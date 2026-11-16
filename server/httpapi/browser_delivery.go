@@ -17,7 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func browserDeliveryResource(app ExamAttemptApplication) route.Resource {
+func browserDeliveryResource(app *attempt.Service) route.Resource {
 	h := examAttemptHandlers{app: app}
 	return route.NewResource(
 		"browser-delivery",

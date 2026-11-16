@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -20,8 +19,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -144,83 +141,68 @@ func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 	require.NotContains(t, errorResponse.Body.String(), "10.0.0.7", "the Store's failure stayed private")
 }
 
-type focusedJobApplication struct {
-	listQuery    job.ListQuery
-	attemptQuery job.AttemptListQuery
-	cancel       model.JobID
-	retry        model.JobID
-	view         job.View
-}
-
-func (f *focusedJobApplication) ListJobs(_ context.Context, _ invocation.Invocation, query job.ListQuery) (job.Page, error) {
-	f.listQuery = query
-	return job.Page{Items: []job.View{f.view}, Counted: query.BeforeID.IsZero(), Total: 1}, nil
-}
-func (f *focusedJobApplication) GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error) {
-	return f.view, nil
-}
-func (f *focusedJobApplication) ListJobAttempts(_ context.Context, _ invocation.Invocation, query job.AttemptListQuery) (job.AttemptPage, error) {
-	f.attemptQuery = query
-	return job.AttemptPage{}, nil
-}
-func (f *focusedJobApplication) CancelJob(_ context.Context, _ invocation.Invocation, id model.JobID) (job.View, error) {
-	f.cancel = id
-	return f.view, nil
-}
-func (f *focusedJobApplication) RetryJob(_ context.Context, _ invocation.Invocation, id model.JobID) (job.View, error) {
-	f.retry = id
-	return f.view, nil
-}
-
 func TestJobResourcePreservesPrivateProjectionAndBoundedControls(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := operatorTestPrincipal()
 	now := time.Now()
-	jobID := model.NewJobID()
-	jobs := &focusedJobApplication{view: job.View{
-		ID: jobID, Type: model.JobTypeProfilePictureGenerateDefault, Status: model.JobStatusRunning,
-		CreatedAt: now, UpdatedAt: now, AvailableAt: now, AttemptCount: 1, MaximumAttempts: 3, Revision: 2,
-	}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, jobResource(jobs))
+	fixture := newJobFixture(t, principal.UserID, failedOperatorJob(t, now), model.ActionJobView, model.ActionJobManage)
+	jobID := fixture.jobs.job.ID
+	jobs := fixture.jobs
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, jobResource(fixture.service))
 
 	list := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?limit=1", "", true)
-	require.Equal(t, http.StatusOK, list.Code, "list status/query = %d/%#v: %s", list.Code, jobs.listQuery, list.Body.String())
-	require.Equal(t, 1, jobs.listQuery.Limit, "list status/query = %d/%#v: %s", list.Code, jobs.listQuery, list.Body.String())
+	require.Equal(t, http.StatusOK, list.Code, "list status = %d: %s", list.Code, list.Body.String())
+	require.Equal(t, 2, jobs.lastList(t).Limit, "the page size reached the Store with its probe row")
 	for _, private := range []string{"command", "checkpoint", "claim_owner", "claim_token", "internal_error"} {
 		require.NotContains(t, list.Body.String(), private, "job list exposed")
 	}
 	cursor, err := encodeJobCursor(jobCursor{CreatedAt: model.FormatRFC3339(now), ID: jobID.String(), Order: listDescending})
 	require.NoError(t, err)
 	page := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?cursor="+url.QueryEscape(cursor), "", true)
-	require.Equal(t, http.StatusOK, page.Code, "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
-	require.True(t, jobs.listQuery.BeforeCreatedAt.Equal(model.TimeUTC(now)), "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
-	require.Equal(t, jobID, jobs.listQuery.BeforeID, "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
-	require.False(t, jobs.listQuery.Ascending, "a newest-first cursor reads newest first")
+	require.Equal(t, http.StatusOK, page.Code, "job cursor forwarding = %d body=%s", page.Code, page.Body.String())
+	continued := jobs.lastList(t)
+	require.True(t, continued.BeforeCreatedAt.Equal(model.TimeUTC(now)), "job cursor forwarding = %#v", continued)
+	require.Equal(t, jobID, continued.BeforeID, "job cursor forwarding = %#v", continued)
+	require.False(t, continued.Ascending, "a newest-first cursor reads newest first")
+	listed := len(jobs.lists)
 	otherOrder := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?order=asc&cursor="+url.QueryEscape(cursor), "", true)
 	assertHTTPProblem(t, otherOrder, http.StatusBadRequest, "request.invalid")
+	require.Len(t, jobs.lists, listed, "a cursor of another order reaches no listing")
 	oldest := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?order=asc", "", true)
 	require.Equal(t, http.StatusOK, oldest.Code, oldest.Body.String())
-	require.True(t, jobs.listQuery.Ascending, "order=asc reads oldest first")
+	require.True(t, jobs.lastList(t).Ascending, "order=asc reads oldest first")
+	listed = len(jobs.lists)
 	unknownOrder := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?order=status", "", true)
 	assertHTTPProblem(t, unknownOrder, http.StatusBadRequest, "request.invalid")
 	malformed := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformed, http.StatusBadRequest, "request.invalid")
 
+	require.Len(t, jobs.lists, listed, "a refused order or cursor reaches no listing")
+
 	attemptCursor, err := encodeJobAttemptCursor(7)
 	require.NoError(t, err)
 	attempts := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs/"+jobID.String()+"/attempts?cursor="+url.QueryEscape(attemptCursor), "", true)
-	require.Equal(t, http.StatusOK, attempts.Code, "job attempt cursor forwarding = %d query=%#v body=%s", attempts.Code, jobs.attemptQuery, attempts.Body.String())
-	require.Equal(t, jobID, jobs.attemptQuery.JobID, "job attempt cursor forwarding = %d query=%#v body=%s", attempts.Code, jobs.attemptQuery, attempts.Body.String())
-	require.Equal(t, 7, jobs.attemptQuery.BeforeNumber, "job attempt cursor forwarding = %d query=%#v body=%s", attempts.Code, jobs.attemptQuery, attempts.Body.String())
+	require.Equal(t, http.StatusOK, attempts.Code, "job attempt cursor forwarding = %d body=%s", attempts.Code, attempts.Body.String())
+	require.Len(t, jobs.attemptLists, 1, "the attempt listing reached the Store")
+	require.Equal(t, jobID, jobs.attemptLists[0].JobID, "job attempt cursor forwarding = %#v", jobs.attemptLists[0])
+	require.Equal(t, 7, jobs.attemptLists[0].BeforeNumber, "job attempt cursor forwarding = %#v", jobs.attemptLists[0])
 	malformedAttempts := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs/"+jobID.String()+"/attempts?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformedAttempts, http.StatusBadRequest, "request.invalid")
+	require.Len(t, jobs.attemptLists, 1, "a malformed attempt cursor reaches no listing")
 	for _, action := range []string{"cancel", "retry"} {
 		response := serveOperatorRequest(t, httpAPI, http.MethodPost, "/api/v1/jobs/"+jobID.String()+"/"+action, "", true)
 		require.Equal(t, http.StatusOK, response.Code, "%s status = %d: %s", action, response.Code, response.Body.String())
 	}
-	require.Equal(t, jobID, jobs.cancel, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
-	require.Equal(t, jobID, jobs.retry, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
+	require.Len(t, jobs.cancels, 1, "the cancel reached the Store")
+	require.Len(t, jobs.retries, 1, "the retry reached the Store")
+	require.Equal(t, jobID, jobs.cancels[0].ID, "control commands = %#v/%#v", jobs.cancels[0], jobs.retries[0])
+	require.Equal(t, jobID, jobs.retries[0].ID, "control commands = %#v/%#v", jobs.cancels[0], jobs.retries[0])
+	require.Equal(t, jobs.job.Revision, jobs.cancels[0].ExpectedRevision, "the cancel is fenced by the revision it read")
+	audits := fixture.access.Audits.Attempts()
+	require.Len(t, audits, 2, "each control was audited")
+	require.Equal(t, audits[0].ID, jobs.cancels[0].AuditEventID, "the Store completes the audit of the cancel")
+	require.Equal(t, audits[1].ID, jobs.retries[0].AuditEventID, "the Store completes the audit of the retry")
 	create := serveOperatorRequest(t, httpAPI, http.MethodPost, "/api/v1/jobs", `{}`, true)
 	require.Equal(t, http.StatusMethodNotAllowed, create.Code, "generic job create status = %d: %s", create.Code, create.Body.String())
 }

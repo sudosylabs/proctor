@@ -241,7 +241,7 @@ func (h examAttemptHandlers) reportSecurityPreflight(request route.Request) (rou
 	return route.JSON(http.StatusOK, result), nil
 }
 
-func securityPreflightResource(app ExamAttemptApplication) route.Resource {
+func securityPreflightResource(app *attempt.Service) route.Resource {
 	h := examAttemptHandlers{app: app}
 	return route.NewResource(
 		"security-preflights",

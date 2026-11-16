@@ -9,7 +9,7 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -32,11 +31,10 @@ func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
-	fake := &examHTTPApplication{principal: principal, view: view}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
+	f := newExamFixture(t, principal)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
 
-	body := []byte(`{"academic_unit_id":"` + view.Exam.AcademicUnitID.String() + `","title":"Systems","instructions_markdown":"Use **Go**."}`)
+	body := []byte(`{"academic_unit_id":"` + f.unitID.String() + `","title":"Systems","instructions_markdown":"Use **Go**."}`)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -44,18 +42,21 @@ func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "create status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, view.Exam.AcademicUnitID, fake.create.AcademicUnitID)
-	require.Equal(t, "Systems", fake.create.Title)
-	require.Equal(t, "Use **Go**.", fake.create.InstructionsMarkdown)
-	require.Equal(t, "exam-retry", fake.create.IdempotencyKey)
+	require.Len(t, f.exams.creations, 1, "the creation never reached the Exam Store")
+	creation := f.exams.creations[0]
+	require.Equal(t, f.unitID, creation.Exam.AcademicUnitID)
+	require.Equal(t, "Systems", creation.Draft.Title)
+	require.Equal(t, "Use **Go**.", creation.Draft.InstructionsMarkdown)
+	require.Equal(t, sha256.Sum256([]byte("exam-retry")), f.exams.lastCommand(t).KeyDigest)
+	view := exam.View{Exam: *creation.Exam, Draft: *creation.Draft, OwnerUserID: principal.UserID, ManagerCount: 1}
 	assertExamHTTPResponse(t, response.Body.Bytes(), view)
 
 	get := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String(), nil)
 	get.Header.Set("Authorization", "Bearer credential")
 	got := httptest.NewRecorder()
 	httpAPI.ServeHTTP(got, get)
-	require.Equal(t, http.StatusOK, got.Code, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
-	require.Equal(t, view.Exam.ID, fake.get, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
+	require.Equal(t, http.StatusOK, got.Code, "get = %d reads=%#v body=%s", got.Code, f.exams.gets, got.Body.String())
+	require.Equal(t, []model.ExamID{view.Exam.ID}, f.exams.gets, "get = %d reads=%#v body=%s", got.Code, f.exams.gets, got.Body.String())
 	assertExamHTTPResponse(t, got.Body.Bytes(), view)
 }
 
@@ -63,21 +64,23 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	unitID, examID := model.NewAcademicUnitID(), model.NewExamID()
-	fake := &examHTTPApplication{principal: principal, catalog: exam.CatalogPage{Items: []store.ExamSummary{{
+	f := newExamFixture(t, principal)
+	unitID, examID := f.unitID, model.NewExamID()
+	f.exams.listed = []store.ExamSummary{{
 		ID: examID, AcademicUnitID: unitID, CreatorUserID: principal.UserID, OwnerUserID: principal.UserID,
 		Title: "Systems", UpdatedAt: time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC), Revision: 2, ManagerCount: 1,
-	}}}}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
+	}}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?academic_unit_id="+unitID.String()+"&q=systems+design&archive_state=all&limit=25", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "list status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, unitID, fake.list.AcademicUnitID)
-	require.Equal(t, "systems design", fake.list.Query)
-	require.Equal(t, store.ExamArchiveAll, fake.list.ArchiveFilter)
-	require.Equal(t, 25, fake.list.Limit)
+	require.Len(t, f.exams.lists, 1, "the listing never reached the Exam Store")
+	require.Equal(t, unitID, f.exams.lists[0].AcademicUnitID)
+	require.Equal(t, "systems design", f.exams.lists[0].Query)
+	require.Equal(t, store.ExamArchiveAll, f.exams.lists[0].ArchiveFilter)
+	require.Equal(t, 26, f.exams.lists[0].Limit, "the catalog reads one past the limit")
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"title":"Systems"`)))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("instructions_markdown")))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("policy")))
@@ -89,14 +92,16 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	second.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, second)
-	require.Equal(t, http.StatusOK, secondResponse.Code, "catalog cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.list, secondResponse.Body.String())
-	require.True(t, fake.list.BeforeUpdatedAt.Equal(wantBefore), "catalog cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.list, secondResponse.Body.String())
-	require.Equal(t, examID, fake.list.BeforeExamID, "catalog cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.list, secondResponse.Body.String())
+	require.Equal(t, http.StatusOK, secondResponse.Code, "catalog cursor forwarding = %d lists=%#v body=%s", secondResponse.Code, f.exams.lists, secondResponse.Body.String())
+	require.Len(t, f.exams.lists, 2, "catalog cursor forwarding = %d body=%s", secondResponse.Code, secondResponse.Body.String())
+	require.True(t, f.exams.lists[1].BeforeUpdatedAt.Equal(wantBefore), "catalog cursor forwarding = %d lists=%#v body=%s", secondResponse.Code, f.exams.lists, secondResponse.Body.String())
+	require.Equal(t, examID, f.exams.lists[1].BeforeExamID, "catalog cursor forwarding = %d lists=%#v body=%s", secondResponse.Code, f.exams.lists, secondResponse.Body.String())
 	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
 	assertHTTPProblem(t, malformedResponse, http.StatusBadRequest, "request.invalid")
+	require.Len(t, f.exams.lists, 2, "a malformed cursor reached the Exam Store")
 }
 
 func TestExamCatalogCursorRoundTripsAndRejectsInvalidInput(t *testing.T) {
@@ -123,60 +128,63 @@ func TestExamManagerHTTPListAndMutationsUseStrictBoundedContracts(t *testing.T) 
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
+	f := newExamFixture(t, principal)
+	examID := f.examID
 	target := model.NewUserID()
+	f.users.add(activeExamUser(target, "target"))
+	f.members.join(target, f.unitID)
 	grantedAt := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
-	manager, err := model.NewExamManager(view.Exam.ID, target, principal.UserID, grantedAt)
+	manager, err := model.NewExamManager(examID, target, principal.UserID, grantedAt)
 	require.NoError(t, err)
-	changedExam := view.Exam
-	changedExam.Revision = 2
-	fake := &examHTTPApplication{principal: principal,
-		managerPage:   exam.ManagerPage{Items: []exam.ManagerSummary{{Manager: *manager}}},
-		managerChange: store.ExamManagerCommandResult{Exam: &changedExam, Manager: manager},
-	}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
+	f.exams.managersListed = []store.ExamManagerSummary{{Manager: *manager}}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
 
-	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?limit=1", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+examID.String()+"/managers?limit=1", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)
-	require.Equal(t, http.StatusOK, listed.Code, "list = %d query=%#v body=%s", listed.Code, fake.managerList, listed.Body.String())
-	require.Equal(t, 1, fake.managerList.Limit, "list = %d query=%#v body=%s", listed.Code, fake.managerList, listed.Body.String())
-	require.True(t, bytes.Contains(listed.Body.Bytes(), []byte(target.String())), "list = %d query=%#v body=%s", listed.Code, fake.managerList, listed.Body.String())
-	require.False(t, bytes.Contains(listed.Body.Bytes(), []byte("display_name")), "list = %d query=%#v body=%s", listed.Code, fake.managerList, listed.Body.String())
+	require.Equal(t, http.StatusOK, listed.Code, "list = %d lists=%#v body=%s", listed.Code, f.exams.managerLists, listed.Body.String())
+	require.Len(t, f.exams.managerLists, 1, "the Manager listing never reached the Exam Store")
+	require.Equal(t, 2, f.exams.managerLists[0].Limit, "the Manager listing reads one past the limit")
+	require.True(t, bytes.Contains(listed.Body.Bytes(), []byte(target.String())), "list = %d body=%s", listed.Code, listed.Body.String())
+	require.False(t, bytes.Contains(listed.Body.Bytes(), []byte("display_name")), "list = %d body=%s", listed.Code, listed.Body.String())
 	cursor, err := encodeExamManagerCursor(examManagerCursor{GrantedAt: grantedAt.Format(time.RFC3339Nano), UserID: target.String()})
 	require.NoError(t, err)
-	second := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?cursor="+url.QueryEscape(cursor), nil)
+	second := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+examID.String()+"/managers?cursor="+url.QueryEscape(cursor), nil)
 	second.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, second)
-	require.Equal(t, http.StatusOK, secondResponse.Code, "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
-	require.True(t, fake.managerList.BeforeGrantedAt.Equal(grantedAt), "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
-	require.Equal(t, target, fake.managerList.BeforeUserID, "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
-	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?cursor=not-a-cursor", nil)
+	require.Equal(t, http.StatusOK, secondResponse.Code, "manager cursor forwarding = %d body=%s", secondResponse.Code, secondResponse.Body.String())
+	require.Len(t, f.exams.managerLists, 2, "manager cursor forwarding = %d body=%s", secondResponse.Code, secondResponse.Body.String())
+	require.True(t, f.exams.managerLists[1].BeforeGrantedAt.Equal(grantedAt), "manager cursor forwarding = %d lists=%#v", secondResponse.Code, f.exams.managerLists)
+	require.Equal(t, target, f.exams.managerLists[1].BeforeUserID, "manager cursor forwarding = %d lists=%#v", secondResponse.Code, f.exams.managerLists)
+	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+examID.String()+"/managers?cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
 	assertHTTPProblem(t, malformedResponse, http.StatusBadRequest, "request.invalid")
+	require.Len(t, f.exams.managerLists, 2, "a malformed cursor reached the Exam Store")
 
-	add := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+view.Exam.ID.String()+"/managers", bytes.NewReader([]byte(`{"user_id":"`+target.String()+`","expected_revision":1}`)))
+	add := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+examID.String()+"/managers", bytes.NewReader([]byte(`{"user_id":"`+target.String()+`","expected_revision":1}`)))
 	add.Header.Set("Authorization", "Bearer credential")
 	add.Header.Set("Content-Type", "application/json")
 	add.Header.Set("Idempotency-Key", "add-manager")
 	added := httptest.NewRecorder()
 	httpAPI.ServeHTTP(added, add)
-	require.Equal(t, http.StatusCreated, added.Code, "add = %d command=%#v body=%s", added.Code, fake.managerCommand, added.Body.String())
-	require.Equal(t, target, fake.managerCommand.UserID, "add = %d command=%#v body=%s", added.Code, fake.managerCommand, added.Body.String())
-	require.Equal(t, int64(1), fake.managerCommand.ExpectedExamRevision, "add = %d command=%#v body=%s", added.Code, fake.managerCommand, added.Body.String())
-	require.Equal(t, "add-manager", fake.managerCommand.IdempotencyKey, "add = %d command=%#v body=%s", added.Code, fake.managerCommand, added.Body.String())
+	require.Equal(t, http.StatusCreated, added.Code, "add = %d body=%s", added.Code, added.Body.String())
+	require.Len(t, f.exams.managerChanges, 1, "the addition never reached the Exam Store")
+	require.Equal(t, target, f.exams.managerChanges[0].TargetUserID, "add = %d body=%s", added.Code, added.Body.String())
+	require.Equal(t, int64(1), f.exams.managerChanges[0].ExpectedRevision, "add = %d body=%s", added.Code, added.Body.String())
+	require.Equal(t, sha256.Sum256([]byte("add-manager")), f.exams.lastCommand(t).KeyDigest, "add = %d body=%s", added.Code, added.Body.String())
 
-	invalidDelete := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/exams/"+view.Exam.ID.String()+"/managers/"+target.String(), bytes.NewReader([]byte(`{"expected_revision":2,"unexpected":true}`)))
+	invalidDelete := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/exams/"+examID.String()+"/managers/"+target.String(), bytes.NewReader([]byte(`{"expected_revision":2,"unexpected":true}`)))
 	invalidDelete.Header.Set("Authorization", "Bearer credential")
 	invalidDelete.Header.Set("Content-Type", "application/json")
 	invalidDelete.Header.Set("Idempotency-Key", "remove-manager")
 	invalid := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalid, invalidDelete)
 	require.Equal(t, http.StatusBadRequest, invalid.Code, "strict DELETE = %d: %s", invalid.Code, invalid.Body.String())
+	require.Len(t, f.exams.managerChanges, 1, "a strict DELETE reached the Exam Store")
 }
 
 func TestExamManagerCursorIsUnversionedAndStrict(t *testing.T) {
@@ -196,68 +204,67 @@ func TestExamHTTPArchiveUsesRequiredIdempotentApplicationCommand(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
-	archived := view.Exam
-	_ = archived.Archive(time.Now().UTC().Add(time.Minute))
-	fake := &examHTTPApplication{principal: principal, archived: archived}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+view.Exam.ID.String()+"/archive", bytes.NewReader([]byte(`{"expected_revision":1}`)))
+	f := newExamFixture(t, principal)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/archive", bytes.NewReader([]byte(`{"expected_revision":1}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "archive-once")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "archive status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, view.Exam.ID, fake.archive.ExamID)
-	require.Equal(t, int64(1), fake.archive.ExpectedExamRevision)
-	require.Equal(t, "archive-once", fake.archive.IdempotencyKey)
+	require.Len(t, f.exams.archives, 1, "the archival never reached the Exam Store")
+	require.Equal(t, f.examID, f.exams.archives[0].ExamID)
+	require.Equal(t, int64(1), f.exams.archives[0].ExpectedRevision)
+	require.Equal(t, sha256.Sum256([]byte("archive-once")), f.exams.lastCommand(t).KeyDigest)
 }
 
 func TestExamHTTPCreateRequiresIdempotencyKey(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	fake := &examHTTPApplication{principal: principal, view: testExamHTTPView(t, principal.UserID)}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams", bytes.NewReader([]byte(`{"academic_unit_id":"`+model.NewAcademicUnitID().String()+`","title":"Systems"}`)))
+	f := newExamFixture(t, principal)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams", bytes.NewReader([]byte(`{"academic_unit_id":"`+f.unitID.String()+`","title":"Systems"}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, "response = %d: %s", response.Code, response.Body.String())
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"code":"idempotency.key_required"`)), "response = %d: %s", response.Code, response.Body.String())
+	require.Zero(t, f.exams.writes(), "an unkeyed creation reached the Exam Store")
 }
 
 func TestExamHTTPPatchDraftPreservesOmittedAndExplicitEmptyFields(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
-	fake := &examHTTPApplication{principal: principal, view: view}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+view.Exam.ID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"instructions_markdown":""}`)))
+	f := newExamFixture(t, principal)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+f.examID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"instructions_markdown":""}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "clear-instructions")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "patch status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, view.Exam.ID, fake.edit.ExamID)
-	require.Equal(t, int64(1), fake.edit.ExpectedDraftRevision)
-	require.Nil(t, fake.edit.Title)
-	require.NotNil(t, fake.edit.InstructionsMarkdown)
-	require.Empty(t, *fake.edit.InstructionsMarkdown)
-	require.Equal(t, "clear-instructions", fake.edit.IdempotencyKey)
+	require.Len(t, f.exams.textUpdates, 1, "the edit never reached the Exam Store")
+	update := f.exams.textUpdates[0]
+	require.Equal(t, f.examID, update.ExamID)
+	require.Equal(t, int64(1), update.ExpectedRevision)
+	require.Nil(t, update.Title)
+	require.NotNil(t, update.InstructionsMarkdown)
+	require.Empty(t, *update.InstructionsMarkdown)
+	require.Equal(t, sha256.Sum256([]byte("clear-instructions")), f.exams.lastCommand(t).KeyDigest)
 }
 
 func TestExamHTTPPatchDraftTreatsNullAsUnchangedAndRequiresAValue(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
-	fake := &examHTTPApplication{principal: principal, view: view}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+view.Exam.ID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"title":null,"instructions_markdown":null}`)))
+	f := newExamFixture(t, principal)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+f.examID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"title":null,"instructions_markdown":null}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "null-fields")
@@ -265,53 +272,53 @@ func TestExamHTTPPatchDraftTreatsNullAsUnchangedAndRequiresAValue(t *testing.T) 
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, "response = %d: %s", response.Code, response.Body.String())
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"code":"request.invalid"`)), "response = %d: %s", response.Code, response.Body.String())
+	require.Zero(t, f.exams.writes(), "an edit without a value reached the Exam Store")
 }
 
 func TestExamHTTPPatchDraftRequiresIdempotencyKey(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
-	fake := &examHTTPApplication{principal: principal, view: view}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+view.Exam.ID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"title":"Algorithms"}`)))
+	f := newExamFixture(t, principal)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+f.examID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"title":"Algorithms"}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, "response = %d: %s", response.Code, response.Body.String())
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"code":"idempotency.key_required"`)), "response = %d: %s", response.Code, response.Body.String())
+	require.Zero(t, f.exams.writes(), "an unkeyed edit reached the Exam Store")
 }
 
 func TestExamHTTPConfigureDraftFocusLossUsesTypedApplicationCommand(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
-	fake := &examHTTPApplication{principal: principal, view: view}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(`{"expected_revision":1,"enabled":false,"minimum_duration_milliseconds":500,"incident_count":1,"window_milliseconds":10000,"outcome":"flag"}`)))
+	f := newExamFixture(t, principal)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+f.examID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(`{"expected_revision":1,"enabled":false,"minimum_duration_milliseconds":500,"incident_count":1,"window_milliseconds":10000,"outcome":"flag"}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "focus-loss-policy")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "put status = %d: %s", response.Code, response.Body.String())
-	command := fake.configureFocusLoss
-	require.Equal(t, view.Exam.ID, command.ExamID)
-	require.Equal(t, int64(1), command.ExpectedDraftRevision)
-	require.False(t, command.Enabled)
-	require.Equal(t, 500*time.Millisecond, command.MinimumDuration)
-	require.Equal(t, 1, command.IncidentCount)
-	require.Equal(t, 10*time.Second, command.Window)
-	require.Equal(t, model.IntegrityOutcomeFlag, command.Outcome)
-	require.Equal(t, "focus-loss-policy", command.IdempotencyKey)
+	require.Len(t, f.exams.focusLossUpdates, 1, "the policy never reached the Exam Store")
+	update := f.exams.focusLossUpdates[0]
+	require.Equal(t, f.examID, update.ExamID)
+	require.Equal(t, int64(1), update.ExpectedRevision)
+	require.False(t, update.FocusLoss.Enabled)
+	require.Equal(t, 500*time.Millisecond, update.FocusLoss.MinimumDuration)
+	require.Equal(t, 1, update.FocusLoss.IncidentCount)
+	require.Equal(t, 10*time.Second, update.FocusLoss.Window)
+	require.Equal(t, model.IntegrityOutcomeFlag, update.FocusLoss.Outcome)
+	require.Equal(t, sha256.Sum256([]byte("focus-loss-policy")), f.exams.lastCommand(t).KeyDigest)
 }
 
 func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPolicy(t *testing.T) {
 	t.Parallel()
 	principal := testExamHTTPPrincipal()
-	view := testExamHTTPView(t, principal.UserID)
 	for name, body := range map[string]string{
 		"enabled omitted":   `{"expected_revision":1,"minimum_duration_milliseconds":500,"incident_count":1,"window_milliseconds":10000,"outcome":"flag"}`,
 		"raw policy member": `{"expected_revision":1,"enabled":true,"minimum_duration_milliseconds":500,"incident_count":1,"window_milliseconds":10000,"outcome":"flag","connection_loss":{"outcome":"flag"}}`,
@@ -321,9 +328,9 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			logger, _ := routetest.NewLogger(t)
-			fake := &examHTTPApplication{principal: principal, view: view}
-			httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(body)))
+			f := newExamFixture(t, principal)
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+f.examID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(body)))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Idempotency-Key", "invalid-focus-loss-policy")
@@ -331,7 +338,8 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 			httpAPI.ServeHTTP(response, request)
 			require.Equal(t, http.StatusBadRequest, response.Code, "response = %d: %s", response.Code, response.Body.String())
 			require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"code":"request.invalid"`)), "response = %d: %s", response.Code, response.Body.String())
-			require.False(t, fake.configureFocusLoss.ExamID.IsValid())
+			require.Empty(t, f.exams.focusLossUpdates, "an invalid policy reached the Exam Store")
+			require.Empty(t, f.exams.accesses, "an invalid policy reached the Exam Store")
 		})
 	}
 }
@@ -369,96 +377,6 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	require.Equal(t, false, draft["has_starter_workspace"])
 	require.Equal(t, float64(model.ExamResourceDefaultMaximumCount), capacity["resource_maximum_count"])
 	require.Equal(t, float64(model.ExamWorkspaceDefaultMaximumEntries), capacity["workspace_maximum_entries"])
-}
-
-type examHTTPApplication struct {
-	principal              model.Principal
-	view                   exam.View
-	create                 exam.CreateCommand
-	edit                   exam.EditDraftTextCommand
-	configureFocusLoss     exam.ConfigureDraftFocusLossCommand
-	configureNativePolicy  exam.ConfigureDraftNativePolicyCommand
-	configureBrowserPolicy exam.ConfigureDraftBrowserPolicyCommand
-	configureExecution     exam.ConfigureDraftExecutionCommand
-	list                   exam.ListQuery
-	catalog                exam.CatalogPage
-	archive                exam.ArchiveCommand
-	archived               model.Exam
-	get                    model.ExamID
-	managerList            exam.ListManagersQuery
-	managerCommand         exam.ManagerChangeCommand
-	managerPage            exam.ManagerPage
-	managerChange          store.ExamManagerCommandResult
-}
-
-func (a *examHTTPApplication) ListExamManagers(_ context.Context, _ invocation.Invocation, query exam.ListManagersQuery) (exam.ManagerPage, error) {
-	a.managerList = query
-	return a.managerPage, nil
-}
-func (a *examHTTPApplication) AddExamManager(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
-	a.managerCommand = command
-	return a.managerChange, nil
-}
-func (a *examHTTPApplication) RemoveExamManager(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
-	a.managerCommand = command
-	return a.managerChange, nil
-}
-func (a *examHTTPApplication) TransferExamOwnership(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
-	a.managerCommand = command
-	return a.managerChange, nil
-}
-
-func (a *examHTTPApplication) ListExams(_ context.Context, _ invocation.Invocation, query exam.ListQuery) (exam.CatalogPage, error) {
-	a.list = query
-	return a.catalog, nil
-}
-func (a *examHTTPApplication) ArchiveExam(_ context.Context, _ invocation.Invocation, command exam.ArchiveCommand) (model.Exam, error) {
-	a.archive = command
-	return a.archived, nil
-}
-
-func (a *examHTTPApplication) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
-	principal := a.principal
-	return &principal, nil
-}
-func (a *examHTTPApplication) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
-	principal := a.principal
-	return &principal, nil
-}
-func (a *examHTTPApplication) CreateExam(_ context.Context, _ invocation.Invocation, command exam.CreateCommand) (exam.View, error) {
-	a.create = command
-	return a.view, nil
-}
-func (a *examHTTPApplication) GetExam(_ context.Context, _ invocation.Invocation, id model.ExamID) (exam.View, error) {
-	a.get = id
-	return a.view, nil
-}
-func (a *examHTTPApplication) EditExamDraftText(_ context.Context, _ invocation.Invocation, command exam.EditDraftTextCommand) (exam.View, error) {
-	a.edit = command
-	return a.view, nil
-}
-func (a *examHTTPApplication) ConfigureExamDraftNativePolicy(_ context.Context, _ invocation.Invocation, command exam.ConfigureDraftNativePolicyCommand) (exam.View, error) {
-	a.configureNativePolicy = command
-	return a.view, nil
-}
-
-func (a *examHTTPApplication) ConfigureExamDraftFocusLoss(_ context.Context, _ invocation.Invocation, command exam.ConfigureDraftFocusLossCommand) (exam.View, error) {
-	a.configureFocusLoss = command
-	return a.view, nil
-}
-
-func (a *examHTTPApplication) ConfigureExamDraftExecution(_ context.Context, _ invocation.Invocation, command exam.ConfigureDraftExecutionCommand) (exam.View, error) {
-	a.configureExecution = command
-	return a.view, nil
-}
-
-func (a *examHTTPApplication) ConfigureExamDraftBrowserPolicy(_ context.Context, _ invocation.Invocation, command exam.ConfigureDraftBrowserPolicyCommand) (exam.View, error) {
-	a.configureBrowserPolicy = command
-	return a.view, nil
-}
-
-func testExamHTTPPrincipal() model.Principal {
-	return model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now().UTC()}
 }
 
 func testExamHTTPView(t *testing.T, userID model.UserID) exam.View {

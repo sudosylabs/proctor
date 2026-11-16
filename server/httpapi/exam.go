@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -386,9 +384,9 @@ type examFocusPolicyResponse struct {
 	Outcome                     string `json:"outcome"`
 }
 
-type examHandlers struct{ app ExamApplication }
+type examHandlers struct{ app *exam.Authoring }
 
-func examResource(app ExamApplication) route.Resource {
+func examResource(app *exam.Authoring) route.Resource {
 	h := examHandlers{app: app}
 	collection := "/exams"
 	member := "/exams/{exam_id}"
@@ -1392,21 +1390,4 @@ func (r *configureExamDraftNativePolicyRequest) UnmarshalJSON(data []byte) error
 	}
 	*r = configureExamDraftNativePolicyRequest(decoded)
 	return nil
-}
-
-// ExamApplication is the application port its handlers call; it authors Exams and manages their owners and managers.
-type ExamApplication interface {
-	CreateExam(context.Context, invocation.Invocation, exam.CreateCommand) (exam.View, error)
-	GetExam(context.Context, invocation.Invocation, model.ExamID) (exam.View, error)
-	EditExamDraftText(context.Context, invocation.Invocation, exam.EditDraftTextCommand) (exam.View, error)
-	ConfigureExamDraftNativePolicy(context.Context, invocation.Invocation, exam.ConfigureDraftNativePolicyCommand) (exam.View, error)
-	ConfigureExamDraftFocusLoss(context.Context, invocation.Invocation, exam.ConfigureDraftFocusLossCommand) (exam.View, error)
-	ConfigureExamDraftExecution(context.Context, invocation.Invocation, exam.ConfigureDraftExecutionCommand) (exam.View, error)
-	ConfigureExamDraftBrowserPolicy(context.Context, invocation.Invocation, exam.ConfigureDraftBrowserPolicyCommand) (exam.View, error)
-	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
-	ArchiveExam(context.Context, invocation.Invocation, exam.ArchiveCommand) (model.Exam, error)
-	ListExamManagers(context.Context, invocation.Invocation, exam.ListManagersQuery) (exam.ManagerPage, error)
-	AddExamManager(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
-	RemoveExamManager(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
-	TransferExamOwnership(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
 }

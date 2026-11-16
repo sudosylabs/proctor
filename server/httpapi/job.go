@@ -8,27 +8,15 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// JobOperationsApplication is the application port its handlers call; it lists
-// Jobs and their attempts for operators and cancels or retries a Job.
-type JobOperationsApplication interface {
-	ListJobs(context.Context, invocation.Invocation, job.ListQuery) (job.Page, error)
-	GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
-	ListJobAttempts(context.Context, invocation.Invocation, job.AttemptListQuery) (job.AttemptPage, error)
-	CancelJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
-	RetryJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
-}
 
 type jobProgressResponse struct {
 	Current int64  `json:"current"`
@@ -91,10 +79,10 @@ type jobAttemptCursor struct {
 }
 
 type jobHandlers struct {
-	app JobOperationsApplication
+	app *job.Operations
 }
 
-func jobResource(application JobOperationsApplication) route.Resource {
+func jobResource(application *job.Operations) route.Resource {
 	h := jobHandlers{app: application}
 	return route.NewResource(
 		"jobs",

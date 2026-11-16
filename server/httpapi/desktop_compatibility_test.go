@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -108,7 +109,7 @@ func desktopCompatibilityPolicy(t *testing.T, settings *model.DesktopCompatibili
 }
 
 // desktopPingAPI serves ping from the real service over policies.
-func desktopPingAPI(t *testing.T, health systemHTTPHealth, policies *desktopCompatibilityPolicies, now func() time.Time) http.Handler {
+func desktopPingAPI(t *testing.T, health *app.Health, policies *desktopCompatibilityPolicies, now func() time.Time) http.Handler {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
 	fixture := newIdentityFixture(t, identityOptions{
@@ -126,7 +127,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 		RevokedDesktopBuildIDs: []string{}, AdministratorMessage: "Scheduled maintenance is complete.",
 		Availability: model.DesktopAvailabilityReady,
 	})
-	httpAPI := desktopPingAPI(t, systemHTTPHealth{live: true, ready: true}, policies, func() time.Time { return now })
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return now })
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.4.0&desktop_build_id=darwin-42&platform=darwin&architecture=arm64&realtime_protocol=2",
@@ -173,7 +174,7 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 		RevokedDesktopBuildIDs: []string{}, AdministratorMessage: "Scheduled maintenance is in progress.",
 		Availability: model.DesktopAvailabilityMaintenance, RetryAt: model.OptionalTimeFrom(retryAt),
 	})
-	httpAPI := desktopPingAPI(t, systemHTTPHealth{live: true, ready: true}, policies, func() time.Time { return serverTime })
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return serverTime })
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -199,7 +200,7 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 		RevokedDesktopBuildIDs: []string{}, Availability: model.DesktopAvailabilityMaintenance,
 		RetryAt: model.OptionalTimeFrom(serverTime),
 	})
-	httpAPI := desktopPingAPI(t, systemHTTPHealth{live: true, ready: true}, policies, func() time.Time { return serverTime })
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return serverTime })
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -217,7 +218,7 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 	t.Parallel()
 	policies := desktopCompatibilityPolicy(t, nil)
-	httpAPI := desktopPingAPI(t, systemHTTPHealth{live: true, ready: true}, policies, time.Now)
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, time.Now)
 	for _, target := range []string{
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64",
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=0",
@@ -235,7 +236,7 @@ func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing.T) {
 	t.Parallel()
 	policies := &desktopCompatibilityPolicies{getErr: errors.New("database unavailable")}
-	httpAPI := desktopPingAPI(t, systemHTTPHealth{live: true}, policies, time.Now)
+	httpAPI := desktopPingAPI(t, readyHealth(t, false), policies, time.Now)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -252,7 +253,7 @@ func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing
 	// A node without the identity area reports the same.
 	logger, _ := routetest.NewLogger(t)
 	withoutIdentity := newFocusedResourceAPI(t, logger, routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, nil, nil, time.Now))
+		systemResourceWithApplication(readyHealth(t, true), BuildInfo{}, nil, nil, time.Now))
 	response = httptest.NewRecorder()
 	withoutIdentity.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,

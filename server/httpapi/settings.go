@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -26,13 +27,6 @@ type BuildInfo struct {
 	GoVersion string `json:"go_version"`
 }
 
-// Health reports the node's liveness and readiness to the /health probes.
-// Composition supplies the runtime's state.
-type Health interface {
-	Live() bool
-	Ready() bool
-}
-
 // Settings holds what composition supplies beside the application: logging,
 // observation and localization ports, node health, build information, and
 // the server's request limits. New validates it before compiling any route.
@@ -41,7 +35,7 @@ type Settings struct {
 	Metrics   route.Metrics
 	Tracing   route.Tracing
 	Localizer route.Localizer
-	Health    Health
+	Health    *app.Health
 	BuildInfo BuildInfo
 	// Plugins reports the active plugins GET /system/plugins lists and
 	// whether readiness is degraded by a failed plugin.

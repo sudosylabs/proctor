@@ -26,21 +26,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExamSittingApplication is the application port its handlers call; it
-// schedules Sittings and pauses, resumes, extends, closes or cancels them.
-type ExamSittingApplication interface {
-	ScheduleExamSitting(context.Context, invocation.Invocation, sitting.ScheduleCommand) (store.ExamSittingSnapshot, error)
-	GetExamSitting(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID) (store.ExamSittingSnapshot, error)
-	ListExamSittings(context.Context, invocation.Invocation, sitting.ListQuery) (sitting.Page, error)
-	UpdateExamSittingSchedule(context.Context, invocation.Invocation, sitting.UpdateScheduleCommand) (store.ExamSittingSnapshot, error)
-	CancelExamSitting(context.Context, invocation.Invocation, sitting.CancelCommand) (store.ExamSittingSnapshot, error)
-	PauseExamSitting(context.Context, invocation.Invocation, sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error)
-	ResumeExamSitting(context.Context, invocation.Invocation, sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error)
-	ExtendExamSitting(context.Context, invocation.Invocation, sitting.ExtendCommand) (store.ExamSittingSnapshot, error)
-	CloseExamSitting(context.Context, invocation.Invocation, sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error)
-	ListExamSittingNoShows(context.Context, invocation.Invocation, sitting.ListNoShowsQuery) (sitting.NoShowPage, error)
-}
-
 type scheduleExamSittingRequest struct {
 	ExamRevisionID   string `json:"exam_revision_id"`
 	ClassID          string `json:"class_id"`
@@ -216,9 +201,9 @@ type examSittingCursorWire struct {
 	ID      string `json:"id"`
 }
 
-type examSittingHandlers struct{ app ExamSittingApplication }
+type examSittingHandlers struct{ app *sitting.Service }
 
-func examSittingResource(app ExamSittingApplication) route.Resource {
+func examSittingResource(app *sitting.Service) route.Resource {
 	h := examSittingHandlers{app: app}
 	collection := "/exams/{exam_id}/sittings"
 	member := "/exams/{exam_id}/sittings/{exam_sitting_id}"

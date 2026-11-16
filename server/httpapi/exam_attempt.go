@@ -8,16 +8,13 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/store"
 )
 
 const (
@@ -51,133 +48,12 @@ func candidateAttemptAccessHeaders(request *http.Request) (candidateAttemptHeade
 	return candidateAttemptHeaderAccess{ConnectionID: connectionID, ContinuityCredential: credentials[0]}, nil
 }
 
-// ExamAttemptApplication is the application port the Attempt handlers call:
-// the candidate's Workspace and Submission, browser and native evidence
-// delivery, security preflight, and manager actions on Attempts.
-type ExamAttemptApplication interface {
-	BrowserSourceStatus(context.Context, invocation.Invocation, attempt.BrowserSourceQuery) (*model.BrowserSourceStatus, error)
-	BrowserDeliveryReceipts(context.Context, invocation.Invocation, attempt.BrowserSourceQuery, int64, int) (*model.BrowserReceiptPage, error)
-	DeclareBrowserDeliveryGaps(
-		context.Context,
-		invocation.Invocation,
-		attempt.BrowserDeliveryGapsCommand,
-	) (*model.BrowserDeliveryGapResult, error)
-	SealBrowserDelivery(context.Context, invocation.Invocation, attempt.BrowserDeliveryFinalCommand) (*model.BrowserSourceStatus, error)
-	UpdateBrowserDeliverySummary(
-		context.Context,
-		invocation.Invocation,
-		attempt.BrowserDeliverySummaryCommand,
-	) (*model.BrowserDeliverySummaryResult, error)
-	AppendHistoricalBrowserDelivery(
-		context.Context,
-		invocation.Invocation,
-		attempt.BrowserDeliveryAppendCommand,
-	) (*model.BrowserActivityAcknowledgement, error)
-
-	BrowserSourceList(context.Context, invocation.Invocation, attempt.BrowserSourceQuery) ([]model.BrowserSourceStatus, error)
-	AppendNativeDelivery(
-		context.Context,
-		invocation.Invocation,
-		attempt.NativeDeliveryAppendCommand,
-	) (*model.NativeSecurityAcknowledgement, error)
-	DeliveryBudget(context.Context, invocation.Invocation, attempt.DeliveryBudgetQuery) (*model.DeliveryBudgetSnapshot, error)
-	StopDeliveryDetails(context.Context, invocation.Invocation, attempt.StopDeliveryDetailsCommand) (*model.StopDeliveryDetailsResult, error)
-	NativeDeliveryStatus(context.Context, invocation.Invocation, attempt.NativeDeliveryQuery) (*model.NativeSecurityStreamStatus, error)
-	NativeDeliveryReceipt(context.Context, invocation.Invocation, attempt.NativeDeliveryQuery, int64) (*model.NativeBatchReceipt, error)
-	DeclareNativeDeliveryGaps(context.Context, invocation.Invocation, attempt.NativeDeliveryGapsCommand) (*model.DeliveryGapReceipt, error)
-	SealNativeDelivery(context.Context, invocation.Invocation, attempt.NativeDeliveryFinalCommand) (*model.NativeSecurityStreamStatus, error)
-	UpdateNativeDeliverySummary(
-		context.Context,
-		invocation.Invocation,
-		attempt.NativeDeliverySummaryCommand,
-	) (*model.NativeSecurityStreamStatus, error)
-	RecoverExamSecurityPolicy(context.Context, invocation.Invocation, model.ExamAttemptID) (*store.SecurityPolicyRecovery, error)
-	SecurityPolicyOverview(context.Context, invocation.Invocation, model.ExamSittingID) (*store.SecurityPolicyOverview, error)
-	PrepareExamSecurityPreflight(
-		context.Context,
-		invocation.Invocation,
-		attempt.PrepareSecurityPreflightCommand,
-	) (*store.SecurityPreflightPrepared, error)
-	ReportExamSecurityPreflight(
-		context.Context,
-		invocation.Invocation,
-		attempt.ReportSecurityPreflightCommand,
-	) (*model.SecurityPreflightResult, error)
-	GetExamAttempt(
-		context.Context,
-		invocation.Invocation,
-		model.ExamID,
-		model.ExamSittingID,
-		model.ExamAttemptID,
-	) (store.ExamAttemptManagerSnapshot, error)
-	ListExamAttempts(context.Context, invocation.Invocation, attempt.ListManagedAttemptsQuery) (attempt.ManagedAttemptPage, error)
-	ListSittingCandidateStatuses(
-		context.Context,
-		invocation.Invocation,
-		attempt.SittingCandidateStatusesQuery,
-	) (attempt.SittingCandidateStatusesPage, error)
-	ListExamAttemptBrowserActivity(
-		context.Context,
-		invocation.Invocation,
-		attempt.BrowserActivityPageQuery,
-	) (attempt.BrowserActivityPage, error)
-	AcknowledgeExamAttemptCorrection(
-		context.Context,
-		invocation.Invocation,
-		attempt.AcknowledgeCorrectionCommand,
-	) (attempt.CorrectionAcknowledgementResult, error)
-	EndExamAttemptByManager(context.Context, invocation.Invocation, attempt.ManagerEndCommand) (store.ExamSubmissionReceipt, error)
-	GetCandidateExamPresentation(context.Context, invocation.Invocation, attempt.CandidateAccess) (attempt.Presentation, error)
-	ListCandidateExamWorkspace(context.Context, invocation.Invocation, attempt.WorkspaceQuery) (attempt.WorkspacePage, error)
-	ListCandidateExamWorkspaceJournal(
-		context.Context,
-		invocation.Invocation,
-		attempt.WorkspaceJournalQuery,
-	) (attempt.WorkspaceJournalPage, error)
-	ApplyCandidateExamWorkspaceBatch(
-		context.Context,
-		invocation.Invocation,
-		attempt.ApplyWorkspaceBatchCommand,
-	) (attempt.WorkspaceBatchResult, error)
-	OpenCandidateExamResource(context.Context, invocation.Invocation, attempt.OpenResourceQuery) (attempt.OpenedContent, error)
-	OpenCandidateExamWorkspaceFile(context.Context, invocation.Invocation, attempt.OpenWorkspaceFileQuery) (attempt.OpenedContent, error)
-	ReallowExamAttempt(context.Context, invocation.Invocation, attempt.ReallowCommand) (attempt.ReallowResult, error)
-	SuspendExamAttempt(context.Context, invocation.Invocation, attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error)
-	ReplaceExamAttemptEnvironment(context.Context, invocation.Invocation, attempt.ReplaceEnvironmentCommand) (attempt.ReplaceEnvironmentResult, error)
-	RequestScreenClip(context.Context, invocation.Invocation, attempt.RequestScreenClipCommand) (attempt.RequestScreenClipResult, error)
-	PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error)
-	TakeScreenClip(context.Context, invocation.Invocation, attempt.CandidateAccess, model.ScreenClipID) (store.ExamAttemptScreenClipView, error)
-	BeginScreenClipUpload(
-		context.Context,
-		invocation.Invocation,
-		attempt.BeginScreenClipUploadCommand,
-	) (store.ExamAttemptScreenClipView, error)
-	ScreenClipUploadStatus(
-		context.Context,
-		invocation.Invocation,
-		attempt.CandidateAccess,
-		model.ScreenClipID,
-	) (store.ExamAttemptScreenClipUploadStatus, error)
-	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.UploadScreenClipChunkCommand) error
-	ListScreenClips(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error)
-	PlayScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipQuery) (attempt.PlayScreenClipResult, error)
-	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.CompleteScreenClipUploadCommand) (store.ExamAttemptScreenClipView, error)
-	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
-	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)
-	ListExamSubmissionManifest(
-		context.Context,
-		invocation.Invocation,
-		attempt.ListSubmissionManifestQuery,
-	) (attempt.SubmissionManifestPage, error)
-	OpenExamSubmissionFile(context.Context, invocation.Invocation, attempt.OpenSubmissionFileQuery) (attempt.OpenedContent, error)
-}
-
 // examAttemptHandlers serves every route backed by the Attempt service: the
 // Exam Attempt routes here and the security preflight, native delivery,
 // browser delivery and delivery budget resources in their own files.
-type examAttemptHandlers struct{ app ExamAttemptApplication }
+type examAttemptHandlers struct{ app *attempt.Service }
 
-func examAttemptResource(app ExamAttemptApplication) route.Resource {
+func examAttemptResource(app *attempt.Service) route.Resource {
 	h := examAttemptHandlers{app: app}
 	managerCollection := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts"
 	managerMember := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}"

@@ -16,7 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func nativeDeliveryResource(app ExamAttemptApplication) route.Resource {
+func nativeDeliveryResource(app *attempt.Service) route.Resource {
 	h := examAttemptHandlers{app: app}
 	return route.NewResource(
 		"native-delivery",

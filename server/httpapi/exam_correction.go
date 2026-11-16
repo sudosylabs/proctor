@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -25,20 +23,8 @@ import (
 
 const examSittingCorrectionUploadBodyLimit = model.ExamResourceMaximumBytes + 64*1024
 
-// ExamSittingCorrectionApplication is the application port its handlers call;
-// it stages corrected resource content and applies a correction to a live
-// Sitting.
-type ExamSittingCorrectionApplication interface {
-	StageExamSittingCorrectionResourceContent(
-		context.Context,
-		invocation.Invocation,
-		correction.StageResourceContentCommand,
-	) (correction.ResourceStage, error)
-	ApplyExamSittingCorrection(context.Context, invocation.Invocation, correction.ApplyCommand) (correction.AppliedCorrection, error)
-}
-
 type examSittingCorrectionHandlers struct {
-	app ExamSittingCorrectionApplication
+	app *correction.Service
 }
 
 type examSittingCorrectionStageMetadata struct {
@@ -162,7 +148,7 @@ func decodeDuplicateFreeExamCorrectionObject(encoded []byte, target any) error {
 	return nil
 }
 
-func examSittingCorrectionResource(app ExamSittingCorrectionApplication) route.Resource {
+func examSittingCorrectionResource(app *correction.Service) route.Resource {
 	h := examSittingCorrectionHandlers{app: app}
 	stages := "/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages"
 	corrections := "/exams/{exam_id}/sittings/{exam_sitting_id}/corrections"

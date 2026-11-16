@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -30,7 +31,7 @@ type healthResponse struct {
 }
 
 type systemHandlers struct {
-	health    Health
+	health    *app.Health
 	buildInfo BuildInfo
 	plugins   Plugins
 	app       *identity.Service
@@ -54,7 +55,7 @@ type Plugins interface {
 }
 
 func systemResourceWithApplication(
-	health Health,
+	health *app.Health,
 	buildInfo BuildInfo,
 	plugins Plugins,
 	app *identity.Service,

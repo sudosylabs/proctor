@@ -27,25 +27,23 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type systemHTTPHealth struct {
-	live  bool
-	ready bool
-}
-
-func (h systemHTTPHealth) Live() bool  { return h.live }
-func (h systemHTTPHealth) Ready() bool { return h.ready }
-
 func TestSystemResourceReturnsTypedUnhealthyProblemThroughKernel(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, systemResource(systemHTTPHealth{}, BuildInfo{Version: "test"}))
+	// A process that answers is live, so the unhealthy answer comes from a
+	// node that has not published readiness: liveness still succeeds and
+	// readiness is the typed problem.
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, systemResource(readyHealth(t, false), BuildInfo{Version: "test"}))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health/live", nil))
-	require.Equal(t, http.StatusServiceUnavailable, response.Code, "liveness status = %d: %s", response.Code, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "liveness status = %d: %s", response.Code, response.Body.String())
+	response = httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health/ready", nil))
+	require.Equal(t, http.StatusServiceUnavailable, response.Code, "readiness status = %d: %s", response.Code, response.Body.String())
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
-	require.Equal(t, "health.not_live", problem.Code)
-	require.Equal(t, "The process is not healthy.", problem.Detail)
+	require.Equal(t, "health.not_ready", problem.Code)
+	require.Equal(t, "The service is not ready to accept requests.", problem.Detail)
 }
 
 func TestSystemResourceReturnsHealthyStatusAndVersionThroughKernel(t *testing.T) {
@@ -55,7 +53,7 @@ func TestSystemResourceReturnsHealthyStatusAndVersionThroughKernel(t *testing.T)
 		t,
 		logger,
 		routetest.Authenticator{},
-		systemResource(systemHTTPHealth{live: true, ready: true}, BuildInfo{Version: "test-version"}),
+		systemResource(readyHealth(t, true), BuildInfo{Version: "test-version"}),
 	)
 	for path, body := range map[string]string{
 		"/health/live":           `"status":"ok"`,

@@ -24,14 +24,14 @@ import (
 )
 
 func (c *connectionRuntime) writePump(ctx context.Context) {
-	ticker := c.clock.NewTicker(pingInterval)
+	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case message := <-c.send:
-			_ = c.socket.SetWriteDeadline(c.clock.Now().Add(writeWait))
+			_ = c.socket.SetWriteDeadline(time.Now().Add(writeWait))
 			var err error
 			if message.event != nil {
 				err = c.socket.WriteJSON(message.event)
@@ -48,9 +48,9 @@ func (c *connectionRuntime) writePump(ctx context.Context) {
 				c.closeTransport()
 				return
 			}
-		case <-ticker.Chan():
-			_ = c.socket.SetWriteDeadline(c.clock.Now().Add(writeWait))
-			err := c.socket.WriteMessage(websocketPingMessage, nil)
+		case <-ticker.C:
+			_ = c.socket.SetWriteDeadline(time.Now().Add(writeWait))
+			err := c.socket.WriteMessage(gorilla.PingMessage, nil)
 			if c.recorder != nil {
 				c.recorder.ObserveWebSocketMessage("outbound", "ping", streamResult(err), 0)
 			}
@@ -142,7 +142,7 @@ func (c *connectionRuntime) enqueueError(sequence int64, code apperror.Code, pre
 }
 
 func (c *connectionRuntime) close(code int, reason string, replayable bool) {
-	c.closeWithDeadline(code, reason, replayable, c.clock.Now().Add(writeWait))
+	c.closeWithDeadline(code, reason, replayable, time.Now().Add(writeWait))
 }
 
 func (c *connectionRuntime) closeWithDeadline(code int, reason string, replayable bool, deadline time.Time) {
@@ -153,8 +153,8 @@ func (c *connectionRuntime) closeWithDeadline(code int, reason string, replayabl
 	}
 	if c.closeStarted.CompareAndSwap(false, true) {
 		message := gorilla.FormatCloseMessage(code, reason)
-		if c.clock.Now().Before(deadline) {
-			_ = c.socket.WriteControl(websocketCloseMessage, message, deadline)
+		if time.Now().Before(deadline) {
+			_ = c.socket.WriteControl(gorilla.CloseMessage, message, deadline)
 		}
 		c.closeTransport()
 	}

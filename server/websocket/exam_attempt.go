@@ -9,15 +9,12 @@ package websocket
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -30,34 +27,6 @@ const (
 	examAttemptBrowserStartAction   = "exam_attempt.browser_activity.start"
 	examAttemptBrowserAppendAction  = "exam_attempt.browser_activity.append"
 )
-
-// ExamAttemptApplication is the Attempt use cases a connection runs on behalf
-// of its candidate; composition supplies the application's Attempt service.
-type ExamAttemptApplication interface {
-	ConnectExamAttempt(context.Context, invocation.Invocation, attempt.ConnectCommand) (attempt.ConnectionResult, error)
-	UpdateExamSecurity(
-		context.Context,
-		invocation.Invocation,
-		attempt.UpdateExamSecurityCommand,
-	) (model.SecurityControlResult, error)
-	RenewExamAttemptParticipation(
-		context.Context,
-		invocation.Invocation,
-		attempt.RenewParticipationCommand,
-	) (attempt.ParticipationRenewal, error)
-	EvaluateExamAttemptFocusLoss(context.Context, invocation.Invocation, attempt.FocusLossCommand) (attempt.FocusLossEvaluation, error)
-	CloseExamAttemptConnection(context.Context, invocation.Invocation, attempt.CloseConnectionCommand) (attempt.ConnectionClosedResult, error)
-	StartExamAttemptBrowserActivity(
-		context.Context,
-		invocation.Invocation,
-		attempt.StartBrowserActivityCommand,
-	) (model.BrowserSourceStatus, error)
-	AppendExamAttemptBrowserActivity(
-		context.Context,
-		invocation.Invocation,
-		attempt.AppendBrowserActivityCommand,
-	) (model.BrowserActivityAcknowledgement, error)
-}
 
 type examAttemptConnectRequest struct {
 	Security                         model.ConnectSecurity                `json:"security"`

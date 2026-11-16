@@ -148,9 +148,9 @@ type mailDeliveryCursor struct {
 // updated, shows recent activity first.
 var mailDeliverySorts = []string{string(store.MailDeliveryOrderUpdated), string(store.MailDeliveryOrderCreated)}
 
-type mailHandlers struct{ app MailApplication }
+type mailHandlers struct{ app *mail.Operations }
 
-func mailResource(application MailApplication) route.Resource {
+func mailResource(application *mail.Operations) route.Resource {
 	h := mailHandlers{app: application}
 	return route.NewResource("mail",
 		route.Endpoint{
@@ -653,17 +653,4 @@ func mailResponse(view mail.DeliveryView) mailDeliveryResponse {
 	}
 
 	return result
-}
-
-// MailApplication is the application port its handlers call; it reports on and operates transactional mail: keys, rekeying, test mail, metrics and deliveries.
-type MailApplication interface {
-	GetMailKeyState(context.Context, invocation.Invocation) (mail.KeyStateView, error)
-	StartMailRekey(context.Context, invocation.Invocation, string) (mail.RekeyView, error)
-	GetMailRekeyStatus(context.Context, invocation.Invocation, model.JobID) (mail.RekeyStatusView, error)
-	SendTestMail(context.Context, invocation.Invocation) (mail.DeliveryView, error)
-	GetMailMetrics(context.Context, invocation.Invocation) (mail.MetricsSnapshot, error)
-	GetMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error)
-	ListMailDeliveries(context.Context, invocation.Invocation, mail.ListDeliveriesQuery) (mail.DeliveryPage, error)
-	CancelMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error)
-	RetryMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error)
 }

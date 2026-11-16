@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,7 +21,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -198,11 +196,11 @@ type candidateExamActivityResultResponse struct {
 
 type userProfileHandlers struct {
 	users    *user.Service
-	attempts UserAccountApplication
+	attempts *attempt.Service
 	emails   *identity.Service
 }
 
-func userProfileResource(users *user.Service, attempts UserAccountApplication, emails *identity.Service) route.Resource {
+func userProfileResource(users *user.Service, attempts *attempt.Service, emails *identity.Service) route.Resource {
 	h := userProfileHandlers{users: users, attempts: attempts, emails: emails}
 	userPath := "/users/{user_id}"
 	picture := "/users/{user_id}/profile-picture"
@@ -1041,10 +1039,4 @@ func userProfileResponseFromModel(account *model.User) userProfileResponse {
 	}
 
 	return response
-}
-
-// UserAccountApplication is the User use case that stays on the application
-// root: a candidate's own exam activity.
-type UserAccountApplication interface {
-	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
 }

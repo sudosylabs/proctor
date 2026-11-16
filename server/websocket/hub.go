@@ -26,11 +26,13 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/internal/weborigin"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -76,13 +78,16 @@ const (
 // drains connections when the hub was started.
 type Hub struct {
 	application  Application
-	attempts     ExamAttemptApplication
+	attempts     *attempt.Service
 	logger       *logging.Logger
-	localizer    Localizer
+	localizer    *localization.Localizer
 	publicOrigin string
 	nodeID       string
 	hashSeed     maphash.Seed
-	recorder     Recorder
+	// recorder observes bounded connection, message, publication, replay
+	// and subscription facts, never a principal, connection identifier,
+	// subscription value, payload or close reason. Nil records nothing.
+	recorder *metrics.Module
 
 	mu        sync.RWMutex
 	state     hubState
@@ -93,22 +98,9 @@ type Hub struct {
 	closeErr  error
 }
 
-// Recorder observes bounded connection, message, publication, replay, and
-// subscription facts. It never receives a principal, connection identifier,
-// subscription value, payload, or close reason.
-type Recorder interface {
-	ConnectionOpened(outcome string)
-	ConnectionClosed(outcome string)
-	Backpressure()
-	ObserveWebSocketMessage(direction, kind, outcome string, bytes int)
-	ObserveWebSocketBroadcast(event, outcome string, recipients int)
-	ObserveWebSocketReplay(outcome string, events int)
-	AddWebSocketSubscriptions(delta int)
-}
-
-// AttachRecorder installs the optional observability adapter while the hub is
-// still inert.
-func (h *Hub) AttachRecorder(recorder Recorder) error {
+// AttachRecorder installs the optional metrics module while the hub is still
+// inert.
+func (h *Hub) AttachRecorder(recorder *metrics.Module) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.state != hubCreated {
@@ -127,12 +119,6 @@ type shard struct {
 	budgets map[string]*sharedFrameBudget
 }
 
-// Localizer is the narrow presentation port used after the HTTP handshake.
-type Localizer interface {
-	Translate(locale, id string, args any) (string, error)
-	SupportedLocales() []string
-}
-
 // Application is the narrow application surface each connection runtime needs
 // for subscription authorization and principal revalidation.
 type Application interface {
@@ -144,11 +130,11 @@ type Application interface {
 // connections and background work within the shutdown budget it is handed.
 func NewHub(
 	application Application,
-	attempts ExamAttemptApplication,
+	attempts *attempt.Service,
 	logger *logging.Logger,
 	publicURL string,
 	nodeID string,
-	localizer Localizer,
+	localizer *localization.Localizer,
 ) (*Hub, error) {
 	if application == nil {
 		return nil, errors.New("WebSocket application is required")
@@ -280,14 +266,13 @@ func (h *Hub) Accept(
 		return nil
 	}
 
-	runtimeSocket := newGorillaConnectionSocket(socket)
 	locale := ""
 	if h.localizer != nil {
 		locale = localization.PreferredLocale(request.Header.Get("Accept-Language"), h.localizer.SupportedLocales())
 	}
 
 	connection, resumed := h.register(
-		runtimeSocket,
+		socket,
 		principal,
 		metadata,
 		connectionID,
@@ -299,12 +284,12 @@ func (h *Hub) Accept(
 			h.recorder.ConnectionOpened("rejected")
 		}
 
-		_ = runtimeSocket.WriteControl(
-			websocketCloseMessage,
+		_ = socket.WriteControl(
+			websocket.CloseMessage,
 			websocket.FormatCloseMessage(CloseLimit, localizedCloseReason(h.localizer, locale, websocketCloseMessages["connection_limit"])),
 			time.Now().Add(writeWait),
 		)
-		_ = runtimeSocket.Close()
+		_ = socket.Close()
 		return nil
 	}
 
@@ -323,7 +308,7 @@ func (h *Hub) Accept(
 }
 
 func (h *Hub) register(
-	socket connectionSocket,
+	socket *websocket.Conn,
 	principal model.Principal,
 	metadata model.RequestMetadata,
 	requestedID string,

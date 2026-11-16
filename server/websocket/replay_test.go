@@ -76,14 +76,15 @@ func TestConnectionRuntimeClonesTheAcceptedPrincipal(t *testing.T) {
 	}
 	application := &inboundTestApplication{}
 	logger, _ := newTestLogger(t)
+	socket, _ := newSocketPair(t)
 	runtime := newConnectionRuntime(
 		application,
-		application,
+		nil,
 		logger,
 		nil,
 		"",
 		"node-a",
-		newInboundTestSocket(),
+		socket,
 		principal,
 		model.RequestMetadata{},
 		model.NewID(),
@@ -100,7 +101,7 @@ func TestConnectionRuntimeClonesTheAcceptedPrincipal(t *testing.T) {
 func TestConnectionRuntimeFinalSnapshotWaitsForSelectedPublication(t *testing.T) {
 	t.Parallel()
 
-	runtime := newOutboundTestRuntime(newOutboundTestSocket(), 1)
+	runtime, _ := newOutboundTestRuntime(t, 1)
 	require.True(t, runtime.acquire(), "active runtime rejected Hub publication")
 	snapshotReady := make(chan connectionSnapshot, 1)
 	go func() {
@@ -190,11 +191,10 @@ func TestHubRetainsOnlyTheRuntimeFinalSnapshot(t *testing.T) {
 
 func newInternalTestHub(t *testing.T) *Hub {
 	t.Helper()
-	application := &inboundTestApplication{}
 	logger, _ := newTestLogger(t)
 	hub, err := NewHub(
-		application,
-		application,
+		&inboundTestApplication{},
+		newAttemptFixture(t).service,
 		logger,
 		"https://proctor.example",
 		"node-a",

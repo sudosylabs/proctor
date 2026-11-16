@@ -55,9 +55,9 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 		<-appendDone
 	}()
 	c.socket.SetReadLimit(MaxMessageBytes)
-	_ = c.socket.SetReadDeadline(c.clock.Now().Add(pongWait))
+	_ = c.socket.SetReadDeadline(time.Now().Add(pongWait))
 	c.socket.SetPongHandler(func(string) error {
-		return c.socket.SetReadDeadline(c.clock.Now().Add(pongWait))
+		return c.socket.SetReadDeadline(time.Now().Add(pongWait))
 	})
 	for {
 		if ctx.Err() != nil {
@@ -78,7 +78,7 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 
 		// Every frame spends from the connection budget before validation or
 		// dispatch, so no action can drive unbounded application work.
-		if !c.inbound.allow(c.clock.Now()) {
+		if !c.inbound.allow(time.Now()) {
 			if c.recorder != nil {
 				c.recorder.ObserveWebSocketMessage("inbound", boundedWebSocketAction(request.Action), "rate_limited", len(request.Data))
 			}
@@ -122,14 +122,14 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 }
 
 func (c *connectionRuntime) sessionPump(ctx context.Context) {
-	ticker := c.clock.NewTicker(sessionCheck)
+	ticker := time.NewTicker(sessionCheck)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			c.closeTransport()
 			return
-		case <-ticker.Chan():
+		case <-ticker.C:
 			if appErr := c.application.ValidateWebSocketPrincipal(
 				ctx,
 				c.principal,

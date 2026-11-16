@@ -20,7 +20,7 @@ import (
 // cases. Preserve this order: it is part of route-catalog review.
 func productionResources(
 	application *app.App,
-	health Health,
+	health *app.Health,
 	buildInfo BuildInfo,
 	plugins Plugins,
 	cookies route.Cookies,

@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,35 +19,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/exam/review"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExamIntegrityReviewApplication is the application port its handlers call; it
-// runs Integrity Review from Flags and evidence to finalization and releases
-// results to students.
-type ExamIntegrityReviewApplication interface {
-	ListNativeConditions(context.Context, invocation.Invocation, store.NativeConditionListOptions) (*store.NativeConditionPage, error)
-	ListAttemptEvidence(context.Context, invocation.Invocation, store.AttemptEvidenceListOptions) (*store.AttemptEvidencePage, error)
-	GetExamIntegrityReview(context.Context, invocation.Invocation, model.SubmissionID) (*store.ExamSubmissionReviewSnapshot, error)
-	ListExamIntegrityFlags(context.Context, invocation.Invocation, review.ListFlagsQuery) (*store.ExamIntegrityFlagPage, error)
-	ListExamIntegrityEvidence(context.Context, invocation.Invocation, review.ListEvidenceQuery) (*store.ExamIntegrityEvidencePage, error)
-	ListExamIntegrityDiscrepancies(
-		context.Context,
-		invocation.Invocation,
-		review.ListDiscrepanciesQuery,
-	) (*store.ExamIntegrityDiscrepancyPage, error)
-	SaveExamIntegrityDecision(context.Context, invocation.Invocation, review.SaveDecisionCommand) (review.Result, error)
-	UpdateExamIntegrityReview(context.Context, invocation.Invocation, review.UpdateDraftCommand) (review.Result, error)
-	FinalizeExamIntegrityReview(context.Context, invocation.Invocation, review.TerminalCommand) (review.Result, error)
-	ReleaseStudentExamResult(context.Context, invocation.Invocation, review.TerminalCommand) (review.Result, error)
-	GetStudentExamResult(context.Context, invocation.Invocation, model.ExamAttemptID) (*model.StudentResult, error)
-}
-
 type examIntegrityReviewHandlers struct {
-	app ExamIntegrityReviewApplication
+	app *review.Service
 }
 
 type examIntegrityReviewIDCursor struct {
@@ -353,7 +330,7 @@ type studentExamResultResponse struct {
 	ReleasedAt             string `json:"released_at"`
 }
 
-func examIntegrityReviewResource(app ExamIntegrityReviewApplication) route.Resource {
+func examIntegrityReviewResource(app *review.Service) route.Resource {
 	h := examIntegrityReviewHandlers{app: app}
 	flags := "/submissions/{submission_id}/integrity-flags"
 	discrepancies := "/submissions/{submission_id}/integrity-discrepancies"

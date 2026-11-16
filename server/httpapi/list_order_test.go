@@ -141,9 +141,10 @@ func TestMailDeliveryListOrderBindsItsCursor(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 24, 10, 11, 12, 345000, time.UTC)
 	id := model.NewMailDeliveryID()
-	fake := &recordingMailAPI{}
+	principal := operatorTestPrincipal()
+	fixture := newMailFixture(t, principal)
 	logger, _ := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: operatorTestPrincipal()}, mailResource(fake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, mailResource(fixture.service))
 	serve := func(query string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?"+query, nil)
 		request.Header.Set("Authorization", "Bearer credential")
@@ -153,22 +154,24 @@ func TestMailDeliveryListOrderBindsItsCursor(t *testing.T) {
 	}
 
 	require.Equal(t, http.StatusOK, serve("").Code)
-	require.Equal(t, store.MailDeliveryOrderUpdated, fake.listQuery.Order, "the default order is the last update")
-	require.False(t, fake.listQuery.Ascending, "newest first by default")
+	require.Equal(t, store.MailDeliveryOrderUpdated, fixture.deliveries.lastList(t).Order, "the default order is the last update")
+	require.False(t, fixture.deliveries.lastList(t).Ascending, "newest first by default")
 	require.Equal(t, http.StatusOK, serve("sort=created&dir=asc").Code)
-	require.Equal(t, store.MailDeliveryOrderCreated, fake.listQuery.Order)
-	require.True(t, fake.listQuery.Ascending)
+	require.Equal(t, store.MailDeliveryOrderCreated, fixture.deliveries.lastList(t).Order)
+	require.True(t, fixture.deliveries.lastList(t).Ascending)
 
 	created, err := encodeMailDeliveryCursor(mailDeliveryCursor{Sort: "created", Dir: listAscending, At: model.FormatRFC3339(at), ID: id.String()})
 	require.NoError(t, err)
 	response := serve("sort=created&dir=asc&cursor=" + url.QueryEscape(created))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.True(t, at.Equal(fake.listQuery.BeforeAt))
-	require.Equal(t, id, fake.listQuery.BeforeID)
+	require.True(t, at.Equal(fixture.deliveries.lastList(t).BeforeAt))
+	require.Equal(t, id, fixture.deliveries.lastList(t).BeforeID)
+	listed := len(fixture.deliveries.lists)
 	for _, reused := range []string{"", "sort=created", "sort=updated&dir=asc", "dir=asc"} {
 		assertHTTPProblem(t, serve(reused+"&cursor="+url.QueryEscape(created)), http.StatusBadRequest, "request.invalid")
 	}
 	assertHTTPProblem(t, serve("sort=recipient"), http.StatusBadRequest, "request.invalid")
+	require.Len(t, fixture.deliveries.lists, listed, "a refused order or cursor reaches no listing")
 }
 
 // TestRoleBindingListCountsItsFirstPage pins the holders total: the first

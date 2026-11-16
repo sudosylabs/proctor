@@ -8,7 +8,7 @@
 package httpapi
 
 import (
-	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,40 +18,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/store"
 )
-
-type recordsHTTPApplication struct {
-	ExamRecordsApplication
-	calls    int
-	complete exam.CompleteRecordsCommand
-	create   exam.CreateRetentionHoldCommand
-	query    store.ExamRecordsHoldListOptions
-	page     *store.ExamRecordsHoldPage
-}
-
-func (a *recordsHTTPApplication) CompleteExamSittingRecords(_ context.Context, call invocation.Invocation, command exam.CompleteRecordsCommand) (*model.ExamSittingRecordsCompletion, error) {
-	a.calls++
-	a.complete = command
-	c := model.NewExamSittingRecordsCompletion(command.Scope.SittingID)
-	_, err := c.Complete(command.ExpectedRevision, command.AcknowledgedEvidenceRevision, call.Principal().UserID, time.Now())
-	return c, err
-}
-func (a *recordsHTTPApplication) CreateRetentionHold(_ context.Context, call invocation.Invocation, command exam.CreateRetentionHoldCommand) (*model.RetentionHold, error) {
-	a.calls++
-	a.create = command
-	return &model.RetentionHold{ID: model.NewRetentionHoldID(), Scope: command.Scope, Revision: 1, CreatedAt: time.Now(), CreatedByUserID: call.Principal().UserID,
-		ReasonCode: command.ReasonCode, PrivateReason: command.PrivateReason, WorkRetiredSubmissionCount: 1, IntegrityRetiredSubmissionCount: 2}, nil
-}
-func (a *recordsHTTPApplication) ListRetentionHolds(_ context.Context, _ invocation.Invocation, query store.ExamRecordsHoldListOptions) (*store.ExamRecordsHoldPage, error) {
-	a.calls++
-	a.query = query
-	return a.page, nil
-}
 
 func recordsHTTPPrincipal() model.Principal {
 	return model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -60,9 +29,10 @@ func recordsHTTPPrincipal() model.Principal {
 
 func TestExamRecordsHTTPRequiresExplicitAcknowledgementAndIdempotency(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
-	application := &recordsHTTPApplication{}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: recordsHTTPPrincipal()}, examRecordsResource(application))
-	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
+	principal := recordsHTTPPrincipal()
+	f := newExamFixture(t, principal)
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
+	examID, sittingID := f.examID, model.NewExamSittingID()
 	path := "/api/v1/exams/" + examID.String() + "/sittings/" + sittingID.String() + "/records-completion"
 	serve := func(body, key string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
@@ -78,16 +48,18 @@ func TestExamRecordsHTTPRequiresExplicitAcknowledgementAndIdempotency(t *testing
 	for _, body := range []string{`{}`, `{"expected_revision":1}`, `{"expected_revision":1,"acknowledged_evidence_revision":null}`, `{"expected_revision":1,"acknowledged_evidence_revision":0,"acknowledged_evidence_revision":2}`, `{"expected_revision":1,"acknowledged_evidence_revision":-1}`, `{"expected_revision":1,"acknowledged_evidence_revision":0,"unknown":true}`} {
 		response := serve(body, "completion-key")
 		require.Equal(t, http.StatusBadRequest, response.Code, "invalid completion %s = %d %s", body, response.Code, response.Body.String())
-		require.Equal(t, 0, application.calls, "invalid completion %s = %d %s", body, response.Code, response.Body.String())
+		require.Zero(t, f.ledger.requests(), "invalid completion %s = %d %s", body, response.Code, response.Body.String())
 	}
 	response := serve(`{"expected_revision":1,"acknowledged_evidence_revision":0}`, "")
 	require.Equal(t, http.StatusBadRequest, response.Code, "missing key = %d %s", response.Code, response.Body.String())
-	require.Equal(t, 0, application.calls, "missing key = %d %s", response.Code, response.Body.String())
+	require.Zero(t, f.ledger.requests(), "missing key = %d %s", response.Code, response.Body.String())
 	response = serve(`{"expected_revision":1,"acknowledged_evidence_revision":0}`, "completion-key")
-	require.Equal(t, http.StatusOK, response.Code, "completion = %d %s, command=%#v", response.Code, response.Body.String(), application.complete)
-	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"), "completion = %d %s, command=%#v", response.Code, response.Body.String(), application.complete)
-	require.Equal(t, model.RetentionHoldScope{ExamID: examID, SittingID: sittingID}, application.complete.Scope, "completion = %d %s, command=%#v", response.Code, response.Body.String(), application.complete)
-	require.Equal(t, "completion-key", application.complete.IdempotencyKey, "completion = %d %s, command=%#v", response.Code, response.Body.String(), application.complete)
+	require.Equal(t, http.StatusOK, response.Code, "completion = %d %s", response.Code, response.Body.String())
+	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"), "completion = %d %s", response.Code, response.Body.String())
+	require.Len(t, f.ledger.completions, 1, "the completion never reached the records Store")
+	require.Equal(t, model.RetentionHoldScope{ExamID: examID, SittingID: sittingID}, f.ledger.completions[0].Scope, "completion = %d %s", response.Code, response.Body.String())
+	require.Equal(t, int64(1), f.ledger.completions[0].ExpectedRevision, "completion = %d %s", response.Code, response.Body.String())
+	require.Equal(t, sha256.Sum256([]byte("completion-key")), f.ledger.commands[0].KeyDigest, "completion = %d %s", response.Code, response.Body.String())
 	var value examRecordsCompletionResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &value))
 	require.True(t, value.Current)
@@ -98,9 +70,11 @@ func TestExamRecordsHTTPRequiresExplicitAcknowledgementAndIdempotency(t *testing
 
 func TestExamRecordsHTTPHoldScopeAndPartialRetirementDisclosure(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
-	application := &recordsHTTPApplication{}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: recordsHTTPPrincipal()}, examRecordsResource(application))
-	examID := model.NewExamID()
+	principal := recordsHTTPPrincipal()
+	f := newExamFixture(t, principal)
+	f.ledger.workRetired, f.ledger.integrityRetired = 1, 2
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
+	examID := f.examID
 	path := "/api/v1/exams/" + examID.String() + "/retention-holds"
 	serve := func(body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
@@ -114,26 +88,33 @@ func TestExamRecordsHTTPHoldScopeAndPartialRetirementDisclosure(t *testing.T) {
 	for _, body := range []string{`{"exam_sitting_id":null,"reason_code":"other","private_reason":"Preserve."}`, `{"submission_id":"` + model.NewSubmissionID().String() + `","reason_code":"other","private_reason":"Preserve."}`, `{"reason_code":"john_doe","private_reason":"Preserve."}`, `{"reason_code":"other","private_reason":"Preserve.","private_reason":"Changed."}`} {
 		response := serve(body)
 		require.Equal(t, http.StatusBadRequest, response.Code, "invalid hold = %d %s", response.Code, response.Body.String())
-		require.Equal(t, 0, application.calls, "invalid hold = %d %s", response.Code, response.Body.String())
+		require.Zero(t, f.ledger.requests(), "invalid hold = %d %s", response.Code, response.Body.String())
 	}
 	response := serve(`{"reason_code":"institution_request","private_reason":"Preserve the current institutional record."}`)
 	require.Equal(t, http.StatusCreated, response.Code, "hold = %d %s", response.Code, response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"), "hold = %d %s", response.Code, response.Body.String())
-	require.Equal(t, model.RetentionHoldScope{ExamID: examID}, application.create.Scope, "hold = %d %s", response.Code, response.Body.String())
+	require.Len(t, f.ledger.creations, 1, "the hold never reached the records Store")
+	created := f.ledger.creations[0]
+	require.Equal(t, model.RetentionHoldScope{ExamID: examID}, created.Scope, "hold = %d %s", response.Code, response.Body.String())
+	require.Equal(t, "institution_request", created.ReasonCode, "hold = %d %s", response.Code, response.Body.String())
+	require.Equal(t, sha256.Sum256([]byte("hold-key")), f.ledger.commands[0].KeyDigest, "hold = %d %s", response.Code, response.Body.String())
 	var value retentionHoldResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &value))
 	require.Equal(t, int64(1), value.WorkRetiredSubmissionCount)
 	require.Equal(t, int64(2), value.IntegrityRetiredSubmissionCount)
-	require.Equal(t, application.create.PrivateReason, value.PrivateReason)
+	require.Equal(t, "Preserve the current institutional record.", created.PrivateReason)
+	require.Equal(t, created.PrivateReason, value.PrivateReason)
 }
 
 func TestExamRecordsHTTPCursorBindsScopeAndReleaseFilter(t *testing.T) {
-	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
+	principal := recordsHTTPPrincipal()
+	f := newExamFixture(t, principal)
+	examID, sittingID := f.examID, model.NewExamSittingID()
 	scope := model.RetentionHoldScope{ExamID: examID, SittingID: sittingID}
 	hold := model.RetentionHold{ID: model.NewRetentionHoldID(), Scope: scope, Revision: 1, CreatedAt: time.Now(), CreatedByUserID: model.NewUserID(), ReasonCode: "other", PrivateReason: "Preserve."}
 	logger, _ := routetest.NewLogger(t)
-	application := &recordsHTTPApplication{page: &store.ExamRecordsHoldPage{Holds: []model.RetentionHold{hold}, HasMore: true}}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: recordsHTTPPrincipal()}, examRecordsResource(application))
+	f.ledger.holds, f.ledger.more = []model.RetentionHold{hold}, true
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
 	path := "/api/v1/exams/" + examID.String() + "/retention-holds?exam_sitting_id=" + sittingID.String() + "&limit=1"
 	serve := func(path string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
@@ -148,30 +129,35 @@ func TestExamRecordsHTTPCursorBindsScopeAndReleaseFilter(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code, "page = %d %s", response.Code, response.Body.String())
 	require.NotEmpty(t, page.NextCursor, "page = %d %s", response.Code, response.Body.String())
 	require.Len(t, page.Items, 1, "page = %d %s", response.Code, response.Body.String())
-	application.page.HasMore = false
+	f.ledger.more = false
 	response = serve(path + "&cursor=" + page.NextCursor)
 	require.Equal(t, http.StatusOK, response.Code, "continuation = %d %s", response.Code, response.Body.String())
-	require.Equal(t, hold.ID, application.query.After, "continuation = %d %s", response.Code, response.Body.String())
+	require.Len(t, f.ledger.holdLists, 2, "continuation = %d %s", response.Code, response.Body.String())
+	continuation := f.ledger.holdLists[1]
+	require.Equal(t, hold.ID, continuation.After, "continuation = %d %s", response.Code, response.Body.String())
+	require.Equal(t, scope, continuation.Scope, "continuation = %d %s", response.Code, response.Body.String())
+	require.Equal(t, 1, continuation.Limit, "continuation = %d %s", response.Code, response.Body.String())
 	for _, changed := range []string{path + "&include_released=true&cursor=" + page.NextCursor, strings.Replace(path, sittingID.String(), model.NewExamSittingID().String(), 1) + "&cursor=" + page.NextCursor, path + "&limit=2", path + "&include_released=1", path + "&unexpected=true"} {
-		calls := application.calls
+		requests := f.ledger.requests()
 		response = serve(changed)
 		require.Equal(t, http.StatusBadRequest, response.Code, "changed scope/filter = %d %s", response.Code, response.Body.String())
-		require.Equal(t, calls, application.calls, "changed scope/filter = %d %s", response.Code, response.Body.String())
+		require.Equal(t, requests, f.ledger.requests(), "changed scope/filter = %d %s", response.Code, response.Body.String())
 	}
 }
 
 func TestExamRecordsHTTPReleaseRequiresStrongRecentSession(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
-	application := &recordsHTTPApplication{}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: recordsHTTPPrincipal()}, examRecordsResource(application))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+model.NewExamID().String()+"/retention-holds/"+model.NewRetentionHoldID().String()+"/release", strings.NewReader(`{"expected_revision":1,"reason_code":"case_closed","private_reason":"Resolved."}`))
+	principal := recordsHTTPPrincipal()
+	f := newExamFixture(t, principal)
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/retention-holds/"+model.NewRetentionHoldID().String()+"/release", strings.NewReader(`{"expected_revision":1,"reason_code":"case_closed","private_reason":"Resolved."}`))
 	request.Header.Set("Authorization", "Bearer session")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "release-key")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
 	require.Equal(t, http.StatusForbidden, response.Code, "single-factor release")
-	require.Equal(t, 0, application.calls, "single-factor release")
+	require.Zero(t, f.ledger.requests(), "single-factor release")
 	require.Contains(t, response.Body.String(), "authentication.strong_required", "single-factor release")
 }
 

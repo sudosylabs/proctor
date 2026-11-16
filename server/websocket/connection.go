@@ -17,23 +17,27 @@ import (
 	"sync/atomic"
 	"time"
 
+	gorilla "github.com/gorilla/websocket"
+
+	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type connectionRuntime struct {
 	application Application
-	attempts    ExamAttemptApplication
+	attempts    *attempt.Service
 	logger      *logging.Logger
-	localizer   Localizer
+	localizer   *localization.Localizer
 	locale      string
 	nodeID      string
-	socket      connectionSocket
-	clock       runtimeClock
+	socket      *gorilla.Conn
 	principal   model.Principal
 	metadata    model.RequestMetadata
 	id          string
-	recorder    Recorder
+	recorder    *metrics.Module
 
 	mu                 sync.Mutex
 	nextSequence       int64
@@ -74,12 +78,12 @@ type examAttemptBinding struct {
 
 func newConnectionRuntime(
 	application Application,
-	attempts ExamAttemptApplication,
+	attempts *attempt.Service,
 	logger *logging.Logger,
-	localizer Localizer,
+	localizer *localization.Localizer,
 	locale string,
 	nodeID string,
-	socket connectionSocket,
+	socket *gorilla.Conn,
 	principal model.Principal,
 	metadata model.RequestMetadata,
 	id string,
@@ -96,7 +100,6 @@ func newConnectionRuntime(
 		locale:        locale,
 		nodeID:        nodeID,
 		socket:        socket,
-		clock:         systemRuntimeClock{},
 		principal:     clonePrincipal(principal),
 		metadata:      metadata,
 		id:            id,

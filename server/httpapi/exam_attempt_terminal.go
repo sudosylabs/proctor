@@ -16,7 +16,6 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -31,25 +30,11 @@ const (
 	terminalOpenBytes = 1 << 10
 )
 
-// terminalApplication is what the terminal routes call: the candidate's
-// access is proved by each call. *environment.Terminals implements it, and
-// a nil one, for an installation that runs no execution environments,
+// examAttemptTerminalHandlers prove the candidate's access on each call. A nil
+// Terminals, for an installation that runs no execution environments,
 // answers every call with exam.attempt.environment_unavailable.
-type terminalApplication interface {
-	GetEnvironment(context.Context, invocation.Invocation, environment.CandidateAccess) (model.AttemptEnvironment, error)
-	OpenTerminal(context.Context, invocation.Invocation, environment.CandidateAccess, environment.Window) (environment.Terminal, error)
-	ListTerminals(context.Context, invocation.Invocation, environment.CandidateAccess) (environment.TerminalList, error)
-	InterruptTerminal(context.Context, invocation.Invocation, environment.CandidateAccess, model.AttemptEnvironmentProcessTag) error
-	AttachTerminal(
-		context.Context,
-		invocation.Invocation,
-		environment.CandidateAccess,
-		model.AttemptEnvironmentProcessTag,
-	) (environment.TerminalAttachment, error)
-}
-
 type examAttemptTerminalHandlers struct {
-	app     terminalApplication
+	app     *environment.Terminals
 	sockets BinarySocketTransport
 	logger  *logging.Logger
 }
@@ -88,7 +73,7 @@ func withCandidateAccessErrors(codes ...string) []string {
 	return append(slices.Clone(candidateAccessErrors), codes...)
 }
 
-func examAttemptTerminalResource(application terminalApplication, sockets BinarySocketTransport, logger *logging.Logger) route.Resource {
+func examAttemptTerminalResource(application *environment.Terminals, sockets BinarySocketTransport, logger *logging.Logger) route.Resource {
 	h := examAttemptTerminalHandlers{app: application, sockets: sockets, logger: logger}
 	return route.NewResource("exam_attempt_terminals",
 		route.Endpoint{

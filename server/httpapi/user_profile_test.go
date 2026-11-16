@@ -22,28 +22,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// userActivityHTTPApplication answers the exam activity the user resource
-// still reaches through an interface; the attempt area removes it.
-type userActivityHTTPApplication struct{}
-
-func (userActivityHTTPApplication) ListCandidateExamActivity(context.Context, invocation.Invocation,
-	attempt.CandidateActivityQuery,
-) (attempt.CandidateActivityPage, error) {
-	return attempt.CandidateActivityPage{}, nil
-}
-
 // userResource is the user profile resource over the fixture's real service.
 func userResource(fixture *userFixture) route.Resource {
-	// The email routes run the identity area; tests of them build their own.
-	return userProfileResource(fixture.service, userActivityHTTPApplication{}, nil)
+	// The email routes run the identity area and the exam activity route the
+	// attempt area; tests of them build their own.
+	return userProfileResource(fixture.service, nil, nil)
 }
 
 // directoryCaller is a signed-in CLI caller of the User directory.
@@ -237,7 +226,7 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionUserManage)},
 	})
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
-		userProfileResource(newUserFixture(t).service, userActivityHTTPApplication{}, identityFixture.service))
+		userProfileResource(newUserFixture(t).service, nil, identityFixture.service))
 
 	for _, test := range []struct {
 		name, method, path, body, operation string

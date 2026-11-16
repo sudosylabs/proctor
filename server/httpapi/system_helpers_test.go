@@ -10,10 +10,11 @@ package httpapi
 import (
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
-func systemResource(health Health, buildInfo BuildInfo) route.Resource {
+func systemResource(health *app.Health, buildInfo BuildInfo) route.Resource {
 	return systemResourceWithApplication(
 		health,
 		buildInfo,

@@ -30,7 +30,7 @@ func systemPluginsAPI(t *testing.T, plugins Plugins) http.Handler {
 		AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
 	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, plugins,
+		systemResourceWithApplication(readyHealth(t, true), BuildInfo{}, plugins,
 			nil, time.Now))
 }
 

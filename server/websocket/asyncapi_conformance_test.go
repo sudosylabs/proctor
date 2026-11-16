@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/internal/asyncapidoc"
 	"github.com/sudosylabs/proctor/server/model"
@@ -105,7 +104,7 @@ func TestProtocolFramesMatchAsyncAPI(t *testing.T) {
 	require.Equal(t, protocolMessages, owned, "every protocol message is checked below")
 
 	application := &inboundTestApplication{}
-	connection := newInboundRuntime(application, newInboundTestSocket(), newRuntimeTestClock(time.Now()))
+	connection, _ := newInboundRuntime(t, application, nil)
 	connection.nodeID = "node-a"
 
 	connection.enqueueHello(false, true)
@@ -150,7 +149,7 @@ func TestApplicationEventFramesMatchAsyncAPI(t *testing.T) {
 	t.Parallel()
 
 	contract := loadAsyncAPIContract(t)
-	connection := newInboundRuntime(&inboundTestApplication{}, newInboundTestSocket(), newRuntimeTestClock(time.Now()))
+	connection, _ := newInboundRuntime(t, &inboundTestApplication{}, nil)
 
 	archived, err := realtime.NewExamArchivedEvent(model.NewExamID(), 3, time.Now())
 	require.NoError(t, err)
@@ -240,25 +239,13 @@ func TestExamAttemptConnectAndFocusLossFramesMatchAsyncAPI(t *testing.T) {
 	t.Parallel()
 
 	contract := loadAsyncAPIContract(t)
-	at := time.Date(2026, time.November, 13, 9, 0, 0, 0, time.UTC)
-	sittingID := model.NewExamSittingID()
-	examAttempt, err := model.NewExamAttempt(model.NewExamAttemptID(), model.NewExamID(), sittingID, model.NewUserID(), model.NewExamRevisionID(), at)
-	require.NoError(t, err)
-	workspace, err := model.NewExamAttemptWorkspace(model.NewExamAttemptWorkspaceID(), examAttempt.ID, at)
-	require.NoError(t, err)
-	participationID, connectionID := model.NewAttemptParticipationID(), model.NewAttemptConnectionID()
-	connection, err := model.NewAttemptConnection(connectionID, examAttempt.ID, participationID, model.NewSessionID(), at)
-	require.NoError(t, err)
-	application := &inboundTestApplication{connectResult: attempt.ConnectionResult{Attempt: *examAttempt, Workspace: *workspace,
-		Participation: store.ExamAttemptParticipationView{ID: participationID, AttemptID: examAttempt.ID,
-			State: model.AttemptParticipationActive, Generation: 1, StartedAt: at, UpdatedAt: at,
-			LeaseExpiresAt: at.Add(model.AttemptParticipationInitialLease)}, Connection: *connection, ClassID: model.NewClassID(), FirstAdmission: true},
-		focusLossResult: attempt.FocusLossEvaluation{AttemptID: examAttempt.ID, ParticipationID: participationID,
-			Generation: 1, AcceptedSequence: 1, ReceivedAt: at.Add(time.Minute), Qualified: true, CandidateWarningCreated: true}}
-	application.connectResult.Security = inboundSecurityFixture(t, application.connectResult)
-	application.connectResult.RuntimeCapabilities = conformanceRuntimeCapabilities(t, examAttempt.AdmissionRevisionID, at)
-	runtime := newInboundRuntime(application, newInboundTestSocket(), newRuntimeTestClock(at))
-	runtime.principal.UserID, runtime.principal.SessionID = examAttempt.CandidateUserID, connection.SessionID
+	f := newAttemptFixture(t)
+	capabilities := conformanceRuntimeCapabilities(t, f.sitting.ExamRevisionID, f.at)
+	f.store.runtimeCapabilities = &capabilities
+	f.store.focusOutcome = model.IntegrityOutcomeFlagAndWarn
+	f.store.databaseTime = f.at.Add(time.Minute)
+	sittingID := f.sitting.ID
+	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
 	credential := model.NewCredentialToken()
 
 	connect := requestWithData(t, 1, examAttemptConnectAction, validExamAttemptConnectRequest(t, sittingID, "connect", credential))
@@ -278,12 +265,12 @@ func TestExamAttemptConnectAndFocusLossFramesMatchAsyncAPI(t *testing.T) {
 	components.require(t, "AttemptConfigurationCandidate", connectData["initial_configuration"])
 
 	resume := requestWithData(t, 2, examAttemptConnectAction, examAttemptConnectRequest{
-		Security: model.ConnectSecurity{Kind: "resume", ParticipationID: participationID, Generation: 1,
+		Security: model.ConnectSecurity{Kind: "resume", ParticipationID: f.store.log().connects[0].ParticipationID, Generation: 1,
 			PolicyDigest: model.SHA256Fingerprint([]byte("policy"))},
 		ExamSittingID: sittingID.String(), IdempotencyKey: "resume", ContinuityCredential: credential,
 		ConfigurationManifestFingerprint: model.CurrentAttemptConfigurationManifestFingerprint(),
 	})
-	_, err = decodeExamAttemptConnectRequest(resume.Data)
+	_, err := decodeExamAttemptConnectRequest(resume.Data)
 	require.NoError(t, err, "the documented resume is one the server accepts")
 	contract.requireFrame(t, "exam_attempt.connect", resume)
 

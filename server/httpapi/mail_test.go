@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,100 +20,52 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-type recordingMailAPI struct {
-	sends     int
-	ids       []model.MailDeliveryID
-	view      mail.DeliveryView
-	lists     int
-	listQuery mail.ListDeliveriesQuery
-	metrics   int
-	rekeys    []string
-	rekeyIDs  []model.JobID
+// mailHandlerRequest is what the route kernel hands a mail handler for the
+// signed-in operator.
+func mailHandlerRequest(t *testing.T, principal model.Principal, request *http.Request, params route.Params) route.Request {
+	t.Helper()
+	return route.Request{Context: t.Context(), Principal: principal, Metadata: model.RequestMetadata{RequestID: "mail-test"}, HTTP: request, Params: params}
 }
 
-func (m *recordingMailAPI) GetMailKeyState(context.Context, invocation.Invocation) (mail.KeyStateView, error) {
-	return mail.KeyStateView{PrimaryKeyID: "22222222222222222222222222222222",
-		RequiredPrimaryKeyID: "22222222222222222222222222222222", Active: []mail.PayloadKeyUsageView{{
-			KeyID: "11111111111111111111111111111111", ActiveReferences: 7,
-		}}}, nil
-}
-
-func (m *recordingMailAPI) StartMailRekey(_ context.Context, _ invocation.Invocation, retiringKeyID string) (mail.RekeyView, error) {
-	m.rekeys = append(m.rekeys, retiringKeyID)
-	return mail.RekeyView{JobID: model.NewJobID(), PrimaryKeyID: "22222222222222222222222222222222",
-		RetiringKeyID: retiringKeyID, CreatedAt: time.Unix(100, 0).UTC()}, nil
-}
-
-func (m *recordingMailAPI) GetMailRekeyStatus(_ context.Context, _ invocation.Invocation, jobID model.JobID) (mail.RekeyStatusView, error) {
-	m.rekeyIDs = append(m.rekeyIDs, jobID)
-	return mail.RekeyStatusView{JobID: jobID, Status: model.JobStatusSucceeded,
-		PrimaryKeyID: "22222222222222222222222222222222", RetiringKeyID: "11111111111111111111111111111111",
-		CreatedAt: time.Unix(100, 0).UTC(), UpdatedAt: time.Unix(103, 0).UTC(), CompletedAt: model.OptionalTimeFrom(time.Unix(103, 0).UTC()),
-		AttemptCount: 2, MaximumAttempts: 11, Processed: 9, Reencrypted: 8,
-		Progress: &mail.RekeyProgressView{Current: 4, Total: 9, Stage: "reencrypting"},
-		Proof:    &mail.RekeyProofView{RetirementSafe: true}}, nil
-}
-
-func (m *recordingMailAPI) GetMailMetrics(context.Context, invocation.Invocation) (mail.MetricsSnapshot, error) {
-	m.metrics++
-	return mail.MetricsSnapshot{HealthCode: mail.HealthHealthy}, nil
-}
-
-func (m *recordingMailAPI) SendTestMail(context.Context, invocation.Invocation) (mail.DeliveryView, error) {
-	m.sends++
-	return m.view, nil
-}
-func (m *recordingMailAPI) GetMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (mail.DeliveryView, error) {
-	m.ids = append(m.ids, id)
-	return m.view, nil
-}
-func (m *recordingMailAPI) ListMailDeliveries(_ context.Context, _ invocation.Invocation, query mail.ListDeliveriesQuery) (mail.DeliveryPage, error) {
-	m.lists++
-	m.listQuery = query
-	page := mail.DeliveryPage{Items: []mail.DeliveryView{m.view}}
-	if query.BeforeID.IsZero() {
-		page.Total = paging.Total{Counted: true, Total: 1}
-	}
-	return page, nil
-}
-func (m *recordingMailAPI) CancelMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (mail.DeliveryView, error) {
-	m.ids = append(m.ids, id)
-	return m.view, nil
-}
-func (m *recordingMailAPI) RetryMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (mail.DeliveryView, error) {
-	m.ids = append(m.ids, id)
-	return m.view, nil
+// mailFixtureDelivery is a stored test-mail delivery in state, written at.
+func mailFixtureDelivery(id model.MailDeliveryID, state model.MailDeliveryState, at time.Time) *model.MailDelivery {
+	return &model.MailDelivery{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest,
+		TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: state, CreatedAt: at, UpdatedAt: at,
+		MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>", Revision: 1}
 }
 
 func TestMailResourceRejectsCallerSuppliedContentAndProjectsNoSecrets(t *testing.T) {
-	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
-	id := model.NewMailDeliveryID()
-	fake := &recordingMailAPI{view: mail.DeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryQueued, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
-	h := mailHandlers{app: fake}
+	principal := mailOperatorPrincipal()
+	fixture := newMailFixture(t, principal)
+	h := mailHandlers{app: fixture.service}
 	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/test", bytes.NewBufferString(`{"recipient":"attacker@example.test","body":"chosen"}`))
-	_, err := h.sendTest(route.Request{HTTP: request})
-	require.True(t, apperror.Is(err, "request.invalid"), "caller content accepted: %v sends", err)
-	require.Equal(t, 0, fake.sends, "caller content accepted: %v sends", err)
+	_, err := h.sendTest(mailHandlerRequest(t, principal, request, nil))
+	require.True(t, apperror.Is(err, "request.invalid"), "caller content accepted: %v", err)
+	require.Empty(t, fixture.deliveries.enqueued, "caller content reached the mail Store")
 	request, _ = http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/test", nil)
-	result, err := h.sendTest(route.Request{HTTP: request})
+	result, err := h.sendTest(mailHandlerRequest(t, principal, request, nil))
 	require.NoError(t, err, "empty test = %#v", result)
 	require.Equal(t, http.StatusAccepted, result.Status(), "empty test = %#v", result)
-	require.Equal(t, 1, fake.sends, "empty test = %#v", result)
+	require.Len(t, fixture.deliveries.enqueued, 1, "the empty test was queued once")
+	queued := fixture.deliveries.enqueued[0].Delivery
+	require.Equal(t, principal.UserID, queued.TargetUserID, "test mail goes only to the caller")
+	require.Equal(t, model.MailTemplateSystemTest, queued.TemplateKey)
+	require.Equal(t, []model.UserID{principal.UserID}, fixture.limiter.accounted, "the caller's test mail was rate limited")
 	// Field names are checked, not values: delivery and message IDs are random
 	// and can spell any short word.
-	encoded, err := json.Marshal(mailResponse(fake.view))
+	encoded, err := json.Marshal(result.Body())
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "operator@example.test")
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(encoded, &fields))
+	require.JSONEq(t, `"`+queued.ID.String()+`"`, string(fields["id"]), "the response is the queued delivery")
 	for name := range fields {
 		for _, forbidden := range []string{"ciphertext", "subject", "html", "body"} {
 			require.NotContains(t, name, forbidden, "mail response field %q", name)
@@ -125,13 +76,19 @@ func TestMailResourceRejectsCallerSuppliedContentAndProjectsNoSecrets(t *testing
 func TestMailDeliveryListCursorFiltersAndMutationBodiesAreBounded(t *testing.T) {
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	id := model.NewMailDeliveryID()
-	fake := &recordingMailAPI{view: mail.DeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryFailed, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
-	h := mailHandlers{app: fake}
+	principal := mailOperatorPrincipal()
+	fixture := newMailFixture(t, principal)
+	fixture.deliveries.listed = []*model.MailDelivery{mailFixtureDelivery(id, model.MailDeliveryFailed, at)}
+	h := mailHandlers{app: fixture.service}
 	request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?state=failed&template_key=system.mail_test&created_after=1970-01-01T00:00:00.001Z&created_before=2286-11-20T17:46:39.999Z&limit=1", nil)
-	result, err := h.listDeliveries(route.Request{HTTP: request})
-	require.NoError(t, err, "list result=%#v err=%v lists", result, err)
-	require.Equal(t, http.StatusOK, result.Status(), "list result=%#v err=%v lists", result, err)
-	require.Equal(t, 1, fake.lists, "list result=%#v err=%v lists", result, err)
+	result, err := h.listDeliveries(mailHandlerRequest(t, principal, request, nil))
+	require.NoError(t, err, "list result=%#v err=%v", result, err)
+	require.Equal(t, http.StatusOK, result.Status(), "list result=%#v err=%v", result, err)
+	require.Len(t, fixture.deliveries.lists, 1, "the listing reached the mail Store once")
+	listed := fixture.deliveries.lastList(t)
+	require.Equal(t, 2, listed.Limit, "the page size reached the Store with its probe row")
+	require.Equal(t, []model.MailDeliveryState{model.MailDeliveryFailed}, listed.States)
+	require.Equal(t, []model.MailTemplateKey{model.MailTemplateSystemTest}, listed.TemplateKeys)
 	cursor, err := encodeMailDeliveryCursor(mailDeliveryCursor{Sort: "updated", Dir: listDescending, At: at.Format(time.RFC3339Nano), ID: id.String()})
 	require.NoError(t, err)
 	decoded, err := decodeMailDeliveryCursor(cursor)
@@ -139,105 +96,118 @@ func TestMailDeliveryListCursorFiltersAndMutationBodiesAreBounded(t *testing.T) 
 	require.Equal(t, id.String(), decoded.ID, "cursor=%#v err", decoded)
 	require.Equal(t, at.Format(time.RFC3339Nano), decoded.At, "cursor=%#v err", decoded)
 	request, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?state=not-a-state", nil)
-	_, err = h.listDeliveries(route.Request{HTTP: request})
-	require.True(t, apperror.Is(err, "request.invalid"), "invalid filter err=%v lists", err)
-	require.Equal(t, 1, fake.lists, "invalid filter err=%v lists", err)
+	_, err = h.listDeliveries(mailHandlerRequest(t, principal, request, nil))
+	require.True(t, apperror.Is(err, "request.invalid"), "invalid filter err=%v", err)
+	require.Len(t, fixture.deliveries.lists, 1, "an invalid filter reaches no listing")
 	recipient := model.NewUserID()
 	request, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?recipient_user_id="+recipient.String(), nil)
-	_, err = h.listDeliveries(route.Request{HTTP: request})
+	_, err = h.listDeliveries(mailHandlerRequest(t, principal, request, nil))
 	require.NoError(t, err)
-	require.Equal(t, recipient, fake.listQuery.RecipientUserID, "the recipient User reaches the application")
+	require.Equal(t, recipient, fixture.deliveries.lastList(t).RecipientUserID, "the recipient User reaches the mail Store")
 	for _, raw := range []string{"recipient_user_id=someone@example.test", "recipient_user_id=", "recipient_user_id=" + recipient.String() + "&recipient_user_id=" + recipient.String()} {
 		request, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?"+raw, nil)
-		_, err = h.listDeliveries(route.Request{HTTP: request})
+		_, err = h.listDeliveries(mailHandlerRequest(t, principal, request, nil))
 		require.True(t, apperror.Is(err, "request.invalid"), "%s err=%v", raw, err)
 	}
-	require.Equal(t, 2, fake.lists, "a refused recipient reaches no listing")
+	require.Len(t, fixture.deliveries.lists, 2, "a refused recipient reaches no listing")
 	request, _ = http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/deliveries/"+id.String()+"/retry", bytes.NewBufferString(`{"body":"forbidden"}`))
-	_, err = h.retryDelivery(route.Request{HTTP: request, Params: route.Params{"mail_delivery_id": id.String()}})
-	require.True(t, apperror.Is(err, "request.invalid"), "retry body err=%v ids", err)
-	require.Empty(t, fake.ids, "retry body err=%v ids", err)
+	_, err = h.retryDelivery(mailHandlerRequest(t, principal, request, route.Params{"mail_delivery_id": id.String()}))
+	require.True(t, apperror.Is(err, "request.invalid"), "retry body err=%v", err)
+	require.Empty(t, fixture.deliveries.gets, "a retry body reaches no delivery")
+	require.Empty(t, fixture.deliveries.retries, "a retry body reaches no delivery")
 }
 
 func TestMailDeliveryEndpointForwardsExactCursorAndMapsMalformedCursor(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 24, 10, 11, 12, 345000, time.UTC)
 	id := model.NewMailDeliveryID()
-	fake := &recordingMailAPI{view: mail.DeliveryView{ID: model.NewMailDeliveryID(), CreatedAt: at.Add(-time.Minute)}}
+	principal := operatorTestPrincipal()
+	fixture := newMailFixture(t, principal)
+	fixture.deliveries.listed = []*model.MailDelivery{mailFixtureDelivery(model.NewMailDeliveryID(), model.MailDeliveryQueued, at.Add(-time.Minute))}
 	logger, _ := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: operatorTestPrincipal()}, mailResource(fake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, mailResource(fixture.service))
 	cursor, err := encodeMailDeliveryCursor(mailDeliveryCursor{Sort: "updated", Dir: listDescending, At: at.Format(time.RFC3339Nano), ID: id.String()})
 	require.NoError(t, err)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?cursor="+url.QueryEscape(cursor), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "cursor forwarding = %d query=%#v body=%s", response.Code, fake.listQuery, response.Body.String())
-	require.True(t, fake.listQuery.BeforeAt.Equal(at), "cursor forwarding = %d query=%#v body=%s", response.Code, fake.listQuery, response.Body.String())
-	require.Equal(t, id, fake.listQuery.BeforeID, "cursor forwarding = %d query=%#v body=%s", response.Code, fake.listQuery, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "cursor forwarding = %d body=%s", response.Code, response.Body.String())
+	continued := fixture.deliveries.lastList(t)
+	require.True(t, continued.BeforeAt.Equal(at), "cursor forwarding = %#v", continued)
+	require.Equal(t, id, continued.BeforeID, "cursor forwarding = %#v", continued)
 
 	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
 	assertHTTPProblem(t, malformedResponse, http.StatusBadRequest, "request.invalid")
+	require.Len(t, fixture.deliveries.lists, 1, "a malformed cursor reaches no listing")
 }
 
 func TestMailMetricsProjectsOnlyBoundedOperationalDimensions(t *testing.T) {
 	t.Parallel()
-	fake := &recordingMailAPI{}
-	result, err := (mailHandlers{app: fake}).getMetrics(route.Request{HTTP: &http.Request{}})
-	require.NoError(t, err, "getMetrics() = %#v, %v calls", result, err)
-	require.Equal(t, http.StatusOK, result.Status(), "getMetrics() = %#v, %v calls", result, err)
-	require.Equal(t, 1, fake.metrics, "getMetrics() = %#v, %v calls", result, err)
+	principal := mailOperatorPrincipal()
+	fixture := newMailFixture(t, principal)
+	result, err := (mailHandlers{app: fixture.service}).getMetrics(mailHandlerRequest(t, principal, &http.Request{}, nil))
+	require.NoError(t, err, "getMetrics() = %#v, %v", result, err)
+	require.Equal(t, http.StatusOK, result.Status(), "getMetrics() = %#v, %v", result, err)
+	require.Equal(t, 1, fixture.metrics.reads, "getMetrics() = %#v, %v", result, err)
 }
 
 func TestMailRekeyAcceptsOnlyAKeyIdentityAndProjectsSafeOperation(t *testing.T) {
 	t.Parallel()
-	fake := &recordingMailAPI{}
-	h := mailHandlers{app: fake}
+	principal := mailOperatorPrincipal()
+	fixture := newMailFixture(t, principal)
+	primaryKeyID := fixture.sealer.PrimaryKeyID()
+	fixture.deliveries.keyState = &store.MailKeyState{RequiredPrimaryKeyID: primaryKeyID,
+		Active: []store.MailPayloadKeyUsage{{KeyID: fixture.retiringID, ActiveReferences: 7}}}
+	h := mailHandlers{app: fixture.service}
 	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/rekey",
-		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111"}`))
+		bytes.NewBufferString(`{"retiring_key_id":"`+fixture.retiringID+`"}`))
 	request.Header.Set("Content-Type", "application/json")
-	result, err := h.startRekey(route.Request{HTTP: request})
-	require.NoError(t, err, "startRekey() = %#v, %v calls", result, err)
-	require.Equal(t, http.StatusAccepted, result.Status(), "startRekey() = %#v, %v calls", result, err)
-	require.Len(t, fake.rekeys, 1, "startRekey() = %#v, %v calls", result, err)
-	require.Equal(t, "11111111111111111111111111111111", fake.rekeys[0], "startRekey() = %#v, %v calls", result, err)
+	result, err := h.startRekey(mailHandlerRequest(t, principal, request, nil))
+	require.NoError(t, err, "startRekey() = %#v, %v", result, err)
+	require.Equal(t, http.StatusAccepted, result.Status(), "startRekey() = %#v, %v", result, err)
+	starts := fixture.deliveries.rekeyStarts
+	require.Len(t, starts, 1, "startRekey() = %#v, %v", result, err)
+	require.Equal(t, fixture.retiringID, starts[0].RetiringKeyID, "startRekey() = %#v, %v", result, err)
+	require.Equal(t, primaryKeyID, starts[0].PrimaryKeyID, "the rekey targets the configured primary key")
+	require.Equal(t, 1, fixture.wakes, "the rekey Job was woken")
 	response, ok := result.Body().(mailRekeyResponse)
 	require.True(t, ok)
-	require.NotEmpty(t, response.JobID)
-	require.Equal(t, "22222222222222222222222222222222", response.PrimaryKeyID)
-	require.Equal(t, fake.rekeys[0], response.RetiringKeyID)
-	require.Equal(t, "1970-01-01T00:01:40Z", response.CreatedAt)
+	require.Equal(t, starts[0].Job.ID.String(), response.JobID)
+	require.Equal(t, primaryKeyID, response.PrimaryKeyID)
+	require.Equal(t, starts[0].RetiringKeyID, response.RetiringKeyID)
+	require.Equal(t, "2026-09-04T12:00:00Z", response.CreatedAt)
 	invalid, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/rekey",
-		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111","encryption_key":"secret"}`))
+		bytes.NewBufferString(`{"retiring_key_id":"`+fixture.retiringID+`","encryption_key":"secret"}`))
 	invalid.Header.Set("Content-Type", "application/json")
-	_, err = h.startRekey(route.Request{HTTP: invalid})
-	require.True(t, apperror.Is(err, "request.invalid"), "secret-bearing rekey body error = %v calls", err)
-	require.Len(t, fake.rekeys, 1, "secret-bearing rekey body error = %v calls", err)
-	stateResult, err := h.getKeyState(route.Request{HTTP: &http.Request{}})
-	state, ok := stateResult.Body().(mailKeyStateResponse)
+	_, err = h.startRekey(mailHandlerRequest(t, principal, invalid, nil))
+	require.True(t, apperror.Is(err, "request.invalid"), "secret-bearing rekey body error = %v", err)
+	require.Len(t, fixture.deliveries.rekeyStarts, 1, "secret-bearing rekey body error = %v", err)
+	stateResult, err := h.getKeyState(mailHandlerRequest(t, principal, &http.Request{}, nil))
 	require.NoError(t, err, "key state response = %#v", stateResult.Body())
+	state, ok := stateResult.Body().(mailKeyStateResponse)
 	require.True(t, ok, "key state response = %#v", stateResult.Body())
-	require.Equal(t, "22222222222222222222222222222222", state.PrimaryKeyID, "key state response = %#v", stateResult.Body())
+	require.Equal(t, primaryKeyID, state.PrimaryKeyID, "key state response = %#v", stateResult.Body())
 	require.Equal(t, state.PrimaryKeyID, state.RequiredPrimaryKeyID, "key state response = %#v", stateResult.Body())
 	require.Len(t, state.Active, 1, "key state response = %#v", stateResult.Body())
-	require.Equal(t, "11111111111111111111111111111111", state.Active[0].KeyID, "key state response = %#v", stateResult.Body())
+	require.Equal(t, fixture.retiringID, state.Active[0].KeyID, "key state response = %#v", stateResult.Body())
 	require.Equal(t, int64(7), state.Active[0].ActiveReferences, "key state response = %#v", stateResult.Body())
 }
 
 func TestMailRekeyStatusProjectsSafeProgressAndFinalProof(t *testing.T) {
 	t.Parallel()
-	jobID := model.NewJobID()
-	fake := &recordingMailAPI{}
-	result, err := (mailHandlers{app: fake}).getRekeyStatus(route.Request{
-		HTTP: &http.Request{}, Params: route.Params{"job_id": jobID.String()},
-	})
-	require.NoError(t, err, "getRekeyStatus() = %#v, %v ids", result, err)
-	require.Equal(t, http.StatusOK, result.Status(), "getRekeyStatus() = %#v, %v ids", result, err)
-	require.Len(t, fake.rekeyIDs, 1, "getRekeyStatus() = %#v, %v ids", result, err)
-	require.Equal(t, jobID, fake.rekeyIDs[0], "getRekeyStatus() = %#v, %v ids", result, err)
+	principal := mailOperatorPrincipal()
+	fixture := newMailFixture(t, principal)
+	rekey := succeededMailRekeyJob(t, fixture.sealer.PrimaryKeyID(), fixture.retiringID, mailFixtureNow.Add(-time.Hour))
+	fixture.rekeyJobs.jobs = []*model.Job{rekey}
+	jobID := rekey.ID
+	result, err := (mailHandlers{app: fixture.service}).getRekeyStatus(mailHandlerRequest(t, principal, &http.Request{}, route.Params{"job_id": jobID.String()}))
+	require.NoError(t, err, "getRekeyStatus() = %#v, %v", result, err)
+	require.Equal(t, http.StatusOK, result.Status(), "getRekeyStatus() = %#v, %v", result, err)
+	require.Equal(t, []model.JobID{jobID}, fixture.rekeyJobs.gets, "getRekeyStatus() = %#v, %v", result, err)
 	response, ok := result.Body().(mailRekeyStatusResponse)
 	require.True(t, ok)
 	require.Equal(t, jobID.String(), response.JobID)

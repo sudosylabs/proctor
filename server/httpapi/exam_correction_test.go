@@ -9,51 +9,60 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/exam/correction"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// newCorrectionAPI serves the correction routes over a fresh fixture whose
+// Sitting is Open at revision 7, as its caller.
+func newCorrectionAPI(t *testing.T) (*sittingFixture, http.Handler) {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	principal := testExamHTTPPrincipal()
+	f := newSittingFixture(t, principal)
+	f.moveSittingTo(t, model.ExamSittingOpen, 7)
+	return f, newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examSittingCorrectionResource(f.correctionService))
+}
+
 func TestExamSittingCorrectionHTTPStagesResourceContentAndReturnsOnlySafeAuthoritativeMetadata(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingCorrectionHTTPFake()
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
+	f, httpAPI := newCorrectionAPI(t)
+	baseRevisionID := f.sitting.ExamRevisionID
 	raw := []byte("corrected reference")
 	digest := fmt.Sprintf("%x", sha256.Sum256(raw))
-	metadata := `{"base_revision_id":"` + fake.baseRevisionID.String() + `","target_kind":"addition","media_type":"text/markdown","size":19,"sha256":"` + digest + `"}`
+	metadata := `{"base_revision_id":"` + baseRevisionID.String() + `","target_kind":"addition","media_type":"text/markdown","size":19,"sha256":"` + digest + `"}`
 	body, contentType := examResourceMultipart(t, metadata, raw, false)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(f)+"/correction-resource-stages", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "stage-correction-once")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status=%d body=%s", response.Code, response.Body.String())
-	require.Equal(t, fake.examID, fake.stage.ExamID, "command=%#v uploaded=%q", fake.stage, fake.uploaded)
-	require.Equal(t, fake.sittingID, fake.stage.SittingID, "command=%#v uploaded=%q", fake.stage, fake.uploaded)
-	require.Equal(t, fake.baseRevisionID, fake.stage.BaseRevisionID, "command=%#v uploaded=%q", fake.stage, fake.uploaded)
-	require.Equal(t, store.ExamCorrectionResourceAddition, fake.stage.Target, "command=%#v uploaded=%q", fake.stage, fake.uploaded)
-	require.False(t, fake.stage.ResourceID.IsValid(), "command=%#v uploaded=%q", fake.stage, fake.uploaded)
-	require.Equal(t, "stage-correction-once", fake.stage.IdempotencyKey, "command=%#v uploaded=%q", fake.stage, fake.uploaded)
-	require.True(t, bytes.Equal(fake.uploaded, raw), "command=%#v uploaded=%q", fake.stage, fake.uploaded)
+	require.Len(t, f.correctionStore.reservations, 1, "the stage never reached the correction Store")
+	reservation := f.correctionStore.reservations[0]
+	require.Equal(t, f.examID, reservation.ExamID)
+	require.Equal(t, f.sitting.ID, reservation.SittingID)
+	require.Equal(t, baseRevisionID, reservation.BaseRevisionID)
+	require.Equal(t, store.ExamCorrectionResourceAddition, reservation.Target)
+	// An addition names no existing Resource: the service allocates its
+	// Resource and a pristine File Entry.
+	require.True(t, reservation.ResourceID.IsValid())
+	require.NotNil(t, reservation.Entry)
+	require.Equal(t, sha256.Sum256([]byte("stage-correction-once")), f.correctionStore.lastCommand(t).KeyDigest)
+	require.Equal(t, [][]byte{raw}, f.correctionContent.stored, "the uploaded bytes reached the file store unchanged")
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
 	wantKeys := []string{"stage_id", "resource_id", "media_type", "size", "sha256", "expires_at"}
@@ -65,8 +74,11 @@ func TestExamSittingCorrectionHTTPStagesResourceContentAndReturnsOnlySafeAuthori
 	for _, forbidden := range []string{"file_entry_id", "file_revision_id", "rendition_id", "upload_lease_id", "object_key", "path", "url"} {
 		assert.False(t, bytes.Contains(response.Body.Bytes(), []byte(forbidden)), "response exposed %q: %s", forbidden, response.Body.String())
 	}
+	// The response describes the stored rendition, whose media type the file
+	// store detected, not the one the request declared.
+	require.Equal(t, `"`+reservation.ResourceID.String()+`"`, string(payload["resource_id"]))
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"media_type":"text/plain"`)))
-	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(strings.Repeat("b", 64))))
+	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(f.correctionStore.readiness[0].Rendition.SHA256)))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte(`"media_type":"text/markdown"`)))
 }
 
@@ -79,78 +91,74 @@ func TestExamSittingCorrectionHTTPStageMetadataIsStrictAndExplicitZeroIsValid(t 
 		"unknown field":              `{"base_revision_id":"BASE","target_kind":"addition","media_type":"text/plain","size":0,"sha256":"DIGEST","object_key":"private"}`,
 		"duplicate field":            `{"base_revision_id":"BASE","target_kind":"addition","target_kind":"replacement","media_type":"text/plain","size":0,"sha256":"DIGEST"}`,
 	} {
-		name, metadata := name, metadata
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := routetest.NewLogger(t)
-			fake := newExamSittingCorrectionHTTPFake()
-			metadata = strings.ReplaceAll(metadata, "BASE", fake.baseRevisionID.String())
+			f, httpAPI := newCorrectionAPI(t)
+			metadata = strings.ReplaceAll(metadata, "BASE", f.sitting.ExamRevisionID.String())
 			metadata = strings.ReplaceAll(metadata, "RESOURCE", model.NewExamResourceID().String())
 			metadata = strings.ReplaceAll(metadata, "DIGEST", fmt.Sprintf("%x", sha256.Sum256(nil)))
-			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 			body, contentType := examResourceMultipart(t, metadata, nil, false)
-			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(f)+"/correction-resource-stages", body)
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", contentType)
 			request.Header.Set("Idempotency-Key", "invalid-stage")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
-			require.Equal(t, http.StatusBadRequest, response.Code, "status=%d calls=%d body=%s", response.Code, fake.stageCalls, response.Body.String())
-			require.Equal(t, 0, fake.stageCalls, "status=%d calls=%d body=%s", response.Code, fake.stageCalls, response.Body.String())
+			require.Equal(t, http.StatusBadRequest, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+			require.Empty(t, f.correctionStore.reservations, "a rejected stage reached the correction Store")
+			require.Empty(t, f.correctionContent.stored, "a rejected stage reached the file store")
 		})
 	}
 
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingCorrectionHTTPFake()
-	fake.stageResult.Size = 0
-	fake.stageResult.SHA256 = fmt.Sprintf("%x", sha256.Sum256(nil))
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
-	metadata := fmt.Sprintf(`{"base_revision_id":"%s","target_kind":"addition","media_type":"text/plain","size":0,"sha256":"%s"}`, fake.baseRevisionID, fake.stageResult.SHA256)
+	f, httpAPI := newCorrectionAPI(t)
+	emptyDigest := fmt.Sprintf("%x", sha256.Sum256(nil))
+	metadata := fmt.Sprintf(`{"base_revision_id":"%s","target_kind":"addition","media_type":"text/plain","size":0,"sha256":"%s"}`, f.sitting.ExamRevisionID, emptyDigest)
 	body, contentType := examResourceMultipart(t, metadata, nil, false)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(f)+"/correction-resource-stages", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "empty-stage")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusCreated, response.Code, "status=%d calls=%d command=%#v body=%s", response.Code, fake.stageCalls, fake.stage, response.Body.String())
-	require.Equal(t, 1, fake.stageCalls, "status=%d calls=%d command=%#v body=%s", response.Code, fake.stageCalls, fake.stage, response.Body.String())
-	require.Equal(t, int64(0), fake.stage.Size, "status=%d calls=%d command=%#v body=%s", response.Code, fake.stageCalls, fake.stage, response.Body.String())
-	require.Empty(t, fake.uploaded, "status=%d calls=%d command=%#v body=%s", response.Code, fake.stageCalls, fake.stage, response.Body.String())
+	require.Equal(t, http.StatusCreated, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+	require.Len(t, f.correctionStore.reservations, 1, "the empty stage never reached the correction Store")
+	require.Len(t, f.correctionStore.readiness, 1)
+	require.Equal(t, int64(0), f.correctionStore.readiness[0].Rendition.Size)
+	require.Equal(t, [][]byte{{}}, f.correctionContent.stored, "the file store read an empty body")
 }
 
 func TestExamSittingCorrectionHTTPAppliesCompleteOrderedManifestAndKeepsReasonPrivate(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingCorrectionHTTPFake()
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
+	f, httpAPI := newCorrectionAPI(t)
+	baseRevisionID := f.sitting.ExamRevisionID
 	first, second := model.NewExamResourceID(), model.NewExamResourceID()
 	stageID := model.NewExamCorrectionResourceStageID()
 	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","instructions_markdown":"","candidate_summary":"A reference was corrected.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":true,"reason":"Fix misleading reference","resources":[{"resource_id":"%s","display_name":"New reference","description_markdown":"**Corrected**","stage_id":"%s"},{"resource_id":"%s","display_name":"Existing reference","description_markdown":""}]}`,
-		fake.baseRevisionID, first, stageID, second)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
+		baseRevisionID, first, stageID, second)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(f)+"/corrections", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "apply-correction-once")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status=%d body=%s", response.Code, response.Body.String())
-	command := fake.apply
-	require.Equal(t, fake.examID, command.ExamID)
-	require.Equal(t, fake.sittingID, command.SittingID)
-	require.Equal(t, int64(7), command.ExpectedSittingRevision)
-	require.Equal(t, fake.baseRevisionID, command.ExpectedCurrentRevisionID)
-	require.True(t, command.Instructions.Present)
-	require.Empty(t, command.Instructions.Markdown)
-	require.Equal(t, "A reference was corrected.", command.CandidateSummary)
-	require.True(t, command.AcknowledgementRequired)
-	require.Equal(t, "Fix misleading reference", command.PrivateReason)
-	require.Equal(t, "apply-correction-once", command.IdempotencyKey)
-	require.Len(t, command.Resources, 2)
-	require.Equal(t, first, command.Resources[0].ResourceID)
-	require.Equal(t, stageID, command.Resources[0].StageID)
-	require.Equal(t, second, command.Resources[1].ResourceID)
-	require.False(t, command.Resources[1].StageID.IsValid())
+	require.Len(t, f.correctionStore.applications, 1, "the correction never reached the correction Store")
+	application := f.correctionStore.applications[0]
+	require.Equal(t, f.examID, application.ExamID)
+	require.Equal(t, f.sitting.ID, application.SittingID)
+	require.Equal(t, int64(7), application.ExpectedSittingRevision)
+	require.Equal(t, baseRevisionID, application.CurrentRevisionID)
+	require.NotNil(t, application.InstructionsMarkdown, "explicit empty instructions replace the current ones")
+	require.Empty(t, *application.InstructionsMarkdown)
+	require.Equal(t, "A reference was corrected.", application.CandidateSummary)
+	require.True(t, application.AcknowledgementRequired)
+	require.Equal(t, "Fix misleading reference", application.PrivateReason)
+	require.Equal(t, sha256.Sum256([]byte("apply-correction-once")), f.correctionStore.lastCommand(t).KeyDigest)
+	require.Len(t, application.Resources, 2)
+	require.Equal(t, first, application.Resources[0].ResourceID)
+	require.Equal(t, stageID, application.Resources[0].StageID)
+	require.Equal(t, second, application.Resources[1].ResourceID)
+	require.False(t, application.Resources[1].StageID.IsValid())
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("Fix misleading reference")))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("Corrected")))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("stage_id")))
@@ -163,36 +171,31 @@ func TestExamSittingCorrectionHTTPAppliesCompleteOrderedManifestAndKeepsReasonPr
 
 func TestExamSittingCorrectionHTTPRejectsPaddedPrivateReasonBeforeApplication(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingCorrectionHTTPFake()
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
-	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"A correction was made.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":" padded ","resources":[]}`, fake.baseRevisionID)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
+	f, httpAPI := newCorrectionAPI(t)
+	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"A correction was made.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":" padded ","resources":[]}`, f.sitting.ExamRevisionID)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(f)+"/corrections", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "invalid-correction")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusBadRequest, response.Code, "status=%d calls=%d body=%s", response.Code, fake.applyCalls, response.Body.String())
-	require.Equal(t, 0, fake.applyCalls, "status=%d calls=%d body=%s", response.Code, fake.applyCalls, response.Body.String())
+	require.Equal(t, http.StatusBadRequest, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+	require.Empty(t, f.correctionStore.applications, "a rejected correction reached the correction Store")
 }
 
 func TestExamSittingCorrectionHTTPOmittedInstructionsPreservesCurrentValue(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingCorrectionHTTPFake()
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
-	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"The resource list was corrected.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":"Resource-only correction","resources":[]}`, fake.baseRevisionID)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
+	f, httpAPI := newCorrectionAPI(t)
+	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"The resource list was corrected.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":"Resource-only correction","resources":[]}`, f.sitting.ExamRevisionID)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(f)+"/corrections", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "resource-only-correction")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusCreated, response.Code, "status=%d calls=%d command=%#v body=%s", response.Code, fake.applyCalls, fake.apply, response.Body.String())
-	require.Equal(t, 1, fake.applyCalls, "status=%d calls=%d command=%#v body=%s", response.Code, fake.applyCalls, fake.apply, response.Body.String())
-	require.False(t, fake.apply.Instructions.Present, "status=%d calls=%d command=%#v body=%s", response.Code, fake.applyCalls, fake.apply, response.Body.String())
-	require.Empty(t, fake.apply.Instructions.Markdown, "status=%d calls=%d command=%#v body=%s", response.Code, fake.applyCalls, fake.apply, response.Body.String())
+	require.Equal(t, http.StatusCreated, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+	require.Len(t, f.correctionStore.applications, 1, "the correction never reached the correction Store")
+	require.Nil(t, f.correctionStore.applications[0].InstructionsMarkdown, "omitted instructions keep the current ones")
 }
 
 func TestApplyExamSittingCorrectionRequestIsClosedDuplicateFreeAndPresenceAware(t *testing.T) {
@@ -233,67 +236,8 @@ func TestApplyExamSittingCorrectionRequestIsClosedDuplicateFreeAndPresenceAware(
 	}
 }
 
-type examSittingCorrectionHTTPFake struct {
-	examID         model.ExamID
-	sittingID      model.ExamSittingID
-	baseRevisionID model.ExamRevisionID
-	stage          correction.StageResourceContentCommand
-	stageCalls     int
-	apply          correction.ApplyCommand
-	applyCalls     int
-	uploaded       []byte
-	stageResult    correction.ResourceStage
-	applyResult    correction.AppliedCorrection
-}
-
-func newExamSittingCorrectionHTTPFake() *examSittingCorrectionHTTPFake {
-	examID, sittingID, baseRevisionID := model.NewExamID(), model.NewExamSittingID(), model.NewExamRevisionID()
-	effectiveAt := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	return &examSittingCorrectionHTTPFake{
-		examID: examID, sittingID: sittingID, baseRevisionID: baseRevisionID,
-		stageResult: correction.ResourceStage{
-			StageID: model.NewExamCorrectionResourceStageID(), ResourceID: model.NewExamResourceID(),
-			MediaType: model.ExamResourceMediaText, Size: 19,
-			SHA256: strings.Repeat("b", 64), ExpiresAt: effectiveAt.Add(time.Hour),
-		},
-		applyResult: correction.AppliedCorrection{
-			ExamID: examID, SittingID: sittingID, PreviousRevisionID: baseRevisionID,
-			RevisionID: model.NewExamRevisionID(), RevisionNumber: 4,
-			SittingState: model.ExamSittingOpen, SittingRevision: 8, EffectiveAt: effectiveAt,
-		},
-	}
-}
-
-func (f *examSittingCorrectionHTTPFake) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
-	principal := testExamHTTPPrincipal()
-	return &principal, nil
-}
-
-func (f *examSittingCorrectionHTTPFake) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
-	principal := testExamHTTPPrincipal()
-	return &principal, nil
-}
-
-func (f *examSittingCorrectionHTTPFake) StageExamSittingCorrectionResourceContent(_ context.Context, _ invocation.Invocation, command correction.StageResourceContentCommand) (correction.ResourceStage, error) {
-	raw, err := io.ReadAll(command.Body)
-	if err != nil {
-		return correction.ResourceStage{}, apperror.New("exam.sitting.correction.content_invalid")
-	}
-	f.stage, f.uploaded = command, raw
-	f.stageCalls++
-	return f.stageResult, nil
-}
-
-func (f *examSittingCorrectionHTTPFake) ApplyExamSittingCorrection(_ context.Context, _ invocation.Invocation, command correction.ApplyCommand) (correction.AppliedCorrection, error) {
-	f.apply = command
-	f.applyCalls++
-	result := f.applyResult
-	result.AffectedCapabilities = append([]model.CandidateCapability{}, command.AffectedCapabilities...)
-	return result, nil
-}
-
-func examSittingCorrectionBasePath(fake *examSittingCorrectionHTTPFake) string {
-	return "/api/v1/exams/" + fake.examID.String() + "/sittings/" + fake.sittingID.String()
+func examSittingCorrectionBasePath(f *sittingFixture) string {
+	return "/api/v1/exams/" + f.examID.String() + "/sittings/" + f.sitting.ID.String()
 }
 
 func TestExamSittingCorrectionOpenAPIDocument(t *testing.T) {

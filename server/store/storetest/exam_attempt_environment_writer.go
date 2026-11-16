@@ -333,9 +333,19 @@ func testAttemptWorkspaceJournalRetention(t *testing.T, ctx context.Context, ss 
 	require.NoError(t, err)
 
 	// A build moves the directory back and forth, well past the fixed
-	// window, while the projection stays behind.
+	// window, while the projection stays behind. The loop outlasts one
+	// participation lease, so it renews the lease each pass as a connected
+	// client does; otherwise the editor's access lapses mid-build.
+	renewal := &store.ExamAttemptParticipationRenewal{DesktopCompatibilityPolicyRevision: 1, AttemptID: attemptID,
+		ParticipationID: editor.ParticipationID, ConnectionID: editor.ConnectionID, CandidateUserID: editor.CandidateUserID,
+		SessionID: editor.SessionID, Generation: editor.Generation, DesktopRegistrationID: editor.DesktopRegistrationID,
+		DPoPKeyThumbprint: editor.DPoPKeyThumbprint, ContinuityCredentialHash: editor.ContinuityCredentialHash}
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	cursor := projected
 	for batch := 0; cursor-projected <= model.AttemptWorkspaceJournalRetention+model.AttemptWorkspaceBatchMaximumMutations; batch++ {
+		renewal.Sequence++
+		_, renewErr := ss.ExamAttempt().RenewParticipation(ctx, renewal)
+		require.NoError(t, renewErr)
 		mutations := make([]store.ExamAttemptWorkspaceMutation, model.AttemptWorkspaceBatchMaximumMutations)
 		for index := range mutations {
 			from, to := "loop", "spin"

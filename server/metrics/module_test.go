@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/config"
 )
 
@@ -56,7 +57,7 @@ func TestModuleServesAuthenticatedNodeMetricsWithoutDebugEndpoints(t *testing.T)
 	module.SetMailQueue("account_recovery", "queued", 2, time.Minute)
 	module.SetMailQueueSnapshotTruncated(true)
 	module.SetMailHealth("mail.healthy")
-	module.ObserveApplication("authentication", "login", "success")
+	module.RecordOperationalEvent(operational.NewEvent("authentication", "login", nil))
 	module.ObserveStoreRetry("retry")
 	module.ConnectionOpened("success")
 	module.Backpressure()

@@ -25,15 +25,13 @@
 //   - shutdown.go: the one shutdown order every stop path takes
 //   - testhooks.go: NewForTesting, which builds the same graph with test substitutes
 //
-// Most of the remaining files each hold one adapter and are named for the two
+// The few remaining files each hold one adapter and are named for the two
 // sides it joins: authentication_cache.go (platform cache to the identity
-// service), mail_sender.go (platform mailer to application mail),
-// external_identity_providers.go, realtime_cluster.go, store_cache_cluster.go,
-// cluster_discovery.go, cluster_logger.go, store_slow_operation_log.go,
-// metrics_recorders.go and tracing_adapters.go. An adapter lives here only
-// when the two packages it joins may not import each other. A wrapper that
-// only measures a port lives in package metrics instead (metrics.WrapCache
-// and its siblings).
+// service), cluster_discovery.go (the store to cluster discovery),
+// cluster_logger.go, log_correlation.go and plugin_directory.go. An adapter
+// lives here only when its two sides may not import each other or speak
+// different types. Everywhere else the package that implements a port holds
+// the code, such as metrics, tracing, pluginhost and platform.
 //
 // There is one way to build a node. Tests go through NewForTesting, and new
 // infrastructure or runtime modules join the existing construction and

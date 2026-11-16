@@ -12,6 +12,7 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -63,6 +64,6 @@ func jobFactoryUnavailable(message string, cause error) error {
 
 func (s *Service) recordOperational(event string, err error) {
 	if s.operational != nil {
-		s.operational.RecordOperational("exam_sitting", event, err)
+		operational.Record(s.operational, "exam_sitting", event, err)
 	}
 }

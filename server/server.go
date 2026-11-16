@@ -26,6 +26,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 )
 
 type options struct {
@@ -306,7 +307,7 @@ type runtimeComponents struct {
 	plugins interface{ Close(context.Context) error }
 	// pluginReconciler keeps the plugins in step with saved settings; nil
 	// without persistence.
-	pluginReconciler *pluginReconciler
+	pluginReconciler *pluginhost.Reconciler
 	metrics          runtimeMetrics
 	// tracing flushes and stops span export; nil when tracing was never built.
 	tracing   runtimeTracing

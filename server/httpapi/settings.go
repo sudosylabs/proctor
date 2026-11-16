@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/websocket"
 )
 
 // BuildInfo is the build identity GET /system/version returns.
@@ -61,7 +62,7 @@ type Settings struct {
 	WebSocket WebSocketTransport
 	// BinarySockets upgrades a request to a binary socket, such as a
 	// terminal's. Nil refuses every binary socket as unavailable.
-	BinarySockets BinarySocketTransport
+	BinarySockets *websocket.Hub
 }
 
 // BinarySocket is one upgraded binary WebSocket. Read returns the next
@@ -69,34 +70,6 @@ type Settings struct {
 type BinarySocket interface {
 	Read(ctx context.Context) ([]byte, error)
 	Write(ctx context.Context, message []byte) error
-}
-
-// BinarySocketOutcome says how a binary socket's server ended, which
-// chooses the close code the client sees.
-type BinarySocketOutcome int
-
-// The outcomes of a binary socket.
-const (
-	// BinarySocketDone closes normally.
-	BinarySocketDone BinarySocketOutcome = iota
-	// BinarySocketAccessEnded closes with the access-ended code (4003).
-	BinarySocketAccessEnded
-	// BinarySocketFailed closes as an internal error.
-	BinarySocketFailed
-)
-
-// BinarySocketTransport upgrades an authenticated request to a binary
-// WebSocket and runs serve on it. Composition supplies the sibling WebSocket
-// transport. An error it returns describes a pre-upgrade refusal and leaves
-// the response uncommitted.
-type BinarySocketTransport interface {
-	ServeBinarySocket(
-		writer http.ResponseWriter,
-		request *http.Request,
-		allowMissingOrigin bool,
-		maxMessageBytes int64,
-		serve func(ctx context.Context, socket BinarySocket) BinarySocketOutcome,
-	) error
 }
 
 // WebSocketTransport is the narrow mount surface HTTP needs from the sibling

@@ -19,9 +19,12 @@
 // Terminals serves the candidate's terminals from any node, without a
 // lease, proving the candidate's access through a port on every call.
 //
+// Node runs all of it on one server node and carries wakes and settles to
+// the other nodes over the cluster.
+//
 // The package holds no execution-host client. The owner and the terminals
-// reach a host through a port that the composition root implements; the
-// parent application implements the candidate port over the Attempt
+// reach a host through a port that the composition root implements. The
+// Workspace and candidate ports are implemented here over the Attempt
 // service.
 package environment
 

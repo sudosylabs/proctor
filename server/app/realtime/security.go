@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -166,7 +167,7 @@ func (s *Delivery) broadcastSecurityInvalidation(
 		s.reportSecurityFailure(ctx, message, "realtime cluster fan-out is not attached")
 		return
 	}
-	if err := fanout.Broadcast(ctx, event, payload); err != nil {
+	if err := fanout.Broadcast(ctx, &cluster.Message{Event: cluster.Event(event), Data: payload}); err != nil {
 		s.reportSecurityFailure(ctx, message, "realtime cluster fan-out failed")
 	}
 }

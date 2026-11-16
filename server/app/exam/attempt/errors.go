@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -183,6 +184,6 @@ func (s *Service) recordStatusDiscrepancies(count int64) {
 
 func (s *Service) recordOperational(event string, err error) {
 	if s.operational != nil {
-		s.operational.RecordOperational("exam_attempt", event, err)
+		operational.Record(s.operational, "exam_attempt", event, err)
 	}
 }

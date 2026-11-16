@@ -13,16 +13,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/app"
 )
 
 func TestVersionSupportsStableTextAndJSONOutput(t *testing.T) {
 	t.Parallel()
 
 	execute := testExecutors()
-	execute.currentBuildInfo = func() server.BuildInfo {
-		return server.BuildInfo{Version: "1.2.3", Commit: "abc123", BuildTime: "2026-07-26T00:00:00Z", GoVersion: "go1.25.4"}
+	execute.currentBuildInfo = func() app.BuildInfo {
+		return app.BuildInfo{Version: "1.2.3", Commit: "abc123", BuildTime: "2026-07-26T00:00:00Z", GoVersion: "go1.25.4"}
 	}
 
 	code, stdout, stderr := executeForTest(context.Background(), []string{"version"}, nil, execute)
@@ -33,7 +32,7 @@ func TestVersionSupportsStableTextAndJSONOutput(t *testing.T) {
 	code, stdout, stderr = executeForTest(context.Background(), []string{"version", "--json"}, nil, execute)
 	require.Equal(t, 0, code, "json: code=%d stdout=%q stderr", code, stdout)
 	require.Empty(t, stderr, "json: code=%d stdout=%q stderr", code, stdout)
-	var info server.BuildInfo
+	var info app.BuildInfo
 	require.NoError(t, json.Unmarshal([]byte(stdout), &info))
 	require.Equal(t, "1.2.3", info.Version)
 	require.Equal(t, "abc123", info.Commit)

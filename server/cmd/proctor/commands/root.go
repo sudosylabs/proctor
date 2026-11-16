@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/operator"
 )
 
@@ -79,7 +80,7 @@ func productionExecutors() executors {
 		migrateDown:           operator.MigrateDown,
 		recoverAdministrator:  server.RecoverAdministratorAccess,
 		resetAdministratorMFA: server.ResetAdministratorMFA,
-		currentBuildInfo:      server.CurrentBuildInfo,
+		currentBuildInfo:      app.CurrentBuildInfo,
 		effectiveUID:          os.Geteuid,
 	}
 }

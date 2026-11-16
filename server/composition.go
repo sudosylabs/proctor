@@ -19,15 +19,20 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/httpapi"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/platform/executionhost"
 	"github.com/sudosylabs/proctor/server/plugin/zipexport"
 	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/tracing"
@@ -125,9 +130,9 @@ func composeConsumers(
 
 	// A lifecycle-only graph without persistence has no saved settings to
 	// follow.
-	var reconciler *pluginReconciler
+	var reconciler *pluginhost.Reconciler
 	if saved := capabilities.persistence.PluginSettings(); saved != nil {
-		reconciler = newPluginReconciler(
+		reconciler = pluginhost.NewReconciler(
 			saved, capabilities.plugins, snapshot, capabilities.logger, capabilities.pluginSettingsCount,
 		)
 	}
@@ -135,33 +140,31 @@ func composeConsumers(
 	if err != nil {
 		return nil, err
 	}
-	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: reconciler}
-	environmentInputs := attemptEnvironmentInputs{persistence: capabilities.persistence, cluster: capabilities.cluster,
-		logger: capabilities.logger, nodeID: capabilities.nodeID,
-		allowUnisolated: input.serviceEnvironment == ServiceEnvironmentDev, dial: input.overrides.ExecutionHostDial}
-	environments, err := prepareAttemptEnvironments(snapshot, environmentInputs)
+	applicationDeps.Plugins = pluginhost.Catalog(capabilities.plugins, reconciler)
+	environments, err := composeEnvironments(snapshot, capabilities, input)
 	if err != nil {
 		return nil, err
 	}
-	environments.attach(&applicationDeps, environmentInputs)
+	if environments != nil {
+		applicationDeps.EnvironmentWaker = environments.Waker()
+		applicationDeps.EnvironmentSettles = environments.Settles()
+		applicationDeps.EnvironmentDiagnostics = environments.Report
+		applicationDeps.EnvironmentHosts = environments.Hosts()
+	}
 
 	application, err := app.New(applicationDeps)
 	if err != nil {
 		return nil, fmt.Errorf("construct application: %w", err)
 	}
-	if err = environments.complete(snapshot, environmentInputs, application); err != nil {
-		return nil, err
-	}
 	// An absent runtime stays an untyped nil so the Server skips its stage.
 	var environmentRuntime runtimeComponent
 	if environments != nil {
+		if err = environments.Complete(application.Attempts); err != nil {
+			return nil, err
+		}
 		environmentRuntime = environments
 	}
-	clusterFanout, err := newRealtimeClusterAdapter(capabilities.cluster)
-	if err != nil {
-		return nil, fmt.Errorf("construct realtime cluster adapter: %w", err)
-	}
-	if err = application.Realtime.AttachClusterFanout(clusterFanout); err != nil {
+	if err = application.Realtime.AttachClusterFanout(capabilities.cluster); err != nil {
 		return nil, fmt.Errorf("attach realtime cluster fan-out: %w", err)
 	}
 
@@ -220,7 +223,7 @@ func composeConsumers(
 		return nil, fmt.Errorf("require durable Job runtime: %w", errDurableJobRuntimeUnavailable)
 	}
 
-	servingLease, err := newServingNodeLeaseRuntime(capabilities.persistence.ServingNodeLease(), capabilities.nodeID)
+	servingLease, err := cluster.NewServingLease(capabilities.persistence.ServingNodeLease(), capabilities.nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("construct serving node lease: %w", err)
 	}
@@ -247,6 +250,40 @@ func composeConsumers(
 		newHTTP:               newHTTPServer,
 	}}
 	return &compositionResult{server: node, application: application, handler: rootTransport}, nil
+}
+
+// composeEnvironments builds this node's execution environments, or nil when
+// the installation runs none. Development accepts hosts that share the
+// machine's kernel; a test's dialer replaces dialing a host.
+func composeEnvironments(
+	snapshot config.Config,
+	capabilities constructionCapabilities,
+	input compositionInput,
+) (*environment.Node, error) {
+	persistence := capabilities.persistence
+	if !snapshot.Execution.Enabled || persistence.AttemptEnvironment() == nil {
+		return nil, nil
+	}
+	dial := input.overrides.ExecutionHostDial
+	hosts, err := executionhost.New(executionhost.Config{Hosts: snapshot.Execution.Hosts, Dial: dial,
+		AllowUnisolated: input.serviceEnvironment == ServiceEnvironmentDev || dial != nil})
+	if err != nil {
+		return nil, fmt.Errorf("construct execution hosts: %w", err)
+	}
+	node, err := environment.NewNode(environment.NodeDependencies{
+		Cluster:      capabilities.cluster,
+		Environments: persistence.AttemptEnvironment(),
+		Evidence:     persistence.ExamAttemptWorkspace(),
+		Leases:       persistence.AttemptRuntimeLease(),
+		Hosts:        hosts,
+		NodeID:       capabilities.nodeID,
+		Owners:       snapshot.Execution.Owners,
+		Logger:       capabilities.logger,
+	})
+	if err != nil {
+		return nil, errors.Join(err, hosts.Close())
+	}
+	return node, nil
 }
 
 // composeLocalization opens the embedded catalogs and templates and constructs
@@ -298,7 +335,7 @@ func composeApplicationDependencies(
 		capabilities.filesystem,
 		filecontent.Policy{
 			MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations,
-			ExamExportFormat:            liveExportFormat(capabilities.plugins, zipexport.MediaType),
+			ExamExportFormat:            pluginhost.LiveExportFormat(capabilities.plugins, zipexport.MediaType),
 		},
 		contentRecorder,
 	)
@@ -314,15 +351,13 @@ func composeApplicationDependencies(
 		applicationDeps.DesktopBuildCatalog = append([]model.DesktopBuildTuple(nil), input.overrides.DesktopBuildCatalog...)
 	}
 	attachApplicationTelemetry(&applicationDeps, capabilities, input.overrides.MailMetrics)
-	var installations bootstrapStatusStore
-	if current := capabilities.persistence.Installation(); current != nil {
-		installations = current
-	}
 	bootstrapOutput := input.overrides.BootstrapSecretWriter
 	if bootstrapOutput == nil {
 		bootstrapOutput = os.Stderr
 	}
-	applicationDeps.BootstrapProtection, err = resolveBootstrapProtection(ctx, snapshot, installations, bootstrapOutput)
+	applicationDeps.BootstrapProtection, err = identity.ResolveBootstrapProtection(ctx,
+		snapshot.Authentication.Bootstrap.Secret, snapshot.Authentication.Bootstrap.DevelopmentMode,
+		capabilities.persistence.Installation(), bootstrapOutput)
 	if err != nil {
 		return app.Dependencies{}, fmt.Errorf("protect installation bootstrap: %w", err)
 	}
@@ -336,12 +371,12 @@ func attachApplicationTelemetry(
 	mailMetrics mail.DeliveryRecorder,
 ) {
 	if capabilities.metrics.Enabled() {
-		applicationDeps.JobRecorder = jobMetricsRecorder{metrics: capabilities.metrics}
-		applicationDeps.OperationalRecorder = applicationMetricsRecorder{metrics: capabilities.metrics}
+		applicationDeps.JobRecorder = capabilities.metrics.JobRecorder()
+		applicationDeps.OperationalRecorder = capabilities.metrics
 		applicationDeps.PasswordWorkRecorder = capabilities.metrics.WorkRecorder("password")
 	}
 	if capabilities.tracing.Enabled() {
-		applicationDeps.JobTracer = jobTracing{tracing: capabilities.tracing}
+		applicationDeps.JobTracer = capabilities.tracing
 	}
 	// Mail observations go to the test recorder, then Prometheus, then the
 	// operational collector. With neither of the first two, the dependencies
@@ -351,10 +386,10 @@ func attachApplicationTelemetry(
 		mailRecorders = append(mailRecorders, mailMetrics)
 	}
 	if capabilities.metrics.Enabled() {
-		mailRecorders = append(mailRecorders, newPrometheusMailRecorder(capabilities.metrics))
+		mailRecorders = append(mailRecorders, capabilities.metrics.MailRecorder())
 	}
 	if len(mailRecorders) > 0 {
-		mailDeliveryRecorder, mailMetricsReader := newMailTelemetry(capabilities.logger, mailRecorders...)
+		mailDeliveryRecorder, mailMetricsReader := metrics.NewMailTelemetry(capabilities.logger, mailRecorders...)
 		applicationDeps.MailDeliveryRecorder = mailDeliveryRecorder
 		applicationDeps.MailMetricsReader = mailMetricsReader
 	}
@@ -407,7 +442,7 @@ func httpAPISettings(
 
 	var httpTracer route.Tracing
 	if capabilities.tracing.Enabled() {
-		httpTracer = httpTracing{tracing: capabilities.tracing}
+		httpTracer = capabilities.tracing
 	}
 
 	trustedProxies, err := config.ParseTrustedProxies(snapshot.Server.TrustedProxies)
@@ -432,7 +467,7 @@ func httpAPISettings(
 		RecentAuthenticationTTL: snapshot.Authentication.RecentAuthenticationTTL.Duration,
 		NodeID:                  capabilities.nodeID,
 		WebSocket:               webSocketHub,
-		BinarySockets:           binarySocketTransport{hub: webSocketHub},
+		BinarySockets:           webSocketHub,
 	}, nil
 }
 

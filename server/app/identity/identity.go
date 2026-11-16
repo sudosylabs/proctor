@@ -25,6 +25,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -52,13 +53,6 @@ type AuthenticationCache interface {
 	Add(context.Context, string, int64, time.Duration) (int64, error)
 }
 
-// OperationalRecorder receives the outcome of each authentication entry point
-// the package observes. It is optional; a Service built without one records
-// nothing.
-type OperationalRecorder interface {
-	RecordOperational(subsystem, event string, err error)
-}
-
 // Dependencies are the collaborators New distributes to the Service. Hasher,
 // Attempts and Invalidator are the shared mechanics the parent builds once
 // with NewPasswordHasher, NewAttemptAccounting and NewCacheInvalidator.
@@ -76,7 +70,7 @@ type Dependencies struct {
 	Attempts     *AttemptAccounting
 	Invalidator  *CacheInvalidator
 	Invitations  InvitationAcceptor
-	Operational  OperationalRecorder
+	Operational  operational.Recorder
 	// MFASecretSealer seals TOTP secrets; it is nil until the MFA ring is
 	// configured.
 	MFASecretSealer *secretseal.Sealer
@@ -152,7 +146,7 @@ type Service struct {
 	invalidator realtime.AuthenticationInvalidator
 	// mfa is the TOTP and recovery-code mechanics, which own secret sealing.
 	mfa         *mfaMechanics
-	operational OperationalRecorder
+	operational operational.Recorder
 	diagnostics *logging.Logger
 	// recoveryDiagnostics logs account recovery failures hidden from callers.
 	recoveryDiagnostics *logging.Logger

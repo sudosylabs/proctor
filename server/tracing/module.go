@@ -35,7 +35,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store/timerlayer"
 )
 
 // instrumentationName identifies Proctor's own instrumentation scope.
@@ -129,20 +133,16 @@ type HTTPRequest struct {
 	once   sync.Once
 }
 
-// StartHTTPRequest begins the server span for an inbound request. Its W3C
-// trace context is continued only when continueParent is true, which the
-// transport sets solely for a trusted proxy peer; an untrusted client can
-// neither choose the trace identity nor force sampling. method must already
-// be bounded; requestID is the server-assigned correlation ID.
-func (m *Module) StartHTTPRequest(
-	ctx context.Context,
-	header http.Header,
-	method string,
-	continueParent bool,
-	requestID string,
-) (context.Context, *HTTPRequest) {
-	if continueParent && m.Enabled() {
-		ctx = m.propagator.Extract(ctx, propagation.HeaderCarrier(header))
+// StartRequest begins the server span for an inbound request, for the HTTP
+// transport. Its W3C trace context is continued only when ContinueParent is
+// true, which the transport sets solely for a trusted proxy peer; an
+// untrusted client can neither choose the trace identity nor force sampling.
+// Method must already be bounded; RequestID is the server-assigned
+// correlation ID.
+func (m *Module) StartRequest(ctx context.Context, request route.TracedRequest) (context.Context, route.RequestSpan) {
+	method, requestID := request.Method, request.RequestID
+	if request.ContinueParent && m.Enabled() {
+		ctx = m.propagator.Extract(ctx, propagation.HeaderCarrier(request.Header))
 	} else {
 		// Discard any span the caller's context already carries so an
 		// untrusted request always starts a new root trace.
@@ -180,45 +180,56 @@ func (r *HTTPRequest) End(status int) {
 	})
 }
 
-// StartStoreOperation begins an internal span for one named store operation.
-// It records only when the context already carries a recording span, so
-// background polling never creates root traces. name is the closed
-// aggregate.operation label; arguments, SQL, and rows never reach the span.
-func (m *Module) StartStoreOperation(ctx context.Context, name string) (context.Context, func(failed bool)) {
+// StartOperation begins an internal span for one store operation, for the
+// store timing layer. It records only when the context already carries a
+// recording span, so background polling never creates root traces. The
+// span carries only the closed aggregate.operation name; arguments, SQL and
+// rows never reach it.
+func (m *Module) StartOperation(ctx context.Context, operation timerlayer.Operation) (context.Context, func(timerlayer.Outcome)) {
 	if !trace.SpanFromContext(ctx).IsRecording() {
-		return ctx, func(bool) {}
+		return ctx, func(timerlayer.Outcome) {}
 	}
+	name := operation.String()
 	ctx, span := m.tracer.Start(ctx, "store "+name, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(
 		attribute.String("db.system.name", "postgresql"),
 		attribute.String("db.operation.name", name),
 	))
-	return ctx, func(failed bool) {
-		if failed {
+	return ctx, func(outcome timerlayer.Outcome) {
+		if outcome != timerlayer.OutcomeSuccess {
 			span.SetStatus(codes.Error, "store operation failed")
 		}
 		span.End()
 	}
 }
 
-// StartJobExecution begins the root span of one claimed Job execution.
-// jobType is a registered Job type name; payloads and identifiers are never
-// recorded. failed reports whether outcome is a failure.
-func (m *Module) StartJobExecution(ctx context.Context, jobType string) (context.Context, func(outcome string, failed bool)) {
+// StartExecution begins the root span of one claimed Job execution, for the
+// Job engine. Only the registered Job type and the closed outcome are
+// recorded, never payloads or identifiers. A canceled, relinquished or
+// shut-down execution is not a failure: the Job runs again elsewhere.
+func (m *Module) StartExecution(ctx context.Context, jobType model.JobType) (context.Context, func(job.ExecutionOutcome)) {
 	ctx, span := m.tracer.Start(
 		trace.ContextWithSpanContext(ctx, trace.SpanContext{}),
-		"job "+jobType,
+		"job "+string(jobType),
 		trace.WithNewRoot(),
 		trace.WithSpanKind(trace.SpanKindConsumer),
-		trace.WithAttributes(attribute.String("proctor.job.type", jobType)),
+		trace.WithAttributes(attribute.String("proctor.job.type", string(jobType))),
 	)
-	return ctx, func(outcome string, failed bool) {
-		span.SetAttributes(attribute.String("proctor.job.outcome", outcome))
-		if failed {
-			span.SetStatus(codes.Error, outcome)
+	return ctx, func(outcome job.ExecutionOutcome) {
+		span.SetAttributes(attribute.String("proctor.job.outcome", string(outcome)))
+		switch outcome {
+		case job.ExecutionSucceeded, job.ExecutionCanceled, job.ExecutionRelinquished, job.ExecutionShutdown:
+		default:
+			span.SetStatus(codes.Error, string(outcome))
 		}
 		span.End()
 	}
 }
+
+var (
+	_ route.Tracing     = (*Module)(nil)
+	_ timerlayer.Tracer = (*Module)(nil)
+	_ job.Tracer        = (*Module)(nil)
+)
 
 // Correlation returns the trace and span IDs of the span ctx carries, for
 // log correlation. ok is false when ctx carries no valid span.

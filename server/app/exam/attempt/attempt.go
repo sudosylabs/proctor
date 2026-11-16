@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -122,7 +123,7 @@ type Dependencies struct {
 	// commits with the Submission.
 	NewDomainEvent func() model.DomainEventID
 	NewJob         func() model.JobID
-	Operational    OperationalRecorder
+	Operational    operational.Recorder
 	// EnvironmentWaker wakes the owner of an Attempt's execution environment
 	// after a candidate changes its Workspace. It is optional: without one,
 	// the owner's backstop finds the change.
@@ -155,12 +156,6 @@ type EnvironmentWaker interface {
 	Wake(attemptID model.ExamAttemptID)
 }
 
-// OperationalRecorder receives the outcome of each use case the module
-// observes. It is optional; a module built without one records nothing.
-type OperationalRecorder interface {
-	RecordOperational(subsystem, event string, err error)
-}
-
 // Service holds every Attempt use case, from admission to the sealed
 // Submission. liveControls and deliveryControls are the per-node admission
 // lanes that rate-limit control commands by User.
@@ -189,7 +184,7 @@ type Service struct {
 	mail          SubmissionReceiptMail
 	desktopBuilds DesktopBuildResolver
 	now           func() time.Time
-	operational   OperationalRecorder
+	operational   operational.Recorder
 	environments  EnvironmentWaker
 	settler       EnvironmentSettler
 	// environmentStore holds the Attempt Environments; nil when none exist.

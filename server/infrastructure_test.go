@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
 	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
 	"github.com/sudosylabs/proctor/server/store/timerlayer"
@@ -238,10 +239,10 @@ func TestRootSelectsLocalDevelopmentInfrastructure(t *testing.T) {
 	t.Cleanup(func() { _ = cluster.Stop(context.Background()) })
 	require.Equal(t, settings.Cluster.NodeID, cluster.NodeID(), "cluster node ID")
 
-	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
+	plugins, _, err := pluginhost.ActivateBuiltin(context.Background(), settings, nil, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
-	providers, err := newExternalAuthenticationRegistry(plugins)
+	providers, err := pluginhost.NewIdentityProviderRegistry(plugins)
 	require.NoError(t, err)
 	require.NoError(t, providers.Configure(settings.Authentication.External))
 }
@@ -266,10 +267,10 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
+	plugins, _, err := pluginhost.ActivateBuiltin(context.Background(), settings, nil, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
-	providers, err := newExternalAuthenticationRegistry(plugins)
+	providers, err := pluginhost.NewIdentityProviderRegistry(plugins)
 	require.NoError(t, err)
 	external := settings.Authentication.External
 	external.Providers = []config.ExternalAuthenticationProvider{
@@ -296,7 +297,7 @@ func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
 	saved := savedPluginSettings{rows: []*model.PluginSettings{pluginSettingsRow(t, "cas", false)}}
-	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, logger, nil, nil)
+	plugins, _, err := pluginhost.ActivateBuiltin(context.Background(), config.Default(), saved, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 
@@ -324,7 +325,7 @@ func TestAFailedPluginDegradesReadiness(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, _, err := activatePlugins(context.Background(), config.Default(), nil, logger, nil, []plugin.Plugin{
+	plugins, _, err := pluginhost.ActivateBuiltin(context.Background(), config.Default(), nil, logger, nil, []plugin.Plugin{
 		failingPlugin{id: "broken"},
 	})
 	require.NoError(t, err)

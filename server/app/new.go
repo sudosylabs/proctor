@@ -32,9 +32,6 @@ import (
 // area in the order its collaborators require, then the optional Job runtime
 // and the services that span areas.
 func New(deps Dependencies) (*App, error) {
-	if deps.OperationalRecorder == nil {
-		deps.OperationalRecorder = nopOperationalRecorder{}
-	}
 	if err := validateApplicationDependencies(deps); err != nil {
 		return nil, err
 	}
@@ -98,7 +95,7 @@ func New(deps Dependencies) (*App, error) {
 		return nil, err
 	}
 	if runtime.engine != nil && deps.Store.Institution() != nil {
-		changes := &jobChangePublisher{publisher: shared.realtime, institutions: deps.Store.Institution()}
+		changes := realtime.NewJobChangePublisher(shared.realtime, deps.Store.Institution())
 		if err = runtime.engine.AttachChangeListener(changes); err != nil {
 			return nil, err
 		}
@@ -235,7 +232,7 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 	publication, err := realtime.New(realtime.Dependencies{
 		Delivery:    delivery,
 		Diagnostics: deps.RealtimeDiagnostics,
-		Attempts:    sessionAttemptTargets{attempts: examAttempts},
+		Attempts:    realtime.StoreSessionAttemptTargets(examAttempts),
 	})
 	if err != nil {
 		return sharedMechanics{}, err
@@ -395,7 +392,7 @@ func newIdentity(
 		Attempts:                  shared.attempts,
 		Invalidator:               shared.invalidator,
 		Invitations:               invitations,
-		Operational:               operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:               deps.OperationalRecorder,
 		MFASecretSealer:           deps.MFASecretSealer,
 		MFARekeyWake:              wake.Wake,
 		DesktopBuildCatalog:       deps.DesktopBuildCatalog,

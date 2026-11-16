@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -32,7 +33,7 @@ type Publication struct {
 	newID             func() model.ExamRevisionID
 	institutionOrigin string
 	executionEnabled  bool
-	operational       OperationalRecorder
+	operational       operational.Recorder
 }
 
 // PublicationDependencies are the collaborators NewPublication validates once
@@ -50,7 +51,7 @@ type PublicationDependencies struct {
 	// ExecutionEnabled is whether Exams may publish with an execution
 	// environment.
 	ExecutionEnabled bool
-	Operational      OperationalRecorder
+	Operational      operational.Recorder
 }
 
 // NewPublication returns a Publication service, or an error when a required

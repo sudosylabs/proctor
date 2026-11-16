@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/operator"
 )
 
@@ -36,8 +37,8 @@ func testExecutors() executors {
 		recoverAdministrator: func(context.Context, string, server.AdministratorRecoveryCommand) (*server.AdministratorRecoveryResult, error) {
 			return &server.AdministratorRecoveryResult{}, nil
 		},
-		currentBuildInfo: func() server.BuildInfo {
-			return server.BuildInfo{Version: "dev", Commit: "unknown", BuildTime: "unknown", GoVersion: "go-test"}
+		currentBuildInfo: func() app.BuildInfo {
+			return app.BuildInfo{Version: "dev", Commit: "unknown", BuildTime: "unknown", GoVersion: "go-test"}
 		},
 		effectiveUID: func() int { return 1000 },
 	}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/websocket"
 )
 
 // The terminal socket protocol. Every message is one binary WebSocket
@@ -83,7 +84,7 @@ func serveTerminal(
 	session environment.TerminalAttachment,
 	logger *logging.Logger,
 	recheck time.Duration,
-) BinarySocketOutcome {
+) websocket.BinarySocketOutcome {
 	defer session.Close(context.WithoutCancel(ctx))
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -91,7 +92,7 @@ func serveTerminal(
 
 	first, err := socket.Read(ctx)
 	if err != nil {
-		return BinarySocketDone
+		return websocket.BinarySocketDone
 	}
 	var from uint64
 	switch {
@@ -103,19 +104,19 @@ func serveTerminal(
 			return sender.fail(ctx, screenErr)
 		}
 		if sender.screen(ctx, screen) != nil {
-			return BinarySocketDone
+			return websocket.BinarySocketDone
 		}
 		from = screen.Offset
 	default:
 		_ = sender.error(ctx, "request.invalid")
-		return BinarySocketDone
+		return websocket.BinarySocketDone
 	}
 	attachment, err := session.Output(ctx, from)
 	if err != nil {
 		return sender.fail(ctx, err)
 	}
 
-	ended := make(chan BinarySocketOutcome, 3)
+	ended := make(chan websocket.BinarySocketOutcome, 3)
 	var group sync.WaitGroup
 	group.Go(func() { ended <- pumpTerminalOutput(ctx, sender, attachment, logger) })
 	group.Go(func() { ended <- readTerminalInput(ctx, socket, sender, session) })
@@ -128,7 +129,7 @@ func serveTerminal(
 				return
 			case <-ticker.C:
 				if errors.Is(session.Check(ctx), environment.ErrTerminalAccessEnded) {
-					ended <- BinarySocketAccessEnded
+					ended <- websocket.BinarySocketAccessEnded
 					return
 				}
 			}
@@ -142,44 +143,49 @@ func serveTerminal(
 }
 
 // pumpTerminalOutput sends the terminal's output until it exits or ends.
-func pumpTerminalOutput(ctx context.Context, sender *terminalSender, attachment environment.ProcessAttachment, logger *logging.Logger) BinarySocketOutcome {
+func pumpTerminalOutput(
+	ctx context.Context,
+	sender *terminalSender,
+	attachment environment.ProcessAttachment,
+	logger *logging.Logger,
+) websocket.BinarySocketOutcome {
 	for {
 		output, err := attachment.Next(ctx)
 		switch {
 		case errors.Is(err, io.EOF), ctx.Err() != nil:
-			return BinarySocketDone
+			return websocket.BinarySocketDone
 		case errors.Is(err, environment.ErrTerminalEnded):
-			return BinarySocketAccessEnded
+			return websocket.BinarySocketAccessEnded
 		case err != nil:
 			logger.WarnContext(ctx, "terminal output failed", logging.Err(err))
-			return BinarySocketFailed
+			return websocket.BinarySocketFailed
 		}
 		switch output.Kind {
 		case environment.OutputData:
 			for offset, data := output.Offset, output.Data; len(data) > 0; {
 				take := min(len(data), maxTerminalOutput)
 				if sender.output(ctx, offset, data[:take]) != nil {
-					return BinarySocketDone
+					return websocket.BinarySocketDone
 				}
 				offset, data = offset+uint64(take), data[take:]
 			}
 		case environment.OutputTruncated:
 			if sender.truncated(ctx, output.Offset, output.To) != nil {
-				return BinarySocketDone
+				return websocket.BinarySocketDone
 			}
 		case environment.OutputExit:
 			_ = sender.exit(ctx, output.ExitCode, output.ExitSignal)
-			return BinarySocketDone
+			return websocket.BinarySocketDone
 		}
 	}
 }
 
 // readTerminalInput applies the client's frames until it leaves.
-func readTerminalInput(ctx context.Context, socket BinarySocket, sender *terminalSender, session environment.TerminalAttachment) BinarySocketOutcome {
+func readTerminalInput(ctx context.Context, socket BinarySocket, sender *terminalSender, session environment.TerminalAttachment) websocket.BinarySocketOutcome {
 	for {
 		message, err := socket.Read(ctx)
 		if err != nil {
-			return BinarySocketDone
+			return websocket.BinarySocketDone
 		}
 		if outcome, done := applyTerminalFrame(ctx, sender, session, message); done {
 			return outcome
@@ -189,7 +195,12 @@ func readTerminalInput(ctx context.Context, socket BinarySocket, sender *termina
 
 // applyTerminalFrame applies one client frame after the first. It reports
 // done when the socket must end.
-func applyTerminalFrame(ctx context.Context, sender *terminalSender, session environment.TerminalAttachment, message []byte) (BinarySocketOutcome, bool) {
+func applyTerminalFrame(
+	ctx context.Context,
+	sender *terminalSender,
+	session environment.TerminalAttachment,
+	message []byte,
+) (websocket.BinarySocketOutcome, bool) {
 	var err error
 	switch {
 	case len(message) > 9 && len(message) <= maxTerminalClientMessage && message[0] == terminalFrameInput:
@@ -204,7 +215,7 @@ func applyTerminalFrame(ctx context.Context, sender *terminalSender, session env
 				return outcome, true
 			}
 			if sender.error(ctx, environment.TerminalCode(writeErr)) != nil {
-				return BinarySocketDone, true
+				return websocket.BinarySocketDone, true
 			}
 		}
 		err = sender.inputOffset(ctx, next)
@@ -232,36 +243,36 @@ func applyTerminalFrame(ctx context.Context, sender *terminalSender, session env
 		err = sender.screen(ctx, screen)
 	default:
 		_ = sender.error(ctx, "request.invalid")
-		return BinarySocketDone, true
+		return websocket.BinarySocketDone, true
 	}
 	if err != nil {
-		return BinarySocketDone, true
+		return websocket.BinarySocketDone, true
 	}
-	return BinarySocketDone, false
+	return websocket.BinarySocketDone, false
 }
 
 // terminalRefusal reports whether a refused frame ends the socket: a
 // machine that ended ends the access.
-func terminalRefusal(err error) (BinarySocketOutcome, bool) {
+func terminalRefusal(err error) (websocket.BinarySocketOutcome, bool) {
 	switch {
 	case errors.Is(err, environment.ErrTerminalEnded):
-		return BinarySocketAccessEnded, true
+		return websocket.BinarySocketAccessEnded, true
 	case errors.Is(err, context.Canceled):
-		return BinarySocketDone, true
+		return websocket.BinarySocketDone, true
 	}
-	return BinarySocketDone, false
+	return websocket.BinarySocketDone, false
 }
 
 // terminalSender writes the server's frames.
 type terminalSender struct{ socket BinarySocket }
 
 // fail reports why the socket could not start and how it closes.
-func (s *terminalSender) fail(ctx context.Context, err error) BinarySocketOutcome {
+func (s *terminalSender) fail(ctx context.Context, err error) websocket.BinarySocketOutcome {
 	if outcome, done := terminalRefusal(err); done {
 		return outcome
 	}
 	_ = s.error(ctx, environment.TerminalCode(err))
-	return BinarySocketDone
+	return websocket.BinarySocketDone
 }
 
 func (s *terminalSender) output(ctx context.Context, offset uint64, data []byte) error {

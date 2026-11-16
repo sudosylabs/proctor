@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -37,7 +38,7 @@ func (s *Service) RefreshSession(
 	_ invocation.Invocation,
 	command RefreshSessionCommand,
 ) (_ *model.Session, _ *model.AuthenticationTokens, resultErr error) {
-	defer func() { recordOperational(s.operational, "authentication", "refresh", resultErr) }()
+	defer func() { operational.Record(s.operational, "authentication", "refresh", resultErr) }()
 	rawRefreshToken := command.RefreshToken
 	if !validRawCredential(rawRefreshToken) {
 		return nil, nil, access.InvalidTokenAppError()

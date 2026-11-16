@@ -116,7 +116,7 @@ func newExamAuthoring(
 		Now:               time.Now,
 		NewID:             model.NewExamID,
 		InstitutionOrigin: deps.PublicURL,
-		Operational:       operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:       deps.OperationalRecorder,
 	})
 }
 
@@ -171,7 +171,7 @@ func newExamPublication(
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: deps.PublicURL,
 		ExecutionEnabled:  deps.ExecutionEnabled,
-		Operational:       operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:       deps.OperationalRecorder,
 	})
 }
 
@@ -192,7 +192,7 @@ func newSittings(
 		Mail:        scheduleMail,
 		Now:         time.Now,
 		NewID:       model.NewExamSittingID,
-		Operational: operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational: deps.OperationalRecorder,
 	})
 }
 
@@ -248,7 +248,7 @@ func newAttempts(
 		NewReceiptCode:      model.NewSubmissionReceiptCode,
 		NewDomainEvent:      model.NewDomainEventID,
 		NewJob:              model.NewJobID,
-		Operational:         operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:         deps.OperationalRecorder,
 	})
 }
 
@@ -394,4 +394,19 @@ func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
 		return nil
 	}
 	return settler
+}
+
+// newTerminals builds the candidates' terminals, or nil when the
+// installation runs no execution environments.
+func newTerminals(deps Dependencies, attempts *attempt.Service) (*environment.Terminals, error) {
+	if deps.EnvironmentHosts == nil || deps.Store.AttemptEnvironment() == nil || attempts == nil {
+		return nil, nil
+	}
+	return environment.NewTerminals(environment.TerminalsDependencies{
+		Environments: deps.Store.AttemptEnvironment(),
+		Evidence:     deps.Store.ExamAttemptWorkspace(),
+		Hosts:        deps.EnvironmentHosts,
+		Candidates:   environment.AttemptCandidates(attempts),
+		Report:       deps.EnvironmentDiagnostics,
+	})
 }

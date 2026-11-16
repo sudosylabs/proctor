@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -50,7 +51,7 @@ func (s *Service) Login(
 	inv invocation.Invocation,
 	command LoginCommand,
 ) (_ *LoginResult, resultErr error) {
-	defer func() { recordOperational(s.operational, "authentication", "login", resultErr) }()
+	defer func() { operational.Record(s.operational, "authentication", "login", resultErr) }()
 	if command.ClientType == model.SessionClientDesktop || !command.ClientType.IsValid() {
 		return nil, apperror.New("authentication.client_type.invalid").WithField("field", "client_type")
 	}

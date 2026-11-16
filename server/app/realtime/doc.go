@@ -26,15 +26,16 @@
 // operation has committed. Service is the production Publisher: it turns
 // Delivery's failures into application errors and adds the Attempt and
 // current-user notices a Session revocation or an authorization change owes.
-// The one Attempt lookup that needs comes through SessionAttemptTargets, which
-// the parent application answers from the Store, so nothing here touches
-// storage. Delivery is best effort: nothing here queues or retries, and a
-// failed publication never undoes the committed change.
+// The one Attempt lookup that needs comes through SessionAttemptTargets,
+// which StoreSessionAttemptTargets answers from the Exam Attempt Store; the
+// other reads are the Institution for JobChangePublisher. Delivery is best
+// effort: nothing here queues or retries, and a failed publication never
+// undoes the committed change.
 //
-// The package knows nothing about WebSocket frames or the cluster wire format.
-// The websocket Hub is attached as the Sink and the cluster adapter as the
-// ClusterFanout, once each, while the node is built. Start with publisher.go,
-// then service.go and delivery.go. The realtimetest child holds the recording
+// The package knows nothing about WebSocket frames. The websocket Hub is
+// attached as the Sink and the cluster transport as the fan-out, once each,
+// while the node is built. Start with publisher.go, then service.go and
+// delivery.go. The realtimetest child holds the recording
 // Publisher that area tests use, and sitting_invalidation.go the two Sitting
 // notices several Exam packages share.
 package realtime

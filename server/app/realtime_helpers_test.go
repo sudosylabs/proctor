@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -115,8 +116,9 @@ func (s *recordingRealtimeSink) CloseAll(reason realtime.ConnectionCloseReason) 
 }
 
 type recordingRealtimeCluster struct {
+	cluster.Transport
 	mu         sync.Mutex
-	handlers   map[string]func(context.Context, []byte) error
+	handlers   map[string]cluster.Handler
 	broadcasts []clusterBroadcast
 }
 
@@ -125,14 +127,12 @@ type clusterBroadcast struct {
 	data  []byte
 }
 
-func (c *recordingRealtimeCluster) RegisterHandler(
-	event string,
-	handler func(context.Context, []byte) error,
-) error {
+func (c *recordingRealtimeCluster) RegisterHandler(name cluster.Event, handler cluster.Handler) error {
+	event := string(name)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.handlers == nil {
-		c.handlers = map[string]func(context.Context, []byte) error{}
+		c.handlers = map[string]cluster.Handler{}
 	}
 	if _, exists := c.handlers[event]; exists {
 		return errors.New("handler already registered")
@@ -141,16 +141,26 @@ func (c *recordingRealtimeCluster) RegisterHandler(
 	return nil
 }
 
-func (c *recordingRealtimeCluster) Broadcast(
-	_ context.Context,
-	event string,
-	data []byte,
-) error {
+func (c *recordingRealtimeCluster) Broadcast(_ context.Context, message *cluster.Message) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.broadcasts = append(c.broadcasts, clusterBroadcast{
-		event: event,
-		data:  append([]byte(nil), data...),
+		event: string(message.Event),
+		data:  append([]byte(nil), message.Data...),
 	})
 	return nil
+}
+
+// handler delivers a peer's payload for event the way the cluster does, in
+// an envelope, or is nil when nothing is registered for event.
+func (c *recordingRealtimeCluster) handler(event string) func(context.Context, []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	handler := c.handlers[event]
+	if handler == nil {
+		return nil
+	}
+	return func(ctx context.Context, data []byte) error {
+		return handler(ctx, &cluster.Message{Event: cluster.Event(event), Data: data})
+	}
 }

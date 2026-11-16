@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -28,7 +29,7 @@ type RealtimeAdmission struct {
 	exams         *exam.Authoring
 	sittings      *sitting.Service
 	authorization *access.Authorizer
-	operational   OperationalRecorder
+	operational   operational.Recorder
 }
 
 var (
@@ -51,7 +52,7 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 	action model.Action,
 	resource model.Resource,
 ) (resultErr error) {
-	defer func() { recordOperational(s.operational, "realtime", "subscription_authorize", resultErr) }()
+	defer func() { operational.Record(s.operational, "realtime", "subscription_authorize", resultErr) }()
 	definition, ok := model.DefinitionForAction(action)
 	if !ok || resource.Validate() != nil || !definition.AcceptsResource(resource.Type) {
 		return invalidRealtimeRequest("subscription")
@@ -71,7 +72,7 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, inv, sittingID))
 	}
 	err := s.authorization.Authorize(ctx, inv, action, resource)
-	recordOperational(s.operational, "authorization", "decision", err)
+	operational.Record(s.operational, "authorization", "decision", err)
 	return err
 }
 
@@ -79,7 +80,7 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 // state behind a long-lived connection's principal.
 func (s *RealtimeAdmission) ValidateWebSocketPrincipal(ctx context.Context, principal model.Principal) error {
 	err := s.principals.ValidatePrincipal(ctx, principal)
-	recordOperational(s.operational, "realtime", "principal_validate", err)
+	operational.Record(s.operational, "realtime", "principal_validate", err)
 	return err
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -38,7 +39,7 @@ func (s *Service) AuthenticateDPoP(
 	method string,
 	path string,
 ) (_ *model.Principal, resultErr error) {
-	defer func() { recordOperational(s.operational, "authentication", "dpop", resultErr) }()
+	defer func() { operational.Record(s.operational, "authentication", "dpop", resultErr) }()
 	resolved, err := s.resolveDesktopCredential(ctx, rawToken, model.SessionCredentialAccess)
 	if err != nil {
 		return nil, err

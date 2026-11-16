@@ -27,7 +27,8 @@
 //   - leaf packages: access (authorization and access.RunAudited, the shared
 //     begin, mutate and audit sequence most audited changes use), paging,
 //     apperror (the one application error type), invocation
-//     (the call context every use case takes), idempotency, realtime and exam
+//     (the call context every use case takes), operational (the bounded
+//     use-case outcomes metrics count), idempotency, realtime and exam
 //   - job (the durable Job engine and job.Operations, the operator Job
 //     service), jobs (the Job handlers) and mail (mail composition and
 //     mail.Operations, the operator mail service, with the mail telemetry
@@ -42,9 +43,7 @@
 //
 // Besides assembly, a few things still live here. realtime_admission.go holds
 // WebSocket admission: it composes the identity, Exam and Access Control
-// services, which the app/realtime child may not import.
-// realtime_attempt_targets.go answers that child's one Attempt lookup from the
-// Store. health.go (node readiness), operational_metrics.go (the operational
-// event seam the module root records) and version.go (build information) are
-// what the module root and transports read from the application as a whole.
+// services, which the app/realtime child may not import without a cycle.
+// health.go (node readiness) and version.go (build information) are what the
+// module root and transports read from the application as a whole.
 package app

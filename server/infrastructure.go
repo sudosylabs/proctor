@@ -114,8 +114,8 @@ type constructionCapabilities struct {
 	logger                 *logging.Logger
 	persistence            store.Catalog
 	cache                  borrowedCache
-	cluster                borrowedCluster
-	mailer                 borrowedMailer
+	cluster                cluster.Transport
+	mailer                 platform.Mailer
 	filesystem             vfs.FileSystem
 	externalAuthentication *externalauth.Registry
 	nodeID                 string
@@ -133,18 +133,6 @@ type borrowedCache interface {
 	Set(context.Context, string, []byte, time.Duration, platform.CacheCondition) error
 	Delete(context.Context, string) error
 	Add(context.Context, string, int64, time.Duration) (int64, error)
-}
-
-type borrowedMailer interface {
-	Enabled() bool
-	From() mail.Address
-	Send(context.Context, mail.Message) (mail.Receipt, error)
-	Test(context.Context) error
-}
-
-type borrowedCluster interface {
-	RegisterHandler(cluster.Event, cluster.Handler) error
-	Broadcast(context.Context, *cluster.Message) error
 }
 
 func openRuntimeInfrastructure(
@@ -196,18 +184,22 @@ func openRuntimeInfrastructure(
 	}
 	// Plugins activate once metrics exist, so their first calls are
 	// recorded, and before anything that consumes what they register.
-	result.plugins, result.pluginSettingsCount, err = activatePlugins(
+	var pluginMetrics pluginhost.Recorder
+	if metricsModule.Enabled() {
+		pluginMetrics = metricsModule
+	}
+	result.plugins, result.pluginSettingsCount, err = pluginhost.ActivateBuiltin(
 		ctx, cfg, result.resources.Persistence.PluginSettings(), result.resources.Logger,
-		pluginRecorder(metricsModule), overrides.Plugins,
+		pluginMetrics, overrides.Plugins,
 	)
 	if err != nil {
 		return result, err
 	}
-	externalAuthentication, err := newExternalAuthenticationRegistry(result.plugins)
+	externalAuthentication, err := pluginhost.NewIdentityProviderRegistry(result.plugins)
 	if err != nil {
 		return result, fmt.Errorf("construct external authentication registry: %w", err)
 	}
-	followSignInPlugins(result.plugins, externalAuthentication, result.resources.Configuration, result.resources.Logger)
+	pluginhost.FollowSignInPlugins(result.plugins, externalAuthentication, result.resources.Configuration, result.resources.Logger)
 	result.resources.ExternalAuthentication = externalAuthentication
 	if err := checkAcquisitionContext(ctx, "acquire external authentication registry"); err != nil {
 		return result, err
@@ -332,10 +324,10 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 
 	timerOptions := timerlayer.Options{
 		SlowThreshold: cfg.Database.SlowOperationThreshold.Duration,
-		Slow:          slowStoreOperationLog{logger: i.resources.Logger},
+		Slow:          i.resources.Logger,
 	}
 	if tracingModule.Enabled() {
-		timerOptions.Tracer = storeTracing{tracing: tracingModule}
+		timerOptions.Tracer = tracingModule
 	}
 
 	timedPersistence, err := timerlayer.New(i.resources.Persistence, storeMetrics, timerOptions)
@@ -452,7 +444,7 @@ func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 		}
 	}
 
-	cacheInvalidation, err := newLocalCacheClusterAdapter(i.resources.Cluster)
+	cacheInvalidation, err := localcachelayer.NewClusterInvalidation(i.resources.Cluster)
 	if err != nil {
 		return fmt.Errorf("construct local-cache invalidation adapter: %w", err)
 	}
@@ -791,31 +783,4 @@ func newCluster(
 	default:
 		return nil, fmt.Errorf("unsupported cluster backend %q", settings.Backend)
 	}
-}
-
-// newExternalAuthenticationRegistry builds the provider registry on the
-// sign-in protocols the active plugins offer.
-func newExternalAuthenticationRegistry(plugins *pluginhost.Host) (*externalauth.Registry, error) {
-	return externalauth.NewRegistry(plugins.IdentityProviderTypes()...)
-}
-
-// followSignInPlugins rebuilds the configured providers whenever plugins
-// change, so turning a sign-in plugin on or off applies without a restart.
-// A failure keeps the previous providers and is logged.
-func followSignInPlugins(
-	plugins *pluginhost.Host,
-	registry *externalauth.Registry,
-	configuration *config.Store,
-	logger *logging.Logger,
-) {
-	plugins.AddChangeListener(func() {
-		if err := registry.Reload(configuration.Get().Authentication.External, plugins.IdentityProviderTypes()...); err != nil {
-			logger.Error("could not rebuild external authentication providers after a plugin change", logging.Err(err))
-			return
-		}
-		for _, id := range registry.Unavailable() {
-			logger.Warn("external authentication provider is unavailable: its sign-in plugin is turned off or has failed",
-				logging.String("provider_id", id))
-		}
-	})
 }

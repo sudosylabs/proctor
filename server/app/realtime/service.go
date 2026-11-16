@@ -12,6 +12,7 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -64,10 +65,10 @@ func New(deps Dependencies) (*Service, error) {
 	return &Service{deps: deps}, nil
 }
 
-// AttachClusterFanout wires the composition-owned cluster adapter and
+// AttachClusterFanout wires the composition-owned cluster transport and
 // registers peer handlers. It must be called once before the node becomes
 // ready. Peer handlers apply only local effects so Broadcast never loops.
-func (s *Service) AttachClusterFanout(fanout ClusterFanout) error {
+func (s *Service) AttachClusterFanout(fanout cluster.Transport) error {
 	return s.deps.Delivery.SetClusterFanout(fanout)
 }
 

@@ -23,6 +23,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -40,13 +41,6 @@ type Sink interface {
 	CloseSession(string, ConnectionCloseReason)
 	CloseUser(string, ConnectionCloseReason)
 	CloseAll(ConnectionCloseReason)
-}
-
-// ClusterFanout carries opaque application event names and payloads between
-// nodes. Its adapter owns cluster envelopes, transport, and lifecycle.
-type ClusterFanout interface {
-	RegisterHandler(event string, handler func(context.Context, []byte) error) error
-	Broadcast(ctx context.Context, event string, data []byte) error
 }
 
 // AuthenticationInvalidator applies the local, disposable authentication
@@ -91,7 +85,7 @@ type Delivery struct {
 
 	mu     sync.RWMutex
 	sink   Sink
-	fanout ClusterFanout
+	fanout cluster.Transport
 }
 
 // NewDelivery constructs an inert Realtime module with its required security
@@ -121,10 +115,11 @@ func (s *Delivery) SetSink(sink Sink) error {
 	return nil
 }
 
-// SetClusterFanout attaches the peer fanout exactly once and registers the
-// ordinary-publication peer handler. Registration failure is terminal for the
-// instance: composition must unwind node construction rather than retry it.
-func (s *Delivery) SetClusterFanout(fanout ClusterFanout) error {
+// SetClusterFanout attaches the cluster exactly once and registers the peer
+// handlers. Registration failure is terminal for the instance: composition
+// must unwind node construction rather than retry it. Composition owns the
+// cluster's lifecycle.
+func (s *Delivery) SetClusterFanout(fanout cluster.Transport) error {
 	if fanout == nil {
 		return errors.New("realtime cluster fan-out is nil")
 	}
@@ -146,7 +141,7 @@ func (s *Delivery) SetClusterFanout(fanout ClusterFanout) error {
 		{event: clusterEventAuthorizationInvalidated, handler: s.handlePeerAuthorizationInvalidation},
 	}
 	for _, registration := range handlers {
-		if err := fanout.RegisterHandler(registration.event, registration.handler); err != nil {
+		if err := fanout.RegisterHandler(cluster.Event(registration.event), peerHandler(registration.handler)); err != nil {
 			return fmt.Errorf("register %s cluster handler: %w", registration.event, err)
 		}
 	}
@@ -262,7 +257,21 @@ func (s *Delivery) broadcast(ctx context.Context, event string, data []byte) err
 	if fanout == nil {
 		return errors.New("realtime cluster fan-out is not attached")
 	}
-	return fanout.Broadcast(ctx, event, data)
+	return fanout.Broadcast(ctx, &cluster.Message{Event: cluster.Event(event), Data: data})
+}
+
+// peerHandler refuses a malformed envelope before its payload reaches
+// handler, since a peer's message is untrusted input.
+func peerHandler(handler func(context.Context, []byte) error) cluster.Handler {
+	return func(ctx context.Context, message *cluster.Message) error {
+		if message == nil {
+			return errors.New("cluster message is nil")
+		}
+		if err := message.Validate(); err != nil {
+			return err
+		}
+		return handler(ctx, message.Data)
+	}
 }
 
 func (s *Delivery) handlePeerPublication(ctx context.Context, data []byte) error {

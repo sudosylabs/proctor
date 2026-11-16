@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -59,7 +60,7 @@ type Dependencies struct {
 	JobRecorder          job.Recorder
 	// JobTracer, when set, encloses each claimed Job execution in a span.
 	JobTracer           job.Tracer
-	OperationalRecorder OperationalRecorder
+	OperationalRecorder operational.Recorder
 	// MFASecretSealer is the concrete in-process cryptographic module for TOTP
 	// secrets. It is nil until the independent MFA ring is configured.
 	MFASecretSealer *secretseal.Sealer

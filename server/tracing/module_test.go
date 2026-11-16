@@ -9,6 +9,7 @@ package tracing
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +20,12 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+	"github.com/sudosylabs/proctor/server/store/timerlayer"
 )
 
 const parentTraceID = "4bf92f3577b34da6a3ce929d0e0e4736"
@@ -54,7 +60,7 @@ func TestHTTPRequestSpanIsNamedByRouteTemplateAndBoundedAttributes(t *testing.T)
 	t.Parallel()
 
 	module, recorder := recordingModule(t, 1)
-	_, span := module.StartHTTPRequest(context.Background(), http.Header{}, http.MethodGet, false, "request-1")
+	_, span := module.StartRequest(context.Background(), route.TracedRequest{Header: http.Header{}, Method: http.MethodGet, RequestID: "request-1"})
 	span.SetRoute("/api/v1/users/{user_id}")
 	span.End(http.StatusServiceUnavailable)
 	span.End(http.StatusOK)
@@ -86,7 +92,7 @@ func TestHTTPRequestContinuesTraceContextOnlyFromTrustedPeers(t *testing.T) {
 	t.Run("trusted proxy", func(t *testing.T) {
 		t.Parallel()
 		module, recorder := recordingModule(t, 0)
-		_, span := module.StartHTTPRequest(context.Background(), parentHeader(), http.MethodGet, true, "")
+		_, span := module.StartRequest(context.Background(), route.TracedRequest{Header: parentHeader(), Method: http.MethodGet, ContinueParent: true})
 		span.End(http.StatusOK)
 		ended := recorder.Ended()
 		require.Len(t, ended, 1, "a sampled trusted parent is recorded even at ratio 0")
@@ -96,7 +102,7 @@ func TestHTTPRequestContinuesTraceContextOnlyFromTrustedPeers(t *testing.T) {
 	t.Run("untrusted client", func(t *testing.T) {
 		t.Parallel()
 		module, recorder := recordingModule(t, 1)
-		_, span := module.StartHTTPRequest(context.Background(), parentHeader(), http.MethodGet, false, "")
+		_, span := module.StartRequest(context.Background(), route.TracedRequest{Header: parentHeader(), Method: http.MethodGet})
 		span.End(http.StatusOK)
 		ended := recorder.Ended()
 		require.Len(t, ended, 1)
@@ -106,7 +112,7 @@ func TestHTTPRequestContinuesTraceContextOnlyFromTrustedPeers(t *testing.T) {
 	t.Run("untrusted client cannot force sampling", func(t *testing.T) {
 		t.Parallel()
 		module, recorder := recordingModule(t, 0)
-		_, span := module.StartHTTPRequest(context.Background(), parentHeader(), http.MethodGet, false, "")
+		_, span := module.StartRequest(context.Background(), route.TracedRequest{Header: parentHeader(), Method: http.MethodGet})
 		span.End(http.StatusOK)
 		require.Empty(t, recorder.Ended())
 	})
@@ -116,15 +122,18 @@ func TestStoreOperationSpansOnlyJoinARecordingTrace(t *testing.T) {
 	t.Parallel()
 
 	module, recorder := recordingModule(t, 1)
-	_, finish := module.StartStoreOperation(context.Background(), "job.claim_next")
-	finish(false)
+	users := &correlatingUserStore{}
+	layer, err := timerlayer.New(userRoot{users: users}, timerlayer.NopRecorder{}, timerlayer.Options{Tracer: module})
+	require.NoError(t, err)
+	_, err = layer.User().GetByEmail(context.Background(), "student@example.edu")
+	require.Error(t, err)
 	require.Empty(t, recorder.Ended(), "a store operation without a parent started a root trace")
 
-	ctx, request := module.StartHTTPRequest(context.Background(), http.Header{}, http.MethodPost, false, "")
-	storeCtx, finish := module.StartStoreOperation(ctx, "user.get_by_email")
-	traceID, spanID, ok := Correlation(storeCtx)
+	ctx, request := module.StartRequest(context.Background(), route.TracedRequest{Header: http.Header{}, Method: http.MethodPost})
+	_, err = layer.User().GetByEmail(ctx, "student@example.edu")
+	require.Error(t, err)
+	traceID, spanID, ok := Correlation(users.ctx)
 	require.True(t, ok)
-	finish(true)
 	request.End(http.StatusOK)
 
 	ended := recorder.Ended()
@@ -145,9 +154,9 @@ func TestJobExecutionSpanIsANewRootWithItsOutcome(t *testing.T) {
 	t.Parallel()
 
 	module, recorder := recordingModule(t, 1)
-	parentCtx, request := module.StartHTTPRequest(context.Background(), http.Header{}, http.MethodGet, false, "")
-	_, finish := module.StartJobExecution(parentCtx, "mail_delivery")
-	finish("retryable_failure", true)
+	parentCtx, request := module.StartRequest(context.Background(), route.TracedRequest{Header: http.Header{}, Method: http.MethodGet})
+	_, finish := module.StartExecution(parentCtx, "mail_delivery")
+	finish(job.ExecutionRetryableFailure)
 	request.End(http.StatusOK)
 
 	ended := recorder.Ended()
@@ -168,7 +177,7 @@ func TestDisabledModuleStartsNothing(t *testing.T) {
 	module, err := New(config.Default().Tracing, Identity{}, nil)
 	require.NoError(t, err)
 	require.False(t, module.Enabled())
-	ctx, span := module.StartHTTPRequest(context.Background(), parentHeader(), http.MethodGet, true, "")
+	ctx, span := module.StartRequest(context.Background(), route.TracedRequest{Header: parentHeader(), Method: http.MethodGet, ContinueParent: true})
 	span.SetRoute("/health/live")
 	span.End(http.StatusOK)
 	_, _, ok := Correlation(ctx)
@@ -209,8 +218,8 @@ func TestExporterSendsOnlyConfiguredHeaders(t *testing.T) {
 	settings.Headers = map[string]string{"x-honeycomb-team": "team-key"}
 	module, err := New(settings, Identity{Version: "test", NodeID: "node-a"}, nil)
 	require.NoError(t, err)
-	_, end := module.StartJobExecution(context.Background(), "test.job")
-	end("succeeded", false)
+	_, end := module.StartExecution(context.Background(), "test.job")
+	end(job.ExecutionSucceeded)
 	require.NoError(t, module.Close(context.Background()))
 
 	select {
@@ -220,4 +229,25 @@ func TestExporterSendsOnlyConfiguredHeaders(t *testing.T) {
 	default:
 		require.FailNow(t, "no export reached the collector")
 	}
+}
+
+// userRoot is a store whose only aggregate is users, enough for the timing
+// layer to time one operation.
+type userRoot struct {
+	store.Store
+	users store.UserStore
+}
+
+func (s userRoot) User() store.UserStore { return s.users }
+
+// correlatingUserStore fails every lookup and keeps the context the timing
+// layer handed it, which carries the store span.
+type correlatingUserStore struct {
+	store.UserStore
+	ctx context.Context
+}
+
+func (s *correlatingUserStore) GetByEmail(ctx context.Context, _ string) (*model.User, error) {
+	s.ctx = ctx
+	return nil, errors.New("lookup failed")
 }

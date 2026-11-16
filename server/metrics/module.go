@@ -1269,11 +1269,6 @@ func (m *Module) SetMailHealth(code string) {
 	m.mailHealth.Reset()
 	m.mailHealth.WithLabelValues(code).Set(1)
 }
-func (m *Module) ObserveApplication(subsystem, event, result string) {
-	if m != nil {
-		m.applicationEvents.WithLabelValues(subsystem, event, result).Inc()
-	}
-}
 
 var _ timerlayer.Recorder = (*Module)(nil)
 

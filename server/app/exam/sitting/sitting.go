@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -61,13 +62,7 @@ type Service struct {
 	mail          ScheduleMail
 	now           func() time.Time
 	newID         func() model.ExamSittingID
-	operational   OperationalRecorder
-}
-
-// OperationalRecorder receives the outcome of each use case the module
-// observes. It is optional; a module built without one records nothing.
-type OperationalRecorder interface {
-	RecordOperational(subsystem, event string, err error)
+	operational   operational.Recorder
 }
 
 // Dependencies are the collaborators New validates once and distributes to
@@ -83,7 +78,7 @@ type Dependencies struct {
 	Mail        ScheduleMail
 	Now         func() time.Time
 	NewID       func() model.ExamSittingID
-	Operational OperationalRecorder
+	Operational operational.Recorder
 }
 
 // New returns an Exam Sitting Service, or an error when a required dependency

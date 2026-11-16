@@ -22,6 +22,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -41,7 +42,7 @@ func (s *Service) AuthenticateAccess(
 	rawToken string,
 ) (*model.Principal, error) {
 	principal, err := s.authenticateAccess(ctx, rawToken)
-	recordOperational(s.operational, "authentication", "access_token", err)
+	operational.Record(s.operational, "authentication", "access_token", err)
 	return principal, err
 }
 
@@ -54,15 +55,15 @@ func (s *Service) AuthenticateBearer(
 ) (*model.Principal, error) {
 	principal, err := s.authenticateAccess(ctx, rawToken)
 	if err == nil {
-		recordOperational(s.operational, "authentication", "bearer", nil)
+		operational.Record(s.operational, "authentication", "bearer", nil)
 		return principal, nil
 	}
 	if failure, ok := apperror.As(err); !ok || failure.Code() != "authentication.token_invalid" {
-		recordOperational(s.operational, "authentication", "bearer", err)
+		operational.Record(s.operational, "authentication", "bearer", err)
 		return nil, err
 	}
 	principal, err = s.resolvePersonalAccessTokenBearer(ctx, rawToken, s.now())
-	recordOperational(s.operational, "authentication", "bearer", err)
+	operational.Record(s.operational, "authentication", "bearer", err)
 	return principal, err
 }
 

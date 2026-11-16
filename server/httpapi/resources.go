@@ -13,6 +13,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/websocket"
 )
 
 // productionResources is the single, visible and policy-free inventory of HTTP
@@ -25,7 +26,7 @@ func productionResources(
 	plugins Plugins,
 	cookies route.Cookies,
 	webSocket WebSocketTransport,
-	binarySockets BinarySocketTransport,
+	binarySockets *websocket.Hub,
 	logger *logging.Logger,
 ) []route.Resource {
 	return []route.Resource{

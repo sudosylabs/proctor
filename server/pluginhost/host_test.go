@@ -362,10 +362,10 @@ func (r *recordingRecorder) PluginCall(pluginID, operation, outcome string, _ ti
 	r.entries = append(r.entries, pluginID+" "+operation+" "+outcome)
 }
 
-func (r *recordingRecorder) PluginState(pluginID string, state pluginhost.State) {
+func (r *recordingRecorder) PluginState(pluginID, state string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.entries = append(r.entries, pluginID+" "+string(state))
+	r.entries = append(r.entries, pluginID+" "+state)
 }
 
 func (r *recordingRecorder) calls() []string {

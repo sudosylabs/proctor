@@ -16,7 +16,12 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/desktoprelease"
+	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/pluginhost"
+	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
 // applicationDependencies projects platform capabilities and deployment
@@ -35,12 +40,12 @@ func applicationDependencies(
 		return app.Dependencies{}, errors.New("file content is nil")
 	}
 
-	mailSecretSealer, err := newMailSecretSealer(cfg.Mail)
+	mailSecretSealer, err := secretseal.NewMailSealer(cfg.Mail)
 	if err != nil {
 		return app.Dependencies{}, err
 	}
 
-	mfaSecretSealer, err := newMFASecretSealer(cfg.Authentication.MFA)
+	mfaSecretSealer, err := secretseal.NewMFASealer(cfg.Authentication.MFA)
 	if err != nil {
 		return app.Dependencies{}, err
 	}
@@ -58,9 +63,9 @@ func applicationDependencies(
 		return app.Dependencies{}, fmt.Errorf("construct mail inline assets: %w", err)
 	}
 
-	mailer := accountMailerAdapter{mailer: capabilities.mailer, assets: mailAssets}
-	mailDeliveryRecorder, mailMetricsReader := newMailTelemetry(log)
-	desktopBuilds, err := verifiedDesktopBuildCatalog()
+	mailer := platform.NewMailSender(capabilities.mailer, mailAssets)
+	mailDeliveryRecorder, mailMetricsReader := metrics.NewMailTelemetry(log)
+	desktopBuilds, err := desktoprelease.VerifiedCatalog()
 	if err != nil {
 		return app.Dependencies{}, err
 	}
@@ -74,7 +79,7 @@ func applicationDependencies(
 		MailMetricsReader:       mailMetricsReader,
 		MFASecretSealer:         mfaSecretSealer,
 		MailSecretSealer:        mailSecretSealer,
-		Registry:                externalProviderRegistryAdapter{registry: capabilities.externalAuthentication},
+		Registry:                pluginhost.IdentityProviders(capabilities.externalAuthentication),
 		FileContent:             content,
 		DesktopBuildCatalog:     desktopBuilds,
 		NodeID:                  capabilities.nodeID,

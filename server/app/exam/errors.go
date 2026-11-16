@@ -9,6 +9,7 @@ package exam
 
 import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 )
 
 // publicFailures presents every Exam authoring, publication, records, and export use-case failure: unexpected errors
@@ -43,13 +44,13 @@ var examStoreErrors = apperror.StoreTable{
 
 func (a *Authoring) recordOperational(event string, err error) {
 	if a.operational != nil {
-		a.operational.RecordOperational("exam", event, err)
+		operational.Record(a.operational, "exam", event, err)
 	}
 }
 
 func (p *Publication) recordOperational(event string, err error) {
 	if p.operational != nil {
-		p.operational.RecordOperational("exam", event, err)
+		operational.Record(p.operational, "exam", event, err)
 	}
 }
 

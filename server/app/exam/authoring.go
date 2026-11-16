@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -66,13 +67,7 @@ type Authoring struct {
 	now               func() time.Time
 	newID             func() model.ExamID
 	institutionOrigin string
-	operational       OperationalRecorder
-}
-
-// OperationalRecorder receives the outcome of each use case the module
-// observes. It is optional; a module built without one records nothing.
-type OperationalRecorder interface {
-	RecordOperational(subsystem, event string, err error)
+	operational       operational.Recorder
 }
 
 // AuthoringDependencies are the collaborators NewAuthoring validates once and
@@ -89,7 +84,7 @@ type AuthoringDependencies struct {
 	Now               func() time.Time
 	NewID             func() model.ExamID
 	InstitutionOrigin string
-	Operational       OperationalRecorder
+	Operational       operational.Recorder
 }
 
 // NewAuthoring returns an Authoring service, or an error when a required

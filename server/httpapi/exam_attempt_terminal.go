@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/websocket"
 )
 
 const (
@@ -35,7 +36,7 @@ const (
 // answers every call with exam.attempt.environment_unavailable.
 type examAttemptTerminalHandlers struct {
 	app     *environment.Terminals
-	sockets BinarySocketTransport
+	sockets *websocket.Hub
 	logger  *logging.Logger
 }
 
@@ -73,7 +74,7 @@ func withCandidateAccessErrors(codes ...string) []string {
 	return append(slices.Clone(candidateAccessErrors), codes...)
 }
 
-func examAttemptTerminalResource(application *environment.Terminals, sockets BinarySocketTransport, logger *logging.Logger) route.Resource {
+func examAttemptTerminalResource(application *environment.Terminals, sockets *websocket.Hub, logger *logging.Logger) route.Resource {
 	h := examAttemptTerminalHandlers{app: application, sockets: sockets, logger: logger}
 	return route.NewResource("exam_attempt_terminals",
 		route.Endpoint{
@@ -319,8 +320,8 @@ func (h examAttemptTerminalHandlers) socket(writer http.ResponseWriter, request 
 		return err
 	}
 	allowMissingOrigin := route.CredentialSourceOf(request.Context) == route.CredentialBearer
-	err = h.sockets.ServeBinarySocket(writer, request.HTTP, allowMissingOrigin, maxTerminalClientMessage,
-		func(ctx context.Context, socket BinarySocket) BinarySocketOutcome {
+	err = h.sockets.ServeBinary(writer, request.HTTP, allowMissingOrigin, maxTerminalClientMessage,
+		func(ctx context.Context, socket *websocket.BinarySocket) websocket.BinarySocketOutcome {
 			return serveTerminal(ctx, socket, session, h.logger, terminalRecheck)
 		})
 	if err != nil {

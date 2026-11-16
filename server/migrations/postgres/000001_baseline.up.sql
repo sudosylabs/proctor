@@ -5835,6 +5835,35 @@ CREATE TABLE attempt_runtime_leases (
 );
 
 -- Canonical domain identifiers remain constrained independently of foreign keys.
+-- Execution environments, runtime leases, profiles and Attempt evidence.
+ALTER TABLE attempt_runtime_leases
+    ADD CONSTRAINT attempt_runtime_leases_exam_attempt_id_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE environment_profiles
+    ADD CONSTRAINT environment_profiles_id_canonical_check
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT environment_profiles_created_by_user_id_canonical_check
+    CHECK (created_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE exam_attempt_environments
+    ADD CONSTRAINT exam_attempt_environments_exam_attempt_id_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_attempt_environments_exam_sitting_id_canonical_check
+    CHECK (exam_sitting_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_attempt_environments_environment__88f165ae_canonical_check
+    CHECK (environment_profile_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE exam_attempt_evidence
+    ADD CONSTRAINT exam_attempt_evidence_exam_attempt_id_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE exam_attempt_evidence_inventories
+    ADD CONSTRAINT exam_attempt_evidence_inventories_exam_1af13dd9_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_attempt_evidence_inventories_submission_id_canonical_check
+    CHECK (submission_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
 ALTER TABLE exam_security_preflights
     ADD CONSTRAINT exam_security_preflights_session_id_canonical_check
     CHECK (session_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),

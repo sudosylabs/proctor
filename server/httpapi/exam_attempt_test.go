@@ -1090,7 +1090,7 @@ func TestCandidateWorkspaceBatchRequiresIdempotencyAndProtectionHeaders(t *testi
 			test.mutate(request)
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
-			requireCandidateWorkspaceProblem(t, response, http.StatusBadRequest, test.code)
+			_ = requireCandidateWorkspaceProblem(t, response, http.StatusBadRequest, test.code)
 			require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 			require.Equal(t, 0, fake.workspaceBatchCalls, "an unprotected batch reached the application")
 		})

@@ -107,11 +107,6 @@ func discoverFragments(source fs.FS) ([]string, error) {
 	return names, nil
 }
 
-// openAPIMethods are the path-item members that hold an operation.
-var openAPIMethods = map[string]bool{
-	"get": true, "put": true, "post": true, "delete": true, "options": true, "head": true, "patch": true, "trace": true,
-}
-
 func decodeYAMLFile(source fs.FS, name string) (map[string]any, error) {
 	encoded, err := fs.ReadFile(source, name)
 	if err != nil {

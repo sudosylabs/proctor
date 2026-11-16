@@ -9,7 +9,6 @@ package websocket_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -77,7 +76,7 @@ func TestServeBinaryEchoesBinaryMessagesAndRefusesText(t *testing.T) {
 	require.ErrorIs(t, <-ended, websocket.ErrBinarySocketText)
 	_, _, err = conn.ReadMessage()
 	var closed *gorilla.CloseError
-	require.True(t, errors.As(err, &closed), "read after refusal = %v", err)
+	require.ErrorAs(t, err, &closed, "read after refusal")
 	require.Equal(t, websocket.CloseBinaryAccessEnded, closed.Code, "serve's outcome chooses the close code")
 }
 
@@ -110,7 +109,7 @@ func TestServeBinaryRefusesBeforeTheUpgrade(t *testing.T) {
 
 	stopped := newTestHub(t)
 	recorder := httptest.NewRecorder()
-	err := stopped.ServeBinary(recorder, httptest.NewRequest(http.MethodGet, "/", nil), true, 1024,
+	err := stopped.ServeBinary(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), true, 1024,
 		func(context.Context, *websocket.BinarySocket) websocket.BinarySocketOutcome {
 			return websocket.BinarySocketDone
 		})
@@ -119,7 +118,7 @@ func TestServeBinaryRefusesBeforeTheUpgrade(t *testing.T) {
 	hub := newTestHub(t)
 	require.NoError(t, hub.Start(context.Background()))
 	t.Cleanup(func() { _ = hub.Close(context.Background()) })
-	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	request.Header.Set("Origin", "https://elsewhere.example")
 	err = hub.ServeBinary(httptest.NewRecorder(), request, false, 1024,
 		func(context.Context, *websocket.BinarySocket) websocket.BinarySocketOutcome {
@@ -127,7 +126,7 @@ func TestServeBinaryRefusesBeforeTheUpgrade(t *testing.T) {
 		})
 	require.True(t, apperror.Is(err, "websocket.origin.invalid"), "a foreign origin is refused: %v", err)
 
-	err = hub.ServeBinary(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil), true, 1024,
+	err = hub.ServeBinary(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), true, 1024,
 		func(context.Context, *websocket.BinarySocket) websocket.BinarySocketOutcome {
 			return websocket.BinarySocketDone
 		})

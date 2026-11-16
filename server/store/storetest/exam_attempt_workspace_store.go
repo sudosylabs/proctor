@@ -10,7 +10,6 @@ package storetest
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -438,9 +437,9 @@ writesComplete:
 	largeEntries := make([]model.AttemptWorkspaceEntryID, len(largeObjects))
 	for index, large := range largeObjects {
 		largeEntries[index] = model.NewAttemptWorkspaceEntryID()
-		_, err = apply("size-quota-"+string(rune('a'+index)), store.ExamAttemptWorkspaceMutation{ //nolint:gosec // G115: index ranges over 0..4.
+		_, err = apply("size-quota-"+string(rune('a'+index)), store.ExamAttemptWorkspaceMutation{
 			Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: largeEntries[index],
-			DestinationPath: "large-" + string(rune('a'+index)), ObjectID: large.ObjectID}) //nolint:gosec // G115: index ranges over 0..4.
+			DestinationPath: "large-" + string(rune('a'+index)), ObjectID: large.ObjectID})
 		if index < 4 {
 			require.NoError(t, err)
 		} else {
@@ -851,7 +850,7 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 		_, err = workspace.ApplyBatch(ctx, invalid, attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-invalid-"+name))
 		requireInvalidInput(t, err, "ApplyBatch(%s)", name)
 		var item *store.ErrAttemptWorkspaceBatchItem
-		require.False(t, errors.As(err, &item), "ApplyBatch(%s) named mutation %v", name, item)
+		require.NotErrorAs(t, err, &item, "ApplyBatch(%s) named a mutation", name)
 	}
 	_, err = workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
 		attemptWorkspaceDirectoryMutations("valid", 1)[0],
@@ -1128,7 +1127,7 @@ func requireAttemptWorkspaceBatchCapacity(t *testing.T, err error, constraint st
 	t.Helper()
 	requireConflictConstraint(t, err, constraint)
 	var item *store.ErrAttemptWorkspaceBatchItem
-	require.False(t, errors.As(err, &item), "whole-batch conflict named mutation %v", item)
+	require.NotErrorAs(t, err, &item, "a whole-batch conflict named a mutation")
 }
 
 func requireInvalidInput(t *testing.T, err error, format string, args ...any) {

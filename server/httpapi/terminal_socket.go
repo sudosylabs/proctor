@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 	"sync"
 	"time"
 
@@ -293,14 +294,20 @@ func (s *terminalSender) inputOffset(ctx context.Context, offset uint64) error {
 	return s.socket.Write(ctx, frame)
 }
 
+// cursorCell is a 0-based cursor position as a frame's 16-bit field,
+// clamped to it.
+func cursorCell(position int) uint16 {
+	return uint16(max(0, min(position, math.MaxUint16))) //nolint:gosec // G115: clamped to 0..MaxUint16 just before.
+}
+
 func (s *terminalSender) screen(ctx context.Context, screen environment.Screen) error {
 	frame := make([]byte, 18, 18+len(screen.Data))
 	frame[0] = terminalFrameScreenState
 	binary.BigEndian.PutUint64(frame[1:], screen.Offset)
 	binary.BigEndian.PutUint16(frame[9:], screen.Window.Cols)
 	binary.BigEndian.PutUint16(frame[11:], screen.Window.Rows)
-	binary.BigEndian.PutUint16(frame[13:], uint16(max(0, min(screen.CursorRow, 1<<16-1))))
-	binary.BigEndian.PutUint16(frame[15:], uint16(max(0, min(screen.CursorCol, 1<<16-1))))
+	binary.BigEndian.PutUint16(frame[13:], cursorCell(screen.CursorRow))
+	binary.BigEndian.PutUint16(frame[15:], cursorCell(screen.CursorCol))
 	var flags byte
 	if screen.AltScreen {
 		flags |= 1

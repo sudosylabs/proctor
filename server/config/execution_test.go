@@ -15,7 +15,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
-	"strings"
 	"testing"
 	"time"
 
@@ -91,5 +90,5 @@ func TestExecutionHostsCloneDeeplyAndRedactTokens(t *testing.T) {
 	require.Equal(t, "token-exec-1", cfg.Execution.Hosts[0].Token, "redaction leaves the original")
 	encoded, err := cfg.RedactedJSON()
 	require.NoError(t, err)
-	require.False(t, strings.Contains(string(encoded), "token-exec-1"), "the token is never shown")
+	require.NotContains(t, string(encoded), "token-exec-1", "the token is never shown")
 }

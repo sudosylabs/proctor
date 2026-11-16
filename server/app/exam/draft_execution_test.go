@@ -32,16 +32,16 @@ func TestConfigureDraftExecutionOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 	require.NoError(t, err)
 	require.Equal(t, execution, view.Draft.Policy.Execution)
 	require.Equal(t, int64(2), view.Draft.Revision)
-	require.Equal(t, model.ActionExamManage, fixture.authorizer.action)
+	require.Equal(t, []string{decided(model.ActionExamManage, fixture.examResource(), model.AuditStatusSuccess)}, fixture.decisions())
 	require.NotNil(t, fixture.persistence.executionUpdate)
 	require.Equal(t, execution, fixture.persistence.executionUpdate.Execution)
-	require.Equal(t, true, fixture.auditor.value["execution_enabled"])
-	require.NotContains(t, fmt.Sprint(fixture.auditor.value), profile.String(), "the audit value names no profile")
+	require.Equal(t, true, fixture.attemptValue(t)["execution_enabled"])
+	require.NotContains(t, string(fixture.onlyAttempt(t).Parameters), profile.String(), "the audit value names no profile")
 	require.Equal(t, []realtimetest.Call{draftUpdated(t, fixture.examID, 2)}, fixture.publisher.Calls())
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationConfigureDraftExecution, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"enabled":true,"profile_id":%q,"record_input":true,"terminals":2}`,
 			fixture.examID, profile))
-	require.Equal(t, []string{"store.access", "membership", "authorize", "store.get", "audit.begin", "store.update_execution",
+	require.Equal(t, []string{"store.access", "membership", "grants", "decision:exam.manage:success", "store.get", "audit-begin:exam.manage", "store.update_execution",
 		"effect.updated"}, *fixture.order)
 }
 

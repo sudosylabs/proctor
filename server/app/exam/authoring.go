@@ -8,31 +8,14 @@
 package exam
 
 import (
-	"context"
 	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// Authorizer is the Access Control the Exam authoring and publication use
-// cases ask; *access.Authorizer satisfies it and tests substitute a fake.
-type Authorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	AuthorizeExamList(context.Context, invocation.Invocation) (store.ExamListVisibility, error)
-}
-
-// Auditor opens the audit attempt for an authoring mutation and fails it when
-// the mutation does not commit; the Store completes successful audits in the
-// mutation's own transaction.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
 
 // ManagerMailRelationship is the relationship an Exam Manager notice tells its
 // recipient they now have to the Exam.
@@ -73,9 +56,12 @@ type Authoring struct {
 	// sittings finds the Sitting boards an archived Exam refreshes.
 	sittings store.ExamSittingStore
 
-	mail              ManagerMailPreparer
-	authorizer        Authorizer
-	auditor           Auditor
+	mail       ManagerMailPreparer
+	authorizer *access.Authorizer
+	// auditor opens the attempt of each mutation and fails it when the
+	// mutation does not commit; the Store completes a committed attempt in
+	// the mutation's own transaction.
+	auditor           access.MutationAuditAdapter
 	publisher         realtime.Publisher
 	now               func() time.Time
 	newID             func() model.ExamID
@@ -97,8 +83,8 @@ type AuthoringDependencies struct {
 	Users             store.UserStore
 	Sittings          store.ExamSittingStore
 	Mail              ManagerMailPreparer
-	Authorizer        Authorizer
-	Auditor           Auditor
+	Authorizer        *access.Authorizer
+	Auditor           *access.Auditor
 	Publisher         realtime.Publisher
 	Now               func() time.Time
 	NewID             func() model.ExamID
@@ -129,7 +115,7 @@ func NewAuthoring(deps AuthoringDependencies) (*Authoring, error) {
 		sittings:            deps.Sittings,
 		mail:                deps.Mail,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		publisher:           deps.Publisher,
 		now:                 deps.Now,
 		newID:               deps.NewID,

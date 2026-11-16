@@ -10,7 +10,6 @@ package exam
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,17 +31,19 @@ func TestConfigureDraftNativePolicyOrderAndFailures(t *testing.T) {
 		revision                 int64
 		want                     string
 	}{
-		{name: "success", revision: 1}, {name: "replay", replay: true, revision: 1}, {name: "archived", archived: true, revision: 1, want: "exam.archived"}, {name: "stale", revision: 2, want: "exam.draft.revision_conflict"}, {name: "authorization denied", denied: true, revision: 1, want: "exam.unavailable"},
+		{name: "success", revision: 1}, {name: "replay", replay: true, revision: 1}, {name: "archived", archived: true, revision: 1, want: "exam.archived"}, {name: "stale", revision: 2, want: "exam.draft.revision_conflict"}, {name: "authorization denied", denied: true, revision: 1, want: "resource.not_found"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newAuthoringFixture(t)
+			if test.denied {
+				// A current Manager needs exam.manage; the override does not
+				// stand in for it.
+				fixture = newAuthoringFixture(t, model.ActionExamManageOverride)
+			}
 			fixture.persistence.actorIsManager = true
 			fixture.persistence.replayed = test.replay
 			fixture.persistence.archived = test.archived
 			fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
-			if test.denied {
-				fixture.authorizer.err = errors.New("denied")
-			}
 			policy := nativeObservePolicy(t)
 			view, err := fixture.service.ConfigureExamDraftNativePolicy(context.Background(), fixture.inv, ConfigureDraftNativePolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: test.revision, NativePolicy: policy, IdempotencyKey: "native-key"})
 			if test.want != "" {
@@ -58,12 +59,12 @@ func TestConfigureDraftNativePolicyOrderAndFailures(t *testing.T) {
 			}
 			require.Equal(t, model.NativeModeObserve, view.Draft.Policy.Native.Families[1].Mode(), "native selection was not authorized and saved")
 			require.Equal(t, int64(2), view.Draft.Revision, "native selection was not authorized and saved")
-			require.Equal(t, model.ActionExamManage, fixture.authorizer.action, "native selection was not authorized and saved")
+			require.Equal(t, []string{decided(model.ActionExamManage, fixture.examResource(), model.AuditStatusSuccess)}, fixture.decisions(), "native selection was not authorized and saved")
 			require.Equal(t, "exam.draft.native_policy.configure", fixture.persistence.idempotency.Operation, "wrong idempotency or unsafe audit")
-			require.Len(t, fixture.auditor.value, 3, "wrong idempotency or unsafe audit")
+			require.Len(t, fixture.attemptValue(t), 3, "wrong idempotency or unsafe audit")
 			// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 			// begins before the durable write, and the write commits before its effect.
-			require.Equal(t, []string{"store.access", "membership", "authorize", "store.get", "audit.begin", "store.update_native_policy", "effect.updated"}, *fixture.order)
+			require.Equal(t, []string{"store.access", "membership", "grants", "decision:exam.manage:success", "store.get", "audit-begin:exam.manage", "store.update_native_policy", "effect.updated"}, *fixture.order)
 		})
 	}
 }

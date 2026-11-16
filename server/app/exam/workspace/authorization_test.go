@@ -25,7 +25,7 @@ func TestServiceStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
 	})
 	require.Equal(t, "exam.starter_workspace.unavailable", faultCode(err))
 	require.ErrorIs(t, err, failure)
-	require.False(t, fixture.authorizer.called, "membership failure continued: authorizer=%#v audit=%#v mutation", fixture.authorizer, fixture.auditor)
-	require.Nil(t, fixture.auditor.values, "membership failure continued: authorizer=%#v audit=%#v mutation", fixture.authorizer, fixture.auditor)
-	require.Nil(t, fixture.persistence.mutation, "membership failure continued: authorizer=%#v audit=%#v mutation", fixture.authorizer, fixture.auditor)
+	require.Empty(t, fixture.access.Audits.Decisions(), "membership failure reached the authorizer")
+	require.Empty(t, fixture.access.Audits.Attempts(), "membership failure began an audit")
+	require.Nil(t, fixture.persistence.mutation, "membership failure reached the Store")
 }

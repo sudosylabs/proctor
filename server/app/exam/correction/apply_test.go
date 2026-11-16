@@ -37,8 +37,9 @@ func TestApplyUsesOneAtomicStoreCommandAndSuppressesReplayEffects(t *testing.T) 
 	require.Equal(t, "Updated", *f.persistence.application.InstructionsMarkdown)
 	require.NotEmpty(t, f.persistence.application.PrivateReason)
 	require.Empty(t, f.publisher.Calls(), "replay effects")
+	value := f.auditValue(t)
 	for _, forbidden := range []string{"instructions_markdown", "resources", "private_reason", "stage_id", "sha256"} {
-		_, ok := f.auditor.value[forbidden]
+		_, ok := value[forbidden]
 		require.False(t, ok, "unsafe audit field %q", forbidden)
 	}
 	wantIdempotency, prepareErr := prepareApplyIdempotency(f.inv, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID,
@@ -63,7 +64,7 @@ func TestApplyPublishesOnlyAfterCommitAndReportsTransientFailure(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effects;
 	// the candidates are read only after the three Sitting-wide publications.
-	require.Equal(t, []string{"access", "membership", "authorize", "audit.begin", "apply", "effect", "effect", "effect", "candidates", "effect"}, f.order)
+	require.Equal(t, []string{"access", "membership", "grants", "decision:exam.sitting.manage:success", "audit-begin:exam.sitting.manage", "apply", "effect", "effect", "effect", "candidates", "effect"}, f.order)
 	managerEvent, err := realtime.NewExamSittingContentCorrectedEvent(f.examID, f.sittingID, f.baseRevisionID, result.RevisionID, 4, result.EffectiveAt)
 	require.NoError(t, err)
 	candidateEvent, err := realtime.NewCandidateExamSittingContentCorrectedEvent(f.examID, f.sittingID, f.baseRevisionID, result.RevisionID, 4, result.EffectiveAt)

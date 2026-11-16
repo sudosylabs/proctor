@@ -8,14 +8,18 @@
 package exam
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
@@ -45,69 +49,171 @@ type authoringFixture struct {
 	examID      model.ExamID
 	userID      model.UserID
 	order       *[]string
-	authorizer  *authorizerFake
+	access      *accesstest.Fixture
 	memberships *membershipsFake
 	users       *usersFake
 	mail        *managerMailPreparerFake
-	auditor     *auditorFake
 	persistence *authoringStoreFake
 	publisher   *realtimetest.Publisher
 	sittings    *sittingsFake
+	submissions *submissionsFake
 }
 
-func newAuthoringFixture(t *testing.T) authoringFixture {
+// examActions are every action the Exam use cases ask about. The fixture's
+// caller holds them all in the Exam's Academic Unit unless a test grants
+// fewer.
+var examActions = []model.Action{
+	model.ActionExamCreate, model.ActionExamCreateOverride,
+	model.ActionExamView, model.ActionExamViewOverride,
+	model.ActionExamManage, model.ActionExamManageOverride,
+	model.ActionExamPublish, model.ActionExamPublishOverride,
+	model.ActionExamRecordsComplete, model.ActionExamRecordsCompleteOverride,
+	model.ActionExamRecordsHold, model.ActionExamRecordsHoldOverride,
+	model.ActionExamRecordsExport, model.ActionExamRecordsExportOverride,
+	model.ActionExamSittingView, model.ActionExamSittingViewOverride,
+	model.ActionSubmissionView, model.ActionSubmissionViewOverride,
+	model.ActionExamAttemptBrowserActivityView, model.ActionRetentionHoldRelease,
+}
+
+// authoringNow is the clock of the Authoring service and of the authorizer.
+func authoringNow() time.Time { return time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC) }
+
+// newAuthoringFixture builds Authoring over the real authorizer and auditor.
+// The caller holds actions in the Exam's Academic Unit, or every examAction
+// when none are named.
+func newAuthoringFixture(t *testing.T, actions ...model.Action) authoringFixture {
 	t.Helper()
 	order := []string{}
 	unitID, examID, userID := model.NewAcademicUnitID(), model.NewExamID(), model.NewUserID()
-	authorizer := &authorizerFake{order: &order}
-	memberships := &membershipsFake{order: &order}
-	users := &usersFake{order: &order, user: activeTestUser(userID)}
-	mail := &managerMailPreparerFake{order: &order}
-	auditor := &auditorFake{order: &order}
-	persistence := &authoringStoreFake{order: &order, examID: examID, unitID: unitID, actorID: userID}
-	publisher := publisherIn(&order)
-	sittings := &sittingsFake{order: &order}
+	f := authoringFixture{
+		unitID: unitID, examID: examID, userID: userID, order: &order,
+		inv:         invocation.New(testPrincipal(userID), model.RequestMetadata{}),
+		memberships: &membershipsFake{order: &order},
+		users:       &usersFake{order: &order, user: activeTestUser(userID)},
+		mail:        &managerMailPreparerFake{order: &order},
+		persistence: &authoringStoreFake{order: &order, examID: examID, unitID: unitID, actorID: userID},
+		publisher:   publisherIn(&order),
+		sittings:    &sittingsFake{order: &order, examID: examID},
+		submissions: &submissionsFake{examID: examID, unitID: unitID},
+	}
+	if len(actions) == 0 {
+		actions = examActions
+	}
+	f.access = f.accessGranting(t, actions...)
 	service, err := NewAuthoring(AuthoringDependencies{
-		Persistence: persistence,
-		Memberships: memberships,
-		Users:       users,
-		Sittings:    sittings,
-		Mail:        mail,
-		Authorizer:  authorizer,
-		Auditor:     auditor,
-		Publisher:   publisher,
-		Now: func() time.Time {
-			return time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
-		},
+		Persistence:       f.persistence,
+		Memberships:       f.memberships,
+		Users:             f.users,
+		Sittings:          f.sittings,
+		Mail:              f.mail,
+		Authorizer:        f.access.Authorizer,
+		Auditor:           f.access.Auditor,
+		Publisher:         f.publisher,
+		Now:               authoringNow,
 		NewID:             func() model.ExamID { return examID },
 		InstitutionOrigin: "https://institution.example",
 	})
 	require.NoError(t, err)
-	return authoringFixture{service: service, inv: invocation.New(testPrincipal(userID), model.RequestMetadata{}), unitID: unitID, examID: examID, userID: userID, order: &order, authorizer: authorizer, memberships: memberships, users: users, mail: mail, auditor: auditor, persistence: persistence, publisher: publisher, sittings: sittings}
+	f.service = service
+	return f
+}
+
+// accessGranting builds the real authorizer and auditor over the fixture's
+// Exam, Sittings and Submissions, with the caller holding actions in the
+// Exam's Academic Unit. What they do joins the fixture's order log as
+// "grants", "decision:<action>:<status>", "audit-begin:<action>" and
+// "audit-<status>".
+func (f authoringFixture) accessGranting(t *testing.T, actions ...model.Action) *accesstest.Fixture {
+	t.Helper()
+	return accesstest.New(t, accesstest.Options{
+		Grants: []accesstest.Grant{{
+			UserID: f.userID, Actions: actions,
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: f.unitID.String(),
+		}},
+		Exams:       f.persistence,
+		Sittings:    f.sittings,
+		Submissions: f.submissions,
+		Now:         authoringNow,
+		Observe:     func(event string) { *f.order = append(*f.order, event) },
+	})
+}
+
+// authorizerWithout is the real authorizer after the caller lost the
+// withdrawn actions, for a use case that must recheck its authority.
+func (f authoringFixture) authorizerWithout(t *testing.T, withdrawn ...model.Action) *access.Authorizer {
+	t.Helper()
+	return f.accessGranting(t, examActionsWithout(withdrawn...)...).Authorizer
+}
+
+// examActionsWithout is examActions less the withheld actions.
+func examActionsWithout(withheld ...model.Action) []model.Action {
+	return slices.DeleteFunc(slices.Clone(examActions), func(action model.Action) bool {
+		return slices.Contains(withheld, action)
+	})
+}
+
+// decisions describes each recorded authorization decision as
+// "<action> <resource type>:<resource id> <status>".
+func (f authoringFixture) decisions() []string {
+	var described []string
+	for _, event := range f.access.Audits.Decisions() {
+		described = append(described, event.Action+" "+string(event.Resource.Type)+":"+event.Resource.ID+" "+string(event.Status))
+	}
+	return described
+}
+
+// decided describes one decision the way decisions does.
+func decided(action model.Action, resource model.Resource, status model.AuditStatus) string {
+	return string(action) + " " + string(resource.Type) + ":" + resource.ID + " " + string(status)
+}
+
+// examResource is the fixture's Exam as an authorization resource.
+func (f authoringFixture) examResource() model.Resource {
+	return model.Resource{Type: model.ResourceExam, ID: f.examID.String()}
+}
+
+// onlyAttempt returns the one mutation attempt the auditor recorded.
+func (f authoringFixture) onlyAttempt(t *testing.T) *model.AuditEvent {
+	t.Helper()
+	attempts := f.access.Audits.Attempts()
+	require.Len(t, attempts, 1, "mutation attempts")
+	return attempts[0]
+}
+
+// attemptValue decodes the value the one recorded attempt stores, with
+// integral numbers as int64 the way the use case built them.
+func (f authoringFixture) attemptValue(t *testing.T) map[string]any {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(f.onlyAttempt(t).Parameters))
+	decoder.UseNumber()
+	var parameters struct {
+		Value map[string]any `json:"value"`
+	}
+	require.NoError(t, decoder.Decode(&parameters))
+	for key, field := range parameters.Value {
+		if number, ok := field.(json.Number); ok {
+			if integral, err := number.Int64(); err == nil {
+				parameters.Value[key] = integral
+			}
+		}
+	}
+	return parameters.Value
+}
+
+// failedCode is the error code the one recorded attempt failed with, or empty
+// when it did not fail.
+func (f authoringFixture) failedCode(t *testing.T) string {
+	t.Helper()
+	attempt := f.onlyAttempt(t)
+	if attempt.Status != model.AuditStatusFail {
+		return ""
+	}
+	return attempt.ErrorCode
 }
 
 func testPrincipal(userID model.UserID) model.Principal {
 	now := time.Now().UTC()
 	return model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: now}
-}
-
-type authorizerFake struct {
-	order          *[]string
-	action         model.Action
-	resource       model.Resource
-	err            error
-	listVisibility store.ExamListVisibility
-}
-
-func (f *authorizerFake) AuthorizeExamList(context.Context, invocation.Invocation) (store.ExamListVisibility, error) {
-	*f.order = append(*f.order, "authorize.list")
-	return f.listVisibility, f.err
-}
-
-func (f *authorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	*f.order = append(*f.order, "authorize")
-	f.action, f.resource = action, resource
-	return f.err
 }
 
 type membershipsFake struct {
@@ -162,31 +268,6 @@ func (f *managerMailPreparerFake) PrepareManagerMail(request ManagerMailPreparat
 		TemplateKey: request.TemplateKey, ActorUserID: request.Recipient.ID, CreatedAt: request.ActionAt}
 	delivery := &model.MailDelivery{TargetUserID: request.Recipient.ID, TemplateKey: request.TemplateKey}
 	return &store.ExamManagerMail{Occurrence: occurrence, Delivery: delivery, Job: &model.Job{}}, nil
-}
-
-type auditorFake struct {
-	order      *[]string
-	failedCode string
-	value      map[string]any
-	scopeType  model.RoleScopeType
-	scopeID    string
-	err        error
-	failErr    error
-}
-
-func (f *auditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	*f.order = append(*f.order, "audit.begin")
-	f.value = attempt.Value
-	f.scopeType, f.scopeID = attempt.ScopeType, attempt.ScopeID
-	return model.NewAuditEventID(), f.err
-}
-func (f *auditorFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
-	*f.order = append(*f.order, "audit.fail")
-	f.failedCode = code
-	if f.failErr != nil {
-		return f.failErr
-	}
-	return f.err
 }
 
 type authoringStoreFake struct {
@@ -406,8 +487,13 @@ func (f *authoringStoreFake) Get(_ context.Context, examID model.ExamID, _ model
 	}
 	return &store.ExamAuthoringSnapshot{Exam: exam, Draft: draft, OwnerUserID: f.actorID, ManagerCount: 1, ActorIsManager: f.actorIsManager}, nil
 }
-func (f *authoringStoreFake) Resolve(context.Context, model.ExamID) (*model.Exam, error) {
-	return nil, nil
+
+// Resolve gives the authorizer the Exam's owning Academic Unit.
+func (f *authoringStoreFake) Resolve(_ context.Context, examID model.ExamID) (*model.Exam, error) {
+	if examID != f.examID {
+		return nil, store.NewErrNotFound("exam", examID.String())
+	}
+	return model.NewExam(examID, f.unitID, f.actorID, time.Now().UTC())
 }
 func snapshotFromCreation(input *store.ExamAuthoringCreation, actor bool) *store.ExamAuthoringSnapshot {
 	return &store.ExamAuthoringSnapshot{Exam: input.Exam, Draft: input.Draft, OwnerUserID: input.Exam.OwnerUserID, ManagerCount: 1, ActorIsManager: actor}
@@ -438,12 +524,33 @@ func draftUpdated(t *testing.T, examID model.ExamID, revision int64) realtimetes
 }
 
 // sittingsFake answers the Sittings of an archived Exam and their candidates,
-// and places the Sitting read in the shared log.
+// and places the Sitting read in the shared log. Every Sitting resolves to the
+// fixture's Exam.
 type sittingsFake struct {
 	store.ExamSittingStore
 	order        *[]string
+	examID       model.ExamID
 	targets      []store.ExamSittingInvalidationTarget
 	candidateIDs []model.UserID
+}
+
+func (f *sittingsFake) Resolve(_ context.Context, id model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	return &store.ExamSittingSnapshot{Sitting: &model.ExamSitting{ID: id, ExamID: f.examID}}, nil
+}
+
+// submissionsFake resolves every Submission to a Sitting of the fixture's
+// Exam in its Academic Unit.
+type submissionsFake struct {
+	store.ExamSubmissionStore
+	examID model.ExamID
+	unitID model.AcademicUnitID
+}
+
+func (f *submissionsFake) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamSubmissionAuthorization, error) {
+	return &store.ExamSubmissionAuthorization{
+		SubmissionID: id, ExamID: f.examID, SittingID: model.NewExamSittingID(),
+		AttemptID: model.NewExamAttemptID(), CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID,
+	}, nil
 }
 
 func (f *sittingsFake) ListInvalidationTargetsByExam(

@@ -41,8 +41,14 @@ func TestServiceCreatesAFileOnlyAfterOpaqueContentAndDurableFinalize(t *testing.
 	require.Equal(t, []realtimetest.Call{
 		starterWorkspaceChanged(t, fixture.examID, result.Entry.ID, 2, ChangeFileCreated, time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)),
 	}, fixture.publisher.Calls())
-	require.Nil(t, fixture.auditor.values["path"])
-	require.Nil(t, fixture.auditor.values["sha256"])
+	decisions := fixture.access.Audits.Decisions()
+	require.Len(t, decisions, 1, "authorization decisions")
+	require.Equal(t, string(model.ActionExamManage), decisions[0].Action)
+	require.Equal(t, model.Resource{Type: model.ResourceExam, ID: fixture.examID.String()}, decisions[0].Resource)
+	require.Equal(t, model.AuditStatusSuccess, decisions[0].Status)
+	value := fixture.attemptValue(t)
+	require.NotContains(t, value, "path")
+	require.NotContains(t, value, "sha256")
 	wantIdempotency, prepareErr := prepareWorkspaceIdempotency(fixture.inv, idempotencyOperationCreateFile,
 		"test-key", fixture.examID, 1, "", "", "cmd/main.go", "text/x-go", int64(len(body)), strings.Repeat("a", 64))
 	require.NoError(t, prepareErr)

@@ -40,15 +40,16 @@ func TestStageResourceContentReservesBeforeDeterministicWriteAndReturnsAuthorita
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable reservation, and bytes are stored only inside the
 	// reservation before it becomes ready.
-	require.Equal(t, []string{"access", "membership", "authorize", "audit.begin", "reserve", "content.store", "ready"}, f.order)
+	require.Equal(t, []string{"access", "membership", "grants", "decision:exam.sitting.manage:success", "audit-begin:exam.sitting.manage", "reserve", "content.store", "ready"}, f.order)
 	require.NotEmpty(t, f.persistence.reservation.AuditEventID)
 	require.False(t, f.persistence.reservation.AuditAt.IsZero())
-	require.Equal(t, model.ActionExamSittingManage, f.authorizer.action, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: f.sittingID.String()}, f.authorizer.resource, "authorization")
+	require.Equal(t, []string{"exam.sitting.manage exam_sitting:" + f.sittingID.String() + " success"}, f.decisions(), "authorization")
+	require.Equal(t, f.grants.Audits.Attempts()[0].ID, f.persistence.reservation.AuditEventID, "the reservation carries the recorded attempt")
 	require.False(t, f.persistence.reservation.ManagerOverride, "authorization")
+	value := f.auditValue(t)
 	for _, forbidden := range []string{"media_type", "size", "sha256", "stage_id", "private_reason", "display_name"} {
-		_, ok := f.auditor.value[forbidden]
-		require.False(t, ok, "unsafe audit field %q in %#v", forbidden, f.auditor.value)
+		_, ok := value[forbidden]
+		require.False(t, ok, "unsafe audit field %q in %#v", forbidden, value)
 	}
 	wantIdempotency, prepareErr := prepareStageIdempotency(f.inv, StageResourceContentCommand{
 		ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID,
@@ -94,7 +95,7 @@ func TestStageResourceContentCapacityRefusalLeavesOnlyPendingReservation(t *test
 	require.Empty(t, f.publisher.Calls(), "refused content became ready or published: store=%#v effects", f.persistence)
 	// Contract (guardrail 8): the audit begins before the durable reservation that
 	// the refused bytes were stored under.
-	require.Equal(t, []string{"access", "membership", "authorize", "audit.begin", "reserve", "content.store"}, f.order)
+	require.Equal(t, []string{"access", "membership", "grants", "decision:exam.sitting.manage:success", "audit-begin:exam.sitting.manage", "reserve", "content.store"}, f.order)
 }
 
 func TestStageResourceContentUsesReservedTimeForConcurrentReplay(t *testing.T) {
@@ -116,8 +117,8 @@ func TestStageResourceContentUsesExplicitOverrideWithoutCurrentUnitMembership(t 
 	f.memberships.empty = true
 	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamSittingManageOverride, f.authorizer.action, "action=%s reservation=%#v", f.authorizer.action, f.persistence.reservation)
-	require.True(t, f.persistence.reservation.ManagerOverride, "action=%s reservation=%#v", f.authorizer.action, f.persistence.reservation)
+	require.Equal(t, []string{"exam.sitting.manage.override exam_sitting:" + f.sittingID.String() + " success"}, f.decisions(), "reservation=%#v", f.persistence.reservation)
+	require.True(t, f.persistence.reservation.ManagerOverride, "decisions=%v reservation=%#v", f.decisions(), f.persistence.reservation)
 }
 
 func TestStageResourceContentStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
@@ -131,7 +132,7 @@ func TestStageResourceContentStopsWhenCurrentManagerMembershipCannotBeRead(t *te
 	require.Equal(t, "exam.sitting.correction.unavailable", fault.Code())
 	require.ErrorIs(t, err, failure)
 	// Without current membership nothing is authorized or reserved.
-	require.Empty(t, f.authorizer.action, "authorized without current membership")
+	require.Empty(t, f.decisions(), "authorized without current membership")
 	require.Nil(t, f.persistence.reservation, "reserved without current membership")
 }
 

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -24,8 +25,8 @@ type Publication struct {
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer        Authorizer
-	auditor           Auditor
+	authorizer        *access.Authorizer
+	auditor           access.MutationAuditAdapter
 	publisher         realtime.Publisher
 	now               func() time.Time
 	newID             func() model.ExamRevisionID
@@ -40,8 +41,8 @@ type PublicationDependencies struct {
 	Persistence       store.ExamRevisionStore
 	Access            store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore
-	Authorizer        Authorizer
-	Auditor           Auditor
+	Authorizer        *access.Authorizer
+	Auditor           *access.Auditor
 	Publisher         realtime.Publisher
 	Now               func() time.Time
 	NewID             func() model.ExamRevisionID
@@ -71,7 +72,7 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		publisher:           deps.Publisher,
 		now:                 deps.Now,
 		newID:               deps.NewID,

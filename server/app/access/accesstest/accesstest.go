@@ -52,6 +52,12 @@ type Options struct {
 	AcademicPeriods store.AcademicPeriodStore
 	Programmes      store.ProgrammeStore
 	ProgrammeLevels store.ProgrammeLevelStore
+	// Exams, Sittings and Submissions resolve Exam, Exam Sitting and
+	// Submission resources through their Resolve methods. Pass the test's own
+	// stores so both sides see the same ownership; nil resolves nothing.
+	Exams       store.ExamAuthoringStore
+	Sittings    store.ExamSittingStore
+	Submissions store.ExamSubmissionStore
 	// Now is the decision clock; nil means time.Now.
 	Now func() time.Time
 	// Observe, when set, is told what the authorizer and auditor do, in
@@ -101,6 +107,18 @@ func New(t testing.TB, options Options) *Fixture {
 	if options.AcademicPeriods != nil {
 		periods = options.AcademicPeriods
 	}
+	var exams store.ExamAuthoringStore = noExams{}
+	if options.Exams != nil {
+		exams = options.Exams
+	}
+	var sittings store.ExamSittingStore = noSittings{}
+	if options.Sittings != nil {
+		sittings = options.Sittings
+	}
+	var submissions store.ExamSubmissionStore = noSubmissions{}
+	if options.Submissions != nil {
+		submissions = options.Submissions
+	}
 
 	roles := &roleStore{roles: map[model.RoleID]*model.Role{}}
 	observe := options.Observe
@@ -132,8 +150,8 @@ func New(t testing.TB, options Options) *Fixture {
 
 	resolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{
 		Institutions: institutions, AcademicUnits: units, Classes: classes, Users: users,
-		ClassMembers: noClassMembers{}, Exams: noExams{}, Sittings: noSittings{},
-		Submissions: noSubmissions{}, AcademicPeriods: periods,
+		ClassMembers: noClassMembers{}, Exams: exams, Sittings: sittings,
+		Submissions: submissions, AcademicPeriods: periods,
 		Programmes: options.Programmes, ProgrammeLevels: options.ProgrammeLevels,
 	})
 	require.NoError(t, err)
@@ -151,10 +169,12 @@ type Audits struct {
 	store.AuditStore
 	observe func(string)
 
-	mu         sync.Mutex
-	events     []*model.AuditEvent
-	attempts   map[model.AuditEventID]bool
-	attemptErr error
+	mu          sync.Mutex
+	events      []*model.AuditEvent
+	attempts    map[model.AuditEventID]bool
+	attemptErr  error
+	decisionErr error
+	completeErr error
 }
 
 // FailAttempts makes every later save of a mutation attempt return err, as
@@ -163,6 +183,21 @@ func (a *Audits) FailAttempts(err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.attemptErr = err
+}
+
+// FailDecisions makes every later save of an authorization decision return
+// err, as an audit store that became unavailable would.
+func (a *Audits) FailDecisions(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.decisionErr = err
+}
+
+// FailCompletions makes every later completion of an attempt return err.
+func (a *Audits) FailCompletions(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.completeErr = err
 }
 
 // Attempts returns the recorded mutation attempts, completed or not.
@@ -202,6 +237,9 @@ func (a *Audits) Save(_ context.Context, event *model.AuditEvent) (*model.AuditE
 		}
 	} else {
 		a.observe("decision:" + event.Action + ":" + string(event.Status))
+		if a.decisionErr != nil {
+			return nil, a.decisionErr
+		}
 	}
 	saved := *event
 	if saved.ID.IsZero() {
@@ -222,6 +260,9 @@ func (a *Audits) Complete(_ context.Context, completion *store.AuditCompletion) 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.observe("audit-" + string(completion.Status))
+	if a.completeErr != nil {
+		return nil, a.completeErr
+	}
 	for _, event := range a.events {
 		if event.ID == completion.ID {
 			event.Status = completion.Status
@@ -315,10 +356,25 @@ func (noClasses) Get(_ context.Context, id model.ClassID) (*model.Class, error) 
 	return nil, store.NewErrNotFound("class", id.String())
 }
 
+type noExams struct{ store.ExamAuthoringStore }
+
+func (noExams) Resolve(_ context.Context, id model.ExamID) (*model.Exam, error) {
+	return nil, store.NewErrNotFound("exam", id.String())
+}
+
+type noSittings struct{ store.ExamSittingStore }
+
+func (noSittings) Resolve(_ context.Context, id model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	return nil, store.NewErrNotFound("exam_sitting", id.String())
+}
+
+type noSubmissions struct{ store.ExamSubmissionStore }
+
+func (noSubmissions) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamSubmissionAuthorization, error) {
+	return nil, store.NewErrNotFound("submission", id.String())
+}
+
 type (
 	noClassMembers    struct{ store.ClassMemberStore }
-	noExams           struct{ store.ExamAuthoringStore }
-	noSittings        struct{ store.ExamSittingStore }
-	noSubmissions     struct{ store.ExamSubmissionStore }
 	noAcademicPeriods struct{ store.AcademicPeriodStore }
 )

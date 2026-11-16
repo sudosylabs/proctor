@@ -9,6 +9,7 @@ package workspace
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -30,10 +31,11 @@ type serviceFixture struct {
 	inv         invocation.Invocation
 	examID      model.ExamID
 	persistence *fakeWorkspaceStore
-	authorizer  *fakeWorkspaceAuthorizer
-	auditor     *fakeWorkspaceAuditor
-	publisher   *realtimetest.Publisher
-	content     *fakeWorkspaceContent
+	// access is the real authorizer and auditor; the caller may view and
+	// manage Exams in the Exam's Academic Unit.
+	access    *accesstest.Fixture
+	publisher *realtimetest.Publisher
+	content   *fakeWorkspaceContent
 }
 
 func newServiceFixture(t *testing.T) *serviceFixture {
@@ -43,16 +45,25 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 	userID := model.UserID("uuuuuuuuuuuuuuuuuuuuuuuuuu")
 	exam, _ := model.NewExam(examID, model.AcademicUnitID("aaaaaaaaaaaaaaaaaaaaaaaaaa"), userID, at)
 	persistence := &fakeWorkspaceStore{access: &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}}
-	authorizer := &fakeWorkspaceAuthorizer{}
-	auditor := &fakeWorkspaceAuditor{}
+	exams := fakeWorkspaceAccess{persistence: persistence}
+	control := accesstest.New(t, accesstest.Options{
+		Grants: []accesstest.Grant{{
+			UserID:    userID,
+			Actions:   []model.Action{model.ActionExamView, model.ActionExamManage},
+			ScopeType: model.RoleScopeAcademicUnit,
+			ScopeID:   exam.AcademicUnitID.String(),
+		}},
+		Exams: exams,
+		Now:   func() time.Time { return at },
+	})
 	publisher := &realtimetest.Publisher{}
 	content := &fakeWorkspaceContent{persistence: persistence}
 	service, err := New(Dependencies{
 		Persistence: persistence,
-		Access:      fakeWorkspaceAccess{persistence: persistence},
+		Access:      exams,
 		Memberships: fakeMemberships{unitID: exam.AcademicUnitID},
-		Authorizer:  authorizer,
-		Auditor:     auditor,
+		Authorizer:  control.Authorizer,
+		Auditor:     control.Auditor,
 		Content:     content,
 		Publisher:   publisher,
 		Now:         func() time.Time { return at },
@@ -66,7 +77,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb,
 		AuthenticatedAt: at}
 	return &serviceFixture{service: service, inv: invocation.New(principal, model.RequestMetadata{}),
-		examID: examID, persistence: persistence, authorizer: authorizer, auditor: auditor, publisher: publisher, content: content}
+		examID: examID, persistence: persistence, access: control, publisher: publisher, content: content}
 }
 
 type fakeWorkspaceStore struct {
@@ -86,6 +97,11 @@ type fakeWorkspaceStore struct {
 type fakeWorkspaceAccess struct {
 	store.ExamAuthoringStore
 	persistence *fakeWorkspaceStore
+}
+
+// Resolve gives the authorizer the Exam's owning Academic Unit.
+func (f fakeWorkspaceAccess) Resolve(context.Context, model.ExamID) (*model.Exam, error) {
+	return f.persistence.access.Exam, nil
 }
 
 func (f fakeWorkspaceAccess) Access(ctx context.Context, examID model.ExamID, userID model.UserID) (*store.ExamAccessSnapshot, error) {
@@ -177,20 +193,17 @@ func (f fakeMemberships) ListActiveByUser(context.Context, model.UserID, time.Ti
 	return []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}, f.err
 }
 
-type fakeWorkspaceAuthorizer struct{ called bool }
-
-func (f *fakeWorkspaceAuthorizer) Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-	f.called = true
-	return nil
+// attemptValue decodes the value the one recorded mutation attempt stored.
+func (f *serviceFixture) attemptValue(t *testing.T) map[string]any {
+	t.Helper()
+	attempts := f.access.Audits.Attempts()
+	require.Len(t, attempts, 1, "mutation attempts")
+	var parameters struct {
+		Value map[string]any `json:"value"`
+	}
+	require.NoError(t, json.Unmarshal(attempts[0].Parameters, &parameters))
+	return parameters.Value
 }
-
-type fakeWorkspaceAuditor struct{ values map[string]any }
-
-func (f *fakeWorkspaceAuditor) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	f.values = attempt.Value
-	return "iiiiiiiiiiiiiiiiiiiiiiiiii", nil
-}
-func (f *fakeWorkspaceAuditor) Fail(context.Context, model.AuditEventID, string) error { return nil }
 
 // starterWorkspaceChanged is the call a committed Starter Workspace mutation
 // publishes.

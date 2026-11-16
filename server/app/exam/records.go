@@ -8,20 +8,13 @@
 package exam
 
 import (
-	"context"
 	"errors"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// RecordsAuthorizer also owns the durable decision for prohibited self-waivers.
-type RecordsAuthorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	RecordDenial(context.Context, invocation.Invocation, model.Action, model.Resource, model.AcademicUnitID) error
-}
 
 // Records owns the separate post-delivery completion and preservation lifecycle.
 // Retention scheduling and deletion are separate use cases.
@@ -31,8 +24,9 @@ type Records struct {
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer RecordsAuthorizer
-	auditor    Auditor
+	// authorizer also records the durable denial of a prohibited self-waiver.
+	authorizer *access.Authorizer
+	auditor    access.MutationAuditAdapter
 	recentTTL  time.Duration
 	now        func() time.Time
 	newHoldID  func() model.RetentionHoldID
@@ -44,8 +38,8 @@ type RecordsDependencies struct {
 	Persistence store.ExamRecordsStore
 	Access      store.ExamAuthoringStore
 	Memberships store.AcademicUnitMemberStore
-	Authorizer  RecordsAuthorizer
-	Auditor     Auditor
+	Authorizer  *access.Authorizer
+	Auditor     *access.Auditor
 	RecentTTL   time.Duration
 	Now         func() time.Time
 	NewHoldID   func() model.RetentionHoldID
@@ -70,7 +64,7 @@ func NewRecords(deps RecordsDependencies) (*Records, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		recentTTL:           deps.RecentTTL,
 		now:                 deps.Now,
 		newHoldID:           deps.NewHoldID,

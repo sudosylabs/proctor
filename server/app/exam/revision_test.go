@@ -33,8 +33,8 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 		Persistence:       revisions,
 		Access:            f.persistence,
 		Memberships:       f.memberships,
-		Authorizer:        f.authorizer,
-		Auditor:           f.auditor,
+		Authorizer:        f.access.Authorizer,
+		Auditor:           f.access.Auditor,
 		Publisher:         publisher,
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
@@ -44,10 +44,10 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 	command := PublishRevisionCommand{ExamID: f.examID, ExpectedDraftRevision: 3, IdempotencyKey: "test-key"}
 	got, err := service.PublishExamRevision(context.Background(), f.inv, command)
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamPublish, f.authorizer.action, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
-	require.NotNil(t, revisions.input, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
-	require.False(t, revisions.input.ManagerOverride, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
-	require.Equal(t, revisions.summary.ID, got.ID, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
+	require.Equal(t, []string{decided(model.ActionExamPublish, f.examResource(), model.AuditStatusSuccess)}, f.decisions(), "publication input=%#v result=%#v", revisions.input, got)
+	require.NotNil(t, revisions.input, "publication input=%#v result=%#v effects", revisions.input, got)
+	require.False(t, revisions.input.ManagerOverride, "publication input=%#v result=%#v effects", revisions.input, got)
+	require.Equal(t, revisions.summary.ID, got.ID, "publication input=%#v result=%#v effects", revisions.input, got)
 	published, eventErr := realtime.NewExamRevisionPublishedEvent(got.ID, f.examID, got.Number, got.PolicyDigest, got.Kind, got.PublishedAt)
 	require.NoError(t, eventErr)
 	// Contract: a fresh publication publishes exactly the Revision's published
@@ -69,8 +69,8 @@ func TestPublicationUsesOverrideForNonManager(t *testing.T) {
 		Persistence:       revisions,
 		Access:            f.persistence,
 		Memberships:       f.memberships,
-		Authorizer:        f.authorizer,
-		Auditor:           f.auditor,
+		Authorizer:        f.access.Authorizer,
+		Auditor:           f.access.Auditor,
 		Publisher:         &realtimetest.Publisher{},
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
@@ -79,8 +79,8 @@ func TestPublicationUsesOverrideForNonManager(t *testing.T) {
 	require.NoError(t, err)
 	_, err = service.PublishExamRevision(context.Background(), f.inv, PublishRevisionCommand{ExamID: f.examID, ExpectedDraftRevision: 1, IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamPublishOverride, f.authorizer.action, "override action=%q input=%#v", f.authorizer.action, revisions.input)
-	require.True(t, revisions.input.ManagerOverride, "override action=%q input=%#v", f.authorizer.action, revisions.input)
+	require.Equal(t, []string{decided(model.ActionExamPublishOverride, f.examResource(), model.AuditStatusSuccess)}, f.decisions(), "override input=%#v", revisions.input)
+	require.True(t, revisions.input.ManagerOverride, "override input=%#v", revisions.input)
 }
 
 func TestPublicationMapsCapacityConflict(t *testing.T) {
@@ -93,8 +93,8 @@ func TestPublicationMapsCapacityConflict(t *testing.T) {
 		Persistence:       revisions,
 		Access:            f.persistence,
 		Memberships:       f.memberships,
-		Authorizer:        f.authorizer,
-		Auditor:           f.auditor,
+		Authorizer:        f.access.Authorizer,
+		Auditor:           f.access.Auditor,
 		Publisher:         &realtimetest.Publisher{},
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,

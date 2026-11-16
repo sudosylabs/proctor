@@ -36,11 +36,12 @@ func TestCreateOwnsAuthorizationAuditPersistenceAndEffects(t *testing.T) {
 	require.Equal(t, fixture.userID, got.Exam.OwnerUserID)
 	require.Equal(t, "Algorithms", got.Draft.Title)
 	require.Equal(t, 1, got.ManagerCount)
-	require.Equal(t, model.ActionExamCreate, fixture.authorizer.action, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceAcademicUnit, ID: fixture.unitID.String()}, fixture.authorizer.resource, "authorization")
+	require.Equal(t, []string{
+		decided(model.ActionExamCreate, model.Resource{Type: model.ResourceAcademicUnit, ID: fixture.unitID.String()}, model.AuditStatusSuccess),
+	}, fixture.decisions(), "authorization")
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"membership", "authorize", "audit.begin", "store.create", "effect.created"}, *fixture.order)
+	require.Equal(t, []string{"membership", "grants", "decision:exam.create:success", "audit-begin:exam.create", "store.create", "effect.created"}, *fixture.order)
 	created, eventErr := realtime.NewExamCreatedEvent(got.Exam.ID)
 	require.NoError(t, eventErr)
 	// Contract: creating an Exam publishes exactly its created fact.
@@ -57,7 +58,9 @@ func TestCreateUsesExplicitOverrideWithoutMembership(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamCreateOverride, fixture.authorizer.action, "action")
+	require.Equal(t, []string{
+		decided(model.ActionExamCreateOverride, model.Resource{Type: model.ResourceAcademicUnit, ID: fixture.unitID.String()}, model.AuditStatusSuccess),
+	}, fixture.decisions(), "action")
 }
 
 func TestCreateRequiresIdempotencyBeforeResolutionOrAuthorization(t *testing.T) {
@@ -102,7 +105,7 @@ func TestCreateFailureCompletesAuditAsFailed(t *testing.T) {
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.conflict", fault.Code())
-	require.Equal(t, "exam.conflict", fixture.auditor.failedCode)
+	require.Equal(t, "exam.conflict", fixture.failedCode(t))
 }
 
 func TestCreateFailedAuditCompletionPreservesStoreFailure(t *testing.T) {
@@ -111,7 +114,7 @@ func TestCreateFailedAuditCompletionPreservesStoreFailure(t *testing.T) {
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	fixture.persistence.err = store.NewErrConflict("exam", "exams_pkey", errors.New("duplicate"))
 	auditErr := errors.New("audit completion unavailable")
-	fixture.auditor.failErr = auditErr
+	fixture.access.Audits.FailCompletions(auditErr)
 	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)

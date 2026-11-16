@@ -14,24 +14,10 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// Authorizer is the part of *access.Authorizer the Starter Workspace use
-// cases call.
-type Authorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-}
-
-// Auditor records the attempt and failure of each audited Starter Workspace
-// command; the Store completes the audit event with the change it commits.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
 
 // Content stages and opens the bytes of a Starter Workspace object. The
 // object is opaque to the file store: paths and entries live only in the
@@ -54,8 +40,10 @@ type Service struct {
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer  Authorizer
-	auditor     Auditor
+	authorizer *access.Authorizer
+	// auditor records the attempt and failure of each audited command; the
+	// Store completes the attempt with the change it commits.
+	auditor     access.MutationAuditAdapter
 	content     Content
 	publisher   realtime.Publisher
 	now         func() time.Time
@@ -70,8 +58,8 @@ type Dependencies struct {
 	Persistence store.ExamStarterWorkspaceStore
 	Access      store.ExamAuthoringStore
 	Memberships store.AcademicUnitMemberStore
-	Authorizer  Authorizer
-	Auditor     Auditor
+	Authorizer  *access.Authorizer
+	Auditor     *access.Auditor
 	Content     Content
 	Publisher   realtime.Publisher
 	Now         func() time.Time
@@ -102,7 +90,7 @@ func New(deps Dependencies) (*Service, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		content:             deps.Content,
 		publisher:           deps.Publisher,
 		now:                 deps.Now,

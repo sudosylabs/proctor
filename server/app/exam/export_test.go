@@ -19,34 +19,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type exportAuthorizerFake struct {
-	actions []model.Action
-	deny    model.Action
-	self    bool
-	denyErr error
-}
-
-func (a *exportAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
-	a.actions = append(a.actions, action)
-	if action == a.deny {
-		return errors.New("current authority denied")
-	}
-	return nil
-}
-func (a *exportAuthorizerFake) RecordDenial(context.Context, invocation.Invocation, model.Action, model.Resource, model.AcademicUnitID) error {
-	a.self = true
-	return a.denyErr
-}
-
 func TestBrowserHistoryExportRejectsOverrideAndRechecksBeforeOpeningBytes(t *testing.T) {
 	for _, removed := range []string{"manager"} {
 		t.Run(removed, func(t *testing.T) {
-			f, service, persistence, auth, content := newExportFixture(t)
+			f, service, persistence, content := newExportFixture(t)
 			f.persistence.actorIsManager = true
 			f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID, UserID: f.userID}}
 			persistence.value.Categories = []model.RetentionCategory{model.RetentionCategoryBrowserActivity}
@@ -62,7 +42,9 @@ func TestBrowserHistoryExportRejectsOverrideAndRechecksBeforeOpeningBytes(t *tes
 			f.persistence.actorIsManager = false
 			_, err = service.GetExamExport(context.Background(), f.inv, query)
 			require.Error(t, err, "export metadata retained removed Browser Activity access")
-			require.True(t, auth.self, "export metadata retained removed Browser Activity access")
+			sitting := model.Resource{Type: model.ResourceExamSitting, ID: query.Scope.SittingID.String()}
+			require.Contains(t, f.decisions(), decided(model.ActionExamAttemptBrowserActivityView, sitting, model.AuditStatusFail),
+				"export metadata retained removed Browser Activity access")
 			_, err = service.OpenExamExport(context.Background(), f.inv, query)
 			require.Error(t, err, "unauthorized history reached archive bytes")
 			require.Equal(t, 0, content.opens, "unauthorized history reached archive bytes")
@@ -70,7 +52,7 @@ func TestBrowserHistoryExportRejectsOverrideAndRechecksBeforeOpeningBytes(t *tes
 			require.Error(t, err, "override created browser history export")
 			require.Nil(t, persistence.create, "override created browser history export")
 			auditErr := errors.New("denial audit unavailable")
-			auth.denyErr = auditErr
+			f.access.Audits.FailDecisions(auditErr)
 			_, err = service.GetExamExport(context.Background(), f.inv, query)
 			require.ErrorIs(t, err, auditErr)
 		})
@@ -180,26 +162,29 @@ func (c *exportContentFake) PurgeExamExport(context.Context, model.ExamExportID,
 	return nil
 }
 
-func newExportFixture(t *testing.T) (authoringFixture, *Exports, *exportStoreFake, *exportAuthorizerFake, *exportContentFake) {
+// newExportFixture builds Exports over the real authorizer and auditor, the
+// caller holding actions in the Exam's Academic Unit, or every examAction
+// when none are named.
+func newExportFixture(t *testing.T, actions ...model.Action) (authoringFixture, *Exports, *exportStoreFake, *exportContentFake) {
 	t.Helper()
-	f := newAuthoringFixture(t)
+	f := newAuthoringFixture(t, actions...)
 	now := model.NowUTC()
 	scope := model.RetentionHoldScope{ExamID: f.examID, SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}
 	s := &exportStoreFake{value: &model.ExamExport{ID: model.NewExamExportID(), Scope: scope, RequesterUserID: f.userID, Categories: []model.RetentionCategory{model.RetentionCategoryWork}, State: model.ExamExportQueued, PolicyRevision: 1, CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour), SourceExpiresAt: now.Add(24 * time.Hour), SubmissionCount: 1}}
 	s.readAt, s.artifactID = func() time.Time { return now }, model.NewJobAttemptID()
 	s.selected = []store.ExamSubmissionAuthorization{{SubmissionID: scope.SubmissionID, ExamID: scope.ExamID, SittingID: scope.SittingID, AttemptID: model.NewExamAttemptID(), CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}}
-	auth, content := &exportAuthorizerFake{}, &exportContentFake{}
+	content := &exportContentFake{}
 	service, err := NewExports(ExportsDependencies{
 		Persistence: s,
 		Access:      f.persistence,
 		Memberships: f.memberships,
-		Authorizer:  auth,
-		Auditor:     f.auditor,
+		Authorizer:  f.access.Authorizer,
+		Auditor:     f.access.Auditor,
 		Content:     content,
 		Now:         func() time.Time { return now },
 		NewID:       model.NewExamExportID,
 		NewJobID:    model.NewJobID,
 	})
 	require.NoError(t, err)
-	return f, service, s, auth, content
+	return f, service, s, content
 }

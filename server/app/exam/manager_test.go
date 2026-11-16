@@ -37,9 +37,9 @@ func TestListManagersUsesManageAuthorizationAndBoundedCursor(t *testing.T) {
 		ExamID: fixture.examID, BeforeGrantedAt: grantedAt.Add(time.Second), BeforeUserID: model.NewUserID(), Limit: 20,
 	})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamManage, fixture.authorizer.action, "authorization/page = %s/%#v", fixture.authorizer.action, page)
-	require.Len(t, page.Items, 1, "authorization/page = %s/%#v", fixture.authorizer.action, page)
-	require.Equal(t, target, page.Items[0].Manager.UserID, "authorization/page = %s/%#v", fixture.authorizer.action, page)
+	require.Equal(t, []string{decided(model.ActionExamManage, fixture.examResource(), model.AuditStatusSuccess)}, fixture.decisions(), "authorization/page = %#v", page)
+	require.Len(t, page.Items, 1, "authorization/page = %#v", page)
+	require.Equal(t, target, page.Items[0].Manager.UserID, "authorization/page = %#v", page)
 	require.Equal(t, 21, fixture.persistence.managerListOptions.Limit, "the read probes one past the page")
 	require.Equal(t, fixture.examID, fixture.persistence.managerListOptions.ExamID)
 	require.False(t, page.HasMore)
@@ -79,8 +79,9 @@ func TestAddManagerChecksEligibilityBeforeAuditedAtomicMutation(t *testing.T) {
 	require.NotNil(t, result.Manager, "result/mutation = %#v/%#v", result, fixture.persistence.managerMutation)
 	require.Equal(t, target, result.Manager.UserID, "result/mutation = %#v/%#v", result, fixture.persistence.managerMutation)
 	require.Equal(t, target, fixture.persistence.managerMutation.TargetUserID, "result/mutation = %#v/%#v", result, fixture.persistence.managerMutation)
-	require.Equal(t, fixture.examID.String(), fixture.auditor.value["exam_id"])
-	require.Equal(t, target.String(), fixture.auditor.value["user_id"])
+	value := fixture.attemptValue(t)
+	require.Equal(t, fixture.examID.String(), value["exam_id"])
+	require.Equal(t, target.String(), value["user_id"])
 	require.Len(t, fixture.mail.requests, 1)
 	request := fixture.mail.requests[0]
 	require.Equal(t, target, request.Recipient.ID)
@@ -134,8 +135,9 @@ func TestAddManagerUsesNativeMembershipDecisionAndMutationTime(t *testing.T) {
 		ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1, IdempotencyKey: "precise-manager-time",
 	})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamManageOverride, fixture.authorizer.action, "expired actor/new target authorization = %s/%#v", fixture.authorizer.action, fixture.auditor.value)
-	require.Equal(t, true, fixture.auditor.value["target_eligible"], "expired actor/new target authorization = %s/%#v", fixture.authorizer.action, fixture.auditor.value)
+	value := fixture.attemptValue(t)
+	require.Equal(t, []string{decided(model.ActionExamManageOverride, fixture.examResource(), model.AuditStatusSuccess)}, fixture.decisions(), "expired actor/new target authorization = %#v", value)
+	require.Equal(t, true, value["target_eligible"], "expired actor/new target authorization = %#v", value)
 	require.Len(t, checked, 2, "membership decision times")
 	require.Equal(t, boundary, checked[fixture.userID.String()], "membership decision times")
 	require.Equal(t, boundary, checked[target.String()], "membership decision times")
@@ -176,9 +178,10 @@ func TestAddManagerRejectsInactiveOrUnrelatedTargetBeforeAudit(t *testing.T) {
 				ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1, IdempotencyKey: "test-key",
 			})
 			require.Equal(t, "exam.manager.ineligible", faultCode(err))
-			require.NotNil(t, fixture.persistence.managerMutation, "ineligible target did not reach the replay-aware guarded Store path: mutation=%#v audit=%#v failure", fixture.persistence.managerMutation, fixture.auditor.value)
-			require.Equal(t, false, fixture.auditor.value["target_eligible"], "ineligible target did not reach the replay-aware guarded Store path: mutation=%#v audit=%#v failure", fixture.persistence.managerMutation, fixture.auditor.value)
-			require.Equal(t, "exam.manager.ineligible", fixture.auditor.failedCode, "ineligible target did not reach the replay-aware guarded Store path: mutation=%#v audit=%#v failure", fixture.persistence.managerMutation, fixture.auditor.value)
+			value := fixture.attemptValue(t)
+			require.NotNil(t, fixture.persistence.managerMutation, "ineligible target did not reach the replay-aware guarded Store path: mutation=%#v audit=%#v failure", fixture.persistence.managerMutation, value)
+			require.Equal(t, false, value["target_eligible"], "ineligible target did not reach the replay-aware guarded Store path: mutation=%#v audit=%#v failure", fixture.persistence.managerMutation, value)
+			require.Equal(t, "exam.manager.ineligible", fixture.failedCode(t), "ineligible target did not reach the replay-aware guarded Store path: mutation=%#v audit=%#v failure", fixture.persistence.managerMutation, value)
 		})
 	}
 }
@@ -198,7 +201,7 @@ func TestManagerMailPreparationFailureStartsNoMutationAndFailsAudit(t *testing.T
 	})
 	require.Equal(t, "exam.unavailable", faultCode(err))
 	require.Nil(t, fixture.persistence.managerMutation, "mutation/audit")
-	require.Equal(t, "exam.unavailable", fixture.auditor.failedCode, "mutation/audit")
+	require.Equal(t, "exam.unavailable", fixture.failedCode(t), "mutation/audit")
 }
 
 func TestRemoveAndTransferPreserveStoreInvariantFailures(t *testing.T) {
@@ -212,8 +215,9 @@ func TestRemoveAndTransferPreserveStoreInvariantFailures(t *testing.T) {
 	require.Equal(t, "exam.manager.owner_protected", faultCode(err), "remove owner error")
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationRemoveManager, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"user_id":%q,"expected_exam_revision":1}`, fixture.examID, fixture.userID))
-	_, exists := fixture.auditor.value["target_eligible"]
-	require.False(t, exists, "removal audit claims an eligibility decision: %#v", fixture.auditor.value)
+	removal := fixture.attemptValue(t)
+	_, exists := removal["target_eligible"]
+	require.False(t, exists, "removal audit claims an eligibility decision: %#v", removal)
 
 	fixture = newAuthoringFixture(t)
 	fixture.persistence.actorIsManager = true

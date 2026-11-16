@@ -25,7 +25,8 @@ import (
 func TestExamExportDownloadRechecksAuthorityAfterStorageOpen(t *testing.T) {
 	for _, scenario := range []string{"unchanged archive", "node clock ahead", "database expiry", "revoked credential", "withdrawn read permission", "replaced artifact"} {
 		t.Run(scenario, func(t *testing.T) {
-			f, service, base, auth, content := newExportFixture(t)
+			f, service, base, content := newExportFixture(t)
+			withdrawn := f.authorizerWithout(t, model.ActionSubmissionViewOverride)
 			base.value.State, base.value.ArchiveSizeBytes, base.value.ArchiveSHA256 = model.ExamExportReady, 42, strings.Repeat("a", 64)
 			base.value.ReadyAt = model.OptionalTimeFrom(base.value.CreatedAt)
 			databaseNow := base.value.ExpiresAt.Add(-time.Second)
@@ -45,7 +46,7 @@ func TestExamExportDownloadRechecksAuthorityAfterStorageOpen(t *testing.T) {
 				case "revoked credential":
 					base.getErr = store.NewErrConflict("authorization", "credential", nil)
 				case "withdrawn read permission":
-					auth.deny = model.ActionSubmissionViewOverride
+					service.authorizer = withdrawn
 				case "replaced artifact":
 					base.artifactID = model.NewJobAttemptID()
 				}
@@ -73,17 +74,17 @@ func TestExamExportDownloadRechecksAuthorityAfterStorageOpen(t *testing.T) {
 }
 
 func TestExamExportDownloadRechecksOrdinaryPermissionAndExpiry(t *testing.T) {
-	f, service, s, auth, content := newExportFixture(t)
+	f, service, s, content := newExportFixture(t)
 	s.value.State = model.ExamExportReady
 	s.value.ArchiveSizeBytes = 42
 	s.value.ArchiveSHA256 = strings.Repeat("a", 64)
 	s.value.ReadyAt = model.OptionalTimeFrom(s.value.CreatedAt)
 	query := ExportQuery{Scope: s.value.Scope, ExportID: s.value.ID}
-	auth.deny = model.ActionSubmissionViewOverride
+	service.authorizer = f.authorizerWithout(t, model.ActionSubmissionViewOverride)
 	_, err := service.OpenExamExport(context.Background(), f.inv, query)
 	require.Error(t, err, "download bypassed ordinary read authority")
 	require.Equal(t, 0, content.opens, "download bypassed ordinary read authority")
-	auth.deny = ""
+	service.authorizer = f.access.Authorizer
 	s.value.CreatedAt = s.value.CreatedAt.Add(-48 * time.Hour)
 	s.value.ExpiresAt = s.value.ExpiresAt.Add(-48 * time.Hour)
 	s.value.SourceExpiresAt = s.value.SourceExpiresAt.Add(-48 * time.Hour)
@@ -100,7 +101,7 @@ func (*exportClosingBody) Read([]byte) (int, error) { return 0, io.EOF }
 func (b *exportClosingBody) Close() error { b.closed = true; return nil }
 
 func TestExamExportDownloadExpiresDuringStorageOpen(t *testing.T) {
-	f, service, s, _, content := newExportFixture(t)
+	f, service, s, content := newExportFixture(t)
 	s.value.State, s.value.ArchiveSizeBytes, s.value.ArchiveSHA256, s.value.ReadyAt = model.ExamExportReady, 42, strings.Repeat("a", 64), model.OptionalTimeFrom(s.value.CreatedAt)
 	now := s.value.CreatedAt
 	s.readAt = func() time.Time { return now }

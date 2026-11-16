@@ -30,7 +30,7 @@ func TestApparentMetadataNoOpWithStaleDraftReachesAuditedStoreGuard(t *testing.T
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.draft.revision_conflict", fault.Code())
-	require.True(t, f.auditor.began)
+	require.True(t, f.auditBegan())
 	require.Equal(t, 1, f.persistence.updateCalls)
 }
 
@@ -73,6 +73,6 @@ func TestMetadataPatchRejectsOmittedFieldsBeforeAudit(t *testing.T) {
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.resource.invalid", fault.Code())
-	require.False(t, f.auditor.began)
+	require.False(t, f.auditBegan())
 	require.Equal(t, 0, f.persistence.updateCalls)
 }

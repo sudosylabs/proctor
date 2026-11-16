@@ -13,6 +13,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -59,8 +60,8 @@ type Exports struct {
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer RecordsAuthorizer
-	auditor    Auditor
+	authorizer *access.Authorizer
+	auditor    access.MutationAuditAdapter
 	content    ExportContent
 	now        func() time.Time
 	newID      func() model.ExamExportID
@@ -73,8 +74,8 @@ type ExportsDependencies struct {
 	Persistence store.ExamExportStore
 	Access      store.ExamAuthoringStore
 	Memberships store.AcademicUnitMemberStore
-	Authorizer  RecordsAuthorizer
-	Auditor     Auditor
+	Authorizer  *access.Authorizer
+	Auditor     *access.Auditor
 	Content     ExportContent
 	Now         func() time.Time
 	NewID       func() model.ExamExportID
@@ -101,7 +102,7 @@ func NewExports(deps ExportsDependencies) (*Exports, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		content:             deps.Content,
 		now:                 deps.Now,
 		newID:               deps.NewID,

@@ -27,7 +27,7 @@ func (*exportUncertainWriteError) Error() string { return "write uncertain" }
 func (*exportUncertainWriteError) ExamExportWriteUncertain() {}
 
 func TestExamExportBuildKeepsUnverifiedRemoteWriterReservation(t *testing.T) {
-	_, service, s, _, content := newExportFixture(t)
+	_, service, s, content := newExportFixture(t)
 	content.err = &exportUncertainWriteError{}
 	input := store.ExamExportBuild{ExamExportArtifact: store.ExamExportArtifact{ExportID: s.value.ID, AttemptID: model.NewJobAttemptID()}, JobID: model.NewJobID()}
 	input.ClaimToken, _ = model.NewJobClaimToken()
@@ -40,7 +40,7 @@ func TestExamExportBuildKeepsUnverifiedRemoteWriterReservation(t *testing.T) {
 func TestExamExportBuildKeepsUnknownPublicationAndFinishesWriterOutsideCancellation(t *testing.T) {
 	for _, cancelDuringBuild := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unknown publication", true: "canceled copy"}[cancelDuringBuild], func(t *testing.T) {
-			_, service, s, _, content := newExportFixture(t)
+			_, service, s, content := newExportFixture(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			if cancelDuringBuild {
@@ -64,7 +64,7 @@ func TestExamExportBuildKeepsUnknownPublicationAndFinishesWriterOutsideCancellat
 }
 
 func TestExamExportBuildRequiresTheClaimingJobIdentity(t *testing.T) {
-	_, service, s, _, content := newExportFixture(t)
+	_, service, s, content := newExportFixture(t)
 	input := store.ExamExportBuild{ExamExportArtifact: store.ExamExportArtifact{ExportID: s.value.ID, AttemptID: model.NewJobAttemptID()}, JobID: model.NewJobID()}
 	input.ClaimToken, _ = model.NewJobClaimToken()
 	for name, system := range map[string]invocation.System{

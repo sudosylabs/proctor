@@ -31,7 +31,7 @@ func systemPluginsAPI(t *testing.T, plugins Plugins) http.Handler {
 	}
 	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, plugins,
-			unavailableDesktopCompatibilityApplication{}, time.Now))
+			nil, time.Now))
 }
 
 func getSystemPlugins(t *testing.T, handler http.Handler, query string, authorized bool) *httptest.ResponseRecorder {

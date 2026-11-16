@@ -48,7 +48,7 @@ func productionResources(
 		browserInvitationResource(application.Onboarding, cookies),
 		userProfileResource(application.Users, application.Attempts, application.Identity),
 		userSettingsResource(application.Users),
-		userAdministrationResource(application.Identity, application.Identity),
+		userAdministrationResource(application.Identity),
 		sessionResource(application.Identity, cookies),
 		sessionReauthenticationResource(application.Identity, cookies),
 		mfaResource(application.Identity),

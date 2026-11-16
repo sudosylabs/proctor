@@ -257,36 +257,15 @@ type RegistrationApplication interface {
 	RegisterLocalUser(context.Context, invocation.Invocation, onboarding.RegisterLocalUserCommand) error
 }
 
-type authenticationEntryApplication interface {
-	Login(context.Context, invocation.Invocation, identity.LoginCommand) (*identity.LoginResult, error)
-	RefreshSession(context.Context, invocation.Invocation, identity.RefreshSessionCommand) (*model.Session, *model.AuthenticationTokens, error)
-	Logout(context.Context, invocation.Invocation) error
-	RequestEmailVerification(context.Context, invocation.Invocation, identity.RequestEmailVerificationCommand) error
-	CompleteEmailVerification(context.Context, invocation.Invocation, identity.CompleteEmailVerificationCommand) (*model.User, error)
-	CompleteEmailChangeUndo(context.Context, invocation.Invocation, identity.CompleteEmailChangeUndoCommand) error
-	InspectEmailVerification(
-		context.Context,
-		invocation.Invocation,
-		identity.InspectAccountTokenCommand,
-	) (*identity.EmailVerificationInspection, error)
-	InspectEmailChangeUndo(
-		context.Context,
-		invocation.Invocation,
-		identity.InspectAccountTokenCommand,
-	) (*identity.EmailChangeUndoInspection, error)
-	RequestPasswordReset(context.Context, invocation.Invocation, identity.RequestPasswordResetCommand) error
-	CompletePasswordReset(context.Context, invocation.Invocation, identity.CompletePasswordResetCommand) (*model.User, error)
-}
-
 type authenticationHandlers struct {
 	registration   RegistrationApplication
-	authentication authenticationEntryApplication
+	authentication *identity.Service
 	cookies        route.Cookies
 }
 
 func authenticationResource(
 	registration RegistrationApplication,
-	authentication authenticationEntryApplication,
+	authentication *identity.Service,
 	cookies route.Cookies,
 ) route.Resource {
 	h := authenticationHandlers{registration: registration, authentication: authentication, cookies: cookies}

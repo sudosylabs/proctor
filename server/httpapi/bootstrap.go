@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -142,10 +141,10 @@ func installationBootstrapResponseFromModel(
 }
 
 type bootstrapHandlers struct {
-	app BootstrapApplication
+	app *identity.Service
 }
 
-func bootstrapResource(app BootstrapApplication) route.Resource {
+func bootstrapResource(app *identity.Service) route.Resource {
 	h := bootstrapHandlers{app: app}
 	return route.NewResource(
 		"bootstrap",
@@ -219,14 +218,4 @@ func (h bootstrapHandlers) install(request route.Request) (route.Result, error) 
 	}
 
 	return route.JSON(http.StatusCreated, installationBootstrapResponseFromModel(request.HTTP, result)), nil
-}
-
-// BootstrapApplication is the application port its handlers call; it reports and performs installation bootstrap.
-type BootstrapApplication interface {
-	GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error)
-	BootstrapInstallation(
-		context.Context,
-		invocation.Invocation,
-		identity.BootstrapInstallationCommand,
-	) (*model.InstallationBootstrapResult, error)
 }

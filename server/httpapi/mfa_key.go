@@ -8,21 +8,12 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// MFAKeyApplication is the operator surface of the MFA key ring.
-type MFAKeyApplication interface {
-	GetMFAKeyState(context.Context, invocation.Invocation) (identity.MFAKeyStateView, error)
-	StartMFARekey(context.Context, invocation.Invocation, identity.StartMFARekeyCommand) (identity.MFARekeyView, error)
-	GetMFARekeyStatus(context.Context, invocation.Invocation, model.JobID) (identity.MFARekeyStatusView, error)
-}
 
 type mfaRekeyRequest struct {
 	RetiringKeyID string `json:"retiring_key_id"`
@@ -77,9 +68,9 @@ type mfaKeyStateResponse struct {
 	Active               []mfaSecretKeyUsageResponse `json:"active"`
 }
 
-type mfaKeyHandlers struct{ app MFAKeyApplication }
+type mfaKeyHandlers struct{ app *identity.Service }
 
-func mfaKeyResource(app MFAKeyApplication) route.Resource {
+func mfaKeyResource(app *identity.Service) route.Resource {
 	h := mfaKeyHandlers{app: app}
 	return route.NewResource("mfa-keys",
 		route.Endpoint{

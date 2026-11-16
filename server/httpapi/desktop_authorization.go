@@ -8,59 +8,13 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// DesktopAuthorization is the application port its handlers call; it runs the
-// browser-mediated flow that authorizes a Desktop and exchanges the result for
-// a Desktop Session.
-type DesktopAuthorization interface {
-	StartDesktopAuthorization(
-		context.Context,
-		invocation.Invocation,
-		identity.StartDesktopAuthorizationCommand,
-	) (*identity.DesktopAuthorizationStart, error)
-	BindDesktopAuthorization(
-		context.Context,
-		invocation.Invocation,
-		identity.BindDesktopAuthorizationCommand,
-	) (*identity.DesktopAuthorizationBinding, error)
-	DesktopAuthorizationContext(context.Context, invocation.Invocation, string) (*identity.DesktopAuthorizationBrowserContext, error)
-	AuthenticateDesktopAuthorizationSession(
-		context.Context,
-		invocation.Invocation,
-		identity.AuthenticateDesktopAuthorizationCommand,
-	) (*identity.DesktopAuthorizationBrowserContext, error)
-	AuthenticateDesktopAuthorizationLocally(
-		context.Context,
-		invocation.Invocation,
-		identity.AuthenticateDesktopAuthorizationLocallyCommand,
-	) (*identity.DesktopAuthorizationBrowserContext, error)
-	ResetDesktopAuthorizationAccount(context.Context, invocation.Invocation, string) error
-	BeginDesktopExternalAuthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.BeginDesktopExternalAuthenticationCommand,
-	) (*model.ExternalAuthenticationStart, error)
-	ApproveDesktopAuthorization(
-		context.Context,
-		invocation.Invocation,
-		identity.ApproveDesktopAuthorizationCommand,
-	) (*identity.DesktopAuthorizationApproval, error)
-	CancelDesktopAuthorization(context.Context, invocation.Invocation, identity.ApproveDesktopAuthorizationCommand) error
-	ExchangeDesktopAuthorization(
-		context.Context,
-		invocation.Invocation,
-		identity.ExchangeDesktopAuthorizationCommand,
-	) (*identity.DesktopAuthorizationExchangeResult, error)
-}
 
 type desktopAuthorizationStartRequest struct {
 	CallbackURL      string                    `json:"callback_url"`
@@ -126,11 +80,11 @@ type desktopAuthorizationContextResponse struct {
 }
 
 type desktopAuthorizationHandlers struct {
-	app     DesktopAuthorization
+	app     *identity.Service
 	cookies route.Cookies
 }
 
-func desktopAuthorizationResource(app DesktopAuthorization, cookies route.Cookies) route.Resource {
+func desktopAuthorizationResource(app *identity.Service, cookies route.Cookies) route.Resource {
 	h := desktopAuthorizationHandlers{app: app, cookies: cookies}
 	base := "/auth/desktop/authorizations"
 	return route.NewResource("desktop_authorization",

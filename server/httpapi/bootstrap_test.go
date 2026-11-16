@@ -11,18 +11,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type systemHTTPHealth struct {
@@ -67,32 +69,89 @@ func TestSystemResourceReturnsHealthyStatusAndVersionThroughKernel(t *testing.T)
 	}
 }
 
+// desktopBootstrapSecret is the deployment bootstrap secret the fixture's
+// service is configured with.
+const desktopBootstrapSecret = "deployment-bootstrap-secret"
+
+// desktopInstallations is the installation aggregate. Bootstrap records each
+// input and either fails with err or commits the input as the installation.
+type desktopInstallations struct {
+	store.InstallationStore
+	state  *model.InstallationState
+	err    error
+	inputs []*store.InstallationBootstrap
+}
+
+func (s *desktopInstallations) Get(context.Context) (*model.InstallationState, error) {
+	if s.state == nil {
+		return nil, store.NewErrNotFound("installation", "")
+	}
+	copied := *s.state
+	return &copied, nil
+}
+
+func (s *desktopInstallations) Bootstrap(_ context.Context, input *store.InstallationBootstrap) (*model.InstallationBootstrapResult, error) {
+	s.inputs = append(s.inputs, input)
+	if s.err != nil {
+		return nil, s.err
+	}
+	institution := *input.Institution
+	institution.ID = model.NewInstitutionID()
+	s.state = &model.InstallationState{
+		InitializedAt: input.Administrator.CreatedAt, InstitutionID: institution.ID, AdministratorUserID: input.Administrator.ID,
+	}
+	administrator := *input.Administrator
+	return &model.InstallationBootstrapResult{State: s.state, Institution: &institution, Administrator: &administrator}, nil
+}
+
+// bootstrapAPI serves the bootstrap resource over the real service and the
+// installation aggregate.
+func bootstrapAPI(t *testing.T, installations *desktopInstallations) (http.Handler, *identityFixture) {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	fixture := newIdentityFixture(t, identityOptions{
+		Stores:          identityStores{Installations: installations},
+		BootstrapSecret: desktopBootstrapSecret,
+	})
+	return newFocusedResourceAPI(t, logger, routetest.Authenticator{}, bootstrapResource(fixture.service)), fixture
+}
+
+func bootstrapBody(t *testing.T, password, secret string) *bytes.Reader {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"institution":      map[string]any{"name": "northbridge", "display_name": "Northbridge"},
+		"administrator":    map[string]any{"username": "admin", "email": "admin@example.edu"},
+		"password":         password,
+		"bootstrap_secret": secret,
+	})
+	require.NoError(t, err)
+	return bytes.NewReader(body)
+}
+
 func TestBootstrapResourceStrictDecodeAndDeclaredFailureThroughKernel(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	bootstrap := &recordingBootstrap{bootstrapErr: apperror.New("installation.unavailable")}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, bootstrapResource(bootstrap))
+	installations := &desktopInstallations{err: errors.New("database unavailable")}
+	httpAPI, _ := bootstrapAPI(t, installations)
 
 	invalid := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalid, newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bytes.NewBufferString(`{"unknown":true}`)))
 	require.Equal(t, http.StatusBadRequest, invalid.Code, "strict bootstrap decode = %d %s", invalid.Code, invalid.Body.String())
 	require.True(t, bytes.Contains(invalid.Body.Bytes(), []byte(`"code":"request.invalid"`)), "strict bootstrap decode = %d %s", invalid.Code, invalid.Body.String())
+	require.Empty(t, installations.inputs, "a body the decoder refused reached the installation")
 
 	failure := httptest.NewRecorder()
-	httpAPI.ServeHTTP(failure, newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bytes.NewBufferString(`{"institution":{"name":"northbridge","display_name":"Northbridge"},"administrator":{"username":"admin","email":"admin@example.edu"},"password":"secret","bootstrap_secret":"deployment-secret"}`)))
+	httpAPI.ServeHTTP(failure, newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bootstrapBody(t, "correct-horse-battery", desktopBootstrapSecret)))
 	require.Equal(t, http.StatusServiceUnavailable, failure.Code, "bootstrap failure = %d %s", failure.Code, failure.Body.String())
 	require.True(t, bytes.Contains(failure.Body.Bytes(), []byte(`"code":"installation.unavailable"`)), "bootstrap failure = %d %s", failure.Code, failure.Body.String())
+	// An ambiguous commit is retried once before it is reported unavailable.
+	require.Len(t, installations.inputs, 2)
 }
 
 func TestBootstrapStatusExposesOnlyInitializedFlag(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(
-		t,
-		logger,
-		routetest.Authenticator{},
-		bootstrapResource(&bootstrapHTTPApplication{status: &model.InstallationStatus{Initialized: true}}),
-	)
+	httpAPI, _ := bootstrapAPI(t, &desktopInstallations{state: &model.InstallationState{
+		InitializedAt: time.UnixMilli(1_000).UTC(), InstitutionID: model.NewInstitutionID(), AdministratorUserID: model.NewUserID(),
+	}})
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/bootstrap", nil))
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
@@ -107,20 +166,16 @@ func TestBootstrapStatusExposesOnlyInitializedFlag(t *testing.T) {
 
 func TestBootstrapDeniedDoesNotEchoSecretOrAccountDetail(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	bootstrap := &recordingBootstrap{bootstrapErr: apperror.New("installation.bootstrap_denied")}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, bootstrapResource(bootstrap))
+	installations := &desktopInstallations{}
+	httpAPI, _ := bootstrapAPI(t, installations)
 	const secret = "wrong-secret-material-that-must-not-be-echoed"
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bytes.NewBufferString(
-		`{"institution":{"name":"northbridge","display_name":"Northbridge"},`+
-			`"administrator":{"username":"admin","email":"admin@example.edu"},`+
-			`"password":"password","bootstrap_secret":"`+secret+`"}`,
-	)))
+	httpAPI.ServeHTTP(response, newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bootstrapBody(t, "password", secret)))
 	require.Equal(t, http.StatusForbidden, response.Code, "response = %d %s", response.Code, response.Body.String())
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"code":"installation.bootstrap_denied"`)), "response = %d %s", response.Code, response.Body.String())
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte(secret)), "response = %d %s", response.Code, response.Body.String())
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("admin@example.edu")), "response = %d %s", response.Code, response.Body.String())
+	require.Empty(t, installations.inputs, "a denied bootstrap reached the installation")
 }
 
 func TestBootstrapResponseDTOPreservesHistoricalEnvelope(t *testing.T) {
@@ -170,45 +225,46 @@ func TestBootstrapResponseDTOPreservesHistoricalEnvelope(t *testing.T) {
 
 func TestBootstrapUsesApplicationCommand(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	rec := &recordingBootstrap{
-		result: &model.InstallationBootstrapResult{
-			State: &model.InstallationState{
-				InitializedAt: model.TimeFromMillis(1), InstitutionID: model.NewInstitutionID(), AdministratorUserID: model.NewUserID(),
-			},
-		},
-	}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, bootstrapResource(rec))
-	body, _ := json.Marshal(map[string]any{
-		"institution":      map[string]any{"name": "northbridge", "display_name": "Northbridge"},
-		"administrator":    map[string]any{"username": "admin", "email": "admin@example.com"},
-		"password":         "correct-horse-battery",
-		"bootstrap_secret": "deployment-bootstrap-secret",
-	})
-	request := newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bytes.NewReader(body))
-	request.Header.Set("Content-Type", "application/json")
+	installations := &desktopInstallations{}
+	httpAPI, fixture := bootstrapAPI(t, installations)
+	request := newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bootstrapBody(t, "correct-horse-battery", desktopBootstrapSecret))
 	request.RemoteAddr = "127.0.0.1:1234"
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, "northbridge", rec.command.InstitutionName)
-	require.Equal(t, "admin", rec.command.AdministratorUsername)
-	require.Equal(t, "correct-horse-battery", rec.command.Password)
-	require.Equal(t, "deployment-bootstrap-secret", rec.command.BootstrapSecret)
-	require.NotEmpty(t, rec.command.Source)
+
+	require.Len(t, installations.inputs, 1)
+	input := installations.inputs[0]
+	require.Equal(t, "northbridge", input.Institution.Name)
+	require.Equal(t, "Northbridge", input.Institution.DisplayName)
+	require.Equal(t, "admin", input.Administrator.Username)
+	require.Equal(t, "admin@example.edu", input.Administrator.Email)
+	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy()})
+	require.NoError(t, err)
+	require.NoError(t, hasher.Verify(t.Context(), input.PasswordHash, "correct-horse-battery"), "the stored hash does not prove the requested password")
+	require.NotEqual(t, [32]byte{}, input.BootstrapSecretDigest)
+	require.NotEqual(t, [32]byte{}, input.CommandFingerprint)
+	// The request's source is the bootstrap audit's network identity and
+	// the key of its rate limit.
+	require.Equal(t, "127.0.0.1", input.AuditEvent.IPAddress)
+	require.Equal(t, 1, desktopAttemptCount(fixture.cache, "authentication/attempts/installation-bootstrap/source/"))
+
+	var body installationBootstrapResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.NotNil(t, body.State)
+	require.Equal(t, input.Administrator.ID.String(), body.State.AdministratorUserID)
+	require.Equal(t, installations.state.InstitutionID.String(), body.State.InstitutionID)
 }
 
-type recordingBootstrap struct {
-	command      identity.BootstrapInstallationCommand
-	result       *model.InstallationBootstrapResult
-	bootstrapErr error
-}
-
-func (r *recordingBootstrap) GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error) {
-	return &model.InstallationStatus{Initialized: false}, nil
-}
-
-func (r *recordingBootstrap) BootstrapInstallation(_ context.Context, _ invocation.Invocation, command identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
-	r.command = command
-	return r.result, r.bootstrapErr
+// desktopAttemptCount is the number of attempt counters under prefix.
+func desktopAttemptCount(cache *identityCache, prefix string) int {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	count := 0
+	for key := range cache.counters {
+		if strings.HasPrefix(key, prefix) {
+			count++
+		}
+	}
+	return count
 }

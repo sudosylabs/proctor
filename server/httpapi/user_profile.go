@@ -199,10 +199,10 @@ type candidateExamActivityResultResponse struct {
 type userProfileHandlers struct {
 	users    *user.Service
 	attempts UserAccountApplication
-	emails   UserEmailApplication
+	emails   *identity.Service
 }
 
-func userProfileResource(users *user.Service, attempts UserAccountApplication, emails UserEmailApplication) route.Resource {
+func userProfileResource(users *user.Service, attempts UserAccountApplication, emails *identity.Service) route.Resource {
 	h := userProfileHandlers{users: users, attempts: attempts, emails: emails}
 	userPath := "/users/{user_id}"
 	picture := "/users/{user_id}/profile-picture"
@@ -1047,14 +1047,4 @@ func userProfileResponseFromModel(account *model.User) userProfileResponse {
 // root: a candidate's own exam activity.
 type UserAccountApplication interface {
 	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
-}
-
-// UserEmailApplication is the email address changes of the identity area.
-type UserEmailApplication interface {
-	ChangeUserEmail(context.Context, invocation.Invocation, identity.ChangeUserEmailCommand) (*identity.UserEmailState, error)
-	VerifyUserEmailPrivileged(
-		context.Context,
-		invocation.Invocation,
-		model.UserID,
-	) (*identity.UserEmailState, error)
 }

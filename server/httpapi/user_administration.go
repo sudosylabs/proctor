@@ -8,29 +8,22 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type userAdministrationHandlers struct {
-	accounts AccountStateApplication
-	sessions SessionAdministrationApplication
+	identities *identity.Service
 }
 
-func userAdministrationResource(
-	accounts AccountStateApplication,
-	sessions SessionAdministrationApplication,
-) route.Resource {
-	h := userAdministrationHandlers{accounts: accounts, sessions: sessions}
+func userAdministrationResource(identities *identity.Service) route.Resource {
+	h := userAdministrationHandlers{identities: identities}
 	return route.NewResource(
 		"user-administration",
 		route.Endpoint{
@@ -126,7 +119,7 @@ func (h userAdministrationHandlers) setEnabled(request route.Request, enabled bo
 	if err != nil {
 		return route.Result{}, err
 	}
-	user, err := h.accounts.SetUserEnabled(
+	user, err := h.identities.SetUserEnabled(
 		request.Context,
 		request.Invocation(),
 		identity.SetUserEnabledCommand{ID: userID, Enabled: enabled, Reason: reason},
@@ -142,7 +135,7 @@ func (h userAdministrationHandlers) revokeAllSessions(request route.Request) (ro
 	if err != nil {
 		return route.Result{}, err
 	}
-	err = h.sessions.RevokeUserSessions(
+	err = h.identities.RevokeUserSessions(
 		request.Context,
 		request.Invocation(),
 		identity.RevokeUserSessionsCommand{UserID: userID},
@@ -181,7 +174,7 @@ func (h userAdministrationHandlers) listSessions(request route.Request) (route.R
 		query.BeforeID = model.SessionID(cursor.ID)
 	}
 
-	page, listErr := h.sessions.ListUserSessions(request.Context, request.Invocation(), query)
+	page, listErr := h.identities.ListUserSessions(request.Context, request.Invocation(), query)
 	if listErr != nil {
 		return route.Result{}, listErr
 	}
@@ -247,7 +240,7 @@ func (h userAdministrationHandlers) revokeSession(request route.Request) (route.
 	if err != nil {
 		return route.Result{}, err
 	}
-	err = h.sessions.RevokeUserSession(
+	err = h.identities.RevokeUserSession(
 		request.Context,
 		request.Invocation(),
 		userID,
@@ -265,16 +258,4 @@ func defaultQuery(r *http.Request, key, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-// AccountStateApplication is the application port its handlers call; it enables and disables User accounts.
-type AccountStateApplication interface {
-	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
-}
-
-// SessionAdministrationApplication is the application port its handlers call; it lists and revokes the Sessions of another User.
-type SessionAdministrationApplication interface {
-	ListUserSessions(context.Context, invocation.Invocation, identity.ListUserSessionsQuery) (paging.Page[*model.Session], error)
-	RevokeUserSession(context.Context, invocation.Invocation, model.UserID, model.SessionID) error
-	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
 }

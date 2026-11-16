@@ -14,11 +14,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -56,11 +54,11 @@ func sessionResponsesFromModels(request *http.Request, sessions []*model.Session
 }
 
 type sessionHandlers struct {
-	app     Sessions
+	app     *identity.Service
 	cookies route.Cookies
 }
 
-func sessionResource(app Sessions, cookies route.Cookies) route.Resource {
+func sessionResource(app *identity.Service, cookies route.Cookies) route.Resource {
 	h := sessionHandlers{app: app, cookies: cookies}
 	base := "/users/me/sessions"
 	return route.NewResource(
@@ -231,16 +229,4 @@ func (h sessionHandlers) revokeOthers(request route.Request) (route.Result, erro
 		return route.Result{}, err
 	}
 	return route.JSON(http.StatusOK, revokeOtherSessionsResponse{RevokedSessionCount: result.RevokedSessionCount}), nil
-}
-
-// Sessions is the application port its handlers call; it lists, renames, and revokes the caller's own Sessions.
-type Sessions interface {
-	ListSessions(context.Context, invocation.Invocation) (*identity.ListSessionsResult, error)
-	RenameSession(context.Context, invocation.Invocation, identity.RenameSessionCommand) (*model.Session, error)
-	RevokeSession(context.Context, invocation.Invocation, model.SessionID) error
-	RevokeAllSessions(context.Context, invocation.Invocation) error
-	RevokeOtherSessions(
-		context.Context,
-		invocation.Invocation,
-	) (*identity.RevokeOtherSessionsResult, error)
 }

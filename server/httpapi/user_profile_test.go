@@ -24,7 +24,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -33,35 +32,20 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// userEmailHTTPApplication answers the email changes and the exam activity
-// the user resource still reaches through interfaces; the identity and
-// attempt areas remove them.
-type userEmailHTTPApplication struct {
-	result             *model.User
-	changeEmailCommand identity.ChangeUserEmailCommand
-	verifyEmailUserID  model.UserID
-}
+// userActivityHTTPApplication answers the exam activity the user resource
+// still reaches through an interface; the attempt area removes it.
+type userActivityHTTPApplication struct{}
 
-func (a *userEmailHTTPApplication) ListCandidateExamActivity(context.Context, invocation.Invocation,
+func (userActivityHTTPApplication) ListCandidateExamActivity(context.Context, invocation.Invocation,
 	attempt.CandidateActivityQuery,
 ) (attempt.CandidateActivityPage, error) {
 	return attempt.CandidateActivityPage{}, nil
 }
 
-func (a *userEmailHTTPApplication) ChangeUserEmail(_ context.Context, _ invocation.Invocation, command identity.ChangeUserEmailCommand) (*identity.UserEmailState, error) {
-	a.changeEmailCommand = command
-	return &identity.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
-}
-
-func (a *userEmailHTTPApplication) VerifyUserEmailPrivileged(_ context.Context, _ invocation.Invocation, userID model.UserID) (*identity.UserEmailState, error) {
-	a.verifyEmailUserID = userID
-	return &identity.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
-}
-
 // userResource is the user profile resource over the fixture's real service.
 func userResource(fixture *userFixture) route.Resource {
-	emails := &userEmailHTTPApplication{result: &model.User{}}
-	return userProfileResource(fixture.service, emails, emails)
+	// The email routes run the identity area; tests of them build their own.
+	return userProfileResource(fixture.service, userActivityHTTPApplication{}, nil)
 }
 
 // directoryCaller is a signed-in CLI caller of the User directory.
@@ -72,42 +56,6 @@ func directoryCaller() model.Principal {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
-}
-
-type accountStateHTTPApplication struct {
-	AccountStateApplication
-	result  *model.User
-	command identity.SetUserEnabledCommand
-}
-
-func (a *accountStateHTTPApplication) SetUserEnabled(_ context.Context, _ invocation.Invocation, command identity.SetUserEnabledCommand) (*model.User, error) {
-	a.command = command
-	return a.result, nil
-}
-
-type sessionAdministrationHTTPApplication struct {
-	SessionAdministrationApplication
-	list             []*model.Session
-	hasMore          bool
-	listQuery        identity.ListUserSessionsQuery
-	revokeUserID     model.UserID
-	revokeSessionID  model.SessionID
-	revokeAllCommand identity.RevokeUserSessionsCommand
-}
-
-func (a *sessionAdministrationHTTPApplication) ListUserSessions(_ context.Context, _ invocation.Invocation, query identity.ListUserSessionsQuery) (paging.Page[*model.Session], error) {
-	a.listQuery = query
-	return paging.Page[*model.Session]{Items: a.list, HasMore: a.hasMore}, nil
-}
-
-func (a *sessionAdministrationHTTPApplication) RevokeUserSession(_ context.Context, _ invocation.Invocation, userID model.UserID, sessionID model.SessionID) error {
-	a.revokeUserID, a.revokeSessionID = userID, sessionID
-	return nil
-}
-
-func (a *sessionAdministrationHTTPApplication) RevokeUserSessions(_ context.Context, _ invocation.Invocation, command identity.RevokeUserSessionsCommand) error {
-	a.revokeAllCommand = command
-	return nil
 }
 
 type roleHTTPApplication struct {
@@ -143,40 +91,6 @@ func (a *roleHTTPApplication) UpdateRole(_ context.Context, _ invocation.Invocat
 func (a *roleHTTPApplication) ArchiveRole(_ context.Context, _ invocation.Invocation, id model.RoleID) error {
 	a.archiveID = id
 	return nil
-}
-
-type bootstrapHTTPApplication struct {
-	BootstrapApplication
-	status *model.InstallationStatus
-	result *model.InstallationBootstrapResult
-}
-
-func (a *bootstrapHTTPApplication) GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error) {
-	if a.status != nil {
-		return a.status, nil
-	}
-	return &model.InstallationStatus{Initialized: false}, nil
-}
-
-func (a *bootstrapHTTPApplication) BootstrapInstallation(context.Context, invocation.Invocation, identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
-	return a.result, nil
-}
-
-type loginRevisionHTTPApplication struct {
-	authenticationEntryApplication
-	user *model.User
-}
-
-func (a *loginRevisionHTTPApplication) Login(
-	context.Context,
-	invocation.Invocation,
-	identity.LoginCommand,
-) (*identity.LoginResult, error) {
-	return &identity.LoginResult{
-		User:    a.user,
-		Session: &model.Session{ID: model.NewSessionID()},
-		Tokens:  &model.AuthenticationTokens{AccessToken: "access"},
-	}, nil
 }
 
 func TestCurrentUserContextHTTPReturnsClosedNoStoreDTO(t *testing.T) {
@@ -297,6 +211,49 @@ func TestGenericUserProfilePatchRejectsEmailSecurityFields(t *testing.T) {
 	require.Nil(t, fixture.users.update, "a security-field PATCH reached the User Store")
 }
 
+// adminUserTokens is the User Token Store of the administrator's email
+// changes: it applies each change to the Users it shares with the User
+// Store and records what it was given.
+type adminUserTokens struct {
+	store.UserTokenStore
+	users         *identityUsers
+	changes       []store.UserEmailChange
+	verifications []store.PrivilegedEmailVerification
+}
+
+func (s *adminUserTokens) ChangeEmail(_ context.Context, input *store.UserEmailChange) (*store.UserEmailChangeResult, error) {
+	user, err := s.apply(input.UserID, input.ExpectedRevision, func(user *model.User) {
+		user.Email, user.EmailVerified = input.NewEmail, false
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.changes = append(s.changes, *input)
+	return &store.UserEmailChangeResult{User: user, Token: input.Token, UndoToken: input.UndoToken}, nil
+}
+
+func (s *adminUserTokens) VerifyEmailPrivileged(_ context.Context, input *store.PrivilegedEmailVerification) (*model.User, error) {
+	user, err := s.apply(input.UserID, input.ExpectedRevision, func(user *model.User) { user.EmailVerified = true })
+	if err != nil {
+		return nil, err
+	}
+	s.verifications = append(s.verifications, *input)
+	return user, nil
+}
+
+func (s *adminUserTokens) apply(id model.UserID, revision int64, change func(*model.User)) (*model.User, error) {
+	s.users.mu.Lock()
+	defer s.users.mu.Unlock()
+	user, ok := s.users.byID[id]
+	if !ok || user.Revision != revision {
+		return nil, store.NewErrConflict("user", "revision", nil)
+	}
+	change(user)
+	user.Revision++
+	copied := *user
+	return &copied, nil
+}
+
 func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
@@ -305,22 +262,28 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: now, MFACompletedAt: model.OptionalTimeFrom(now), ClientType: model.SessionClientWeb}
-	userID := model.NewUserID()
-	emails := &userEmailHTTPApplication{result: &model.User{ID: userID, CreatedAt: now.Add(-time.Hour), UpdatedAt: now,
-		Revision: 9, Username: "private-user", Email: "private@example.edu", EmailVerified: false,
+	subject := &model.User{Revision: 9, Username: "private-user", Email: "private@example.edu", EmailVerified: false,
 		DisplayName: "Private User", Locale: "fr", Timezone: "Europe/Paris",
-		LastLoginAt: model.OptionalTimeFrom(now.Add(-time.Minute)), LastActivityAt: model.OptionalTimeFrom(now)}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(newUserFixture(t).service, emails, emails))
+		LastLoginAt: model.OptionalTimeFrom(now.Add(-time.Minute)), LastActivityAt: model.OptionalTimeFrom(now)}
+	subject.PrepareCreate(model.NewUserID(), now.Add(-time.Hour))
+	userID := subject.ID
+	users := newIdentityUsers(subject)
+	tokens := &adminUserTokens{users: users}
+	identityFixture := newIdentityFixture(t, identityOptions{
+		Stores: identityStores{Users: users, UserTokens: tokens},
+		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionUserManage)},
+	})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
+		userProfileResource(newUserFixture(t).service, userActivityHTTPApplication{}, identityFixture.service))
 
 	for _, test := range []struct {
-		name, method, path, body string
-		verified                 bool
+		name, method, path, body, operation string
+		verified                            bool
 	}{
-		{name: "change", method: http.MethodPut, path: "/api/v1/users/" + userID.String() + "/email", body: `{"email":"new@example.edu"}`},
-		{name: "privileged verify", method: http.MethodPost, path: "/api/v1/users/" + userID.String() + "/email/verify", verified: true},
+		{name: "change", method: http.MethodPut, path: "/api/v1/users/" + userID.String() + "/email", body: `{"email":"new@example.edu"}`, operation: "change_email"},
+		{name: "privileged verify", method: http.MethodPost, path: "/api/v1/users/" + userID.String() + "/email/verify", operation: "verify_email_privileged", verified: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			emails.result.EmailVerified = test.verified
 			request := httptest.NewRequestWithContext(t.Context(), test.method, test.path, strings.NewReader(test.body))
 			request.Header.Set("Authorization", "Bearer credential")
 			if test.body != "" {
@@ -337,8 +300,25 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 				_, exposed := fields[forbidden]
 				require.False(t, exposed, "email mutation exposed %q: %s", forbidden, response.Body.Bytes())
 			}
+			attempts := identityFixture.access.Audits.Attempts()
+			require.NotEmpty(t, attempts)
+			require.Equal(t, test.operation, attempts[len(attempts)-1].Operation())
 		})
 	}
+	require.Len(t, tokens.changes, 1)
+	require.Equal(t, "new@example.edu", tokens.changes[0].NewEmail)
+	require.Equal(t, int64(9), tokens.changes[0].ExpectedRevision)
+	attempts := identityFixture.access.Audits.Attempts()
+	require.Len(t, attempts, 2)
+	require.Equal(t, attempts[0].ID, tokens.changes[0].AuditEventID)
+	require.Equal(t, attempts[1].ID, tokens.verifications[0].AuditEventID)
+	require.Equal(t, []model.MailTemplateKey{
+		model.MailTemplateIdentityEmailChangeWarningOld, model.MailTemplateIdentityEmailChangeVerifyNew,
+		model.MailTemplateIdentityEmailVerifiedByAdmin,
+	}, identityFixture.mail.templates())
+	require.Len(t, tokens.verifications, 1)
+	require.Equal(t, userID, tokens.verifications[0].UserID)
+	require.Equal(t, int64(10), tokens.verifications[0].ExpectedRevision, "verification applies to the changed address")
 }
 
 func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthorization(t *testing.T) {
@@ -511,12 +491,103 @@ func TestProfilePictureIfMatchRequiresOneCanonicalStrongETag(t *testing.T) {
 	}
 }
 
+// adminAccountStates is the User Store of account enable and disable: it
+// applies each disabled-state change to the User it holds and records the
+// change it was given.
+type adminAccountStates struct {
+	*identityUsers
+	changes []store.UserDisabledStateChange
+}
+
+func (s *adminAccountStates) SetDisabled(_ context.Context, input *store.UserDisabledStateChange) (*store.UserDisabledStateResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.changes = append(s.changes, *input)
+	user, ok := s.byID[input.ID]
+	if !ok || user.Revision != input.ExpectedRevision {
+		return nil, store.NewErrConflict("user", "revision", nil)
+	}
+	user.DisabledAt = model.OptionalTime{}
+	if input.Disabled {
+		user.DisabledAt = model.OptionalTimeFrom(input.ChangedAt)
+	}
+	user.Revision++
+	user.UpdatedAt = input.ChangedAt
+	copied := *user
+	return &store.UserDisabledStateResult{User: &copied}, nil
+}
+
+// adminSignInMFA is the MFA Store of a password sign-in by a User who never
+// enrolled a second factor.
+type adminSignInMFA struct{ identityMFAKeys }
+
+func (*adminSignInMFA) GetRecoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
+	return &model.UserMFARecovery{UserID: userID}, nil
+}
+
+func (*adminSignInMFA) GetByUser(_ context.Context, userID model.UserID) (*model.MFACredential, error) {
+	return nil, store.NewErrNotFound("mfa_credential", userID.String())
+}
+
+// adminAccountTest serves account enable and disable requests for one
+// administrator over a fresh Store holding the subject.
+type adminAccountTest struct {
+	principal model.Principal
+	subject   *model.User
+	accounts  *adminAccountStates
+	fixture   *identityFixture
+	api       http.Handler
+}
+
+func newAdminAccountTest(t *testing.T, subject *model.User) *adminAccountTest {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	test := &adminAccountTest{principal: adminPrincipal(), subject: subject, accounts: &adminAccountStates{identityUsers: newIdentityUsers(subject)}}
+	test.fixture = newIdentityFixture(t, identityOptions{
+		Stores: identityStores{Users: test.accounts},
+		Grants: []accesstest.Grant{institutionWide(test.principal.UserID, model.ActionUserManage)},
+	})
+	test.api = newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: test.principal}, userAdministrationResource(test.fixture.service))
+	return test
+}
+
+// serve posts body to the subject's path; an empty body sends none.
+func (a *adminAccountTest) serve(t *testing.T, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+a.subject.ID.String()+path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer credential")
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	response := httptest.NewRecorder()
+	a.api.ServeHTTP(response, request)
+	return response
+}
+
+// auditValue decodes the value an audit event's parameters record.
+func auditValue(t *testing.T, event *model.AuditEvent) map[string]any {
+	t.Helper()
+	var parameters struct {
+		Value map[string]any `json:"value"`
+	}
+	require.NoError(t, json.Unmarshal(event.Parameters, &parameters))
+	return parameters.Value
+}
+
 func TestLoginResponseDoesNotExposeUserRevision(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	application := &loginRevisionHTTPApplication{user: &model.User{
-		ID: model.NewUserID(), Revision: 7, Username: "student",
-	}}
+	student := &model.User{Revision: 7, Username: "student", Email: "student@example.edu"}
+	student.PrepareCreate(model.NewUserID(), time.UnixMilli(100))
+	credential := &model.PasswordCredential{UserID: student.ID, Revision: 1, PasswordHash: hashPassword(t, "password")}
+	credential.PrepareCreate(model.NewPasswordCredentialID(), time.UnixMilli(100))
+	sessions := newAdminSessions()
+	fixture := newIdentityFixture(t, identityOptions{Stores: identityStores{
+		Users:     newIdentityUsers(student),
+		Passwords: &identityPasswords{byUser: map[model.UserID]*model.PasswordCredential{student.ID: credential}},
+		Sessions:  sessions,
+		MFA:       &adminSignInMFA{},
+	}})
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -528,77 +599,94 @@ func TestLoginResponseDoesNotExposeUserRevision(t *testing.T) {
 		t,
 		logger,
 		routetest.Authenticator{},
-		authenticationResource(nil, application, route.Cookies{}),
+		authenticationResource(nil, fixture.service, route.Cookies{}),
 	)
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.Len(t, sessions.saved, 1, "the sign-in issued one Session")
+	require.Equal(t, student.ID, sessions.saved[0].Session.UserID)
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	account, ok := body["user"].(map[string]any)
 	require.True(t, ok, "user response = %#v", body["user"])
+	require.Equal(t, student.ID.String(), account["id"])
 	_, exposed := account["revision"]
 	require.False(t, exposed, "revision exposed by login: %#v", account)
 }
 
 func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	userID := model.NewID()
-	accounts := &accountStateHTTPApplication{result: &model.User{ID: model.UserID(userID), Revision: 4, Username: "student", DisabledAt: model.OptionalTimeFromMillis(500)}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+userID+"/disable", nil)
-	request.Header.Set("Authorization", "Bearer credential")
-	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, request)
+	test := newAdminAccountTest(t, adminSubject("student"))
+	response := test.serve(t, "/disable", "")
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, model.UserID(userID), accounts.command.ID)
-	require.False(t, accounts.command.Enabled)
+	require.Len(t, test.accounts.changes, 1)
+	change := test.accounts.changes[0]
+	require.Equal(t, test.subject.ID, change.ID)
+	require.True(t, change.Disabled)
+	require.Equal(t, int64(1), change.ExpectedRevision)
+	require.Equal(t, model.SessionRevocationAccountDisabled, change.RevocationReason)
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, test.subject.ID.String(), body["id"])
 	_, exposed := body["revision"]
 	require.False(t, exposed, "revision exposed: %#v", body)
-	require.Nil(t, accounts.command.Reason, "a request without a body carries no reason")
+	attempts := test.fixture.access.Audits.Attempts()
+	require.Len(t, attempts, 1)
+	require.Equal(t, attempts[0].ID, change.AuditEventID)
+	require.Equal(t, model.AuditOperationDisableAccount, attempts[0].Operation())
+	_, reasoned := auditValue(t, attempts[0])["reason"]
+	require.False(t, reasoned, "a request without a body carries no reason")
+	require.Equal(t, []model.MailTemplateKey{model.MailTemplateIdentityAccountDisabled}, test.fixture.mail.templates())
 }
 
 func TestAccountDisableReadsAnOptionalReasonBody(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	userID := model.NewID()
-	serve := func(path, body string) (*httptest.ResponseRecorder, *accountStateHTTPApplication) {
-		accounts := &accountStateHTTPApplication{result: &model.User{ID: model.UserID(userID), Username: "student", DisabledAt: model.OptionalTimeFromMillis(500)}}
-		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
-		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+userID+path, strings.NewReader(body))
-		request.Header.Set("Authorization", "Bearer credential")
-		if body != "" {
-			request.Header.Set("Content-Type", "application/json")
+	// serve posts body to a fresh Store holding an enabled subject, or a
+	// disabled one for an enable, and returns the single audit attempt.
+	serve := func(path, body string) (*httptest.ResponseRecorder, *adminAccountTest) {
+		subject := adminSubject("student")
+		if path == "/enable" {
+			subject.DisabledAt = model.OptionalTimeFromMillis(200)
 		}
-		response := httptest.NewRecorder()
-		httpAPI.ServeHTTP(response, request)
-		return response, accounts
+		test := newAdminAccountTest(t, subject)
+		return test.serve(t, path, body), test
+	}
+	reason := func(t *testing.T, test *adminAccountTest) (any, bool) {
+		t.Helper()
+		attempts := test.fixture.access.Audits.Attempts()
+		require.Len(t, attempts, 1)
+		require.Len(t, test.accounts.changes, 1)
+		require.Equal(t, attempts[0].ID, test.accounts.changes[0].AuditEventID)
+		value, present := auditValue(t, attempts[0])["reason"]
+		return value, present
 	}
 
-	response, accounts := serve("/disable", `{"reason":"  Left the institution "}`)
+	response, test := serve("/disable", `{"reason":"  Left the institution "}`)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.NotNil(t, accounts.command.Reason)
-	require.Equal(t, "  Left the institution ", *accounts.command.Reason, "the application owns trimming and bounds")
+	recorded, present := reason(t, test)
+	require.True(t, present)
+	require.Equal(t, "Left the institution", recorded, "the application owns trimming and bounds")
+	require.Equal(t, "Left the institution", test.fixture.access.Audits.Attempts()[0].AccountDisableReason())
 
-	response, accounts = serve("/disable", `{}`)
-	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Nil(t, accounts.command.Reason, "an empty object carries no reason")
-	response, accounts = serve("/disable", `{"reason":""}`)
-	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Nil(t, accounts.command.Reason, "an empty reason is an omitted one")
+	for _, body := range []string{`{}`, `{"reason":""}`} {
+		response, test = serve("/disable", body)
+		require.Equal(t, http.StatusOK, response.Code, "%s: status = %d: %s", body, response.Code, response.Body.String())
+		_, present = reason(t, test)
+		require.False(t, present, "%s: an empty object or an empty reason carries no reason", body)
+	}
 
 	for _, body := range []string{`{"reason":"x","note":"y"}`, `{"reason":42}`, `not json`} {
-		response, _ = serve("/disable", body)
+		response, test = serve("/disable", body)
 		require.Equal(t, http.StatusBadRequest, response.Code, "%s: status = %d: %s", body, response.Code, response.Body.String())
+		require.Empty(t, test.accounts.changes, "%s reached the Store", body)
+		require.Empty(t, test.fixture.access.Audits.Attempts(), "%s was audited", body)
 	}
 
-	response, accounts = serve("/enable", `{"reason":"back"}`)
+	response, test = serve("/enable", `{"reason":"back"}`)
 	require.Equal(t, http.StatusOK, response.Code, "enable ignores a body as before: %s", response.Body.String())
-	require.Nil(t, accounts.command.Reason)
+	require.False(t, test.accounts.changes[0].Disabled)
+	_, present = reason(t, test)
+	require.False(t, present)
 }
 
 func TestUserProfileOpenAPIDocument(t *testing.T) {

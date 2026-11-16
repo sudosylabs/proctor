@@ -9,69 +9,96 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-type mfaKeyAPIFake struct {
-	state   identity.MFAKeyStateView
-	started identity.StartMFARekeyCommand
-	status  model.JobID
-	err     error
+// newAccountMFAKeyAPI serves the MFA key routes to an operator holding
+// mfa.rekey with a strong, recent Session, over the key ring state mfa holds.
+func newAccountMFAKeyAPI(t *testing.T, mfa *accountMFA, retiringKeys ...string) (http.Handler, *identityFixture) {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	now := time.Now()
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID:         model.PrincipalCredentialID(model.NewID()),
+		CredentialType:       model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
+		AuthenticatedAt: now, MFACompletedAt: model.OptionalTimeFrom(now), ClientType: model.SessionClientWeb,
+	}
+	fixture := newIdentityFixture(t, identityOptions{
+		Stores: identityStores{MFA: mfa, Jobs: struct{ store.JobStore }{}},
+		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionMFARekey)},
+		MFA:    true, MFARetiringKeys: retiringKeys,
+	})
+	mfa.audits = fixture.access.Audits
+	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, mfaKeyResource(fixture.service)), fixture
 }
 
-func (f *mfaKeyAPIFake) GetMFAKeyState(context.Context, invocation.Invocation) (identity.MFAKeyStateView, error) {
-	return f.state, f.err
-}
-
-func (f *mfaKeyAPIFake) StartMFARekey(_ context.Context, _ invocation.Invocation, command identity.StartMFARekeyCommand) (identity.MFARekeyView, error) {
-	f.started = command
-	return identity.MFARekeyView{JobID: model.NewJobID(), PrimaryKeyID: "0123456789abcdef0123456789abcdef", RetiringKeyID: command.RetiringKeyID}, f.err
-}
-
-func (f *mfaKeyAPIFake) GetMFARekeyStatus(_ context.Context, _ invocation.Invocation, jobID model.JobID) (identity.MFARekeyStatusView, error) {
-	f.status = jobID
-	return identity.MFARekeyStatusView{JobID: jobID}, f.err
-}
-
+// The ring still opens an older key, which a rekey retires; a body carrying
+// key material never reaches the use case.
 func TestMFARekeyAcceptsOnlyAKeyIdentity(t *testing.T) {
 	t.Parallel()
-	fake := &mfaKeyAPIFake{}
-	h := mfaKeyHandlers{app: fake}
-	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mfa/rekey", bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111"}`))
-	request.Header.Set("Content-Type", "application/json")
-	result, err := h.startRekey(route.Request{HTTP: request})
+	retiring := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32))
+	retiringRing, err := secretseal.New(secretseal.Settings{EncryptionKey: retiring, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusAccepted, result.Status())
-	require.Equal(t, identity.StartMFARekeyCommand{RetiringKeyID: "11111111111111111111111111111111"}, fake.started)
+	retiringKeyID := retiringRing.PrimaryKeyID()
+	mfa := newAccountMFA(newAccountSessions())
+	api, fixture := newAccountMFAKeyAPI(t, mfa, retiring)
+	rekey := func(body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mfa/rekey", bytes.NewBufferString(body))
+		request.Header.Set("Authorization", "Bearer operator")
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, request)
+		return response
+	}
 
-	fake.started = identity.StartMFARekeyCommand{}
-	secretBearing, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mfa/rekey",
-		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111","encryption_key":"secret"}`))
-	secretBearing.Header.Set("Content-Type", "application/json")
-	_, err = h.startRekey(route.Request{HTTP: secretBearing})
-	require.True(t, apperror.Is(err, "request.invalid"), "a body carrying key material: error = %v", err)
-	require.Equal(t, identity.StartMFARekeyCommand{}, fake.started, "the use case never saw the secret-bearing body")
+	response := rekey(`{"retiring_key_id":"` + retiringKeyID + `"}`)
+	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+	inputs := mfa.rekeyInputs()
+	require.Len(t, inputs, 1, "the rekey reached the MFA Store once")
+	require.Equal(t, retiringKeyID, inputs[0].RetiringKeyID)
+	require.Equal(t, fixture.mfaSealer.PrimaryKeyID(), inputs[0].PrimaryKeyID)
+
+	response = rekey(`{"retiring_key_id":"` + retiringKeyID + `","encryption_key":"secret"}`)
+	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), `"code":"request.invalid"`, "a body carrying key material")
+	require.Len(t, mfa.rekeyInputs(), 1, "the use case never saw the secret-bearing body")
+	require.Len(t, fixture.access.Audits.Attempts(), 1, "only the accepted rekey was audited")
 }
 
 func TestMFAKeyStateProjectsIdentitiesAndCountsOnly(t *testing.T) {
 	t.Parallel()
+	mfa := newAccountMFA(newAccountSessions())
+	api, fixture := newAccountMFAKeyAPI(t, mfa)
+	// Another node fenced the ring and sealed secrets with a key this node
+	// does not hold, after this node started.
 	jobID := model.NewJobID()
-	fake := &mfaKeyAPIFake{state: identity.MFAKeyStateView{PrimaryKeyID: "0123456789abcdef0123456789abcdef",
-		RequiredPrimaryKeyID: "0123456789abcdef0123456789abcdef", ActiveRekeyJobID: jobID,
-		Active: []identity.MFASecretKeyUsageView{{KeyID: "11111111111111111111111111111111", Credentials: 4}}}}
-	result, err := mfaKeyHandlers{app: fake}.getKeyState(route.Request{HTTP: &http.Request{}})
-	require.NoError(t, err)
-	require.Equal(t, mfaKeyStateResponse{PrimaryKeyID: "0123456789abcdef0123456789abcdef",
+	mfa.keyState = store.MFAKeyState{RequiredPrimaryKeyID: "0123456789abcdef0123456789abcdef", ActiveRekeyJobID: jobID,
+		Active: []store.MFASecretKeyUsage{{KeyID: "11111111111111111111111111111111", Credentials: 4}}}
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mfa/keys", nil)
+	request.Header.Set("Authorization", "Bearer operator")
+	response := httptest.NewRecorder()
+	api.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var body mfaKeyStateResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, mfaKeyStateResponse{PrimaryKeyID: fixture.mfaSealer.PrimaryKeyID(),
 		RequiredPrimaryKeyID: "0123456789abcdef0123456789abcdef", ActiveRekeyJobID: jobID.String(),
-		Active: []mfaSecretKeyUsageResponse{{KeyID: "11111111111111111111111111111111", Credentials: 4}}}, result.Body())
+		Active: []mfaSecretKeyUsageResponse{{KeyID: "11111111111111111111111111111111", Credentials: 4}}}, body)
+	require.NotContains(t, response.Body.String(), "encryption_key")
 }

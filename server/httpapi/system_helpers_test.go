@@ -18,7 +18,7 @@ func systemResource(health Health, buildInfo BuildInfo) route.Resource {
 		health,
 		buildInfo,
 		nil,
-		unavailableDesktopCompatibilityApplication{},
+		nil,
 		time.Now,
 	)
 }

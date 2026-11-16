@@ -33,7 +33,7 @@ type systemHandlers struct {
 	health    Health
 	buildInfo BuildInfo
 	plugins   Plugins
-	app       DesktopCompatibilityApplication
+	app       *identity.Service
 	now       func() time.Time
 }
 
@@ -57,7 +57,7 @@ func systemResourceWithApplication(
 	health Health,
 	buildInfo BuildInfo,
 	plugins Plugins,
-	app DesktopCompatibilityApplication,
+	app *identity.Service,
 	now func() time.Time,
 ) route.Resource {
 	h := systemHandlers{
@@ -189,11 +189,12 @@ func (h systemHandlers) ping(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	result, evaluationErr := h.app.EvaluateDesktopCompatibility(
-		request.Context,
-		request.Invocation(),
-		query,
-	)
+	// A node built without the identity area reports compatibility as
+	// unavailable rather than evaluating it.
+	result, evaluationErr := identity.DesktopCompatibilityResult{}, route.ErrUnpresentable
+	if h.app != nil {
+		result, evaluationErr = h.app.EvaluateDesktopCompatibility(request.Context, request.Invocation(), query)
+	}
 	// Only a malformed query fails the request. Every other evaluation error
 	// becomes a 200 that reports compatibility as unavailable.
 	if apperror.Is(evaluationErr, "request.invalid") {

@@ -182,18 +182,17 @@ func newSittings(
 	scheduleMail sitting.ScheduleMail,
 ) (*sitting.Service, error) {
 	return sitting.New(sitting.Dependencies{
-		Persistence:   deps.Store.ExamSitting(),
-		Access:        deps.Store.ExamAuthoring(),
-		Memberships:   deps.Store.AcademicUnitMember(),
-		Authorizer:    authorizer,
-		Auditor:       shared.audit.MutationAudit(),
-		SystemAuditor: shared.audit.SystemAudit(),
-		Publisher:     shared.realtime,
-		Jobs:          sittingLifecycleJobs(deps),
-		Mail:          scheduleMail,
-		Now:           time.Now,
-		NewID:         model.NewExamSittingID,
-		Operational:   operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Persistence: deps.Store.ExamSitting(),
+		Access:      deps.Store.ExamAuthoring(),
+		Memberships: deps.Store.AcademicUnitMember(),
+		Authorizer:  authorizer,
+		Auditor:     shared.audit,
+		Publisher:   shared.realtime,
+		Jobs:        sittingLifecycleJobs(deps),
+		Mail:        scheduleMail,
+		Now:         time.Now,
+		NewID:       model.NewExamSittingID,
+		Operational: operationalRecorderAdapter{recorder: deps.OperationalRecorder},
 	})
 }
 

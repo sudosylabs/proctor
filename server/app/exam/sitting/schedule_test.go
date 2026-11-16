@@ -35,8 +35,8 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, fixture.sittingID, got.Sitting.ID)
 	require.Equal(t, model.ExamSittingScheduled, got.Sitting.State)
-	require.Equal(t, model.ActionExamSittingCreate, fixture.authorizer.action, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceExam, ID: fixture.examID.String()}, fixture.authorizer.resource, "authorization")
+	fixture.requireDecision(t, model.ActionExamSittingCreate,
+		model.Resource{Type: model.ResourceExam, ID: fixture.examID.String()}, model.AuditStatusSuccess)
 	require.NotNil(t, fixture.persistence.schedule, "store schedule")
 	require.False(t, fixture.persistence.schedule.ManagerOverride, "store schedule")
 	require.Equal(t, fixture.userID, fixture.persistence.schedule.ActorUserID, "store schedule")
@@ -57,9 +57,10 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 		"exam_id": fixture.examID.String(), "exam_sitting_id": fixture.sittingID.String(),
 		"exam_revision_id": fixture.revisionID.String(), "class_id": fixture.classID.String(),
 	}
-	require.Equal(t, model.ActionExamSittingCreate, fixture.auditor.action, "audit")
-	require.Equal(t, "schedule", fixture.auditor.operation, "audit")
-	require.Equal(t, wantAudit, fixture.auditor.value, "audit")
+	attempt := fixture.attempt(t)
+	require.Equal(t, string(model.ActionExamSittingCreate), attempt.event.Action, "audit")
+	require.Equal(t, "schedule", attempt.operation, "audit")
+	attempt.requireValue(t, wantAudit)
 	// Contract: the scheduled fact reaches managers before the Sitting board is
 	// invalidated; this Sitting has no candidate to invalidate after it.
 	require.Equal(t, scheduleCalls(t, realtime.NewExamSittingScheduledEvent, fixture.examID, fixture.sittingID, model.ExamSittingScheduled, 1, testNow),
@@ -77,7 +78,8 @@ func TestScheduleUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testin
 		ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamSittingCreateOverride, fixture.authorizer.action, "override authorization/store")
+	fixture.requireDecision(t, model.ActionExamSittingCreateOverride,
+		model.Resource{Type: model.ResourceExam, ID: fixture.examID.String()}, model.AuditStatusSuccess)
 	require.NotNil(t, fixture.persistence.schedule, "override authorization/store")
 	require.True(t, fixture.persistence.schedule.ManagerOverride, "override authorization/store")
 }
@@ -85,16 +87,15 @@ func TestScheduleUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testin
 func TestScheduleAuthorizationFailureStopsMutationAndAudit(t *testing.T) {
 	t.Parallel()
 	fixture := newFixture(t)
-	fixture.authorizer.err = errors.New("denied")
 	start, end := testNow.Add(time.Hour), testNow.Add(3*time.Hour)
 
-	_, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.inv, ScheduleCommand{
+	_, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.stranger, ScheduleCommand{
 		ExamID: fixture.examID, ExamRevisionID: fixture.revisionID, ClassID: fixture.classID,
 		ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "test-key",
 	})
 	require.Error(t, err, "unauthorized mutation continued: err")
 	require.Nil(t, fixture.persistence.schedule, "unauthorized mutation continued: err")
-	require.Empty(t, fixture.auditor.operation, "unauthorized mutation continued: err")
+	require.Empty(t, fixture.control.Audits.Attempts(), "unauthorized mutation continued: err")
 }
 
 func TestScheduleStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
@@ -110,9 +111,9 @@ func TestScheduleStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.sitting.unavailable", fault.Code())
 	require.ErrorIs(t, err, failure)
-	require.Empty(t, testFixture.authorizer.action, "membership failure continued: action")
+	require.Empty(t, testFixture.control.Audits.Decisions(), "membership failure continued: action")
 	require.Nil(t, testFixture.persistence.schedule, "membership failure continued: action")
-	require.Empty(t, testFixture.auditor.operation, "membership failure continued: action")
+	require.Empty(t, testFixture.control.Audits.Attempts(), "membership failure continued: action")
 }
 
 func TestReplayedCommandsDoNotPublishEffects(t *testing.T) {
@@ -156,8 +157,8 @@ func TestUpdateScheduleUsesSittingManagementAndOptimisticFence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, int64(2), got.Sitting.Revision)
-	require.Equal(t, model.ActionExamSittingManage, fixture.authorizer.action, "authorization = %q %#v", fixture.authorizer.action, fixture.authorizer.resource)
-	require.Equal(t, model.ResourceExamSitting, fixture.authorizer.resource.Type, "authorization = %q %#v", fixture.authorizer.action, fixture.authorizer.resource)
+	fixture.requireDecision(t, model.ActionExamSittingManage,
+		model.Resource{Type: model.ResourceExamSitting, ID: fixture.sittingID.String()}, model.AuditStatusSuccess)
 	input := fixture.persistence.update
 	require.NotNil(t, input, "store update")
 	require.Equal(t, int64(1), input.ExpectedRevision, "store update")
@@ -181,8 +182,9 @@ func TestUpdateScheduleUsesSittingManagementAndOptimisticFence(t *testing.T) {
 	require.True(t, input.ScheduledEndAt.Equal(changedEnd))
 	wantAudit := map[string]any{"exam_id": fixture.examID.String(), "exam_sitting_id": fixture.sittingID.String(),
 		"exam_revision_id": fixture.revisionID.String(), "class_id": fixture.classID.String(), "expected_sitting_revision": int64(1)}
-	require.Equal(t, "update_schedule", fixture.auditor.operation, "audit")
-	require.Equal(t, wantAudit, fixture.auditor.value, "audit")
+	attempt := fixture.attempt(t)
+	require.Equal(t, "update_schedule", attempt.operation, "audit")
+	attempt.requireValue(t, wantAudit)
 	// Contract: the updated schedule reaches managers at the committed
 	// revision before the Sitting board is invalidated.
 	require.Equal(t, scheduleCalls(t, realtime.NewExamSittingScheduleUpdatedEvent, fixture.examID, fixture.sittingID, got.Sitting.State, 2, testNow),
@@ -202,7 +204,7 @@ func TestUpdateScheduleReturnsCurrentNoChangesOnlyForCurrentActiveScheduledState
 	})
 	assertFaultCode(t, err, "exam.sitting.no_changes")
 	require.Nil(t, fixture.persistence.update, "no-op reached mutation boundary: update")
-	require.Empty(t, fixture.auditor.operation, "no-op reached mutation boundary: update")
+	require.Empty(t, fixture.control.Audits.Attempts(), "no-op reached mutation boundary: update")
 }
 
 func TestUpdateScheduleSendsStaleNoOpToStore(t *testing.T) {
@@ -220,7 +222,7 @@ func TestUpdateScheduleSendsStaleNoOpToStore(t *testing.T) {
 	})
 	assertFaultCode(t, err, "exam.sitting.revision_conflict")
 	require.NotNil(t, fixture.persistence.update, "stale no-op did not reach mutation boundary: update")
-	require.Equal(t, "update_schedule", fixture.auditor.operation, "stale no-op did not reach mutation boundary: update")
+	require.Equal(t, "update_schedule", fixture.attempt(t).operation, "stale no-op did not reach mutation boundary: update")
 }
 
 func TestUpdateScheduleSendsArchivedAndNonScheduledNoOpsToStore(t *testing.T) {

@@ -13,44 +13,10 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// Authorizer is the part of *access.Authorizer the Sitting use cases call:
-// the permission decision, and the audited denial of a Browser Activity read
-// refused before a permission is checked.
-type Authorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	RecordDenial(context.Context, invocation.Invocation, model.Action, model.Resource, model.AcademicUnitID) error
-}
-
-// Auditor records the attempt and failure of each audited manager command;
-// the Store completes the audit event in the transaction that commits the
-// change.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
-
-// SystemAuditor owns audit creation for trusted durable work. It deliberately
-// accepts invocation.System rather than an Invocation so Jobs cannot impersonate a User.
-// access.SystemAuditAdapter satisfies it and tests substitute a fake.
-type SystemAuditor interface {
-	BeginJob(
-		context.Context,
-		invocation.System,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-	) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
 
 // LifecycleJobFactory constructs validated durable intents. Persistence owns
 // inserting them atomically with the corresponding Sitting mutation.
@@ -91,9 +57,13 @@ type Service struct {
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer    Authorizer
-	auditor       Auditor
-	systemAuditor SystemAuditor
+	authorizer *access.Authorizer
+	// auditor records the attempt and failure of each audited manager
+	// command; the Store completes the attempt with the change it commits.
+	auditor access.MutationAuditAdapter
+	// systemAuditor audits lifecycle Jobs. It takes an invocation.System
+	// rather than an Invocation, so a Job cannot act as a User.
+	systemAuditor access.SystemAuditAdapter
 	publisher     realtime.Publisher
 	jobs          LifecycleJobFactory
 	mail          ScheduleMailPreparer
@@ -111,18 +81,17 @@ type OperationalRecorder interface {
 // Dependencies are the collaborators New validates once and distributes to
 // the Service.
 type Dependencies struct {
-	Persistence   store.ExamSittingStore
-	Access        store.ExamAuthoringStore
-	Memberships   store.AcademicUnitMemberStore
-	Authorizer    Authorizer
-	Auditor       Auditor
-	SystemAuditor SystemAuditor
-	Publisher     realtime.Publisher
-	Jobs          LifecycleJobFactory
-	Mail          ScheduleMailPreparer
-	Now           func() time.Time
-	NewID         func() model.ExamSittingID
-	Operational   OperationalRecorder
+	Persistence store.ExamSittingStore
+	Access      store.ExamAuthoringStore
+	Memberships store.AcademicUnitMemberStore
+	Authorizer  *access.Authorizer
+	Auditor     *access.Auditor
+	Publisher   realtime.Publisher
+	Jobs        LifecycleJobFactory
+	Mail        ScheduleMailPreparer
+	Now         func() time.Time
+	NewID       func() model.ExamSittingID
+	Operational OperationalRecorder
 }
 
 // New returns an Exam Sitting Service, or an error when a required dependency
@@ -133,7 +102,6 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Memberships == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
-		deps.SystemAuditor == nil ||
 		deps.Publisher == nil ||
 		deps.Jobs == nil ||
 		deps.Mail == nil ||
@@ -147,8 +115,8 @@ func New(deps Dependencies) (*Service, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
-		systemAuditor:       deps.SystemAuditor,
+		auditor:             deps.Auditor.MutationAudit(),
+		systemAuditor:       deps.Auditor.SystemAudit(),
 		publisher:           deps.Publisher,
 		jobs:                deps.Jobs,
 		mail:                deps.Mail,

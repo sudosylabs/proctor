@@ -9,7 +9,6 @@ package sitting
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -72,9 +71,10 @@ func TestCancelRetainsPrivateReasonOnlyInStoreCommand(t *testing.T) {
 	require.Equal(t, wantIdempotency, fixture.persistence.command)
 	wantAudit := map[string]any{"exam_id": fixture.examID.String(), "exam_sitting_id": fixture.sittingID.String(),
 		"expected_sitting_revision": int64(1), "reason_code": string(model.ExamSittingReasonManagerCanceled)}
-	require.Equal(t, "cancel", fixture.auditor.operation, "audit")
-	require.Equal(t, wantAudit, fixture.auditor.value, "audit")
-	require.NotEqual(t, "Room became unavailable", reflect.ValueOf(fixture.auditor.value).String(), "private cancellation reason leaked into audit")
+	attempt := fixture.attempt(t)
+	require.Equal(t, "cancel", attempt.operation, "audit")
+	attempt.requireValue(t, wantAudit)
+	require.NotContains(t, string(attempt.event.Parameters), "Room became unavailable", "private cancellation reason leaked into audit")
 	// Contract: the cancellation reaches managers in the canceled state before
 	// the Sitting board is invalidated.
 	require.Equal(t, scheduleCalls(t, realtime.NewExamSittingCanceledEvent, fixture.examID, fixture.sittingID, model.ExamSittingCanceled, got.Sitting.Revision, testNow),
@@ -96,11 +96,11 @@ func TestPauseAuthorizesCurrentManagerAndKeepsPrivateReasonOutOfAuditAndEffect(t
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, model.ExamSittingPaused, got.Sitting.State)
-	require.Equal(t, model.ActionExamSittingManage, fixture.authorizer.action, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: fixture.sittingID.String()}, fixture.authorizer.resource, "authorization")
+	fixture.requireDecision(t, model.ActionExamSittingManage,
+		model.Resource{Type: model.ResourceExamSitting, ID: fixture.sittingID.String()}, model.AuditStatusSuccess)
 	wantAudit := map[string]any{"exam_id": fixture.examID.String(), "exam_sitting_id": fixture.sittingID.String(),
 		"expected_sitting_revision": current.Revision, "transition": string(store.ExamSittingTransitionManagerPaused)}
-	require.Equal(t, wantAudit, fixture.auditor.value)
+	fixture.attempt(t).requireValue(t, wantAudit)
 	require.NotNil(t, fixture.persistence.pause)
 	require.Equal(t, "Candidate requested clarification", fixture.persistence.pause.PrivateReason)
 	wantIdempotency, err := prepareTransitionIdempotency(fixture.inv, idempotencyOperationPause, ManagerTransitionCommand{
@@ -194,7 +194,8 @@ func TestLifecycleManagerCommandsUseExplicitStatesJobsAndReplaySuppression(t *te
 			}
 			require.NoError(t, err)
 			require.NotNil(t, test.input(fixture.persistence), "Store input/action")
-			require.Equal(t, test.wantAction, fixture.authorizer.action, "Store input/action")
+			fixture.requireDecision(t, test.wantAction,
+				model.Resource{Type: model.ResourceExamSitting, ID: fixture.sittingID.String()}, model.AuditStatusSuccess)
 			var wantIdempotency *store.CommandIdempotency
 			switch test.transition {
 			case store.ExamSittingTransitionManagerPaused:
@@ -253,7 +254,8 @@ func TestPauseUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testing.T
 		SittingID: fixture.sittingID, ExpectedRevision: current.Revision, PrivateReason: "Administrator intervention",
 		IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamSittingManageOverride, fixture.authorizer.action, "override authorization/store")
+	fixture.requireDecision(t, model.ActionExamSittingManageOverride,
+		model.Resource{Type: model.ResourceExamSitting, ID: fixture.sittingID.String()}, model.AuditStatusSuccess)
 	require.NotNil(t, fixture.persistence.pause, "override authorization/store")
 	require.True(t, fixture.persistence.pause.ManagerOverride, "override authorization/store")
 }

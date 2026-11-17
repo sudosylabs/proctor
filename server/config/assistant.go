@@ -21,9 +21,10 @@ type Assistant struct {
 }
 
 type AssistantCapabilities struct {
-	ToolChoice    bool `json:"ToolChoice"`
-	ParallelTools bool `json:"ParallelTools"`
-	Streaming     bool `json:"Streaming"`
+	ToolChoice       bool `json:"ToolChoice"`
+	ParallelTools    bool `json:"ParallelTools"`
+	Streaming        bool `json:"Streaming"`
+	CompletionTokens bool `json:"CompletionTokens"`
 }
 
 type AssistantProvider struct {

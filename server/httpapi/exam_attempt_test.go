@@ -141,7 +141,7 @@ func TestCandidateSubmitExamAttemptUsesStrictCausalSelectorsAndReturnsSafeReceip
 	require.Equal(t, sha256.Sum256([]byte("submit-once")), f.submissionStore.lastCommand(t).KeyDigest, "status=%d headers=%v seal=%#v body=%s", response.Code, response.Header(), seal, response.Body.String())
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload), "receipt")
-	require.Len(t, payload, 9, "receipt")
+	require.Len(t, payload, 10, "receipt")
 	require.Equal(t, `"MBY3-KBMN-EB83-TFW1"`, string(payload["receipt_code"]), "receipt code is in display form")
 	require.Equal(t, `"`+f.attempt.AdmissionRevisionID.String()+`"`, string(payload["exam_revision_id"]), "receipt")
 	require.Equal(t, `"submitted"`, string(payload["state"]), "receipt")

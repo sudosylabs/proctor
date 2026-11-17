@@ -1057,3 +1057,5 @@ func (f *onboardingFixture) storedFilterPreview(state model.OnboardingImportStat
 }
 
 func (c onboardingCatalog) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (c onboardingCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }

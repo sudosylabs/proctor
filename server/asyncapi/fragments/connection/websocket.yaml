@@ -89,6 +89,18 @@ channels:
         $ref: '#/components/messages/exam_attempt_access_reallowed'
       exam_attempt_workspace_changed:
         $ref: '#/components/messages/exam_attempt_workspace_changed'
+      exam_attempt_assistant_turn_started:
+        $ref: '#/components/messages/exam_attempt_assistant_turn_started'
+      exam_attempt_assistant_text_delta:
+        $ref: '#/components/messages/exam_attempt_assistant_text_delta'
+      exam_attempt_assistant_tool_call:
+        $ref: '#/components/messages/exam_attempt_assistant_tool_call'
+      exam_attempt_assistant_approval_requested:
+        $ref: '#/components/messages/exam_attempt_assistant_approval_requested'
+      exam_attempt_assistant_turn_ended:
+        $ref: '#/components/messages/exam_attempt_assistant_turn_ended'
+      exam_attempt_assistant_unavailable:
+        $ref: '#/components/messages/exam_attempt_assistant_unavailable'
       exam_attempt_focus_warning:
         $ref: '#/components/messages/exam_attempt_focus_warning'
       exam_attempt_screen_clips_requested:
@@ -208,6 +220,12 @@ operations:
       - $ref: '#/channels/websocket/messages/exam_attempt_access_suspended'
       - $ref: '#/channels/websocket/messages/exam_attempt_access_reallowed'
       - $ref: '#/channels/websocket/messages/exam_attempt_workspace_changed'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_turn_started'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_text_delta'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_tool_call'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_approval_requested'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_turn_ended'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_unavailable'
       - $ref: '#/channels/websocket/messages/exam_attempt_focus_warning'
       - $ref: '#/channels/websocket/messages/exam_attempt_screen_clips_requested'
       - $ref: '#/channels/websocket/messages/exam_attempt_integrity_flagged'

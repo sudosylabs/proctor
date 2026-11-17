@@ -516,6 +516,10 @@ func (h *Hub) publishWire(event *Event) {
 				continue
 			}
 
+			if event.SessionID != "" && !connection.belongsToSession(event.SessionID) {
+				continue
+			}
+
 			if event.Action != "" &&
 				!connection.hasSubscription(
 					Subscription{Action: event.Action, Resource: event.Resource},
@@ -569,12 +573,13 @@ func (h *Hub) CloseAll(reason realtime.ConnectionCloseReason) {
 
 func eventFromRealtime(event realtime.Event) *Event {
 	return &Event{
-		ID:       event.ID,
-		Event:    event.Name,
-		UserID:   event.UserID.String(),
-		Action:   event.Action,
-		Resource: resourceFromModel(event.Resource),
-		Data:     append(json.RawMessage(nil), event.Data...),
+		ID:        event.ID,
+		Event:     event.Name,
+		UserID:    event.UserID.String(),
+		SessionID: event.SessionID.String(),
+		Action:    event.Action,
+		Resource:  resourceFromModel(event.Resource),
+		Data:      append(json.RawMessage(nil), event.Data...),
 	}
 }
 

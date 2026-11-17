@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/packages/vfs/memory"
 	"github.com/sudosylabs/proctor/server"
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/cluster/local"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/httpapi"
@@ -43,6 +44,7 @@ type setupOptions struct {
 	desktopBuilds      []model.DesktopBuildTuple
 	plugins            []plugin.Plugin
 	executionHostDial  executionhost.Dialer
+	assistantGateway   assistant.ModelGateway
 }
 
 // Option customizes one concern in the test graph; everything else is
@@ -108,6 +110,14 @@ func WithDesktopBuildCatalog(builds ...model.DesktopBuildTuple) Option {
 func WithExecutionHostDial(dial executionhost.Dialer) Option {
 	return func(options *setupOptions) {
 		options.executionHostDial = dial
+	}
+}
+
+// WithAssistantGateway scripts the model the assistant calls. The
+// configuration must still enable the assistant and name a provider.
+func WithAssistantGateway(gateway assistant.ModelGateway) Option {
+	return func(options *setupOptions) {
+		options.assistantGateway = gateway
 	}
 }
 
@@ -232,6 +242,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		ServiceEnvironment:  settings.serviceEnvironment,
 		Plugins:             settings.plugins,
 		ExecutionHostDial:   settings.executionHostDial,
+		AssistantGateway:    settings.assistantGateway,
 	})
 	require.NoError(tb, err)
 	helper := &Helper{
@@ -517,3 +528,5 @@ func (lifecycleInstallationStore) ReconcileAdministratorRecovery(
 }
 
 func (s *LifecycleStore) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (s *LifecycleStore) AssistantTranscript() store.AssistantTranscriptStore { return nil }

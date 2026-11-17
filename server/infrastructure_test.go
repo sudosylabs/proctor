@@ -355,3 +355,5 @@ func (s savedPluginSettings) ChangeCount(context.Context) (int64, error) {
 }
 
 func (layerOrderStore) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (layerOrderStore) AssistantTranscript() store.AssistantTranscriptStore { return nil }

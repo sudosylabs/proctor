@@ -101,8 +101,12 @@ type Terminal struct {
 }
 
 func terminalOf(info ProcessInfo) Terminal {
-	return Terminal{Tag: info.Tag, Running: info.Running, Started: info.Started, ExitCode: info.ExitCode,
-		ExitSignal: info.ExitSignal, Output: info.Output, Input: info.Input}
+	terminal := Terminal{Tag: info.Tag, Running: info.Running, Started: info.Started,
+		Output: info.Output[ProcessStreamPTY], Input: info.Input}
+	if info.Exit != nil {
+		terminal.ExitCode, terminal.ExitSignal = info.Exit.Code, info.Exit.SignalNumber()
+	}
+	return terminal
 }
 
 // TerminalsDependencies configures NewTerminals; Environments, Evidence,
@@ -294,7 +298,8 @@ func (t *Terminals) open(ctx context.Context, candidate CandidateAttempt, window
 		var started ProcessInfo
 		err = t.fenced(ctx, &at, func(fence Fence) error {
 			var startErr error
-			started, startErr = at.machine.StartProcess(ctx, fence, ProcessSpec{Tag: TerminalTag(highest + 1), PTY: &window})
+			started, startErr = at.machine.StartProcess(ctx, fence, ProcessSpec{Tag: TerminalTag(highest + 1),
+				Streams: ProcessStreamsPTY, PTY: &window})
 			return startErr
 		})
 		switch {
@@ -357,34 +362,69 @@ func (t *Terminals) signal(
 	}))
 }
 
-// attach opens a session on one terminal. Any number of sessions may read
-// a terminal; the candidate's sessions also write to it. The caller closes
-// the session.
+// attach opens a session on one terminal, and answers with the terminal as
+// it found it. Any number of sessions may read a terminal; an author's
+// sessions also write to it, resize it and record what they write. The
+// caller closes the session.
 func (t *Terminals) attach(
 	ctx context.Context,
 	candidate CandidateAttempt,
 	tag model.AttemptEnvironmentProcessTag,
-) (*terminalSession, error) {
+	author bool,
+) (*terminalSession, ProcessInfo, error) {
 	if !IsTerminalTag(tag) {
-		return nil, ErrTerminalNotFound
+		return nil, ProcessInfo{}, ErrTerminalNotFound
 	}
 	at, err := t.reach(ctx, candidate.AttemptID)
 	if err != nil {
-		return nil, err
+		return nil, ProcessInfo{}, err
 	}
 	open, err := terminals(ctx, at.machine)
 	if err != nil {
-		return nil, err
+		return nil, ProcessInfo{}, err
 	}
 	index := slices.IndexFunc(open, func(info ProcessInfo) bool { return info.Tag == tag })
 	if index < 0 {
-		return nil, ErrTerminalNotFound
+		return nil, ProcessInfo{}, ErrTerminalNotFound
 	}
-	session := &terminalSession{terminals: t, at: at, tag: tag, author: true}
-	if at.row.RecordInput {
+	session := &terminalSession{terminals: t, at: at, tag: tag, author: author}
+	if author && at.row.RecordInput {
 		session.recorder = newInputRecorder(t, at.row.AttemptID, at.row.Incarnation, tag, open[index].Input)
 	}
-	return session, nil
+	return session, open[index], nil
+}
+
+// TerminalScreen is a terminal's screen as text, for a reader that draws
+// nothing: each row trimmed of trailing blanks, the window it fills, and
+// whether the terminal still runs. Exit is nil while it runs.
+type TerminalScreen struct {
+	Text    []string
+	Cols    uint16
+	Rows    uint16
+	Running bool
+	Exit    *ProcessExit
+}
+
+// view reads a terminal's screen through a session that is not its
+// author's, so nothing it does can type, resize, signal or record.
+func (t *Terminals) view(
+	ctx context.Context,
+	candidate CandidateAttempt,
+	tag model.AttemptEnvironmentProcessTag,
+) (TerminalScreen, error) {
+	session, info, err := t.attach(ctx, candidate, tag, false)
+	if err != nil {
+		return TerminalScreen{}, err
+	}
+	defer session.Close(ctx)
+	screen, err := session.Screen(ctx)
+	if err != nil {
+		return TerminalScreen{}, err
+	}
+	// The state is the one attach found, read before the screen: a terminal
+	// that exits in between shows its last screen and is reported running.
+	return TerminalScreen{Text: screen.Text, Cols: screen.Window.Cols, Rows: screen.Window.Rows,
+		Running: info.Running, Exit: info.Exit}, nil
 }
 
 // terminalSession is one attachment to one terminal on the machine the

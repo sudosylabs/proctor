@@ -744,3 +744,5 @@ func TestNewForTestingServesTheProvidedBuildInfo(t *testing.T) {
 }
 
 func (s *hookStore) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (s *hookStore) AssistantTranscript() store.AssistantTranscriptStore { return nil }

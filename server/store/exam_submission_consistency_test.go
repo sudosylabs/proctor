@@ -37,7 +37,7 @@ func automaticSealTargetFixture() ExamSubmissionAutomaticSealTarget {
 // the proposed Submission identities.
 func sealResultFixture(target ExamSubmissionAutomaticSealTarget, id model.SubmissionID, code model.SubmissionReceiptCode) ExamSubmissionSealResult {
 	return ExamSubmissionSealResult{
-		Receipt: ExamSubmissionReceipt{
+		Receipt: ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest,
 			BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 			SubmissionID:    id,
 			ReceiptCode:     code,

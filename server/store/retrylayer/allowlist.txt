@@ -228,3 +228,11 @@ AttemptRuntimeLeaseStore.Release                           always
 
 AssistantProfileStore.Get always
 AssistantProfileStore.List always
+
+AssistantTranscriptStore.ListForAttempt always
+AssistantTranscriptStore.Inventory always
+AssistantTranscriptStore.Decision always
+
+AssistantProfileStore.Usage always
+
+ExamAttemptStore.ListCandidateStarterWorkspace always

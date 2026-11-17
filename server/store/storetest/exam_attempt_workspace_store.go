@@ -364,6 +364,14 @@ writesComplete:
 	require.Equal(t, model.AttemptWorkspaceStorageAttempt, cowResolved.StorageOrigin)
 	require.Equal(t, cowObject.ObjectID, cowResolved.AttemptObjectID)
 	require.Equal(t, starterFile.EntryID, cowResolved.Entry.EntryID)
+	originals, err := ss.ExamAttempt().ListCandidateStarterWorkspace(ctx, journalAccess(access), 128)
+	require.NoError(t, err)
+	require.Contains(t, originals, store.CandidateStarterWorkspaceFile{ObjectID: starterResolved.StarterObjectID}, "candidate replacement keeps original admitted starter context")
+	outsider := journalAccess(access)
+	outsider.CandidateUserID = model.NewUserID()
+	_, err = ss.ExamAttempt().ListCandidateStarterWorkspace(ctx, outsider, 128)
+	require.True(t, store.IsNotFound(err), "another candidate cannot read original starter context")
+
 	childObject := stage(textContent("child"))[0]
 	childID := model.NewAttemptWorkspaceEntryID()
 	child, err := apply("create-child", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,

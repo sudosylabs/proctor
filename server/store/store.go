@@ -74,6 +74,7 @@ type Catalog interface {
 	PluginSettings() PluginSettingsStore
 	EnvironmentProfile() EnvironmentProfileStore
 	AssistantProfile() AssistantProfileStore
+	AssistantTranscript() AssistantTranscriptStore
 	AttemptEnvironment() AttemptEnvironmentStore
 	AttemptRuntimeLease() AttemptRuntimeLeaseStore
 	RetentionPolicy() RetentionPolicyStore

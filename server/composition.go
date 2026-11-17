@@ -235,6 +235,7 @@ func composeConsumers(
 		logger:                capabilities.logger,
 		jobs:                  jobRuntime,
 		environments:          environmentRuntime,
+		assistant:             application.Assistant,
 		servingLease:          servingLease,
 		transport:             rootTransport,
 		websocket:             webSocketHub,
@@ -341,6 +342,9 @@ func composeApplicationDependencies(
 		return app.Dependencies{}, fmt.Errorf("project application dependencies: %w", err)
 	}
 	applicationDeps.SkipDesktopCompatibility = input.serviceEnvironment == ServiceEnvironmentDev
+	if input.overrides.AssistantGateway != nil && applicationDeps.AssistantEnabled {
+		applicationDeps.AssistantGateway = input.overrides.AssistantGateway
+	}
 	if input.overrides.DesktopBuildCatalog != nil {
 		applicationDeps.DesktopBuildCatalog = append([]model.DesktopBuildTuple(nil), input.overrides.DesktopBuildCatalog...)
 	}

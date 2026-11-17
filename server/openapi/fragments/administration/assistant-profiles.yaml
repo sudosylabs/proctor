@@ -13,8 +13,9 @@ paths:
       tags:
         - Administration
       description: >-
-        System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement
-        preserves the recipe used by published exams; transcripts are available only through exam review.
+        System administrators manage immutable assistant profiles. Creation requires a configured provider.
+        Retirement preserves the recipe used by published exams; transcripts are available only through exam
+        review.
       parameters:
         - name: include_retired
           in: query
@@ -65,8 +66,9 @@ paths:
       tags:
         - Administration
       description: >-
-        System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement
-        preserves the recipe used by published exams; transcripts are available only through exam review.
+        System administrators manage immutable assistant profiles. Creation requires a configured provider.
+        Retirement preserves the recipe used by published exams; transcripts are available only through exam
+        review.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -155,8 +157,9 @@ paths:
       tags:
         - Administration
       description: >-
-        System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement
-        preserves the recipe used by published exams; transcripts are available only through exam review.
+        System administrators manage immutable assistant profiles. Creation requires a configured provider.
+        Retirement preserves the recipe used by published exams; transcripts are available only through exam
+        review.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -215,6 +218,71 @@ paths:
               --url 'https://proctor.example.edu/api/v1/assistant-profiles/ybndrfg8ejkmcpqxot1uwisza3/retire' \
               --header 'Authorization: Bearer <interactive-system-administrator-session>' \
               --header 'Idempotency-Key: docs-assistant-profile-retire-001'
+  /api/v1/assistant-profiles/{assistant_profile_id}/usage:
+    get:
+      operationId: getAssistantProfileUsage
+      summary: Read aggregate assistant profile usage
+      tags:
+        - Administration
+      description: >-
+        System administrators read counters for retained attempts, including outstanding reservations. No candidate
+        identity or transcript is returned. Counters fall when histories are retired.
+      parameters:
+        - name: assistant_profile_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ID'
+          description: The assistant profile to retire.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - assistant_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - assistant_profile.invalid
+        - assistant_profile.not_found
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Retained aggregate usage, including reservations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProfileUsageResponse'
+              example:
+                attempts: 2
+                turns: 4
+                input_tokens: 1000
+                output_tokens: 200
+                tool_calls: 3
+                commands: 1
+                command_milliseconds: 1000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
 components:
   responses:
     AssistantProfileListOK:
@@ -445,3 +513,43 @@ components:
           format: int64
           minimum: 1
           maximum: 600
+    AssistantProfileUsageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - attempts
+        - turns
+        - input_tokens
+        - output_tokens
+        - tool_calls
+        - commands
+        - command_milliseconds
+      properties:
+        attempts:
+          type: integer
+          format: int64
+          minimum: 0
+        turns:
+          type: integer
+          format: int64
+          minimum: 0
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        tool_calls:
+          type: integer
+          format: int64
+          minimum: 0
+        commands:
+          type: integer
+          format: int64
+          minimum: 0
+        command_milliseconds:
+          type: integer
+          format: int64
+          minimum: 0

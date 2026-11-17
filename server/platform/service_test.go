@@ -804,3 +804,5 @@ func (failingProviderType) New(plugin.IdentityProviderDefinition) (plugin.Identi
 }
 
 func (testStore) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (testStore) AssistantTranscript() store.AssistantTranscriptStore { return nil }

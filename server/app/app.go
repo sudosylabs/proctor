@@ -11,6 +11,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
@@ -43,6 +44,8 @@ type App struct {
 	Attempts        *attempt.Service
 	// Terminals is nil when the installation runs no execution environments.
 	Terminals *environment.Terminals
+	// Assistant is nil when the installation has the assistant off.
+	Assistant *assistant.Service
 	// Reviews covers integrity review and result release; it does not grade.
 	Reviews           *review.Service
 	Resources         *resource.Service

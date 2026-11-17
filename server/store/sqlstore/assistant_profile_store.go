@@ -315,3 +315,33 @@ func (s SQLAssistantProfileStore) List(ctx context.Context, includeRetired bool)
 }
 
 var _ store.AssistantProfileStore = (*SQLAssistantProfileStore)(nil)
+
+// Usage counts retained counters only; profile administration never reads history.
+func (s SQLAssistantProfileStore) Usage(ctx context.Context, id model.AssistantProfileID) (model.AssistantProfileUsage, error) {
+	if !id.IsValid() {
+		return model.AssistantProfileUsage{}, store.NewErrInvalidInput("assistant_profile", "id", nil)
+	}
+	if _, err := s.Get(ctx, id); err != nil {
+		return model.AssistantProfileUsage{}, err
+	}
+	var row struct {
+		Attempts            int64 `db:"attempts"`
+		Turns               int64 `db:"turns"`
+		InputTokens         int64 `db:"input_tokens"`
+		OutputTokens        int64 `db:"output_tokens"`
+		ToolCalls           int64 `db:"tool_calls"`
+		Commands            int64 `db:"commands"`
+		CommandMilliseconds int64 `db:"command_milliseconds"`
+	}
+	err := s.GetMaster().Get(ctx, &row, `SELECT count(*) AS attempts,COALESCE(sum(i.turns),0) AS turns,
+ COALESCE(sum(i.input_tokens),0) AS input_tokens,COALESCE(sum(i.output_tokens),0) AS output_tokens,
+ COALESCE(sum(i.tool_calls),0) AS tool_calls,COALESCE(sum(i.commands),0) AS commands,
+ COALESCE(sum(i.command_milliseconds),0) AS command_milliseconds
+ FROM exam_attempt_assistants a JOIN exam_attempt_assistant_inventories i ON i.id=a.id WHERE a.policy->>'profile_id'=?`, id.String())
+	if err != nil {
+		return model.AssistantProfileUsage{}, fmt.Errorf("read assistant profile usage: %w", err)
+	}
+	return model.AssistantProfileUsage{Attempts: row.Attempts, Turns: row.Turns,
+		InputTokens: row.InputTokens, OutputTokens: row.OutputTokens, ToolCalls: row.ToolCalls,
+		Commands: row.Commands, CommandMilliseconds: row.CommandMilliseconds}, nil
+}

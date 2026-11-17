@@ -559,6 +559,12 @@ func applyAttemptWorkspaceBatch(
 		outcome.ProtectedObjectIDs = append(outcome.ProtectedObjectIDs, effect.protected...)
 	}
 
+	if author.Kind == model.AttemptWorkspaceAuthorCandidate {
+		if err = matchAssistantProposals(ctx, tx, input.Access.WorkspaceAttemptID(), input.Mutations); err != nil {
+			return zero, err
+		}
+	}
+
 	if err = trimAttemptWorkspaceJournal(ctx, tx, target.WorkspaceID); err != nil {
 		return zero, err
 	}

@@ -60,9 +60,9 @@ func (p AssistantPolicy) Validate() error {
 	if !p.ProfileID.IsValid() {
 		return invalid("assistant.profile_id", "requires an assistant profile")
 	}
-	// Levels become usable only when their tools and enforcement have landed.
-	if p.Level != AssistantLevelTutor {
-		return invalid("assistant.level", "only tutor is available")
+	// Agent's need for execution is checked with the whole policy set.
+	if !p.Level.IsValid() || p.Level == AssistantLevelOff {
+		return invalid("assistant.level", "an enabled assistant must be tutor, reviewer, pair or agent")
 	}
 	if !p.Budgets.Valid() {
 		return invalid("assistant.budgets", "must have bounded allowances")

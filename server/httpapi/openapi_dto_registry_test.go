@@ -29,7 +29,18 @@ import (
 // schema. TestOpenAPISchemasAgreeWithDTOs fails when an operation's JSON body
 // names a component that is neither registered nor a list envelope of one.
 var openAPIDTOs = map[string]reflect.Type{
+	"AssistantProfileUsageResponse":                  reflect.TypeOf(assistantProfileUsageResponse{}),
 	"ConfigureExamDraftAssistantRequest":             reflect.TypeOf(configureExamDraftAssistantRequest{}),
+	"SendAssistantMessageRequest":                    reflect.TypeOf(sendAssistantMessageRequest{}),
+	"AssistantTurnStartedResponse":                   reflect.TypeOf(assistantTurnStartedResponse{}),
+	"DecideAssistantApprovalRequest":                 reflect.TypeOf(decideAssistantApprovalRequest{}),
+	"AssistantTranscriptResponse":                    reflect.TypeOf(assistantTranscriptResponse{}),
+	"AssistantRecord":                                reflect.TypeOf(assistantRecordResponse{}),
+	"AssistantTurn":                                  reflect.TypeOf(model.AssistantTurn{}),
+	"AssistantCall":                                  reflect.TypeOf(model.AssistantCall{}),
+	"AssistantUsage":                                 reflect.TypeOf(model.AssistantUsage{}),
+	"AssistantInventory":                             reflect.TypeOf(model.AssistantInventory{}),
+	"AssistantUsageSummary":                          reflect.TypeOf(model.AssistantUsageSummary{}),
 	"AssistantPolicy":                                reflect.TypeOf(model.AssistantPolicy{}),
 	"AssistantPolicyBudgets":                         reflect.TypeOf(model.AssistantBudgets{}),
 	"AcademicAdministrationBatchItemRequest":         reflect.TypeOf(academicAdministrationBatchItemRequest{}),

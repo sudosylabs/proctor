@@ -496,3 +496,22 @@ const (
 func storeOperation(aggregate aggregateName, method methodName) Operation {
 	return Operation{name: string(aggregate) + "." + string(method)}
 }
+
+const aggregateAssistantTranscript aggregateName = "assistant_transcript"
+const (
+	methodStart          methodName = "start"
+	methodReserveModel   methodName = "reserve_model"
+	methodReserveCommand methodName = "reserve_command"
+	methodDecide         methodName = "decide"
+	methodDecision       methodName = "decision"
+	methodCompleteModel  methodName = "complete_model"
+	methodAppendTurn     methodName = "append_turn"
+	methodAppendCall     methodName = "append_call"
+	methodCompleteCall   methodName = "complete_call"
+	methodListForAttempt methodName = "list_for_attempt"
+	methodInventory      methodName = "inventory"
+)
+
+const methodUsage methodName = "usage"
+
+const methodListCandidateStarterWorkspace methodName = "list_candidate_starter_workspace"

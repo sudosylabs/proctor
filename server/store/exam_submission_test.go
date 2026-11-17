@@ -36,7 +36,7 @@ func TestExamSubmissionStoreOwnsAtomicCandidateSealAndExactReplaySelector(t *tes
 		CandidateUserID: access.CandidateUserID, WorkspaceID: model.NewExamAttemptWorkspaceID(),
 		CurrentRevisionID: access.ExpectedCurrentRevisionID,
 	}
-	receipt := ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
+	receipt := ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		SubmissionID: command.SubmissionID, AttemptID: access.AttemptID, ExamRevisionID: access.ExpectedCurrentRevisionID,
 		State:           model.ExamAttemptSubmitted,
 		WorkspaceCursor: 41, ManifestDigest: strings.Repeat("a", 64), SubmittedAt: time.Unix(100, 0).UTC(),

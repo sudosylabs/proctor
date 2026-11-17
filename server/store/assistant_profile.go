@@ -54,6 +54,7 @@ type AssistantProfileCommandResult struct {
 // assistant_profile_limit). List returns unretired profiles by name, then,
 // with includeRetired, retired ones newest retirement first.
 type AssistantProfileStore interface {
+	Usage(context.Context, model.AssistantProfileID) (model.AssistantProfileUsage, error)
 	Create(context.Context, *AssistantProfileCreation, *CommandIdempotency) (*AssistantProfileCommandResult, error)
 	Retire(context.Context, *AssistantProfileRetirement, *CommandIdempotency) (*AssistantProfileCommandResult, error)
 	Get(context.Context, model.AssistantProfileID) (*model.AssistantProfile, error)

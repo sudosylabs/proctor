@@ -74,6 +74,8 @@ func (s *Server) runShutdown(plan stopPlan, endRun context.CancelFunc) error {
 			}
 			return nil
 		},
+		// Turns end before the stores they record into close.
+		func(ctx context.Context) error { return s.components.assistant.Close(ctx) },
 		draining(s.components.jobs),
 		draining(s.components.environments),
 		draining(s.components.websocket),

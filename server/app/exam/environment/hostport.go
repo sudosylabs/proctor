@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -392,26 +393,117 @@ func (w Window) Valid() bool {
 	return w.Cols > 0 && w.Rows > 0 && w.Cols <= MaxWindowCells && w.Rows <= MaxWindowCells
 }
 
-// ProcessSpec starts one process. A terminal has a PTY of its window and,
-// with no Argv, runs the image's login shell.
+// ProcessStreams is how a process's input and output are wired.
+type ProcessStreams string
+
+// The wirings a process may have.
+const (
+	// ProcessStreamsPTY gives the process a terminal of the spec's PTY
+	// window: one output stream, and input to the terminal.
+	ProcessStreamsPTY ProcessStreams = "pty"
+	// ProcessStreamsPipes gives the process separate stdout and stderr, and
+	// closes its input at once unless the spec keeps Stdin open.
+	ProcessStreamsPipes ProcessStreams = "pipes"
+)
+
+// ProcessSpec starts one process. A terminal has the PTY streams of its
+// window and, with no Argv, runs the image's login shell.
 type ProcessSpec struct {
 	Tag  model.AttemptEnvironmentProcessTag
 	Argv []string
-	PTY  *Window
+	// Env adds NAME=value entries to the workload's environment.
+	Env []string
+	// Dir is the working directory relative to the workspace root; empty
+	// is the root itself. The host refuses one that leaves the workspace.
+	Dir     string
+	Streams ProcessStreams
+	// PTY is the terminal's window, set exactly when Streams is PTY.
+	PTY *Window
+	// Stdin keeps a piped process's input open for WriteInput.
+	Stdin bool
+	// Timeout, when set, ends the process that long after it started: the
+	// host sends it TERM, then KILL a few seconds later.
+	Timeout time.Duration
+}
+
+// Valid reports whether the spec's wiring is whole: a PTY process has a
+// valid window and no separate input switch, and a piped process has a
+// command and no window.
+func (s ProcessSpec) Valid() bool {
+	if s.Timeout < 0 {
+		return false
+	}
+	switch s.Streams {
+	case ProcessStreamsPTY:
+		return s.PTY != nil && s.PTY.Valid() && !s.Stdin
+	case ProcessStreamsPipes:
+		return s.PTY == nil && len(s.Argv) > 0
+	}
+	return false
+}
+
+// ProcessStream is one output of a process.
+type ProcessStream string
+
+// The outputs a process has: a PTY process has only ProcessStreamPTY, and a
+// piped one ProcessStreamStdout and ProcessStreamStderr.
+const (
+	ProcessStreamPTY    ProcessStream = "pty"
+	ProcessStreamStdout ProcessStream = "stdout"
+	ProcessStreamStderr ProcessStream = "stderr"
+)
+
+// ProcessExit is how a process ended: its exit code, or the name of the
+// signal that killed it, such as KILL, with Code 0.
+type ProcessExit struct {
+	Code   int
+	Signal string
+}
+
+// The guest is Linux, so a host reports a signal by Linux's number. Only
+// the ones a workload commonly dies of are named; any other keeps its
+// number as its name.
+var signalNames = map[int]string{
+	1: "HUP", 2: "INT", 3: "QUIT", 4: "ILL", 5: "TRAP", 6: "ABRT", 7: "BUS", 8: "FPE",
+	9: "KILL", 10: "USR1", 11: "SEGV", 12: "USR2", 13: "PIPE", 14: "ALRM", 15: "TERM",
+}
+
+// SignalName names a signal number a host reports; zero is no signal.
+func SignalName(number int) string {
+	if number == 0 {
+		return ""
+	}
+	if name, ok := signalNames[number]; ok {
+		return name
+	}
+	return strconv.Itoa(number)
+}
+
+// SignalNumber is the number of the signal that killed the process, or 0.
+func (e ProcessExit) SignalNumber() int {
+	if e.Signal == "" {
+		return 0
+	}
+	for number, name := range signalNames {
+		if name == e.Signal {
+			return number
+		}
+	}
+	number, _ := strconv.Atoi(e.Signal)
+	return number
 }
 
 // ProcessInfo describes one process a Start created, running or exited.
-// Output is the end offset of its terminal output and Input how many bytes
-// of input it took.
+// Output is the end offset of each of its streams and Input how many bytes
+// of input it took. Exit is nil while it runs.
 type ProcessInfo struct {
-	Tag        model.AttemptEnvironmentProcessTag
-	PTY        bool
-	Started    time.Time
-	Running    bool
-	ExitCode   int
-	ExitSignal int
-	Output     uint64
-	Input      uint64
+	Tag     model.AttemptEnvironmentProcessTag
+	Streams ProcessStreams
+	Started time.Time
+	Running bool
+	Exit    *ProcessExit
+	Output  map[ProcessStream]uint64
+	Input   uint64
 }
 
 // OutputKind is what one ProcessOutput carries.
@@ -419,18 +511,20 @@ type OutputKind uint8
 
 // The events of an attachment.
 const (
-	// OutputData is terminal bytes at Offset.
+	// OutputData is bytes of Stream at Offset.
 	OutputData OutputKind = iota + 1
-	// OutputTruncated says bytes from Offset to To left the history before
-	// this reader got them.
+	// OutputTruncated says bytes of Stream from Offset to To left the
+	// history before this reader got them.
 	OutputTruncated
 	// OutputExit is the process's exit, always the last event.
 	OutputExit
 )
 
-// ProcessOutput is one event of an attachment.
+// ProcessOutput is one event of an attachment. Offsets count within
+// Stream; an exit names no stream.
 type ProcessOutput struct {
 	Kind       OutputKind
+	Stream     ProcessStream
 	Offset     uint64
 	To         uint64
 	Data       []byte
@@ -438,7 +532,7 @@ type ProcessOutput struct {
 	ExitSignal int
 }
 
-// ProcessAttachment reads one terminal's output from an offset. Next
+// ProcessAttachment reads one process's output from an offset. Next
 // returns io.EOF after OutputExit, and ErrMachineRevoked or ErrMachineLost
 // once the machine has ended.
 type ProcessAttachment interface {
@@ -456,14 +550,19 @@ type Screen struct {
 	CursorRow    int
 	CursorCol    int
 	CursorHidden bool
+	// Text is each row as plain text, trailing blanks trimmed.
+	Text []string
 }
 
 // ProcessSignal is a signal the core may send a process.
 type ProcessSignal string
 
-// The signals the core sends.
+// The signals the core sends. A candidate only interrupts; terminate and
+// kill end a command the core started, such as one past its deadline.
 const (
 	SignalInterrupt ProcessSignal = "interrupt"
+	SignalTerminate ProcessSignal = "terminate"
+	SignalKill      ProcessSignal = "kill"
 )
 
 // Processes runs a machine's processes by tag. Starting, input, size and
@@ -473,8 +572,9 @@ const (
 type Processes interface {
 	StartProcess(ctx context.Context, fence Fence, spec ProcessSpec) (ProcessInfo, error)
 	ListProcesses(ctx context.Context) ([]ProcessInfo, error)
-	// AttachProcess reads a terminal's output from offset; output older
-	// than its history is reported as truncated.
+	// AttachProcess reads a process's output from offset in each of its
+	// streams; output older than its history is reported as truncated. A
+	// piped process's streams count apart, so its readers start at 0.
 	AttachProcess(ctx context.Context, tag model.AttemptEnvironmentProcessTag, from uint64) (ProcessAttachment, error)
 	// WriteInput appends data at offset and returns the process's input
 	// offset after it. Bytes it already took are dropped, so a resend never

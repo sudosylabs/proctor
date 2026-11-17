@@ -32,7 +32,7 @@ func TestAutomaticSealUsesBoundedSystemAuditAndPublishesOnlyFreshResult(t *testi
 	f.submissionID, f.receiptCode = retained, retainedCode
 	f.submissions.automaticTargets = []store.ExamSubmissionAutomaticSealTarget{target}
 	f.submissions.automaticResult = &store.ExamSubmissionAutomaticSealResult{ExamSubmissionSealResult: store.ExamSubmissionSealResult{
-		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: retained, ReceiptCode: retainedCode, AttemptID: target.AttemptID,
+		Receipt: store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: retained, ReceiptCode: retainedCode, AttemptID: target.AttemptID,
 			ExamRevisionID: target.CurrentRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 4,
 			ManifestDigest: strings.Repeat("a", 64), SubmittedAt: f.at},
 		ExamID: target.ExamID, SittingID: target.SittingID, ClassID: target.ClassID, CandidateUserID: target.CandidateUserID,

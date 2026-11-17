@@ -240,3 +240,27 @@ func deliveredEventIDs(runtime *connectionRuntime) []string {
 	}
 	return ids
 }
+
+func TestHubAssistantEventsStayWithinTheOriginatingSession(t *testing.T) {
+	hub := newInternalTestHub(t)
+	recorder, scrape := newServedMetrics(t)
+	require.NoError(t, hub.AttachRecorder(recorder))
+	require.NoError(t, hub.Start(t.Context()))
+	defer func() { _ = hub.Close(context.Background()) }()
+	user := model.NewUserID()
+	origin := model.Principal{UserID: user, SessionID: model.NewSessionID()}
+	other := model.Principal{UserID: user, SessionID: model.NewSessionID()}
+	for _, principal := range []model.Principal{origin, other} {
+		socket, _ := newSocketPair(t)
+		connection, _ := hub.register(socket, principal, model.RequestMetadata{}, "", 0, "")
+		require.NotNil(t, connection)
+	}
+	target := realtime.AssistantTarget{CandidateID: user, SessionID: origin.SessionID, SittingID: model.NewExamSittingID(), AttemptID: model.NewExamAttemptID(), TurnID: model.NewAssistantTurnID()}
+	event, err := realtime.NewAssistantTextDeltaEvent(target, 0, "A private hint.")
+	require.NoError(t, err)
+	hub.PublishLocal(t.Context(), event)
+	require.Contains(t, scrape(), "proctor_websocket_broadcast_recipients_sum 1\n")
+	encoded, err := json.Marshal(eventFromRealtime(event))
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "session_id")
+}

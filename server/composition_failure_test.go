@@ -158,6 +158,7 @@ func TestRealtimeHandlerRegistrationFailureUnwindsComposition(t *testing.T) {
 	require.Equal(t, []cluster.Event{
 		cluster.Event("store.academic_period.invalidated"),
 		cluster.Event("websocket.publish"),
+		cluster.Event("assistant.changed"),
 		cluster.Event("exam_attempt.connection_unbound"),
 		cluster.Event("authentication.session_revoked"),
 	}, clusterTransport.registered(), "cluster handler registrations")

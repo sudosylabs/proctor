@@ -70,7 +70,9 @@ type examSubmissionReceiptResponse struct {
 	State           string                            `json:"state"`
 	WorkspaceCursor int64                             `json:"workspace_cursor"`
 	ManifestDigest  string                            `json:"manifest_digest"`
-	SubmittedAt     string                            `json:"submitted_at"`
+	// AssistantTranscriptDigest binds the candidate's assistant transcript.
+	AssistantTranscriptDigest string `json:"assistant_transcript_digest"`
+	SubmittedAt               string `json:"submitted_at"`
 }
 
 type examSubmissionManagerResponse struct {
@@ -157,15 +159,16 @@ func (h examAttemptHandlers) submit(request route.Request) (route.Result, error)
 	}
 
 	response := examSubmissionReceiptResponse{
-		BrowserActivity: receipt.BrowserActivity,
-		SubmissionID:    receipt.SubmissionID.String(),
-		ReceiptCode:     receipt.ReceiptCode.Display(),
-		ExamAttemptID:   receipt.AttemptID.String(),
-		ExamRevisionID:  receipt.ExamRevisionID.String(),
-		State:           string(receipt.State),
-		WorkspaceCursor: receipt.WorkspaceCursor,
-		ManifestDigest:  receipt.ManifestDigest,
-		SubmittedAt:     model.FormatRFC3339(receipt.SubmittedAt),
+		BrowserActivity:           receipt.BrowserActivity,
+		SubmissionID:              receipt.SubmissionID.String(),
+		ReceiptCode:               receipt.ReceiptCode.Display(),
+		ExamAttemptID:             receipt.AttemptID.String(),
+		ExamRevisionID:            receipt.ExamRevisionID.String(),
+		State:                     string(receipt.State),
+		WorkspaceCursor:           receipt.WorkspaceCursor,
+		ManifestDigest:            receipt.ManifestDigest,
+		AssistantTranscriptDigest: receipt.AssistantTranscriptDigest,
+		SubmittedAt:               model.FormatRFC3339(receipt.SubmittedAt),
 	}
 	return route.JSON(http.StatusCreated, response).WithHeaders(noStoreHeaders()), nil
 }

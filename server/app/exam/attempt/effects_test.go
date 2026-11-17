@@ -305,7 +305,7 @@ func TestSubmissionEffectPublishesSafeManagerAndCandidateFactsThenUnbindsExactCo
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
 	service := &Service{publisher: publisher}
-	result := SubmissionResult{Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
+	result := SubmissionResult{Receipt: store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID(), State: model.ExamAttemptSubmitted,
 		WorkspaceCursor: 13, ManifestDigest: strings.Repeat("d", 64),
 		SubmittedAt: time.Date(2026, time.August, 21, 11, 0, 0, 0, time.UTC),
@@ -335,7 +335,7 @@ func TestAutomaticSubmissionEffectPublishesSittingClosedFactsAndUnbindsExactConn
 	publisher := &realtimetest.Publisher{}
 	service := &Service{publisher: publisher}
 	result := AutomaticSubmissionResult{SubmissionResult: SubmissionResult{
-		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID(),
+		Receipt: store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID(),
 			State: model.ExamAttemptSubmitted, WorkspaceCursor: 21, ManifestDigest: strings.Repeat("e", 64),
 			SubmittedAt: time.Date(2026, time.August, 22, 11, 0, 0, 0, time.UTC)},
 		Provenance: model.ExamSubmissionSittingClosed, ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(),

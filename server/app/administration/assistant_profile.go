@@ -163,3 +163,19 @@ var assistantProfileStoreErrors = apperror.StoreTable{
 	NotFound:    "assistant_profile.not_found",
 	Unavailable: "assistant_profile.unavailable",
 }
+
+// AssistantProfileUsage requires the same system-administrator authority as
+// listing profiles, and exposes counters without transcripts or candidate IDs.
+func (s *Service) AssistantProfileUsage(ctx context.Context, inv invocation.Invocation, id model.AssistantProfileID) (model.AssistantProfileUsage, error) {
+	if !id.IsValid() {
+		return model.AssistantProfileUsage{}, apperror.Invalid("assistant_profile.invalid", "profile_id")
+	}
+	if _, _, err := s.authorizeAssistantProfiles(ctx, inv); err != nil {
+		return model.AssistantProfileUsage{}, err
+	}
+	usage, err := s.assistantProfiles.Usage(ctx, id)
+	if err != nil {
+		return model.AssistantProfileUsage{}, assistantProfileStoreErrors.Translate(err)
+	}
+	return usage, nil
+}

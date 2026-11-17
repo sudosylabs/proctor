@@ -543,7 +543,22 @@ type submissionReceiptDocument struct {
 	State           model.ExamAttemptState            `json:"state"`
 	WorkspaceCursor int64                             `json:"workspace_cursor"`
 	ManifestDigest  string                            `json:"manifest_digest"`
-	SubmittedAt     time.Time                         `json:"submitted_at"`
+	// AssistantTranscriptDigest is read back after the insert binds it.
+	AssistantTranscriptDigest string    `json:"assistant_transcript_digest"`
+	SubmittedAt               time.Time `json:"submitted_at"`
+}
+
+// bindAssistantDigest names, in the receipt, the assistant inventory the
+// insert of the Submission bound.
+func bindAssistantDigest(ctx context.Context, tx *sqlxTxWrapper, outcome *examSubmissionSealOutcome) error {
+	var digest string
+	err := tx.Get(ctx, &digest, `SELECT digest FROM exam_attempt_assistant_inventories WHERE id=? AND submission_id=?`,
+		outcome.Receipt.AttemptID.String(), outcome.Receipt.SubmissionID.String())
+	if err != nil {
+		return fmt.Errorf("read bound assistant inventory: %w", err)
+	}
+	outcome.Receipt.AssistantTranscriptDigest = digest
+	return nil
 }
 
 func (s *SQLExamSubmissionStore) Seal(
@@ -781,6 +796,9 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 		Generation:      participation.Generation,
 		ConnectionID:    connection.ID.String(),
 	}
+	if err = bindAssistantDigest(ctx, tx, &outcome); err != nil {
+		return zero, err
+	}
 	if err = completeExamSubmissionAudit(ctx, tx, outcome, input.AuditEventID, input.AuditAt, false, ""); err != nil {
 		return zero, err
 	}
@@ -845,6 +863,10 @@ func insertVoluntaryExamSubmissionHeader(
 	submission *model.ExamSubmission,
 	access store.ExamSubmissionSealAccess,
 ) error {
+	if err := sealAssistantTranscript(ctx, tx, submission.AttemptID); err != nil {
+		return err
+	}
+
 	if _, err := tx.Exec(
 		ctx,
 		`INSERT INTO exam_submissions (
@@ -1324,6 +1346,7 @@ func examSubmissionSealResult(outcome examSubmissionSealOutcome) (*store.ExamSub
 		outcome.Receipt.State != model.ExamAttemptSubmitted ||
 		outcome.Receipt.WorkspaceCursor < 0 ||
 		len(outcome.Receipt.ManifestDigest) != 64 ||
+		!model.IsValidSHA256Fingerprint(outcome.Receipt.AssistantTranscriptDigest) ||
 		outcome.Receipt.SubmittedAt.IsZero() ||
 		outcome.Generation < 1 {
 		return nil, errors.New("invalid Exam Submission seal outcome")

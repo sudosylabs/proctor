@@ -89,6 +89,7 @@ func TestClusterFanoutRegistersStableEventsAndPropagatesFailure(t *testing.T) {
 	require.ErrorIs(t, err, registrationErr, "SetClusterFanout() error")
 	want := []cluster.Event{
 		cluster.Event("websocket.publish"),
+		cluster.Event("assistant.changed"),
 		cluster.Event("exam_attempt.connection_unbound"),
 		cluster.Event("authentication.session_revoked"),
 		cluster.Event("authorization.invalidated"),

@@ -57,10 +57,104 @@ func TestProviderFailuresAreSanitizedAndRetryAfterIsBounded(t *testing.T) {
 		})
 	}
 	now := time.Date(2026, time.November, 17, 12, 0, 0, 0, time.UTC)
-	require.Equal(t, time.Duration(0), retryAfter("-1", now))
-	require.Equal(t, 24*time.Hour, retryAfter("99999999", now))
-	require.Equal(t, time.Second, retryAfter(now.Add(time.Second).Format(http.TimeFormat), now))
-	require.Equal(t, time.Duration(0), retryAfter("invalid", now))
+	for _, test := range []struct {
+		name, header, value string
+		want                time.Duration
+	}{
+		{"negative", "Retry-After", "-1", 0}, {"huge", "Retry-After", "99999999", 24 * time.Hour},
+		{"fractional", "Retry-After", "1.5", 1500 * time.Millisecond}, {"not a number", "Retry-After", "NaN", 0},
+		{"infinite", "Retry-After", "Inf", 24 * time.Hour}, {"date", "Retry-After", now.Add(time.Second).Format(http.TimeFormat), time.Second},
+		{"invalid", "Retry-After", "invalid", 0}, {"milliseconds", "Retry-After-Ms", "250", 250 * time.Millisecond},
+		{"absent", "X-Other", "5", 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			header := http.Header{}
+			header.Set(test.header, test.value)
+			require.Equal(t, test.want, retryAfter(header, now))
+		})
+	}
+	t.Run("milliseconds take precedence", func(t *testing.T) {
+		header := http.Header{"Retry-After": {"9"}, "Retry-After-Ms": {"20"}}
+		require.Equal(t, 20*time.Millisecond, retryAfter(header, now))
+	})
+}
+func TestProviderErrorDocumentsAreClassifiedFromEveryServerShape(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		status int
+		body   string
+		class  assistant.ModelErrorClass
+	}{
+		{"openai nested code", 400, `{"error":{"code":"context_length_exceeded","type":"invalid_request_error"}}`, assistant.ModelContextTooLong},
+		{"vllm top level numeric code", 400, `{"object":"error","message":"This model's maximum context length is 4096 tokens.","type":"BadRequestError","code":400}`, assistant.ModelContextTooLong},
+		{"vllm nested numeric code", 400, `{"error":{"message":"bad tool schema","type":"BadRequestError","code":400}}`, assistant.ModelInvalid},
+		{"ollama string error", 404, `{"error":"model \"teaching-model\" not found"}`, assistant.ModelInvalid},
+		{"anthropic overload", 529, `{"type":"error","error":{"type":"overloaded_error","message":"untrusted"}}`, assistant.ModelOverloaded},
+		{"anthropic prompt too long", 400, `{"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 210000 tokens > 200000 maximum"}}`, assistant.ModelContextTooLong},
+		{"anthropic request too large", 413, `{"type":"error","error":{"type":"request_too_large"}}`, assistant.ModelContextTooLong},
+		{"exhausted quota is terminal", 429, `{"error":{"code":"insufficient_quota","type":"insufficient_quota"}}`, assistant.ModelUnavailable},
+		{"token rate limit stays retryable", 429, `{"error":{"message":"too many tokens per minute"}}`, assistant.ModelRateLimited},
+		{"unparseable body", 503, `<html>gateway</html>`, assistant.ModelOverloaded},
+		{"empty body", 500, ``, assistant.ModelUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			failure := Failure(test.status, []byte(test.body))
+			require.Equal(t, test.class, failure.Class)
+			require.NotContains(t, failure.Error(), "untrusted")
+		})
+	}
+	for _, test := range []struct {
+		name  string
+		body  string
+		class assistant.ModelErrorClass
+	}{
+		{"numeric client code", `{"message":"bad","type":"BadRequestError","code":400}`, assistant.ModelInvalid},
+		{"anthropic overload", `{"type":"overloaded_error"}`, assistant.ModelOverloaded},
+		{"context message", `{"message":"maximum context length exceeded"}`, assistant.ModelContextTooLong},
+		{"missing", ``, assistant.ModelUnavailable},
+	} {
+		t.Run("stream "+test.name, func(t *testing.T) {
+			require.Equal(t, test.class, StreamFailure([]byte(test.body)).Class)
+		})
+	}
+}
+func TestOverloadCarriesRetryAfter(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "3")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"error":{"message":"untrusted"}}`)
+	}))
+	defer server.Close()
+	client, err := NewClient(Config{BaseURL: server.URL, Timeout: time.Second, MaxResponseBytes: 1024})
+	require.NoError(t, err)
+	response, err := client.Send(t.Context(), false, struct{}{})
+	if response != nil {
+		require.NoError(t, response.Body.Close())
+	}
+	var failure *assistant.ModelError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, assistant.ModelOverloaded, failure.Class)
+	require.Equal(t, 3*time.Second, failure.RetryAfter)
+}
+func TestToolArgumentsMustBeOneJSONObject(t *testing.T) {
+	t.Parallel()
+	for input, want := range map[string]string{"": "{}", "  ": "{}", `{"path":"src"}`: `{"path":"src"}`, ` {"a":1} `: `{"a":1}`} {
+		got, valid := ToolArguments([]byte(input))
+		require.True(t, valid, input)
+		require.JSONEq(t, want, string(got))
+	}
+	for _, input := range []string{`[1,2]`, `"text"`, `{"path":`, `[read_file(path="src")]`, `{"a":1}{"b":2}`, `null`} {
+		_, valid := ToolArguments([]byte(input))
+		require.False(t, valid, input)
+	}
+}
+func TestSyntheticCallIDsAreDistinctAndProviderSafe(t *testing.T) {
+	t.Parallel()
+	first, second := SyntheticCallID(), SyntheticCallID()
+	require.NotEqual(t, first, second)
+	require.Regexp(t, `^call_[0-9a-f]{24}$`, first)
 }
 func TestSSEMultilineEventsAndLimits(t *testing.T) {
 	t.Parallel()

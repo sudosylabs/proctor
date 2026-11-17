@@ -20,11 +20,13 @@ type Assistant struct {
 	Providers []AssistantProvider `json:"Providers"`
 }
 
+// AssistantCapabilities declare what one provider's server accepts; false omits the parameter.
 type AssistantCapabilities struct {
 	ToolChoice       bool `json:"ToolChoice"`
 	ParallelTools    bool `json:"ParallelTools"`
 	Streaming        bool `json:"Streaming"`
 	CompletionTokens bool `json:"CompletionTokens"`
+	StreamUsage      bool `json:"StreamUsage"`
 }
 
 type AssistantProvider struct {

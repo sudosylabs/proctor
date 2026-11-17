@@ -64,6 +64,10 @@ func assistantProfileResource(app *administration.Service) route.Resource {
 	h := assistantProfileHandlers{app: app}
 	return route.NewResource(
 		"assistant-profiles",
+		route.Endpoint{Method: http.MethodGet, Path: "/assistant-profiles/{assistant_profile_id}/usage", Auth: route.AuthPrincipalRequired,
+			Errors: []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "assistant_profile.invalid",
+				"assistant_profile.unavailable", "assistant_profile.not_found", "request.invalid", "resource.not_found"}, Handle: h.usage},
+
 		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/assistant-profiles",
@@ -165,4 +169,28 @@ func assistantProfileResponseFrom(profile *model.AssistantProfile) assistantProf
 		response.RetiredAt = model.FormatRFC3339(profile.RetiredAt)
 	}
 	return response
+}
+
+type assistantProfileUsageResponse struct {
+	Attempts            int64 `json:"attempts"`
+	Turns               int64 `json:"turns"`
+	InputTokens         int64 `json:"input_tokens"`
+	OutputTokens        int64 `json:"output_tokens"`
+	ToolCalls           int64 `json:"tool_calls"`
+	Commands            int64 `json:"commands"`
+	CommandMilliseconds int64 `json:"command_milliseconds"`
+}
+
+func (h assistantProfileHandlers) usage(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AssistantProfileID](request, "assistant_profile_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	result, err := h.app.AssistantProfileUsage(request.Context, request.Invocation(), id)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, assistantProfileUsageResponse{Attempts: result.Attempts, Turns: result.Turns,
+		InputTokens: result.InputTokens, OutputTokens: result.OutputTokens, ToolCalls: result.ToolCalls,
+		Commands: result.Commands, CommandMilliseconds: result.CommandMilliseconds}), nil
 }

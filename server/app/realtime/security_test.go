@@ -189,7 +189,7 @@ func TestCompleteHandlerRegistrationFailureIsTerminal(t *testing.T) {
 	err := service.SetClusterFanout(fanout)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "register authorization.invalidated cluster handler")
-	wantRegistered := []string{clusterEventPublication, clusterEventExamAttemptUnbound,
+	wantRegistered := []string{clusterEventPublication, "assistant.changed", clusterEventExamAttemptUnbound,
 		clusterEventSessionRevoked, clusterEventAuthorizationInvalidated}
 	require.Equal(t, wantRegistered, registered, "registration order")
 	err = service.SetClusterFanout(&recordingFanout{})

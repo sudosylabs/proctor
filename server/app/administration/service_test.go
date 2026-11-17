@@ -350,3 +350,5 @@ type capabilityMailHealth struct{}
 func (capabilityMailHealth) Code() string { return mail.HealthHealthy }
 
 func (c *catalogFake) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (c *catalogFake) AssistantTranscript() store.AssistantTranscriptStore { return nil }

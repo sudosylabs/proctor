@@ -1,0 +1,43 @@
+{
+  "title": "Assistant tool call",
+  "description": "The assistant started or ended a tool call. Only the tool and the outcome are included; the arguments and result are in the transcript.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "turn_id",
+    "call_id",
+    "tool",
+    "phase"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "turn_id": {
+      "$ref": "id.json"
+    },
+    "call_id": {
+      "$ref": "id.json"
+    },
+    "tool": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "started",
+        "ended"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "maxLength": 32
+    }
+  }
+}

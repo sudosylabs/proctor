@@ -9,11 +9,11 @@
 package openaicompat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
-	"sort"
 
 	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/platform/modelgateway"
@@ -36,8 +36,29 @@ type function struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
-	Arguments   string          `json:"arguments,omitempty"`
+	Arguments   arguments       `json:"arguments,omitempty"`
 }
+
+// arguments is a JSON string on the wire, but some servers send the decoded object instead.
+type arguments string
+
+func (a *arguments) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	switch {
+	case bytes.Equal(data, []byte("null")):
+		*a = ""
+	case len(data) > 0 && data[0] == '"':
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+		*a = arguments(text)
+	default:
+		*a = arguments(data)
+	}
+	return nil
+}
+
 type toolCall struct {
 	Index    int      `json:"index,omitempty"`
 	ID       string   `json:"id,omitempty"`
@@ -82,7 +103,11 @@ func (g *Gateway) Stream(ctx context.Context, request assistant.ModelRequest) (a
 		}
 		next := message{Role: item.Role, Content: item.Text, ToolCallID: item.CallID}
 		for _, call := range item.Calls {
-			next.ToolCalls = append(next.ToolCalls, toolCall{ID: call.ID, Type: "function", Function: function{Name: call.Name, Arguments: string(call.Arguments)}})
+			encoded, valid := modelgateway.ToolArguments(call.Arguments)
+			if call.ID == "" || call.Name == "" || !valid {
+				return nil, &assistant.ModelError{Class: assistant.ModelInvalid}
+			}
+			next.ToolCalls = append(next.ToolCalls, toolCall{ID: call.ID, Type: "function", Function: function{Name: call.Name, Arguments: arguments(encoded)}})
 		}
 		wire.Messages = append(wire.Messages, next)
 	}
@@ -98,7 +123,7 @@ func (g *Gateway) Stream(ctx context.Context, request assistant.ModelRequest) (a
 			wire.ParallelTools = &parallel
 		}
 	}
-	if wire.Stream {
+	if wire.Stream && g.capabilities.StreamUsage {
 		wire.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
 	encoded, err := json.Marshal(wire)
@@ -110,7 +135,7 @@ func (g *Gateway) Stream(ctx context.Context, request assistant.ModelRequest) (a
 		return nil, err
 	}
 	stream := &modelStream{body: response.Body, decoder: modelgateway.NewSSEDecoder(response.Body),
-		ctx: ctx, inputBytes: int64(len(encoded)), outputLimit: request.MaxOutputTokens, calls: map[int]*callState{}}
+		ctx: ctx, inputBytes: int64(len(encoded)), outputLimit: request.MaxOutputTokens, slots: map[int]*callState{}}
 	if !wire.Stream {
 		if err := stream.readComplete(); err != nil {
 			_ = response.Body.Close()
@@ -134,25 +159,26 @@ type choice struct {
 	Finish  string  `json:"finish_reason"`
 }
 type chunk struct {
-	Choices []choice   `json:"choices"`
-	Usage   *wireUsage `json:"usage"`
-	Error   *struct {
-		Code string `json:"code"`
-		Type string `json:"type"`
-	} `json:"error"`
+	Choices []choice        `json:"choices"`
+	Usage   *wireUsage      `json:"usage"`
+	Error   json.RawMessage `json:"error"`
 }
 type callState struct {
-	id      string
-	name    string
-	started bool
+	id        string
+	name      string
+	started   bool
+	arguments bytes.Buffer
 }
 type modelStream struct {
-	body        io.ReadCloser
-	decoder     *modelgateway.SSEDecoder
-	ctx         context.Context
-	queue       []assistant.ModelEvent
-	calls       map[int]*callState
+	body    io.ReadCloser
+	decoder *modelgateway.SSEDecoder
+	ctx     context.Context
+	queue   []assistant.ModelEvent
+	// calls keeps response order; slots maps the provider's index to the call it is filling.
+	calls       []*callState
+	slots       map[int]*callState
 	usage       *assistant.ModelUsage
+	usageFinal  bool
 	inputBytes  int64
 	outputBytes int64
 	outputLimit int64
@@ -168,6 +194,7 @@ func (s *modelStream) Next() (assistant.ModelEvent, error) {
 		}
 		data, err := s.decoder.Next()
 		if err != nil {
+			// Some servers end the body after the finish chunk without [DONE].
 			if errors.Is(err, io.EOF) && s.finish != "" {
 				s.end(nil)
 			} else {
@@ -184,27 +211,23 @@ func (s *modelStream) Next() (assistant.ModelEvent, error) {
 			s.end(&assistant.ModelError{Class: assistant.ModelUnavailable})
 			continue
 		}
-		if value.Error != nil {
-			s.end(modelgateway.Classify(500, value.Error.Code+" "+value.Error.Type))
+		if hasError(value.Error) {
+			s.end(modelgateway.StreamFailure(value.Error))
 			continue
 		}
-		if err = s.accept(value); err != nil {
-			s.end(&assistant.ModelError{Class: assistant.ModelInvalid})
+		if failure := s.accept(value); failure != nil {
+			s.end(failure)
 		}
 	}
 	event := s.queue[0]
 	s.queue = s.queue[1:]
 	return event, nil
 }
-func (s *modelStream) accept(value chunk) error {
-	if value.Usage != nil {
-		u := value.Usage
-		usage := assistant.ModelUsage{Input: u.Input - u.Details.Cached, CacheRead: u.Details.Cached, Output: u.Output}
-		if !usage.Valid() {
-			return errors.New("invalid model usage")
-		}
-		s.usage = &usage
-	}
+func hasError(value json.RawMessage) bool {
+	value = bytes.TrimSpace(value)
+	return len(value) > 0 && !bytes.Equal(value, []byte("null"))
+}
+func (s *modelStream) accept(value chunk) *assistant.ModelError {
 	for _, choice := range value.Choices {
 		if choice.Index != 0 {
 			continue
@@ -216,12 +239,12 @@ func (s *modelStream) accept(value chunk) error {
 		}
 		for _, call := range choice.Delta.ToolCalls {
 			if err := s.acceptCall(call); err != nil {
-				return err
+				return modelgateway.MalformedToolCall()
 			}
 		}
 		if choice.Finish != "" {
 			switch choice.Finish {
-			case "stop":
+			case "stop", "eos":
 				s.finish = "end_turn"
 			case "tool_calls", "function_call":
 				s.finish = "tool_use"
@@ -230,25 +253,38 @@ func (s *modelStream) accept(value chunk) error {
 			case "content_filter":
 				s.finish = "refusal"
 			default:
-				return errors.New("unknown model stop reason")
+				return &assistant.ModelError{Class: assistant.ModelInvalid}
 			}
 		}
+	}
+	// Usage is read after the choices so a server that puts it on the finish chunk counts as final.
+	// vLLM's continuous usage arrives on every chunk and is only final once the finish is known.
+	if value.Usage != nil {
+		u := value.Usage
+		usage := assistant.ModelUsage{Input: u.Input - u.Details.Cached, CacheRead: u.Details.Cached, Output: u.Output}
+		if u.Details.Cached > u.Input || !usage.Valid() {
+			return &assistant.ModelError{Class: assistant.ModelInvalid}
+		}
+		s.usage = &usage
+		s.usageFinal = s.finish != "" || len(value.Choices) == 0
 	}
 	return nil
 }
 func (s *modelStream) acceptCall(call toolCall) error {
-	if call.Index < 0 || call.Index >= 16 {
-		return errors.New("model tool count exceeds bound")
+	if call.Index < 0 || call.Index >= modelgateway.MaximumToolCalls {
+		return errors.New("model tool index exceeds bound")
 	}
-	state := s.calls[call.Index]
-	if state == nil {
-		state = &callState{}
-		s.calls[call.Index] = state
-	}
-	if call.ID != "" {
-		if state.started && state.id != call.ID {
-			return errors.New("model tool ID changed")
+	state := s.slots[call.Index]
+	// A new ID on a started slot opens a new call: older Ollama releases give every call index 0.
+	if state == nil || (call.ID != "" && state.started && state.id != call.ID) {
+		if len(s.calls) >= modelgateway.MaximumToolCalls {
+			return errors.New("model tool count exceeds bound")
 		}
+		state = &callState{}
+		s.slots[call.Index] = state
+		s.calls = append(s.calls, state)
+	}
+	if call.ID != "" && !state.started {
 		state.id = call.ID
 	}
 	if call.Function.Name != "" {
@@ -260,7 +296,11 @@ func (s *modelStream) acceptCall(call toolCall) error {
 	if len(state.id) > 256 || len(state.name) > 64 {
 		return errors.New("model tool identity exceeds bound")
 	}
-	if !state.started && state.id != "" && state.name != "" {
+	if !state.started && state.name != "" {
+		// llama.cpp and some vLLM parsers omit the ID; the call still needs one for its result.
+		if state.id == "" {
+			state.id = modelgateway.SyntheticCallID()
+		}
 		state.started = true
 		s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelToolCallStart, ID: state.id, Name: state.name})
 	}
@@ -269,8 +309,39 @@ func (s *modelStream) acceptCall(call toolCall) error {
 			return errors.New("model tool arguments precede identity")
 		}
 		s.outputBytes += int64(len(call.Function.Arguments))
-		s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelToolCallArgsDelta, ID: state.id, Text: call.Function.Arguments})
+		state.arguments.WriteString(string(call.Function.Arguments))
+		s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelToolCallArgsDelta, ID: state.id, Text: string(call.Function.Arguments)})
 	}
+	return nil
+}
+
+// finishCalls ends every call only once all of them parse, so no call runs from a broken response.
+func (s *modelStream) finishCalls() *assistant.ModelError {
+	if s.finish == "tool_use" && len(s.calls) == 0 {
+		// The server meant to call a tool but its parser recovered nothing.
+		return modelgateway.MalformedToolCall()
+	}
+	events := make([]assistant.ModelEvent, 0, 2*len(s.calls))
+	seen := make(map[string]bool, len(s.calls))
+	for _, call := range s.calls {
+		if !call.started || seen[call.id] {
+			return modelgateway.MalformedToolCall()
+		}
+		seen[call.id] = true
+		arguments, valid := modelgateway.ToolArguments(call.arguments.Bytes())
+		if !valid {
+			return modelgateway.MalformedToolCall()
+		}
+		if call.arguments.Len() == 0 {
+			events = append(events, assistant.ModelEvent{Kind: assistant.ModelToolCallArgsDelta, ID: call.id, Text: string(arguments)})
+		}
+		events = append(events, assistant.ModelEvent{Kind: assistant.ModelToolCallEnd, ID: call.id})
+	}
+	if len(s.calls) > 0 && s.finish == "end_turn" {
+		// vLLM and older Ollama report "stop" even when the response is a tool call.
+		s.finish = "tool_use"
+	}
+	s.queue = append(s.queue, events...)
 	return nil
 }
 func (s *modelStream) end(failure *assistant.ModelError) {
@@ -279,23 +350,17 @@ func (s *modelStream) end(failure *assistant.ModelError) {
 	}
 	s.ended = true
 	if failure == nil {
-		indices := make([]int, 0, len(s.calls))
-		for index := range s.calls {
-			indices = append(indices, index)
-		}
-		sort.Ints(indices)
-		for _, index := range indices {
-			call := s.calls[index]
-			if !call.started {
-				failure = &assistant.ModelError{Class: assistant.ModelInvalid}
-				break
-			}
-			s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelToolCallEnd, ID: call.id})
-		}
+		failure = s.finishCalls()
 	}
 	usage := assistant.ModelUsage{Input: s.inputBytes, Output: max(s.outputBytes, s.outputLimit), Estimated: true}
 	if s.usage != nil {
-		usage = *s.usage
+		if s.usageFinal && failure == nil {
+			usage = *s.usage
+		} else {
+			// Partial counts undercount a cut stream, so the larger figure is reserved.
+			usage = assistant.ModelUsage{Input: s.usage.Input, CacheRead: s.usage.CacheRead,
+				Output: max(s.usage.Output, s.outputBytes, s.outputLimit), Estimated: true}
+		}
 	}
 	s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelUsageEvent, Usage: usage})
 	reason := s.finish
@@ -322,20 +387,21 @@ func (s *modelStream) readComplete() error {
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return &assistant.ModelError{Class: assistant.ModelUnavailable}
 	}
+	if hasError(value.Error) {
+		return modelgateway.StreamFailure(value.Error)
+	}
 	for index := range value.Choices {
 		value.Choices[index].Delta = value.Choices[index].Message
 		for callIndex := range value.Choices[index].Delta.ToolCalls {
 			value.Choices[index].Delta.ToolCalls[callIndex].Index = callIndex
 		}
 	}
-	if err := s.accept(value); err != nil {
-		return &assistant.ModelError{Class: assistant.ModelInvalid}
+	if failure := s.accept(value); failure != nil {
+		return failure
 	}
-	if value.Error != nil {
-		s.end(modelgateway.Classify(500, value.Error.Code+" "+value.Error.Type))
-	} else {
-		s.end(nil)
-	}
+	// A complete response carries its usage with the choices, so it is final.
+	s.usageFinal = s.usage != nil
+	s.end(nil)
 	return nil
 }
 

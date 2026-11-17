@@ -9,6 +9,7 @@
 package anthropic
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -77,7 +78,11 @@ func (g *Gateway) Stream(ctx context.Context, request assistant.ModelRequest) (a
 				next.Content = append(next.Content, block{Type: "text", Text: item.Text})
 			}
 			for _, call := range item.Calls {
-				next.Content = append(next.Content, block{Type: "tool_use", ID: call.ID, Name: call.Name, Input: call.Arguments})
+				input, valid := modelgateway.ToolArguments(call.Arguments)
+				if call.ID == "" || call.Name == "" || !valid {
+					return nil, &assistant.ModelError{Class: assistant.ModelInvalid}
+				}
+				next.Content = append(next.Content, block{Type: "tool_use", ID: call.ID, Name: call.Name, Input: input})
 			}
 		case "tool":
 			next.Role = "user"
@@ -93,7 +98,12 @@ func (g *Gateway) Stream(ctx context.Context, request assistant.ModelRequest) (a
 		}
 	}
 	for _, item := range request.Tools {
-		wire.Tools = append(wire.Tools, tool{Name: item.Name, Description: item.Description, InputSchema: item.Parameters})
+		schema := item.Parameters
+		if len(schema) == 0 {
+			// The Messages API requires a schema even for a tool without parameters.
+			schema = json.RawMessage(`{"type":"object"}`)
+		}
+		wire.Tools = append(wire.Tools, tool{Name: item.Name, Description: item.Description, InputSchema: schema})
 	}
 	if len(wire.Tools) > 0 && g.capabilities.ToolChoice {
 		wire.ToolChoice = &toolChoice{Type: "auto"}
@@ -143,15 +153,14 @@ type document struct {
 		PartialJSON string `json:"partial_json"`
 		StopReason  string `json:"stop_reason"`
 	} `json:"delta"`
-	Error *struct {
-		Type string `json:"type"`
-	} `json:"error"`
+	Error json.RawMessage `json:"error"`
 }
 type callState struct {
 	id        string
 	name      string
 	initial   json.RawMessage
-	arguments bool
+	streamed  bool
+	arguments bytes.Buffer
 	stopped   bool
 }
 type modelStream struct {
@@ -223,7 +232,8 @@ func (s *modelStream) accept(event document) error {
 			if call == nil || call.stopped {
 				return errors.New("model arguments have no tool call")
 			}
-			call.arguments = true
+			call.streamed = true
+			call.arguments.WriteString(event.Delta.PartialJSON)
 			s.outputBytes += int64(len(event.Delta.PartialJSON))
 			s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelToolCallArgsDelta, ID: call.id, Text: event.Delta.PartialJSON})
 		}
@@ -239,11 +249,7 @@ func (s *modelStream) accept(event document) error {
 	case "message_stop":
 		s.end(nil)
 	case "error":
-		if event.Error == nil {
-			s.end(&assistant.ModelError{Class: assistant.ModelUnavailable})
-		} else {
-			s.end(modelgateway.Classify(500, event.Error.Type))
-		}
+		s.end(modelgateway.StreamFailure(event.Error))
 	}
 	return nil
 }
@@ -259,8 +265,13 @@ func (s *modelStream) startBlock(index int, value block) error {
 	case "text":
 		s.text(value.Text)
 	case "tool_use":
-		if len(s.calls) >= 16 || value.ID == "" || len(value.ID) > 256 || value.Name == "" || len(value.Name) > 64 {
+		if len(s.calls) >= modelgateway.MaximumToolCalls || value.ID == "" || len(value.ID) > 256 || value.Name == "" || len(value.Name) > 64 {
 			return errors.New("model tool identity exceeds bound")
+		}
+		for _, call := range s.calls {
+			if call.id == value.ID {
+				return errors.New("model tool ID reused")
+			}
 		}
 		s.calls[index] = &callState{id: value.ID, name: value.Name, initial: value.Input}
 		s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelToolCallStart, ID: value.ID, Name: value.Name})
@@ -274,10 +285,15 @@ func (s *modelStream) stopBlock(index int) error {
 	}
 	s.blocks[index] = ""
 	if call := s.calls[index]; call != nil {
-		if !call.arguments {
-			arguments := call.initial
-			if len(arguments) == 0 {
-				arguments = json.RawMessage(`{}`)
+		// Streamed input replaces the empty object announced at block start.
+		if call.streamed {
+			if _, valid := modelgateway.ToolArguments(call.arguments.Bytes()); !valid {
+				return errMalformedArguments
+			}
+		} else {
+			arguments, valid := modelgateway.ToolArguments(call.initial)
+			if !valid {
+				return errMalformedArguments
 			}
 			s.outputBytes += int64(len(arguments))
 			s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelToolCallArgsDelta, ID: call.id, Text: string(arguments)})
@@ -287,6 +303,9 @@ func (s *modelStream) stopBlock(index int) error {
 	}
 	return nil
 }
+
+var errMalformedArguments = errors.New("model tool arguments are not a JSON object")
+
 func (s *modelStream) text(text string) {
 	if text != "" {
 		s.outputBytes += int64(len(text))
@@ -295,8 +314,14 @@ func (s *modelStream) text(text string) {
 }
 func (s *modelStream) setFinish(reason string) error {
 	switch reason {
-	case "end_turn", "tool_use", "max_tokens", "stop_sequence", "refusal":
+	case "end_turn", "tool_use", "max_tokens", "refusal":
 		s.finish = reason
+		return nil
+	case "stop_sequence":
+		s.finish = "end_turn"
+		return nil
+	case "model_context_window_exceeded":
+		s.finish = "max_tokens"
 		return nil
 	default:
 		return errors.New("unknown model stop reason")
@@ -333,9 +358,12 @@ func (s *modelStream) end(failure *assistant.ModelError) {
 	}
 	s.ended = true
 	if failure == nil {
+		if s.finish == "tool_use" && len(s.calls) == 0 {
+			failure = modelgateway.MalformedToolCall()
+		}
 		for _, call := range s.calls {
 			if !call.stopped {
-				failure = &assistant.ModelError{Class: assistant.ModelInvalid}
+				failure = modelgateway.MalformedToolCall()
 				break
 			}
 		}
@@ -346,7 +374,11 @@ func (s *modelStream) end(failure *assistant.ModelError) {
 	if !s.finalUsage {
 		s.usage.Output = max(s.outputBytes, s.outputLimit)
 	}
-	s.usage.Estimated = !s.inputKnown || !s.finalUsage
+	s.usage.Estimated = !s.inputKnown || !s.finalUsage || failure != nil
+	if failure != nil {
+		// A failed stream may have produced more than its last cumulative count.
+		s.usage.Output = max(s.usage.Output, s.outputBytes, s.outputLimit)
+	}
 	s.queue = append(s.queue, assistant.ModelEvent{Kind: assistant.ModelUsageEvent, Usage: s.usage})
 	reason := s.finish
 	if reason == "" {
@@ -372,13 +404,12 @@ func (s *modelStream) readComplete() error {
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return &assistant.ModelError{Class: assistant.ModelUnavailable}
 	}
-	if value.Error != nil {
-		s.end(modelgateway.Classify(500, value.Error.Type))
-		return nil
+	if len(bytes.TrimSpace(value.Error)) > 0 && string(bytes.TrimSpace(value.Error)) != "null" {
+		return modelgateway.StreamFailure(value.Error)
 	}
 	for index, block := range value.Content {
 		if s.startBlock(index, block) != nil || s.stopBlock(index) != nil {
-			return &assistant.ModelError{Class: assistant.ModelInvalid}
+			return modelgateway.MalformedToolCall()
 		}
 	}
 	if s.setFinish(value.StopReason) != nil || s.acceptUsage(value.Usage, true) != nil {

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -23,11 +24,22 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 )
 
+// Capabilities describe what one configured server accepts. The zero value is the most conservative
+// request shape, because "OpenAI-compatible" servers disagree on optional parameters.
 type Capabilities struct {
-	ToolChoice       bool
-	ParallelTools    bool
-	Streaming        bool
+	// ToolChoice sends tool_choice "auto"; Ollama ignores it and some servers reject it.
+	ToolChoice bool
+	// ParallelTools asks the server to call at most one tool per turn. Without it the parameter is
+	// omitted and the adapter accepts several calls in one response. The Messages API carries it
+	// inside tool_choice, so there it also needs ToolChoice.
+	ParallelTools bool
+	// Streaming requests server-sent events; otherwise one complete response is read.
+	Streaming bool
+	// CompletionTokens sends max_completion_tokens instead of the older max_tokens.
 	CompletionTokens bool
+	// StreamUsage sends stream_options.include_usage. Without it, or when a server drops the final
+	// usage chunk, usage is estimated and marked as such. The Messages API always streams usage.
+	StreamUsage bool
 }
 type Config struct {
 	BaseURL          string
@@ -127,43 +139,112 @@ func (b *boundedBody) Read(buffer []byte) (int, error) {
 }
 func (b *boundedBody) Close() error { return b.source.Close() }
 
+// HTTPFailure reads a bounded error document only to classify it; no provider text leaves the gateway.
 func HTTPFailure(response *http.Response) *assistant.ModelError {
-	var document struct {
-		Error struct {
-			Code string `json:"code"`
-			Type string `json:"type"`
-		} `json:"error"`
-	}
-	_ = json.NewDecoder(io.LimitReader(response.Body, 8192)).Decode(&document)
-	failure := Classify(response.StatusCode, document.Error.Code+" "+document.Error.Type)
-	if failure.Class == assistant.ModelRateLimited {
-		failure.RetryAfter = retryAfter(response.Header.Get("Retry-After"), time.Now())
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 8192))
+	failure := Failure(response.StatusCode, data)
+	if failure.Class == assistant.ModelRateLimited || failure.Class == assistant.ModelOverloaded {
+		failure.RetryAfter = retryAfter(response.Header, time.Now())
 	}
 	return failure
 }
+
+// StreamFailure classifies an error carried inside an otherwise successful stream.
+func StreamFailure(data json.RawMessage) *assistant.ModelError {
+	return Failure(0, data)
+}
+
+// errorBody accepts the OpenAI, Anthropic and vLLM shapes: the code may be a string or a number,
+// and the body may be nested under "error", sit at the top level, or be a bare string (Ollama).
+type errorBody struct {
+	Code    json.RawMessage `json:"code"`
+	Type    string          `json:"type"`
+	Message string          `json:"message"`
+	Error   json.RawMessage `json:"error"`
+}
+
+// Failure classifies a provider error document; malformed documents fall back to the status.
+func Failure(status int, data []byte) *assistant.ModelError {
+	var body errorBody
+	_ = json.Unmarshal(data, &body)
+	if nested := bytes.TrimSpace(body.Error); len(nested) > 0 {
+		var inner errorBody
+		var text string
+		if nested[0] == '{' && json.Unmarshal(nested, &inner) == nil {
+			body = inner
+		} else if json.Unmarshal(nested, &text) == nil {
+			body = errorBody{Message: text}
+		}
+	}
+	code := strings.Trim(string(body.Code), `"`)
+	if status == 0 {
+		if numeric, err := strconv.Atoi(code); err == nil && numeric >= 400 && numeric < 600 {
+			status = numeric
+		} else {
+			status = http.StatusInternalServerError
+		}
+	}
+	failure := Classify(status, strings.ToLower(code+" "+body.Type))
+	if failure.Class != assistant.ModelRateLimited && contextExceeded(body.Message) {
+		failure.Class = assistant.ModelContextTooLong
+	}
+	return failure
+}
+
+// contextExceeded recognizes the context-window messages of servers that reply with a plain 400.
+func contextExceeded(message string) bool {
+	message = strings.ToLower(message)
+	for _, marker := range []string{"maximum context length", "context length", "context_length", "context window",
+		"prompt is too long", "too many tokens", "exceeds the model's"} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func Classify(status int, code string) *assistant.ModelError {
 	class := assistant.ModelUnavailable
 	switch {
+	case strings.Contains(code, "insufficient_quota") || strings.Contains(code, "billing"):
+		// Exhausted provider credit is terminal; retrying after a delay cannot succeed.
+		class = assistant.ModelUnavailable
 	case status == 429 || strings.Contains(code, "rate_limit"):
 		class = assistant.ModelRateLimited
 	case status == 503 || status == 529 || strings.Contains(code, "overloaded"):
 		class = assistant.ModelOverloaded
-	case status == 413 || strings.Contains(code, "context_length") || strings.Contains(code, "context_too_long"):
+	case status == 413 || strings.Contains(code, "context_length") || strings.Contains(code, "context_too_long") ||
+		strings.Contains(code, "request_too_large"):
 		class = assistant.ModelContextTooLong
 	case status >= 400 && status < 500 || strings.Contains(code, "invalid_request") || strings.Contains(code, "authentication"):
-
 		class = assistant.ModelInvalid
 	}
 	return &assistant.ModelError{Class: class}
 }
-func retryAfter(value string, now time.Time) time.Duration {
-	if seconds, err := strconv.ParseInt(value, 10, 32); err == nil {
-		return min(max(time.Duration(seconds)*time.Second, 0), 24*time.Hour)
+
+// retryAfter prefers the millisecond header some OpenAI-compatible servers send, then the HTTP one.
+func retryAfter(header http.Header, now time.Time) time.Duration {
+	if milliseconds, err := strconv.ParseFloat(header.Get("Retry-After-Ms"), 64); err == nil {
+		return boundedDelay(milliseconds, time.Millisecond)
+	}
+	value := header.Get("Retry-After")
+	if seconds, err := strconv.ParseFloat(value, 64); err == nil {
+		return boundedDelay(seconds, time.Second)
 	}
 	if at, err := http.ParseTime(value); err == nil {
-		return min(max(at.Sub(now), 0), 24*time.Hour)
+		return min(max(at.Sub(now), 0), maximumRetryAfter)
 	}
 	return 0
+}
+
+const maximumRetryAfter = 24 * time.Hour
+
+// boundedDelay clamps before converting, so NaN, infinities and huge values cannot overflow.
+func boundedDelay(value float64, unit time.Duration) time.Duration {
+	if math.IsNaN(value) || value <= 0 {
+		return 0
+	}
+	return time.Duration(min(value, float64(maximumRetryAfter/unit)) * float64(unit))
 }
 
 // Router chooses only an operator-configured provider, without fallback spend.

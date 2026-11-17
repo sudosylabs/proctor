@@ -630,3 +630,5 @@ func TestAcademicAdministrationSensitiveBatchRequiresStrongRecentInteractiveSess
 }
 
 func (c *batchCatalog) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (c *batchCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }

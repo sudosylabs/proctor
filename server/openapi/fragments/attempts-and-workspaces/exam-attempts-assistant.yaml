@@ -1,0 +1,622 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/messages:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    post:
+      operationId: sendCandidateAssistantMessage
+      summary: Ask the assistant
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Records the candidate's message and starts the assistant's reply, which streams to the candidate's
+        originating session as exam_attempt_assistant_* events and is recorded in the transcript. The answer is 202 with
+        the turn the message started; a retry with the same Idempotency-Key and text returns the same turn without
+        starting another. One turn runs at a time per Attempt: while one runs the request fails with
+        exam.attempt.assistant_busy. The request also fails when the Exam Revision does not offer the assistant,
+        when the installation has it off, and when the Attempt's allowance of turns or tokens is spent. The
+        assistant acts only while the candidate's own access holds: a seal or the end of the participation ends a
+        running turn, which the transcript records.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.sitting_not_open
+        - exam.attempt.state_conflict
+        - exam.attempt.connection_closed
+        - exam.attempt.assistant_unavailable
+        - exam.attempt.assistant_disabled
+        - audit.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - exam.attempt.assistant_busy
+        - exam.attempt.assistant_budget_exhausted
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        description: The candidate's message, 1 to 16 KiB of text.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendAssistantMessageRequest'
+            example:
+              text: Why does my loop never end?
+      responses:
+        '202':
+          description: The message was recorded and the reply started
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantTurnStartedResponse'
+              example:
+                conversation_id: 8kpous3h9nfemqtwz47ydgjcx1
+                turn_id: h9nfemqtwz47ydgjcx1ia56br8
+                replayed: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/turns:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listCandidateAssistantTranscript
+      summary: Read the assistant transcript
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Pages the candidate's own assistant transcript in record order: each message, reply, tool call, approval
+        and output check, as recorded. Realtime deltas are hints; this is what a client keeps, and it reloads from
+        here after a dropped socket. It needs only the candidate's Session, so the transcript stays readable after
+        submission. The inventory covers the whole transcript, and at the seal its digest is bound to the
+        Submission.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.assistant_unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - exam.delivery.metadata_capacity
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AssistantTranscript'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/turns/{turn_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - name: turn_id
+        in: path
+        required: true
+        description: The running turn to stop.
+        schema:
+          $ref: '#/components/schemas/ID'
+    post:
+      operationId: cancelCandidateAssistantTurn
+      summary: Stop the assistant's turn
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Stops the running turn wherever it runs: the model call ends, any assistant command is killed, and the
+        transcript records the turn as canceled. Tokens already spent stay spent.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --request POST \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/8kpous3h9nfemqtwz47ydgjcx1/assistant/turns/h9nfemqtwz47ydgjcx1ia56br8/cancel' \
+              --header 'Authorization: Bearer <token>' \
+              --header 'X-Proctor-Attempt-Connection-ID: <connection-id>' \
+              --header 'X-Proctor-Attempt-Credential: <continuity-credential>'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.sitting_not_open
+        - exam.attempt.state_conflict
+        - exam.attempt.connection_closed
+        - exam.attempt.assistant_unavailable
+        - exam.attempt.assistant_disabled
+        - exam.attempt.assistant_turn_not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - audit.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '204':
+          description: The turn was stopped
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/approvals/{call_id}:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - name: call_id
+        in: path
+        required: true
+        description: The tool call that waits for the candidate's approval.
+        schema:
+          $ref: '#/components/schemas/ID'
+    post:
+      operationId: decideCandidateAssistantApproval
+      summary: Approve or decline an assistant command or edit
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Answers an exam_attempt_assistant_approval_requested event. When the Exam asks for approvals, each command
+        and each edit waits for the candidate; an unanswered request is declined after five minutes. The answer is
+        recorded once: a second answer, or one after the expiry, fails with
+        exam.attempt.assistant_approval_conflict.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.sitting_not_open
+        - exam.attempt.state_conflict
+        - exam.attempt.connection_closed
+        - exam.attempt.assistant_unavailable
+        - exam.attempt.assistant_disabled
+        - exam.attempt.assistant_approval_not_found
+        - exam.attempt.assistant_approval_conflict
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - audit.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      requestBody:
+        required: true
+        description: Accept or decline this pending command or edit.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideAssistantApprovalRequest'
+            example:
+              decision: accept
+      responses:
+        '204':
+          description: The answer was recorded
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    AssistantTranscript:
+      description: One page of an assistant transcript and the inventory that binds all of it
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AssistantTranscriptResponse'
+          example:
+            items:
+              - sequence: 1
+                created_at: '2026-08-01T09:30:00Z'
+                gap: false
+                turn:
+                  conversation_id: 8kpous3h9nfemqtwz47ydgjcx1
+                  turn_id: h9nfemqtwz47ydgjcx1ia56br8
+                  role: candidate
+                  text: Why does my loop never end?
+                  model: ''
+                  usage:
+                    input: 0
+                    cache_read: 0
+                    cache_write: 0
+                    output: 0
+                    estimated: false
+                  final: true
+                  stop_reason: ''
+            inventory:
+              records: 1
+              bytes: 312
+              gaps: 0
+              digest: sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+  schemas:
+    SendAssistantMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 16384
+          description: The message; line breaks and tabs are its only control characters.
+    AssistantTurnStartedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - conversation_id
+        - turn_id
+        - replayed
+      properties:
+        conversation_id:
+          $ref: '#/components/schemas/ID'
+        turn_id:
+          $ref: '#/components/schemas/ID'
+        replayed:
+          type: boolean
+          description: Whether this answers a retry of an earlier send.
+    DecideAssistantApprovalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum:
+            - accept
+            - decline
+    AssistantTranscriptResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - inventory
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/AssistantRecord'
+        inventory:
+          $ref: '#/components/schemas/AssistantInventory'
+        next_cursor:
+          type: string
+          description: >-
+            Token for the next page. Send it back unchanged as `cursor`, and do not parse it. Omitted on the last
+            page.
+    AssistantRecord:
+      type: object
+      additionalProperties: false
+      description: >-
+        One transcript record, a turn or a tool call. Gap marks a record the server wrote for a turn that ended
+        abnormally, such as at a seal or a provider failure.
+      required:
+        - sequence
+        - created_at
+        - gap
+      properties:
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        gap:
+          type: boolean
+        turn:
+          $ref: '#/components/schemas/AssistantTurn'
+        call:
+          $ref: '#/components/schemas/AssistantCall'
+    AssistantTurn:
+      type: object
+      additionalProperties: false
+      description: >-
+        A candidate message, or part of a reply. A reply's text and its end are separate records; the final record
+        carries the stop reason and the turn's usage, which includes any rewrite.
+      required:
+        - conversation_id
+        - turn_id
+        - role
+        - text
+        - model
+        - usage
+        - final
+        - stop_reason
+      properties:
+        conversation_id:
+          $ref: '#/components/schemas/ID'
+        turn_id:
+          $ref: '#/components/schemas/ID'
+        role:
+          type: string
+          enum:
+            - candidate
+            - assistant
+        text:
+          type: string
+        model:
+          type: string
+          maxLength: 256
+        usage:
+          $ref: '#/components/schemas/AssistantUsage'
+        final:
+          type: boolean
+        stop_reason:
+          type: string
+          enum:
+            - ''
+            - end_turn
+            - tool_use
+            - max_tokens
+            - stop_sequence
+            - refusal
+            - canceled
+            - sealed
+            - access_lost
+            - budget_exhausted
+            - rate_limited
+            - overloaded
+            - invalid
+            - context_too_long
+            - unavailable
+            - lease_expired
+    AssistantUsage:
+      type: object
+      additionalProperties: false
+      description: Tokens a turn used. Estimated marks a figure the server estimated because the provider's count was lost.
+      required:
+        - input
+        - cache_read
+        - cache_write
+        - output
+        - estimated
+      properties:
+        input:
+          type: integer
+          format: int64
+          minimum: 0
+        cache_read:
+          type: integer
+          format: int64
+          minimum: 0
+        cache_write:
+          type: integer
+          format: int64
+          minimum: 0
+        output:
+          type: integer
+          format: int64
+          minimum: 0
+        estimated:
+          type: boolean
+    AssistantCall:
+      type: object
+      additionalProperties: false
+      description: >-
+        One phase of a tool call: requested, decision (an approval answer), reserved (a command slot), completed,
+        or applied (a Pair proposal matched by a candidate batch). A command's reservation names its assistant:N
+        process tag before the process starts. Its completion carries the exit code; the Workspace journal names
+        the call in the author of every change an Agent edit made.
+      required:
+        - conversation_id
+        - turn_id
+        - call_id
+        - tool
+        - phase
+        - arguments
+        - result
+        - outcome
+        - duration_milliseconds
+        - approval
+        - process_tag
+        - truncated
+      properties:
+        conversation_id:
+          $ref: '#/components/schemas/ID'
+        turn_id:
+          $ref: '#/components/schemas/ID'
+        call_id:
+          $ref: '#/components/schemas/ID'
+        tool:
+          type: string
+          enum:
+            - list_files
+            - read_file
+            - search
+            - read_terminal
+            - run_command
+            - propose_edit
+            - apply_edit
+            - output_check
+        phase:
+          type: string
+          enum:
+            - requested
+            - reserved
+            - decision
+            - completed
+            - applied
+        arguments:
+          type: object
+          additionalProperties: true
+          description: The arguments as the model sent them, on the requested phase.
+        result:
+          type: string
+          description: >-
+            Bounded tool result text. On a completed propose_edit call with outcome proposed, this is a JSON
+            object serialized as text, with path (workspace path), base_content_version (the expected current
+            file version, or an empty string for a new file), sha256 (lowercase hexadecimal SHA-256 of the full
+            replacement), size_bytes (replacement UTF-8 byte count), and diff (a complete unified replacement
+            diff). A matching ordinary candidate batch adds an applied phase to this call; the workspace write
+            remains authored by the candidate. Other tools return text, and an applied phase contains a matching
+            marker rather than the proposal object.
+        outcome:
+          type: string
+          enum:
+            - ''
+            - ok
+            - error
+            - declined
+            - canceled
+            - proposed
+            - applied
+            - rewrite
+            - replaced
+        duration_milliseconds:
+          type: integer
+          format: int64
+          minimum: 0
+        approval:
+          type: string
+          enum:
+            - ''
+            - pending
+            - accept
+            - decline
+            - auto
+            - expired
+        process_tag:
+          type: string
+        exit_code:
+          type: integer
+        truncated:
+          type: boolean
+    AssistantInventory:
+      type: object
+      additionalProperties: false
+      description: The transcript's record and byte counts, its gaps, and a SHA-256 digest chained over every record in order.
+      required:
+        - records
+        - bytes
+        - gaps
+        - digest
+      properties:
+        records:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 20000
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        gaps:
+          type: integer
+          format: int64
+          minimum: 0
+        digest:
+          type: string
+          pattern: ^sha256:[0-9a-f]{64}$

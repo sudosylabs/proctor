@@ -396,15 +396,16 @@ func (h examAttemptHandlers) endByManager(request route.Request) (route.Result, 
 	}
 
 	response := examSubmissionReceiptResponse{
-		BrowserActivity: receipt.BrowserActivity,
-		SubmissionID:    receipt.SubmissionID.String(),
-		ReceiptCode:     receipt.ReceiptCode.Display(),
-		ExamAttemptID:   receipt.AttemptID.String(),
-		ExamRevisionID:  receipt.ExamRevisionID.String(),
-		State:           string(receipt.State),
-		WorkspaceCursor: receipt.WorkspaceCursor,
-		ManifestDigest:  receipt.ManifestDigest,
-		SubmittedAt:     model.FormatRFC3339(receipt.SubmittedAt),
+		BrowserActivity:           receipt.BrowserActivity,
+		SubmissionID:              receipt.SubmissionID.String(),
+		ReceiptCode:               receipt.ReceiptCode.Display(),
+		ExamAttemptID:             receipt.AttemptID.String(),
+		ExamRevisionID:            receipt.ExamRevisionID.String(),
+		State:                     string(receipt.State),
+		WorkspaceCursor:           receipt.WorkspaceCursor,
+		ManifestDigest:            receipt.ManifestDigest,
+		AssistantTranscriptDigest: receipt.AssistantTranscriptDigest,
+		SubmittedAt:               model.FormatRFC3339(receipt.SubmittedAt),
 	}
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }

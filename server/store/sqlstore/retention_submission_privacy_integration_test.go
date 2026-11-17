@@ -77,6 +77,15 @@ func TestRetentionSubmissionPrivacy(t *testing.T) {
 			}
 			require.Equal(t, expectedCopies, nativeCopies, "native condition retirement copies")
 			require.Equal(t, expectedRecords, nativeDeliveryCopies, "native condition retirement copies")
+			// The seal binds an assistant inventory to every Submission, so the
+			// guard must let integrity retirement remove it.
+			var assistantInventories int
+			require.NoError(t, s.GetMaster().Get(ctx, &assistantInventories, `SELECT count(*) FROM exam_attempt_assistant_inventories WHERE submission_id=?`, id.String()))
+			expectedInventories := 1
+			if retired {
+				expectedInventories = 0
+			}
+			require.Equal(t, expectedInventories, assistantInventories, "assistant transcript retirement")
 			if !retired {
 				require.Equal(t, 2, sources, "fixture lacks source chain or replay copies")
 				require.GreaterOrEqual(t, privateOutcomes, 1, "fixture lacks source chain or replay copies")

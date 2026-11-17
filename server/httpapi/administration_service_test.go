@@ -742,3 +742,5 @@ func administrationAccessPolicyGrant(userID model.UserID) accesstest.Grant {
 func (c administrationCatalog) AssistantProfile() store.AssistantProfileStore {
 	return c.fixture.assistantProfiles
 }
+
+func (c administrationCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }

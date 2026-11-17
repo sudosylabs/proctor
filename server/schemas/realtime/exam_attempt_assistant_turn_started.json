@@ -1,0 +1,30 @@
+{
+  "title": "Assistant turn started",
+  "description": "The assistant started answering the candidate's message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "turn_id",
+    "conversation_id",
+    "started_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "turn_id": {
+      "$ref": "id.json"
+    },
+    "conversation_id": {
+      "$ref": "id.json"
+    },
+    "started_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

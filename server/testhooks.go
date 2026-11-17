@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/httpapi"
@@ -66,6 +67,10 @@ type TestingOverrides struct {
 	// hosts without isolation. Production always dials the configured
 	// addresses and requires isolation.
 	ExecutionHostDial executionhost.Dialer
+	// AssistantGateway replaces the configured model providers, so tests
+	// script the model. It applies only when the configuration enables the
+	// assistant; production always reaches the configured providers.
+	AssistantGateway assistant.ModelGateway
 	// AllowMissingJobs is for lifecycle-only tests. Production always
 	// requires durable job persistence and a job runtime.
 	AllowMissingJobs bool

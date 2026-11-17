@@ -328,6 +328,21 @@ codes:
   - code: exam.attempt.already_connected
     description: "The Attempt already has an open connection."
     websocket_fallback: true
+  - code: exam.attempt.assistant_approval_conflict
+    description: "The approval request was already answered or has expired."
+  - code: exam.attempt.assistant_approval_not_found
+    description: "No approval request with that call waits for an answer in the running assistant turn."
+  - code: exam.attempt.assistant_budget_exhausted
+    description: "The Attempt has used its assistant allowance of turns, tokens or tool calls; the exam goes on without the assistant."
+  - code: exam.attempt.assistant_busy
+    description: "The assistant is still answering the previous message; wait for its turn to end, or cancel it."
+    retry_after: 5
+  - code: exam.attempt.assistant_disabled
+    description: "The Attempt's Exam Revision does not offer the assistant."
+  - code: exam.attempt.assistant_turn_not_found
+    description: "No assistant turn with that ID is running for the Attempt."
+  - code: exam.attempt.assistant_unavailable
+    description: "The installation has the assistant off, or it cannot be reached now; retry later."
   - code: exam.attempt.browser_activity_conflict
     description: "The Browser Activity report conflicts with the recorded sequence or source."
   - code: exam.attempt.configuration_frozen

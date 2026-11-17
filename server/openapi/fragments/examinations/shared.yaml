@@ -616,6 +616,9 @@ components:
           enum:
             - "off"
             - tutor
+            - reviewer
+            - pair
+            - agent
         approvals:
           type: string
           enum:

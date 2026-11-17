@@ -122,6 +122,8 @@ type localCacheStores struct {
 	environmentProfileOnce         sync.Once
 	assistantProfile               store.AssistantProfileStore
 	assistantProfileOnce           sync.Once
+	assistantTranscript            store.AssistantTranscriptStore
+	assistantTranscriptOnce        sync.Once
 	attemptEnvironment             store.AttemptEnvironmentStore
 	attemptEnvironmentOnce         sync.Once
 	attemptRuntimeLease            store.AttemptRuntimeLeaseStore
@@ -400,6 +402,11 @@ type environmentProfileStore struct {
 
 type assistantProfileStore struct {
 	store.AssistantProfileStore
+	layer *Layer
+}
+
+type assistantTranscriptStore struct {
+	store.AssistantTranscriptStore
 	layer *Layer
 }
 
@@ -968,6 +975,16 @@ func (l *Layer) AssistantProfile() store.AssistantProfileStore {
 	return l.stores.assistantProfile
 }
 
+func (l *Layer) AssistantTranscript() store.AssistantTranscriptStore {
+	l.stores.assistantTranscriptOnce.Do(func() {
+		next := l.Store.AssistantTranscript()
+		if next != nil {
+			l.stores.assistantTranscript = &assistantTranscriptStore{AssistantTranscriptStore: next, layer: l}
+		}
+	})
+	return l.stores.assistantTranscript
+}
+
 func (l *Layer) AttemptEnvironment() store.AttemptEnvironmentStore {
 	l.stores.attemptEnvironmentOnce.Do(func() {
 		next := l.Store.AttemptEnvironment()
@@ -1093,6 +1110,7 @@ var (
 	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
 	_ store.EnvironmentProfileStore         = (*environmentProfileStore)(nil)
 	_ store.AssistantProfileStore           = (*assistantProfileStore)(nil)
+	_ store.AssistantTranscriptStore        = (*assistantTranscriptStore)(nil)
 	_ store.AttemptEnvironmentStore         = (*attemptEnvironmentStore)(nil)
 	_ store.AttemptRuntimeLeaseStore        = (*attemptRuntimeLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)

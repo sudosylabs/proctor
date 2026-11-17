@@ -373,6 +373,9 @@ func sealAutomaticExamSubmission(
 	}
 
 	outcome := automaticExamSubmissionOutcome(submission, target)
+	if err = bindAssistantDigest(ctx, tx, &outcome); err != nil {
+		return nil, err
+	}
 	if err = completeExamSubmissionAudit(ctx, tx, outcome, input.AuditEventID, input.AuditAt, false, ""); err != nil {
 		return nil, err
 	}
@@ -727,6 +730,10 @@ func insertAutomaticExamSubmission(
 	rows []examSubmissionManifestPersistenceRow,
 	entries []model.ExamSubmissionManifestEntry,
 ) error {
+	if err := sealAssistantTranscript(ctx, tx, submission.AttemptID); err != nil {
+		return err
+	}
+
 	if _, err := tx.Exec(
 		ctx,
 		`INSERT INTO exam_submissions (
@@ -965,6 +972,9 @@ func replayAutomaticExamSubmission(
 	}
 
 	outcome := automaticExamSubmissionOutcome(submission, target)
+	if err = bindAssistantDigest(ctx, tx, &outcome); err != nil {
+		return nil, err
+	}
 	if err = completeExamSubmissionAudit(ctx, tx, outcome, input.AuditEventID, input.AuditAt, true, ""); err != nil {
 		return nil, err
 	}

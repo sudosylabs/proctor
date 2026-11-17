@@ -24,6 +24,8 @@ type assistantProfileStoreFake struct {
 	created  *store.AssistantProfileCreation
 	retired  *store.AssistantProfileRetirement
 	command  *store.CommandIdempotency
+	usageID  model.AssistantProfileID
+	usage    model.AssistantProfileUsage
 	listed   []bool
 	profiles []*model.AssistantProfile
 	err      error
@@ -153,4 +155,26 @@ func TestAssistantProfileRequiresAConfiguredProvider(t *testing.T) {
 	require.True(t, apperror.Is(err, "assistant_profile.invalid"))
 	require.Nil(t, profiles.created)
 	require.Empty(t, fixture.access.Audits.Attempts())
+}
+
+func (s *assistantProfileStoreFake) Usage(_ context.Context, id model.AssistantProfileID) (model.AssistantProfileUsage, error) {
+	s.usageID = id
+	return s.usage, s.err
+}
+
+func TestAssistantProfileUsageRequiresAdministrator(t *testing.T) {
+	t.Parallel()
+	fixture, profiles := assistantProfileFixture(t)
+	id := model.NewAssistantProfileID()
+	profiles.usage = model.AssistantProfileUsage{Attempts: 2, Turns: 3, InputTokens: 400, Commands: 1}
+	_, err := fixture.service.AssistantProfileUsage(t.Context(), fixture.stranger, id)
+	require.True(t, apperror.Is(err, "authorization.denied"))
+	require.True(t, profiles.usageID.IsZero(), "denial must precede reading counters")
+	usage, err := fixture.service.AssistantProfileUsage(t.Context(), fixture.inv, id)
+	require.NoError(t, err)
+	require.Equal(t, profiles.usage, usage)
+	require.Equal(t, id, profiles.usageID)
+	profiles.err = store.NewErrNotFound("assistant_profile", id.String())
+	_, err = fixture.service.AssistantProfileUsage(t.Context(), fixture.inv, id)
+	require.True(t, apperror.Is(err, "assistant_profile.not_found"))
 }

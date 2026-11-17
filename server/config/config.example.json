@@ -229,5 +229,9 @@
     "Hosts": [],
     "Owners": 512
   },
-  "Plugins": {}
+  "Plugins": {},
+  "Assistant": {
+    "Enabled": false,
+    "Providers": []
+  }
 }

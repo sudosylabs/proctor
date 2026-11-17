@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	ExamPolicySchemaVersion = 1
+	ExamPolicySchemaVersion = 2
 	ExamPolicySetMaxBytes   = 64 * 1024
 )
 
@@ -43,6 +43,7 @@ type ExamPolicySet struct {
 	FocusLoss      FocusLossPolicy
 	Native         NativeSecurityPolicy
 	Execution      ExecutionPolicy
+	Assistant      AssistantPolicy
 }
 
 // ExecutionPolicy says whether an exam's attempts get an execution
@@ -79,6 +80,7 @@ func DefaultExamPolicySet() ExamPolicySet {
 	return ExamPolicySet{
 		SchemaVersion:  ExamPolicySchemaVersion,
 		Native:         DefaultNativeSecurityPolicy(),
+		Assistant:      DefaultAssistantPolicy(),
 		ConnectionLoss: ConnectionLossPolicy{Outcome: IntegrityOutcomeFlagAndSuspend},
 		FocusLoss: FocusLossPolicy{
 			Enabled:         true,
@@ -125,7 +127,16 @@ func (p ExamPolicySet) Validate() error {
 		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", "focus loss outcome is invalid", "")
 	}
 
-	return p.Execution.Validate()
+	if err := p.Execution.Validate(); err != nil {
+		return err
+	}
+	if err := p.Assistant.Validate(); err != nil {
+		return err
+	}
+	if p.Assistant.Enabled && p.Assistant.Level == AssistantLevelAgent && !p.Execution.Enabled {
+		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "assistant.level", "agent requires execution", "")
+	}
+	return nil
 }
 
 type examPolicyWire struct {
@@ -133,6 +144,7 @@ type examPolicyWire struct {
 	ConnectionLoss examConnectionPolicyWire `json:"connection_loss"`
 	FocusLoss      examFocusPolicyWire      `json:"focus_loss"`
 	Execution      examExecutionPolicyWire  `json:"execution"`
+	Assistant      json.RawMessage          `json:"assistant"`
 }
 
 type examExecutionPolicyWire struct {
@@ -158,8 +170,13 @@ func EncodeExamPolicySet(policy ExamPolicySet) ([]byte, error) {
 	if err := policy.Validate(); err != nil {
 		return nil, err
 	}
+	assistantPolicy, err := EncodeAssistantPolicy(policy.Assistant)
+	if err != nil {
+		return nil, err
+	}
 	data, err := encodeCanonicalExamDocument(examPolicyWire{
 		Native:         policy.Native.Clone(),
+		Assistant:      assistantPolicy,
 		ConnectionLoss: examConnectionPolicyWire{Outcome: policy.ConnectionLoss.Outcome},
 		FocusLoss: examFocusPolicyWire{
 			Enabled:                     policy.FocusLoss.Enabled,
@@ -196,6 +213,7 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 	decoder.DisallowUnknownFields()
 	var wire struct {
 		Native         *NativeSecurityPolicy `json:"native"`
+		Assistant      *json.RawMessage      `json:"assistant"`
 		ConnectionLoss *struct {
 			Outcome *IntegrityOutcome `json:"outcome"`
 		} `json:"connection_loss"`
@@ -220,7 +238,7 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 		return ExamPolicySet{}, err
 	}
 
-	if wire.Native == nil ||
+	if wire.Assistant == nil || wire.Native == nil ||
 		wire.ConnectionLoss == nil ||
 		wire.ConnectionLoss.Outcome == nil ||
 		wire.FocusLoss == nil ||
@@ -244,9 +262,14 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 		return ExamPolicySet{}, invalidModelError("DecodeExamPolicySet", "exam_policy", "", "exam policy duration is out of bounds", "")
 	}
 
+	assistantPolicy, err := DecodeAssistantPolicy(*wire.Assistant)
+	if err != nil {
+		return ExamPolicySet{}, err
+	}
 	policy := ExamPolicySet{
 		SchemaVersion:  ExamPolicySchemaVersion,
 		Native:         wire.Native.Clone(),
+		Assistant:      assistantPolicy,
 		ConnectionLoss: ConnectionLossPolicy{Outcome: *wire.ConnectionLoss.Outcome},
 		FocusLoss: FocusLossPolicy{
 			Enabled:         *wire.FocusLoss.Enabled,
@@ -296,8 +319,12 @@ func encodeCanonicalExamDocument(value any) ([]byte, error) {
 	return canonicaljson.Canonicalize(encoded, len(encoded))
 }
 
-// Clone copies the native family slice; the family values are immutable.
-func (p ExamPolicySet) Clone() ExamPolicySet { p.Native = p.Native.Clone(); return p }
+// Clone keeps native selections and private assistant instructions independent.
+func (p ExamPolicySet) Clone() ExamPolicySet {
+	p.Native = p.Native.Clone()
+	p.Assistant = p.Assistant.Clone()
+	return p
+}
 
 // Equal compares the whole validated policy, native selections included.
 func (p ExamPolicySet) Equal(other ExamPolicySet) bool {

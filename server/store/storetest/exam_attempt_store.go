@@ -1162,6 +1162,13 @@ func newExamAttemptFixtureWithExecutionOptions(t *testing.T, ctx context.Context
 	natives ...examAttemptFixtureNative,
 ) examAttemptFixture {
 	t.Helper()
+	return newExamAttemptFixtureWithAssistantOptions(t, ctx, ss, focus, browser, capacity, withResource, execution, nil, natives...)
+}
+func newExamAttemptFixtureWithAssistantOptions(t *testing.T, ctx context.Context, ss store.Store, focus *model.FocusLossPolicy,
+	browser *model.BrowserPolicy, capacity model.ExamCapacityPolicy, withResource bool, execution *model.ExecutionPolicy,
+	assistant *model.AssistantPolicy, natives ...examAttemptFixtureNative,
+) examAttemptFixture {
+	t.Helper()
 	unit, programme := saveProgrammeParents(t, ctx, ss, "attempt-unit")
 	if !capacity.IsZero() {
 		institution, err := ss.Institution().GetSingleton(ctx)
@@ -1221,6 +1228,14 @@ func newExamAttemptFixtureWithExecutionOptions(t *testing.T, ctx context.Context
 		require.NoError(t, updateErr)
 		draftRevision = updated.Value.Draft.Revision
 	}
+	if assistant != nil {
+		audit := saveExamSittingAudit(t, ctx, ss, manager.ID, created.Value.Exam.ID, unit.ID)
+		updated, updateErr := ss.ExamAuthoring().UpdateDraftAssistant(ctx, &store.ExamDraftAssistantUpdate{
+			ExamID: created.Value.Exam.ID, ActorUserID: manager.ID, ExpectedRevision: draftRevision, Assistant: *assistant, UpdatedAt: now.Add(time.Millisecond), AuditEventID: audit.ID, AuditAt: audit.CreatedAt,
+		}, examCommand(manager.ID, "exam.draft.assistant.configure", "attempt-assistant", "attempt-assistant"))
+		require.NoError(t, updateErr)
+		draftRevision = updated.Value.Draft.Revision
+	}
 	var resourceID model.ExamResourceID
 	if withResource {
 		resourceID = model.NewExamResourceID()
@@ -1245,6 +1260,10 @@ func newExamAttemptFixtureWithExecutionOptions(t *testing.T, ctx context.Context
 	draftRevision++
 	publication := examRevisionPublication(t, ctx, ss, created.Value.Exam.ID, manager.ID, programme.AcademicUnitID, draftRevision, now.Add(3*time.Millisecond))
 	publication.ExecutionEnabled = execution != nil
+	if assistant != nil {
+		publication.AssistantEnabled = true
+		publication.AssistantProviders = []string{"campus"}
+	}
 	published, err := ss.ExamRevision().Publish(ctx, publication, examCommand(manager.ID, "exam.revision.publish", "attempt-revision", "attempt-revision"))
 	require.NoError(t, err)
 	// PostgreSQL decides that a new start is strictly future. A loaded host

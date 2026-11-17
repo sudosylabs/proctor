@@ -2826,6 +2826,17 @@ export const searchEntries = [
     "searchText": "editexamdrafttext edit authored title or markdown instructions on the active exam draft changes the draft title, its markdown instructions, or both. the change is made only if expected_revision still matches the draft's current revision, so you never overwrite someone else's newer edit. a field you leave out or send as null stays as it is. proctor stores the markdown exactly as you wrote it and renders it safely when it is shown. examinations patch /api/v1/exams/{exam_id}/draft principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.archived exam.draft.revision_conflict exam.draft.no_changes exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:configureExamDraftAssistant",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "Configure the Draft assistant",
+    "description": "Replace the assistant policy behind the Draft revision fence. The profile must be active and permit the requested level and budgets. Publication checks installation availability.",
+    "href": "/api/reference/configure-exam-draft-assistant",
+    "method": "PUT",
+    "path": "/api/v1/exams/{exam_id}/draft/assistant",
+    "searchText": "configureexamdraftassistant configure the draft assistant replace the assistant policy behind the draft revision fence. the profile must be active and permit the requested level and budgets. publication checks installation availability. examinations put /api/v1/exams/{exam_id}/draft/assistant principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.archived exam.draft.revision_conflict exam.draft.no_changes exam.assistant.profile_unusable exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
     "id": "operation:configureExamDraftBrowserPolicy",
     "kind": "endpoint",
     "group": "Examinations",
@@ -3120,7 +3131,7 @@ export const searchEntries = [
     "href": "/api/reference/publish-exam-revision",
     "method": "POST",
     "path": "/api/v1/exams/{exam_id}/revisions",
-    "searchText": "publishexamrevision publish the complete validated draft as an immutable exam revision checks the whole current draft and publishes it as a new revision, which can't change afterwards. publishing happens only if expected_revision still matches the draft's current revision, so you never publish edits you haven't seen. send an idempotency-key: if the response is lost, retrying with the same key returns the same result. the revision captures the text, policies, capacity limits, resources and starter workspace together. examinations post /api/v1/exams/{exam_id}/revisions principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.archived exam.conflict exam.draft.revision_conflict exam.revision.no_changes exam.revision.capacity_exceeded exam.execution.disabled exam.execution.profile_unusable exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+    "searchText": "publishexamrevision publish the complete validated draft as an immutable exam revision checks the whole current draft and publishes it as a new revision, which can't change afterwards. publishing happens only if expected_revision still matches the draft's current revision, so you never publish edits you haven't seen. send an idempotency-key: if the response is lost, retrying with the same key returns the same result. the revision captures the text, policies, capacity limits, resources and starter workspace together. examinations post /api/v1/exams/{exam_id}/revisions principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.archived exam.conflict exam.draft.revision_conflict exam.revision.no_changes exam.revision.capacity_exceeded exam.execution.disabled exam.execution.profile_unusable exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid exam.assistant.disabled exam.assistant.profile_unusable"
   },
   {
     "id": "operation:getExamRevision",
@@ -6534,6 +6545,24 @@ export const searchEntries = [
     "description": "The Exam is archived and cannot change.",
     "href": "/problems/exam.archived",
     "searchText": "exam.archived exam archived 409 the exam is archived and cannot change."
+  },
+  {
+    "id": "problem:exam.assistant.disabled",
+    "kind": "problem",
+    "group": "Error codes / Exam assistant",
+    "title": "exam.assistant.disabled",
+    "description": "The installation does not allow the assistant.",
+    "href": "/problems/exam.assistant.disabled",
+    "searchText": "exam.assistant.disabled exam assistant disabled 403 the installation does not allow the assistant."
+  },
+  {
+    "id": "problem:exam.assistant.profile_unusable",
+    "kind": "problem",
+    "group": "Error codes / Exam assistant",
+    "title": "exam.assistant.profile_unusable",
+    "description": "The assistant profile is absent, retired, exceeds its ceilings or names an unavailable provider.",
+    "href": "/problems/exam.assistant.profile_unusable",
+    "searchText": "exam.assistant.profile_unusable exam assistant profile unusable 409 the assistant profile is absent, retired, exceeds its ceilings or names an unavailable provider."
   },
   {
     "id": "problem:exam.attempt.already_connected",

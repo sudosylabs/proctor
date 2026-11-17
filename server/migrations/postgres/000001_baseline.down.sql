@@ -8,6 +8,8 @@
 -- Rolls back the pre-release schema baseline. Development databases should
 -- normally be dropped and recreated rather than rolled back.
 
+DROP TABLE IF EXISTS exam_attempt_assistants;
+DROP FUNCTION IF EXISTS guard_attempt_assistant_recipe();
 DROP TABLE IF EXISTS attempt_runtime_leases;
 DROP SEQUENCE IF EXISTS attempt_runtime_fences;
 DROP TABLE IF EXISTS exam_attempt_environments;

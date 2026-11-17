@@ -126,6 +126,8 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"environment_profile.not_found":                               {status: http.StatusNotFound},
 	"environment_profile.unavailable":                             {status: http.StatusServiceUnavailable},
 	"exam.archived":                                               {status: http.StatusConflict},
+	"exam.assistant.disabled":                                     {status: http.StatusForbidden},
+	"exam.assistant.profile_unusable":                             {status: http.StatusConflict},
 	"exam.attempt.already_connected":                              {status: http.StatusConflict},
 	"exam.attempt.browser_activity_conflict":                      {status: http.StatusConflict},
 	"exam.attempt.configuration_frozen":                           {status: http.StatusConflict},

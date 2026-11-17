@@ -1329,6 +1329,12 @@ func (s *timedExamAuthoringStore) UpdateDraftExecution(arg0 context.Context, arg
 	})
 }
 
+func (s *timedExamAuthoringStore) UpdateDraftAssistant(arg0 context.Context, arg1 *store.ExamDraftAssistantUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftAssistant), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
+		return s.next.UpdateDraftAssistant(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamAuthoringStore) UpdateDraftNativePolicy(arg0 context.Context, arg1 *store.ExamDraftNativePolicyUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftNativePolicy), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
 		return s.next.UpdateDraftNativePolicy(callCtx, arg1, arg2)

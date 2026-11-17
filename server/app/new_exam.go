@@ -147,17 +147,19 @@ func newExamPublication(
 	authorizer *access.Authorizer,
 ) (*exam.Publication, error) {
 	return exam.NewPublication(exam.PublicationDependencies{
-		Persistence:       deps.Store.ExamRevision(),
-		Access:            deps.Store.ExamAuthoring(),
-		Memberships:       deps.Store.AcademicUnitMember(),
-		Authorizer:        authorizer,
-		Auditor:           shared.audit,
-		Publisher:         shared.realtime,
-		Now:               time.Now,
-		NewID:             model.NewExamRevisionID,
-		InstitutionOrigin: deps.PublicURL,
-		ExecutionEnabled:  deps.ExecutionEnabled,
-		Operational:       deps.OperationalRecorder,
+		Persistence:        deps.Store.ExamRevision(),
+		Access:             deps.Store.ExamAuthoring(),
+		Memberships:        deps.Store.AcademicUnitMember(),
+		Authorizer:         authorizer,
+		Auditor:            shared.audit,
+		Publisher:          shared.realtime,
+		Now:                time.Now,
+		NewID:              model.NewExamRevisionID,
+		InstitutionOrigin:  deps.PublicURL,
+		ExecutionEnabled:   deps.ExecutionEnabled,
+		AssistantEnabled:   deps.AssistantEnabled,
+		AssistantProviders: deps.AssistantProviders,
+		Operational:        deps.OperationalRecorder,
 	})
 }
 

@@ -404,6 +404,7 @@ const (
 	methodUpdateDraftNativePolicy                   methodName = "update_draft_native_policy"
 	methodUpdateDraftFocusLoss                      methodName = "update_draft_focus_loss"
 	methodUpdateDraftExecution                      methodName = "update_draft_execution"
+	methodUpdateDraftAssistant                      methodName = "update_draft_assistant"
 	methodUpdateDraftText                           methodName = "update_draft_text"
 	methodArchive                                   methodName = "archive"
 	methodSchedule                                  methodName = "schedule"

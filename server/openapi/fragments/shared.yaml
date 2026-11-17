@@ -1208,6 +1208,8 @@ components:
         - environment_profile.not_found
         - environment_profile.unavailable
         - exam.archived
+        - exam.assistant.disabled
+        - exam.assistant.profile_unusable
         - exam.attempt.already_connected
         - exam.attempt.browser_activity_conflict
         - exam.attempt.configuration_frozen

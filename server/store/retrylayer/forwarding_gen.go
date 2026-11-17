@@ -1215,6 +1215,15 @@ func (s *examAuthoringStore) UpdateDraftExecution(ctx context.Context, arg1 *sto
 	})
 }
 
+func (s *examAuthoringStore) UpdateDraftAssistant(ctx context.Context, arg1 *store.ExamDraftAssistantUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	if command == nil {
+		return s.ExamAuthoringStore.UpdateDraftAssistant(ctx, arg1, command)
+	}
+	return retryCall1(ctx, s.layer, func() (*store.ExamAuthoringCommandResult, error) {
+		return s.ExamAuthoringStore.UpdateDraftAssistant(ctx, arg1, command)
+	})
+}
+
 func (s *examAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, arg1 *store.ExamDraftNativePolicyUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.UpdateDraftNativePolicy(ctx, arg1, command)

@@ -8,12 +8,14 @@
 paths:
   /api/v1/exams/{exam_id}/draft/browser-policy:
     parameters:
-      - $ref: '#/components/parameters/ExamID'
+      - $ref: "#/components/parameters/ExamID"
     put:
       operationId: configureExamDraftBrowserPolicy
       summary: Replace the Browser Policy on the active Exam Draft
       description: >-
-        Replaces the whole Browser Policy on the Draft. The change is made only if expected_revision still matches the Draft's current revision. A disabled policy has no rules. An enabled policy lists the sites candidates may open, and Proctor matches pages against them by host and path in a fixed order.
+        Replaces the whole Browser Policy on the Draft. The change is made only if expected_revision still matches
+        the Draft's current revision. A disabled policy has no rules. An enabled policy lists the sites candidates
+        may open, and Proctor matches pages against them by host and path in a fixed order.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -47,34 +49,36 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
       requestBody:
-        $ref: '#/components/requestBodies/ConfigureExamDraftBrowserPolicy'
+        $ref: "#/components/requestBodies/ConfigureExamDraftBrowserPolicy"
       responses:
         "200":
-          $ref: '#/components/responses/ExamOK'
+          $ref: "#/components/responses/ExamOK"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "409":
-          $ref: '#/components/responses/Conflict'
+          $ref: "#/components/responses/Conflict"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/exams/{exam_id}/draft/policies/focus-loss:
     parameters:
-      - $ref: '#/components/parameters/ExamID'
+      - $ref: "#/components/parameters/ExamID"
     put:
       operationId: configureExamDraftFocusLoss
       summary: Replace the Focus Loss policy on the active Exam Draft
       description: >-
-        Replaces the whole Focus Loss rule on the Draft. The change is made only if expected_revision still matches the Draft's current revision. The minimum duration, incident count, window and outcome are checked together, so every published Revision carries a rule that makes sense as a whole.
+        Replaces the whole Focus Loss rule on the Draft. The change is made only if expected_revision still matches
+        the Draft's current revision. The minimum duration, incident count, window and outcome are checked
+        together, so every published Revision carries a rule that makes sense as a whole.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -108,38 +112,38 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
       requestBody:
-        $ref: '#/components/requestBodies/ConfigureExamDraftFocusLoss'
+        $ref: "#/components/requestBodies/ConfigureExamDraftFocusLoss"
       responses:
         "200":
-          $ref: '#/components/responses/ExamOK'
+          $ref: "#/components/responses/ExamOK"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "409":
-          $ref: '#/components/responses/Conflict'
+          $ref: "#/components/responses/Conflict"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/exams/{exam_id}/draft/policies/execution:
     parameters:
-      - $ref: '#/components/parameters/ExamID'
+      - $ref: "#/components/parameters/ExamID"
     put:
       operationId: configureExamDraftExecution
       summary: Replace the execution policy on the active Exam Draft
       description: >-
         Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an
-        execution environment, the environment profile they are created from, whether terminal input is
-        recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists,
-        is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable.
-        A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile
+        execution environment, the environment profile they are created from, whether terminal input is recorded,
+        and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not
+        retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A
+        disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile
         again and requires the installation to allow execution.
       tags:
         - Examinations
@@ -175,14 +179,14 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
       requestBody:
         required: true
         description: Supplies the expected Draft revision and the complete replacement execution policy.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ConfigureExamDraftExecutionRequest'
+              $ref: "#/components/schemas/ConfigureExamDraftExecutionRequest"
             example:
               expected_revision: 4
               execution:
@@ -192,21 +196,107 @@ paths:
                 terminals: 2
       responses:
         "200":
-          $ref: '#/components/responses/ExamOK'
+          $ref: "#/components/responses/ExamOK"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "409":
-          $ref: '#/components/responses/Conflict'
+          $ref: "#/components/responses/Conflict"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/exams/{exam_id}/draft/assistant:
+    parameters:
+      - $ref: "#/components/parameters/ExamID"
+    put:
+      operationId: configureExamDraftAssistant
+      summary: Configure the Draft assistant
+      description: >-
+        Replace the assistant policy behind the Draft revision fence. The profile must be active and permit the
+        requested level and budgets. Publication checks installation availability.
+      tags:
+        - Examinations
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.invalid
+        - exam.archived
+        - exam.draft.revision_conflict
+        - exam.draft.no_changes
+        - exam.assistant.profile_unusable
+        - exam.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
+      requestBody:
+        required: true
+        description: The complete replacement assistant policy.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigureExamDraftAssistantRequest"
+            example:
+              expected_revision: 4
+              assistant:
+                enabled: false
+                profile_id: ""
+                level: "off"
+                approvals: always_ask
+                instructions: ""
+                concepts_to_avoid: []
+                budgets:
+                  turns: 0
+                  input_tokens: 0
+                  output_tokens: 0
+                  tool_calls: 0
+                  commands: 0
+                  command_seconds: 0
+                  command_timeout_seconds: 0
+                code_line_budget: 10
+      responses:
+        "200":
+          $ref: "#/components/responses/ExamOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   requestBodies:
     ConfigureExamDraftBrowserPolicy:
@@ -215,7 +305,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ConfigureExamDraftBrowserPolicyRequest'
+            $ref: "#/components/schemas/ConfigureExamDraftBrowserPolicyRequest"
           example:
             expected_revision: 4
             browser_policy:
@@ -242,7 +332,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ConfigureExamDraftFocusLossRequest'
+            $ref: "#/components/schemas/ConfigureExamDraftFocusLossRequest"
           example:
             expected_revision: 4
             enabled: true
@@ -263,7 +353,7 @@ components:
           format: int64
           minimum: 1
         execution:
-          $ref: '#/components/schemas/ExecutionPolicy'
+          $ref: "#/components/schemas/ExecutionPolicy"
     ConfigureExamDraftBrowserPolicyRequest:
       type: object
       additionalProperties: false
@@ -277,7 +367,7 @@ components:
           minimum: 1
           description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         browser_policy:
-          $ref: '#/components/schemas/BrowserPolicy'
+          $ref: "#/components/schemas/BrowserPolicy"
           description: The new Browser Policy. It replaces the current one completely.
     ConfigureExamDraftFocusLossRequest:
       type: object
@@ -326,3 +416,16 @@ components:
           description: >-
             What happens when the threshold is reached. flag marks the Attempt for review. flag_and_warn also warns
             the candidate. flag_and_suspend also suspends the Attempt.
+    ConfigureExamDraftAssistantRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - assistant
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        assistant:
+          $ref: "#/components/schemas/AssistantPolicy"

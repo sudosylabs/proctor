@@ -6159,3 +6159,23 @@ CREATE INDEX exam_revision_starter_workspace_entries_exam_id_fkey_idx
     ON exam_revision_starter_workspace_entries (exam_id);
 CREATE INDEX integrity_evidence_exam_attempt_id_fkey_idx
     ON integrity_evidence (exam_attempt_id);
+
+
+-- Immutable assistant settings admitted with the Attempt, independent of later drafts.
+CREATE TABLE exam_attempt_assistants (
+ id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id)
+ CONSTRAINT exam_attempt_assistants_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ policy jsonb NOT NULL CHECK (jsonb_typeof(policy)='object' AND octet_length(policy::text)<=65536),
+ provider varchar(63) NOT NULL,
+ model varchar(256) NOT NULL,
+ display_name varchar(160) NOT NULL,
+ pseudonymize boolean NOT NULL,
+ created_at timestamptz NOT NULL
+);
+CREATE FUNCTION guard_attempt_assistant_recipe() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ RAISE EXCEPTION 'admitted assistant recipes are immutable' USING ERRCODE='55000';
+END;
+$$;
+CREATE TRIGGER exam_attempt_assistants_guard BEFORE UPDATE OR DELETE ON exam_attempt_assistants
+ FOR EACH ROW EXECUTE FUNCTION guard_attempt_assistant_recipe();

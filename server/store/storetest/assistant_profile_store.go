@@ -50,6 +50,7 @@ func TestAssistantProfileStore(t *testing.T, stores store.Store) {
 	require.Equal(t, "campus-tutor", created.Profile.Name)
 	require.False(t, created.Profile.Retired())
 	require.NoError(t, created.Profile.Validate())
+	testAssistantDraftPolicy(t, ctx, stores, created.Profile, institutionID, administrator)
 
 	replayed, err := create(t, spec, administrator, "first")
 	require.NoError(t, err)

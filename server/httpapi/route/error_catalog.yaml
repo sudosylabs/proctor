@@ -321,6 +321,10 @@ codes:
     description: "Environment profiles cannot be read or changed now; retry later."
   - code: exam.archived
     description: "The Exam is archived and cannot change."
+  - code: exam.assistant.disabled
+    description: "The installation does not allow the assistant."
+  - code: exam.assistant.profile_unusable
+    description: "The assistant profile is absent, retired, exceeds its ceilings or names an unavailable provider."
   - code: exam.attempt.already_connected
     description: "The Attempt already has an open connection."
     websocket_fallback: true

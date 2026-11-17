@@ -5443,6 +5443,24 @@
                 "has_starter_workspace": false,
                 "instructions_markdown": "Read every question before you begin.",
                 "policy": {
+                  "assistant": {
+                    "approvals": "always_ask",
+                    "budgets": {
+                      "command_seconds": 0,
+                      "command_timeout_seconds": 0,
+                      "commands": 0,
+                      "input_tokens": 0,
+                      "output_tokens": 0,
+                      "tool_calls": 0,
+                      "turns": 0
+                    },
+                    "code_line_budget": 10,
+                    "concepts_to_avoid": [],
+                    "enabled": false,
+                    "instructions": "",
+                    "level": "off",
+                    "profile_id": ""
+                  },
                   "connection_loss": {
                     "outcome": "flag_and_suspend"
                   },
@@ -6114,6 +6132,24 @@
                 "has_starter_workspace": true,
                 "instructions_markdown": "Read every question before you begin.\n\nYou may use the formula sheet in Resources.",
                 "policy": {
+                  "assistant": {
+                    "approvals": "always_ask",
+                    "budgets": {
+                      "command_seconds": 0,
+                      "command_timeout_seconds": 0,
+                      "commands": 0,
+                      "input_tokens": 0,
+                      "output_tokens": 0,
+                      "tool_calls": 0,
+                      "turns": 0
+                    },
+                    "code_line_budget": 10,
+                    "concepts_to_avoid": [],
+                    "enabled": false,
+                    "instructions": "",
+                    "level": "off",
+                    "profile_id": ""
+                  },
                   "connection_loss": {
                     "outcome": "flag_and_suspend"
                   },
@@ -6457,7 +6493,7 @@
               "id": "t1oekp5dqa7nwrzhcx3by9mug4",
               "number": 2,
               "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-              "policy_schema_version": 1,
+              "policy_schema_version": 2,
               "publication_kind": "standard",
               "published_at": "2026-08-01T16:45:00Z",
               "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -6499,7 +6535,7 @@
                   "id": "t1oekp5dqa7nwrzhcx3by9mug4",
                   "number": 2,
                   "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-                  "policy_schema_version": 1,
+                  "policy_schema_version": 2,
                   "publication_kind": "standard",
                   "published_at": "2026-08-01T16:45:00Z",
                   "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -6542,7 +6578,7 @@
               "id": "t1oekp5dqa7nwrzhcx3by9mug4",
               "number": 2,
               "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-              "policy_schema_version": 1,
+              "policy_schema_version": 2,
               "publication_kind": "standard",
               "published_at": "2026-08-01T16:45:00Z",
               "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -12585,6 +12621,121 @@
         ],
         "type": "object"
       },
+      "AssistantPolicy": {
+        "additionalProperties": false,
+        "description": "Frozen assistant allowances. Instructions and avoided concepts are visible to managers only. Only Tutor is currently available.",
+        "properties": {
+          "approvals": {
+            "enum": [
+              "always_ask",
+              "auto_within_level"
+            ],
+            "type": "string"
+          },
+          "budgets": {
+            "$ref": "#/components/schemas/AssistantPolicyBudgets"
+          },
+          "code_line_budget": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "concepts_to_avoid": {
+            "items": {
+              "maxLength": 80,
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "instructions": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "off",
+              "tutor"
+            ],
+            "type": "string"
+          },
+          "profile_id": {
+            "description": "An assistant profile ID when enabled; empty when disabled.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "profile_id",
+          "level",
+          "approvals",
+          "instructions",
+          "concepts_to_avoid",
+          "budgets",
+          "code_line_budget"
+        ],
+        "type": "object"
+      },
+      "AssistantPolicyBudgets": {
+        "additionalProperties": false,
+        "properties": {
+          "command_seconds": {
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "command_timeout_seconds": {
+            "format": "int64",
+            "maximum": 600,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "commands": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_tokens": {
+            "format": "int64",
+            "maximum": 100000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output_tokens": {
+            "format": "int64",
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tool_calls": {
+            "format": "int64",
+            "maximum": 20000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turns": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turns",
+          "input_tokens",
+          "output_tokens",
+          "tool_calls",
+          "commands",
+          "command_seconds",
+          "command_timeout_seconds"
+        ],
+        "type": "object"
+      },
       "AssistantProfileListResponse": {
         "additionalProperties": false,
         "description": "One page of the collection in its stable order.",
@@ -16789,6 +16940,24 @@
         ],
         "type": "object"
       },
+      "ConfigureExamDraftAssistantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assistant": {
+            "$ref": "#/components/schemas/AssistantPolicy"
+          },
+          "expected_revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "assistant"
+        ],
+        "type": "object"
+      },
       "ConfigureExamDraftBrowserPolicyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -20404,6 +20573,8 @@
           "environment_profile.not_found",
           "environment_profile.unavailable",
           "exam.archived",
+          "exam.assistant.disabled",
+          "exam.assistant.profile_unusable",
           "exam.attempt.already_connected",
           "exam.attempt.browser_activity_conflict",
           "exam.attempt.configuration_frozen",
@@ -22022,6 +22193,9 @@
         "additionalProperties": false,
         "description": "The integrity rules for an Attempt.",
         "properties": {
+          "assistant": {
+            "$ref": "#/components/schemas/AssistantPolicy"
+          },
           "connection_loss": {
             "$ref": "#/components/schemas/ConnectionLossPolicy",
             "description": "What happens when the server loses its connection to an Attempt."
@@ -22043,7 +22217,8 @@
           "native",
           "connection_loss",
           "focus_loss",
-          "execution"
+          "execution",
+          "assistant"
         ],
         "type": "object"
       },
@@ -22453,8 +22628,8 @@
             "description": "The SHA-256 digest of the Revision's integrity policy, as lowercase hex. Two Revisions with the same policy have the same digest."
           },
           "policy_schema_version": {
-            "const": 1,
-            "description": "The version of the policy format the Revision was saved in. Always 1 today.",
+            "const": 2,
+            "description": "The version of the policy format the Revision was saved in. Always 2 today.",
             "type": "integer"
           },
           "publication_kind": {
@@ -45982,6 +46157,123 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exams/{exam_id}/draft/assistant": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        }
+      ],
+      "put": {
+        "description": "Replace the assistant policy behind the Draft revision fence. The profile must be active and permit the requested level and budgets. Publication checks installation availability.",
+        "operationId": "configureExamDraftAssistant",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "assistant": {
+                  "approvals": "always_ask",
+                  "budgets": {
+                    "command_seconds": 0,
+                    "command_timeout_seconds": 0,
+                    "commands": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "tool_calls": 0,
+                    "turns": 0
+                  },
+                  "code_line_budget": 10,
+                  "concepts_to_avoid": [],
+                  "enabled": false,
+                  "instructions": "",
+                  "level": "off",
+                  "profile_id": ""
+                },
+                "expected_revision": 4
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureExamDraftAssistantRequest"
+              }
+            }
+          },
+          "description": "The complete replacement assistant policy.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Configure the Draft assistant",
+        "tags": [
+          "Examinations"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.invalid",
+          "exam.archived",
+          "exam.draft.revision_conflict",
+          "exam.draft.no_changes",
+          "exam.assistant.profile_unusable",
+          "exam.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exams/{exam_id}/draft/browser-policy": {
       "parameters": [
         {
@@ -48440,7 +48732,9 @@
           "authentication.dpop.replayed",
           "authentication.dpop.use_nonce",
           "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
+          "authentication.csrf.invalid",
+          "exam.assistant.disabled",
+          "exam.assistant.profile_unusable"
         ],
         "x-proctor-idempotency": "required"
       }

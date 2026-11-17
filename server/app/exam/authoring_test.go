@@ -282,6 +282,7 @@ type authoringStoreFake struct {
 	textUpdate         *store.ExamDraftTextUpdate
 	focusLossUpdate    *store.ExamDraftFocusLossUpdate
 	executionUpdate    *store.ExamDraftExecutionUpdate
+	assistantUpdate    *store.ExamDraftAssistantUpdate
 	nativePolicyUpdate *store.ExamDraftNativePolicyUpdate
 	draftRevision      int64
 	archive            *store.ExamArchive
@@ -436,6 +437,26 @@ func (f *authoringStoreFake) UpdateDraftExecution(_ context.Context, input *stor
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
 	if _, err := snapshot.Draft.ApplyExecutionPolicy(input.Execution, model.TimeUTC(input.UpdatedAt)); err != nil {
+		return nil, err
+	}
+	return &store.ExamAuthoringCommandResult{Value: snapshot}, nil
+}
+
+func (f *authoringStoreFake) UpdateDraftAssistant(ctx context.Context, input *store.ExamDraftAssistantUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	*f.order = append(*f.order, "store.update_assistant")
+	f.assistantUpdate, f.idempotency = input, command
+	if f.err != nil {
+		return nil, f.err
+	}
+	snapshot, err := f.Get(ctx, input.ExamID, input.ActorUserID)
+	*f.order = (*f.order)[:len(*f.order)-1]
+	if err != nil {
+		return nil, err
+	}
+	if snapshot.Draft.Revision != input.ExpectedRevision {
+		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
+	}
+	if _, err := snapshot.Draft.ApplyAssistantPolicy(input.Assistant, model.TimeUTC(input.UpdatedAt)); err != nil {
 		return nil, err
 	}
 	return &store.ExamAuthoringCommandResult{Value: snapshot}, nil

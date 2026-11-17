@@ -130,6 +130,10 @@ func TestWorkspaceBatchFingerprintFollowsOrderAndPaths(t *testing.T) {
 	require.NotEqual(t, original, fingerprint(directory), "every mutation is part of the batch")
 	require.NotEqual(t, original, fingerprintFrom(model.AttemptWorkspaceAuthorEnvironment, directory, file),
 		"an environment batch never replays as the editor's")
+	assistant := fingerprintFrom(model.AttemptWorkspaceAuthorAssistant, directory, file)
+	require.NotEqual(t, original, assistant, "an assistant batch never replays as the editor's")
+	require.NotEqual(t, fingerprintFrom(model.AttemptWorkspaceAuthorEnvironment, directory, file), assistant)
+	require.Equal(t, assistant, fingerprintFrom(model.AttemptWorkspaceAuthorAssistant, directory, file))
 }
 
 func TestCommandIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {

@@ -171,3 +171,23 @@ func TestAttemptWorkspaceAuthorNamesOneActorOfAKnownKind(t *testing.T) {
 		require.False(t, author.IsValid(), name)
 	}
 }
+
+func TestAssistantWorkspaceAuthorIdentifiesOneToolCall(t *testing.T) {
+	t.Parallel()
+	conversation, turn, call := NewAssistantConversationID(), NewAssistantTurnID(), NewAssistantCallID()
+	author := NewAssistantWorkspaceAuthor(conversation, turn, call)
+	require.True(t, author.Kind.IsValid())
+	require.True(t, author.IsValid())
+	require.Equal(t, conversation.String()+"/"+turn.String()+"/"+call.String(), author.Ref)
+	require.LessOrEqual(t, len(author.Ref), AttemptWorkspaceAuthorRefMaximumBytes)
+	for name, ref := range map[string]string{
+		"empty": "", "missing call": conversation.String() + "/" + turn.String(),
+		"extra component": author.Ref + "/extra", "empty turn": conversation.String() + "//" + call.String(),
+		"noncanonical ID": "c1/" + turn.String() + "/" + call.String(),
+		"over bound":      strings.Repeat("a", AttemptWorkspaceAuthorRefMaximumBytes+1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.False(t, (AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorAssistant, Ref: ref}).IsValid())
+		})
+	}
+}

@@ -83,7 +83,7 @@ func TestWorkspaceWriteRatesFitOneMaximumBatch(t *testing.T) {
 	t.Parallel()
 	smallest := model.EnvironmentResources{CPUMillis: model.EnvironmentProfileMinimumCPUMillis,
 		MemoryBytes: model.EnvironmentProfileMinimumMemoryBytes, DiskBytes: model.EnvironmentProfileMinimumDiskBytes}
-	for _, kind := range []model.AttemptWorkspaceAuthorKind{model.AttemptWorkspaceAuthorCandidate, model.AttemptWorkspaceAuthorEnvironment} {
+	for _, kind := range []model.AttemptWorkspaceAuthorKind{model.AttemptWorkspaceAuthorCandidate, model.AttemptWorkspaceAuthorEnvironment, model.AttemptWorkspaceAuthorAssistant} {
 		rate, ok := workspaceWriteRateFor(kind, smallest)
 		require.True(t, ok, "every author kind has a rate: %s", kind)
 		require.GreaterOrEqual(t, rate.mutationBurst, float64(model.AttemptWorkspaceBatchMaximumMutations), kind)
@@ -147,4 +147,18 @@ func fixedRates(rates map[model.AttemptWorkspaceAuthorKind]workspaceWriteRate) f
 		rate, ok := rates[kind]
 		return rate, ok
 	}
+}
+
+func TestAssistantWriteBudgetIsSeparateAndRefillsAtItsLowerRate(t *testing.T) {
+	t.Parallel()
+	budget := newWorkspaceWriteBudget(workspaceWriteRateFor)
+	attempt := model.NewExamAttemptID()
+	at := time.Date(2026, time.November, 17, 9, 0, 0, 0, time.UTC)
+	resources := model.EnvironmentResources{}
+	require.True(t, budget.spend(attempt, model.AttemptWorkspaceAuthorAssistant, resources, 256, 128<<20, at))
+	require.False(t, budget.spend(attempt, model.AttemptWorkspaceAuthorAssistant, resources, 1, 0, at))
+	require.True(t, budget.spend(attempt, model.AttemptWorkspaceAuthorCandidate, resources, 32, 4<<20, at))
+	require.False(t, budget.spend(attempt, model.AttemptWorkspaceAuthorAssistant, resources, 17, 0, at.Add(time.Second)))
+	require.False(t, budget.spend(attempt, model.AttemptWorkspaceAuthorAssistant, resources, 16, (2<<20)+1, at.Add(time.Second)))
+	require.True(t, budget.spend(attempt, model.AttemptWorkspaceAuthorAssistant, resources, 16, 2<<20, at.Add(time.Second)))
 }

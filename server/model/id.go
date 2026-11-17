@@ -84,6 +84,15 @@ type AttemptParticipationID string
 // participation.
 type AttemptConnectionID string
 
+// AssistantConversationID identifies an attempt's assistant conversation.
+type AssistantConversationID string
+
+// AssistantTurnID identifies one assistant conversation turn.
+type AssistantTurnID string
+
+// AssistantCallID identifies one tool call within an assistant turn.
+type AssistantCallID string
+
 // EnvironmentProfileID identifies one immutable environment profile.
 type EnvironmentProfileID string
 

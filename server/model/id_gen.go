@@ -74,6 +74,15 @@ func NewAttemptParticipationID() AttemptParticipationID { return AttemptParticip
 // NewAttemptConnectionID returns a freshly generated attempt-connection identifier.
 func NewAttemptConnectionID() AttemptConnectionID { return AttemptConnectionID(NewID()) }
 
+// NewAssistantConversationID returns a freshly generated assistant-conversation identifier.
+func NewAssistantConversationID() AssistantConversationID { return AssistantConversationID(NewID()) }
+
+// NewAssistantTurnID returns a freshly generated assistant-turn identifier.
+func NewAssistantTurnID() AssistantTurnID { return AssistantTurnID(NewID()) }
+
+// NewAssistantCallID returns a freshly generated assistant-call identifier.
+func NewAssistantCallID() AssistantCallID { return AssistantCallID(NewID()) }
+
 // NewEnvironmentProfileID returns a freshly generated environment-profile identifier.
 func NewEnvironmentProfileID() EnvironmentProfileID { return EnvironmentProfileID(NewID()) }
 
@@ -308,6 +317,21 @@ func ParseAttemptParticipationID(value string) (AttemptParticipationID, error) {
 // ParseAttemptConnectionID validates and converts the shared identifier representation.
 func ParseAttemptConnectionID(value string) (AttemptConnectionID, error) {
 	return parseID[AttemptConnectionID](value, "attempt_connection_id")
+}
+
+// ParseAssistantConversationID validates and converts the shared identifier representation.
+func ParseAssistantConversationID(value string) (AssistantConversationID, error) {
+	return parseID[AssistantConversationID](value, "assistant_conversation_id")
+}
+
+// ParseAssistantTurnID validates and converts the shared identifier representation.
+func ParseAssistantTurnID(value string) (AssistantTurnID, error) {
+	return parseID[AssistantTurnID](value, "assistant_turn_id")
+}
+
+// ParseAssistantCallID validates and converts the shared identifier representation.
+func ParseAssistantCallID(value string) (AssistantCallID, error) {
+	return parseID[AssistantCallID](value, "assistant_call_id")
 }
 
 // ParseEnvironmentProfileID validates and converts the shared identifier representation.
@@ -578,6 +602,15 @@ func (id AttemptParticipationID) IsZero() bool { return id == "" }
 // IsZero reports whether the attempt-connection is the empty zero value.
 func (id AttemptConnectionID) IsZero() bool { return id == "" }
 
+// IsZero reports whether the assistant-conversation is the empty zero value.
+func (id AssistantConversationID) IsZero() bool { return id == "" }
+
+// IsZero reports whether the assistant-turn is the empty zero value.
+func (id AssistantTurnID) IsZero() bool { return id == "" }
+
+// IsZero reports whether the assistant-call is the empty zero value.
+func (id AssistantCallID) IsZero() bool { return id == "" }
+
 // IsZero reports whether the environment-profile is the empty zero value.
 func (id EnvironmentProfileID) IsZero() bool { return id == "" }
 
@@ -763,6 +796,15 @@ func (id AttemptParticipationID) IsValid() bool { return IsValidOpaqueID(string(
 
 // IsValid reports whether the attempt-connection is a canonical non-zero ID.
 func (id AttemptConnectionID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the assistant-conversation is a canonical non-zero ID.
+func (id AssistantConversationID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the assistant-turn is a canonical non-zero ID.
+func (id AssistantTurnID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the assistant-call is a canonical non-zero ID.
+func (id AssistantCallID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the environment-profile is a canonical non-zero ID.
 func (id EnvironmentProfileID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -950,6 +992,15 @@ func (id AttemptParticipationID) String() string { return string(id) }
 // String returns the attempt-connection wire/database representation.
 func (id AttemptConnectionID) String() string { return string(id) }
 
+// String returns the assistant-conversation wire/database representation.
+func (id AssistantConversationID) String() string { return string(id) }
+
+// String returns the assistant-turn wire/database representation.
+func (id AssistantTurnID) String() string { return string(id) }
+
+// String returns the assistant-call wire/database representation.
+func (id AssistantCallID) String() string { return string(id) }
+
 // String returns the environment-profile wire/database representation.
 func (id EnvironmentProfileID) String() string { return string(id) }
 
@@ -1135,6 +1186,15 @@ func (id AttemptParticipationID) MarshalText() ([]byte, error) { return marshalI
 
 // MarshalText encodes the attempt-connection as its canonical string.
 func (id AttemptConnectionID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the assistant-conversation as its canonical string.
+func (id AssistantConversationID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the assistant-turn as its canonical string.
+func (id AssistantTurnID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the assistant-call as its canonical string.
+func (id AssistantCallID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the environment-profile as its canonical string.
 func (id EnvironmentProfileID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1362,6 +1422,21 @@ func (id *AttemptParticipationID) UnmarshalText(data []byte) error {
 // UnmarshalText decodes and validates the attempt-connection when non-empty.
 func (id *AttemptConnectionID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseAttemptConnectionID)
+}
+
+// UnmarshalText decodes and validates the assistant-conversation when non-empty.
+func (id *AssistantConversationID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseAssistantConversationID)
+}
+
+// UnmarshalText decodes and validates the assistant-turn when non-empty.
+func (id *AssistantTurnID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseAssistantTurnID)
+}
+
+// UnmarshalText decodes and validates the assistant-call when non-empty.
+func (id *AssistantCallID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseAssistantCallID)
 }
 
 // UnmarshalText decodes and validates the environment-profile when non-empty.
@@ -1632,6 +1707,15 @@ func (id AttemptParticipationID) MarshalJSON() ([]byte, error) { return marshalI
 // MarshalJSON encodes the attempt-connection as a JSON string.
 func (id AttemptConnectionID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
+// MarshalJSON encodes the assistant-conversation as a JSON string.
+func (id AssistantConversationID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
+// MarshalJSON encodes the assistant-turn as a JSON string.
+func (id AssistantTurnID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
+// MarshalJSON encodes the assistant-call as a JSON string.
+func (id AssistantCallID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
 // MarshalJSON encodes the environment-profile as a JSON string.
 func (id EnvironmentProfileID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
@@ -1858,6 +1942,21 @@ func (id *AttemptParticipationID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the attempt-connection.
 func (id *AttemptConnectionID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseAttemptConnectionID)
+}
+
+// UnmarshalJSON decodes a JSON string into the assistant-conversation.
+func (id *AssistantConversationID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseAssistantConversationID)
+}
+
+// UnmarshalJSON decodes a JSON string into the assistant-turn.
+func (id *AssistantTurnID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseAssistantTurnID)
+}
+
+// UnmarshalJSON decodes a JSON string into the assistant-call.
+func (id *AssistantCallID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseAssistantCallID)
 }
 
 // UnmarshalJSON decodes a JSON string into the environment-profile.

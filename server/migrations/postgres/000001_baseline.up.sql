@@ -1979,7 +1979,7 @@ CREATE TABLE exam_attempt_workspace_entries (
     current_object_id varchar(26),
     -- The author of the entry's last change; both are null for an entry
     -- seeded from the Starter Workspace and never changed since.
-    last_author_kind varchar(16) CHECK (last_author_kind IN ('candidate', 'environment')),
+    last_author_kind varchar(16) CHECK (last_author_kind IN ('candidate', 'environment', 'assistant')),
     last_author_ref varchar(96) CHECK (octet_length(last_author_ref) BETWEEN 1 AND 96),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
@@ -2027,7 +2027,7 @@ CREATE TABLE exam_attempt_workspace_journal (
     -- Who made the change: the kind of author and a reference within it (the
     -- candidate's Attempt Connection, or the environment incarnation and the
     -- writing process's tag).
-    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment', 'assistant')),
     author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     CONSTRAINT exam_attempt_workspace_journal_recursive_check CHECK (
         NOT recursive OR (operation = 'delete_entry' AND entry_kind = 'directory')
@@ -2877,7 +2877,7 @@ CREATE TABLE exam_submission_manifest_entries (
     workspace_object_id varchar(26),
     -- The author of the entry's last change when it was sealed; both are null
     -- for an entry unchanged since the Starter Workspace.
-    author_kind varchar(16) CHECK (author_kind IN ('candidate', 'environment')),
+    author_kind varchar(16) CHECK (author_kind IN ('candidate', 'environment', 'assistant')),
     author_ref varchar(96) CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     PRIMARY KEY (submission_id, entry_id),
     UNIQUE (submission_id, path),
@@ -5659,7 +5659,7 @@ CREATE TABLE exam_attempt_evidence (
     kind varchar(32) NOT NULL CHECK (kind IN (
         'execution.process', 'execution.input', 'execution.gap', 'execution.overwritten', 'execution.refused'
     )),
-    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment', 'assistant')),
     author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     sequence bigint NOT NULL CHECK (sequence BETWEEN 1 AND 9007199254740991),
     canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 67584),

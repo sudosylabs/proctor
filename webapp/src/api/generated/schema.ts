@@ -15594,11 +15594,11 @@ export interface components {
         /** @description Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was. */
         WorkspaceAuthor: {
             /**
-             * @description `candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed.
+             * @description `candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed. `assistant` acts on the candidate's behalf through a recorded tool call.
              * @enum {string}
              */
-            kind: "candidate" | "environment";
-            /** @description The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known. */
+            kind: "candidate" | "environment" | "assistant";
+            /** @description The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known. For `assistant`, the compact conversation, turn and tool-call IDs, separated by slashes. */
             ref: string;
         };
         /** @description A token for one saved version of a Workspace file's content. Compare it or send it back unchanged. It is not an identifier, and you should not read meaning into its characters. */

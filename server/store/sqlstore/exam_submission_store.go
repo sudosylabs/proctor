@@ -444,7 +444,7 @@ func verifyActiveExamSubmissionSealAccess(
 
 // requireNoCandidateChangesAfter accepts a voluntary seal's expected cursor
 // when every journaled change after it, up to the workspace's current
-// cursor, was made by the execution environment. A candidate change after
+// cursor, was made by the execution environment. A candidate or assistant change after
 // it, an expected cursor past the current one, or a change no longer
 // journaled conflicts with attempt_workspace_cursor.
 func requireNoCandidateChangesAfter(
@@ -466,7 +466,7 @@ func requireNoCandidateChangesAfter(
 		ByCandidate int64 `db:"by_candidate"`
 	}
 	if err := tx.Get(ctx, &changes, `SELECT COUNT(*) AS journaled,
-			COUNT(*) FILTER (WHERE author_kind <> 'environment') AS by_candidate
+			COUNT(*) FILTER (WHERE author_kind IN ('candidate', 'assistant')) AS by_candidate
 		FROM exam_attempt_workspace_journal
 		WHERE workspace_id = ? AND cursor > ? AND cursor <= ?`, workspaceID, expected, current); err != nil {
 		return fmt.Errorf("read the Workspace changes after the seal cursor: %w", err)

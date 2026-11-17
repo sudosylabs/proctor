@@ -92,6 +92,8 @@ type attemptWorkspaceMutationTargetRow struct {
 
 func validAttemptWorkspaceWriteAccess(access store.ExamAttemptWorkspaceWriteAccess) bool {
 	switch access := access.(type) {
+	case store.ExamAttemptWorkspaceAssistantAccess:
+		return access.WorkspaceAuthor().IsValid() && validAttemptWorkspaceWriteAccess(access.ExamAttemptWorkspaceEditorAccess)
 	case store.ExamAttemptWorkspaceEditorAccess:
 		return access.AttemptID.IsValid() &&
 			access.ParticipationID.IsValid() &&
@@ -124,6 +126,11 @@ func lockAttemptWorkspaceMutationTarget(
 		return nil, time.Time{}, store.NewErrInvalidInput("attempt_workspace", "access", nil)
 	}
 
+	// Attribution stays with the caller; every access decision below uses
+	// the same live editor proof for an assistant as for the candidate.
+	if assistant, ok := access.(store.ExamAttemptWorkspaceAssistantAccess); ok {
+		access = assistant.ExamAttemptWorkspaceEditorAccess
+	}
 	attemptID := access.WorkspaceAttemptID()
 	var candidateID model.UserID
 	var row attemptWorkspaceMutationTargetRow

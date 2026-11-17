@@ -802,3 +802,5 @@ func (failingProviderType) Type() string { return "cas" }
 func (failingProviderType) New(plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
 	return nil, errors.New("settings rejected")
 }
+
+func (testStore) AssistantProfile() store.AssistantProfileStore { return nil }

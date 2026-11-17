@@ -123,6 +123,8 @@ type retryStores struct {
 	pluginSettingsOnce             sync.Once
 	environmentProfile             store.EnvironmentProfileStore
 	environmentProfileOnce         sync.Once
+	assistantProfile               store.AssistantProfileStore
+	assistantProfileOnce           sync.Once
 	attemptEnvironment             store.AttemptEnvironmentStore
 	attemptEnvironmentOnce         sync.Once
 	attemptRuntimeLease            store.AttemptRuntimeLeaseStore
@@ -396,6 +398,11 @@ type pluginSettingsStore struct {
 
 type environmentProfileStore struct {
 	store.EnvironmentProfileStore
+	layer *Layer
+}
+
+type assistantProfileStore struct {
+	store.AssistantProfileStore
 	layer *Layer
 }
 
@@ -952,6 +959,16 @@ func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
 		}
 	})
 	return l.stores.environmentProfile
+}
+
+func (l *Layer) AssistantProfile() store.AssistantProfileStore {
+	l.stores.assistantProfileOnce.Do(func() {
+		next := l.Store.AssistantProfile()
+		if next != nil {
+			l.stores.assistantProfile = &assistantProfileStore{AssistantProfileStore: next, layer: l}
+		}
+	})
+	return l.stores.assistantProfile
 }
 
 func (l *Layer) AttemptEnvironment() store.AttemptEnvironmentStore {
@@ -2053,6 +2070,18 @@ func (s *installationStore) Get(ctx context.Context) (*model.InstallationState, 
 	})
 }
 
+func (s *assistantProfileStore) Get(ctx context.Context, arg1 model.AssistantProfileID) (*model.AssistantProfile, error) {
+	return retryCall1(ctx, s.layer, func() (*model.AssistantProfile, error) {
+		return s.AssistantProfileStore.Get(ctx, arg1)
+	})
+}
+
+func (s *assistantProfileStore) List(ctx context.Context, includeRetired bool) ([]*model.AssistantProfile, error) {
+	return retryCall1(ctx, s.layer, func() ([]*model.AssistantProfile, error) {
+		return s.AssistantProfileStore.List(ctx, includeRetired)
+	})
+}
+
 func (s *attemptEnvironmentStore) Get(ctx context.Context, arg1 model.ExamAttemptID) (*model.AttemptEnvironment, error) {
 	return retryCall1(ctx, s.layer, func() (*model.AttemptEnvironment, error) {
 		return s.AttemptEnvironmentStore.Get(ctx, arg1)
@@ -2143,6 +2172,7 @@ var (
 	_ store.DesktopCompatibilityPolicyStore = (*desktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
 	_ store.EnvironmentProfileStore         = (*environmentProfileStore)(nil)
+	_ store.AssistantProfileStore           = (*assistantProfileStore)(nil)
 	_ store.AttemptEnvironmentStore         = (*attemptEnvironmentStore)(nil)
 	_ store.AttemptRuntimeLeaseStore        = (*attemptRuntimeLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)

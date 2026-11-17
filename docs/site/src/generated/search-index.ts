@@ -1660,6 +1660,39 @@ export const searchEntries = [
     "searchText": "endaffiliation end an affiliation while retaining history ends one affiliation that is in effect, after checking that you may manage the user. the user's other affiliations stay in effect, and ending this one never revokes credentials or permissions. membership and progression delete /api/v1/affiliations/{affiliation_id} principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.csrf.invalid authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found affiliation.student_has_active_enrollment affiliation.conflict administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listAssistantProfiles",
+    "kind": "endpoint",
+    "group": "Administration",
+    "title": "List the assistant profiles",
+    "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+    "href": "/api/reference/list-assistant-profiles",
+    "method": "GET",
+    "path": "/api/v1/assistant-profiles",
+    "searchText": "listassistantprofiles list the assistant profiles system administrators manage immutable assistant profiles. creation requires a configured provider. retirement preserves the recipe used by published exams; transcripts are available only through exam review. administration get /api/v1/assistant-profiles principal_required none authorization.denied authorization.request.invalid authorization.unavailable assistant_profile.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:createAssistantProfile",
+    "kind": "endpoint",
+    "group": "Administration",
+    "title": "Create an assistant profile",
+    "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+    "href": "/api/reference/create-assistant-profile",
+    "method": "POST",
+    "path": "/api/v1/assistant-profiles",
+    "searchText": "createassistantprofile create an assistant profile system administrators manage immutable assistant profiles. creation requires a configured provider. retirement preserves the recipe used by published exams; transcripts are available only through exam review. administration post /api/v1/assistant-profiles strong_recent_session_required required authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress assistant_profile.invalid assistant_profile.unavailable request.invalid resource.not_found assistant_profile.name_in_use assistant_profile.limit_reached authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid authentication.strong_required authentication.reauthentication_required"
+  },
+  {
+    "id": "operation:retireAssistantProfile",
+    "kind": "endpoint",
+    "group": "Administration",
+    "title": "Retire an assistant profile",
+    "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+    "href": "/api/reference/retire-assistant-profile",
+    "method": "POST",
+    "path": "/api/v1/assistant-profiles/{assistant_profile_id}/retire",
+    "searchText": "retireassistantprofile retire an assistant profile system administrators manage immutable assistant profiles. creation requires a configured provider. retirement preserves the recipe used by published exams; transcripts are available only through exam review. administration post /api/v1/assistant-profiles/{assistant_profile_id}/retire strong_recent_session_required required authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress assistant_profile.invalid assistant_profile.unavailable request.invalid resource.not_found assistant_profile.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid authentication.strong_required authentication.reauthentication_required"
+  },
+  {
     "id": "operation:listAuditEvents",
     "kind": "endpoint",
     "group": "Roles and access",
@@ -5682,6 +5715,51 @@ export const searchEntries = [
     "description": "A student Affiliation cannot end while the student has an open Class enrollment.",
     "href": "/problems/affiliation.student_has_active_enrollment",
     "searchText": "affiliation.student_has_active_enrollment affiliation student has active enrollment 409 a student affiliation cannot end while the student has an open class enrollment."
+  },
+  {
+    "id": "problem:assistant_profile.invalid",
+    "kind": "problem",
+    "group": "Error codes / Assistant profile",
+    "title": "assistant_profile.invalid",
+    "description": "The assistant profile is outside its bounds; fields.field names the part.",
+    "href": "/problems/assistant_profile.invalid",
+    "searchText": "assistant_profile.invalid assistant profile invalid 400 the assistant profile is outside its bounds; `fields.field` names the part."
+  },
+  {
+    "id": "problem:assistant_profile.limit_reached",
+    "kind": "problem",
+    "group": "Error codes / Assistant profile",
+    "title": "assistant_profile.limit_reached",
+    "description": "The installation already keeps the most assistant profiles that are not retired.",
+    "href": "/problems/assistant_profile.limit_reached",
+    "searchText": "assistant_profile.limit_reached assistant profile limit reached 409 the installation already keeps the most assistant profiles that are not retired."
+  },
+  {
+    "id": "problem:assistant_profile.name_in_use",
+    "kind": "problem",
+    "group": "Error codes / Assistant profile",
+    "title": "assistant_profile.name_in_use",
+    "description": "Another assistant profile that is not retired has that name.",
+    "href": "/problems/assistant_profile.name_in_use",
+    "searchText": "assistant_profile.name_in_use assistant profile name in use 409 another assistant profile that is not retired has that name."
+  },
+  {
+    "id": "problem:assistant_profile.not_found",
+    "kind": "problem",
+    "group": "Error codes / Assistant profile",
+    "title": "assistant_profile.not_found",
+    "description": "No assistant profile has that ID.",
+    "href": "/problems/assistant_profile.not_found",
+    "searchText": "assistant_profile.not_found assistant profile not found 404 no assistant profile has that id."
+  },
+  {
+    "id": "problem:assistant_profile.unavailable",
+    "kind": "problem",
+    "group": "Error codes / Assistant profile",
+    "title": "assistant_profile.unavailable",
+    "description": "Environment profiles cannot be read or changed now; retry later.",
+    "href": "/problems/assistant_profile.unavailable",
+    "searchText": "assistant_profile.unavailable assistant profile unavailable 503 environment profiles cannot be read or changed now; retry later."
   },
   {
     "id": "problem:audit.internal",

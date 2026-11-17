@@ -28,6 +28,7 @@ const (
 	aggregateDesktopCompatibilityPolicy aggregateName = "desktop_compatibility_policy"
 	aggregatePluginSettings             aggregateName = "plugin_settings"
 	aggregateEnvironmentProfile         aggregateName = "environment_profile"
+	aggregateAssistantProfile           aggregateName = "assistant_profile"
 	aggregateAttemptEnvironment         aggregateName = "attempt_environment"
 	aggregateAttemptRuntimeLease        aggregateName = "attempt_runtime_lease"
 	aggregateRetentionPolicy            aggregateName = "retention_policy"

@@ -84,6 +84,9 @@ type AttemptParticipationID string
 // participation.
 type AttemptConnectionID string
 
+// AssistantProfileID identifies one immutable assistant profile.
+type AssistantProfileID string
+
 // AssistantConversationID identifies an attempt's assistant conversation.
 type AssistantConversationID string
 

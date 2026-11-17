@@ -84,7 +84,7 @@ func newPluginFixture(t *testing.T) pluginFixture {
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at), ClientType: model.SessionClientWeb}
-	access := grantedAccess(t, nil, institutionGrant(principal.UserID, model.ActionPluginManage, model.ActionEnvironmentProfileManage))
+	access := grantedAccess(t, nil, institutionGrant(principal.UserID, model.ActionPluginManage, model.ActionEnvironmentProfileManage, model.ActionAssistantProfileManage))
 	publisher := &realtimetest.Publisher{}
 	service := &Service{
 		institutions: &institutionStoreFake{institution: institution}, pluginSettings: saved, plugins: catalog,

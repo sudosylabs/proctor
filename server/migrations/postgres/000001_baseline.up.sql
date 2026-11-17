@@ -4078,10 +4078,40 @@ CREATE TABLE plugin_settings (
     updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
 );
 
--- The administrator-managed recipes Attempt Environments are created from.
+-- The administrator-managed recipes for assistant models and execution.
 -- A profile is never edited or deleted: a change is a new profile and the old
 -- one is retired, so a published Exam Revision always names a profile that
 -- still exists. The name is unique among the profiles that are not retired.
+CREATE TABLE assistant_profiles (
+ id varchar(26) PRIMARY KEY CONSTRAINT assistant_profiles_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ name varchar(63) NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,62}$'),
+ specification jsonb NOT NULL CHECK (jsonb_typeof(specification) = 'object' AND octet_length(specification::text) <= 16384),
+ created_by_user_id varchar(26) NOT NULL REFERENCES users(id)
+  CONSTRAINT assistant_profiles_created_by_user_id_canonical_check
+  CHECK (created_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ created_at timestamptz NOT NULL,
+ retired_at timestamptz CHECK (retired_at IS NULL OR retired_at >= created_at),
+ revision bigint NOT NULL CHECK (revision > 0)
+);
+CREATE UNIQUE INDEX assistant_profiles_live_name_key ON assistant_profiles(name) WHERE retired_at IS NULL;
+CREATE INDEX assistant_profiles_created_by_user_id_idx ON assistant_profiles(created_by_user_id);
+CREATE FUNCTION guard_assistant_profile_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP = 'DELETE' THEN
+  RAISE EXCEPTION 'assistant profiles are never deleted' USING ERRCODE = '55000';
+ END IF;
+ IF OLD.retired_at IS NOT NULL OR NEW.retired_at IS NULL OR NEW.revision <> OLD.revision + 1 OR
+  ROW(NEW.id, NEW.name, NEW.specification, NEW.created_by_user_id, NEW.created_at) IS DISTINCT FROM
+  ROW(OLD.id, OLD.name, OLD.specification, OLD.created_by_user_id, OLD.created_at) THEN
+  RAISE EXCEPTION 'an assistant profile only retires' USING ERRCODE = '55000';
+ END IF;
+ RETURN NEW;
+END;
+$$;
+CREATE TRIGGER assistant_profiles_guard BEFORE UPDATE OR DELETE ON assistant_profiles
+ FOR EACH ROW EXECUTE FUNCTION guard_assistant_profile_mutation();
+
 CREATE TABLE environment_profiles (
     id varchar(26) PRIMARY KEY CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     name varchar(63) NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,62}$'),

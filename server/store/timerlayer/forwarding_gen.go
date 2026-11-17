@@ -123,6 +123,8 @@ type timedStores struct {
 	pluginSettingsOnce             sync.Once
 	environmentProfile             store.EnvironmentProfileStore
 	environmentProfileOnce         sync.Once
+	assistantProfile               store.AssistantProfileStore
+	assistantProfileOnce           sync.Once
 	attemptEnvironment             store.AttemptEnvironmentStore
 	attemptEnvironmentOnce         sync.Once
 	attemptRuntimeLease            store.AttemptRuntimeLeaseStore
@@ -397,6 +399,11 @@ type timedPluginSettingsStore struct {
 type timedEnvironmentProfileStore struct {
 	layer *Layer
 	next  store.EnvironmentProfileStore
+}
+
+type timedAssistantProfileStore struct {
+	layer *Layer
+	next  store.AssistantProfileStore
 }
 
 type timedAttemptEnvironmentStore struct {
@@ -952,6 +959,16 @@ func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
 		}
 	})
 	return l.stores.environmentProfile
+}
+
+func (l *Layer) AssistantProfile() store.AssistantProfileStore {
+	l.stores.assistantProfileOnce.Do(func() {
+		next := l.next.AssistantProfile()
+		if next != nil {
+			l.stores.assistantProfile = &timedAssistantProfileStore{layer: l, next: next}
+		}
+	})
+	return l.stores.assistantProfile
 }
 
 func (l *Layer) AttemptEnvironment() store.AttemptEnvironmentStore {
@@ -4108,6 +4125,30 @@ func (s *timedEnvironmentProfileStore) List(ctx context.Context, includeRetired 
 	})
 }
 
+func (s *timedAssistantProfileStore) Create(arg0 context.Context, arg1 *store.AssistantProfileCreation, arg2 *store.CommandIdempotency) (*store.AssistantProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantProfile, methodCreate), func(callCtx context.Context) (*store.AssistantProfileCommandResult, error) {
+		return s.next.Create(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAssistantProfileStore) Retire(arg0 context.Context, arg1 *store.AssistantProfileRetirement, arg2 *store.CommandIdempotency) (*store.AssistantProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantProfile, methodRetire), func(callCtx context.Context) (*store.AssistantProfileCommandResult, error) {
+		return s.next.Retire(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAssistantProfileStore) Get(arg0 context.Context, arg1 model.AssistantProfileID) (*model.AssistantProfile, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantProfile, methodGet), func(callCtx context.Context) (*model.AssistantProfile, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantProfileStore) List(ctx context.Context, includeRetired bool) ([]*model.AssistantProfile, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateAssistantProfile, methodList), func(callCtx context.Context) ([]*model.AssistantProfile, error) {
+		return s.next.List(callCtx, includeRetired)
+	})
+}
+
 func (s *timedAttemptEnvironmentStore) ApplyFact(arg0 context.Context, arg1 model.AttemptEnvironmentFact) (*store.AttemptEnvironmentFactResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodApplyFact), func(callCtx context.Context) (*store.AttemptEnvironmentFactResult, error) {
 		return s.next.ApplyFact(callCtx, arg1)
@@ -4366,6 +4407,7 @@ var (
 	_ store.DesktopCompatibilityPolicyStore = (*timedDesktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*timedPluginSettingsStore)(nil)
 	_ store.EnvironmentProfileStore         = (*timedEnvironmentProfileStore)(nil)
+	_ store.AssistantProfileStore           = (*timedAssistantProfileStore)(nil)
 	_ store.AttemptEnvironmentStore         = (*timedAttemptEnvironmentStore)(nil)
 	_ store.AttemptRuntimeLeaseStore        = (*timedAttemptRuntimeLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*timedRetentionPolicyStore)(nil)

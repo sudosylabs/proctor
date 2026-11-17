@@ -78,6 +78,8 @@ DROP TABLE IF EXISTS jobs;
 DROP TABLE IF EXISTS administrator_recovery_records;
 DROP TABLE IF EXISTS installation_states;
 DROP TABLE IF EXISTS retention_policies;
+DROP TABLE IF EXISTS assistant_profiles;
+DROP FUNCTION IF EXISTS guard_assistant_profile_mutation();
 DROP TABLE IF EXISTS environment_profiles;
 DROP FUNCTION IF EXISTS guard_environment_profile_mutation();
 DROP TABLE IF EXISTS plugin_settings;

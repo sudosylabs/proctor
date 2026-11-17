@@ -27,6 +27,7 @@ var baselineTables = []string{
 	"access_policy_transitions",
 	"administrator_recovery_records",
 	"affiliations",
+	"assistant_profiles",
 	"attempt_runtime_leases",
 	"audit_events",
 	"browser_activity_events",

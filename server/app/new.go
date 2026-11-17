@@ -314,6 +314,7 @@ func newAdministration(
 		RecentAuthenticationTTL: deps.RecentAuthenticationTTL,
 		Sessions:                deps.Sessions,
 		Plugins:                 deps.Plugins,
+		AssistantProviders:      deps.AssistantProviders,
 		Now:                     time.Now,
 	})
 }

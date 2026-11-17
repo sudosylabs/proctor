@@ -80,7 +80,9 @@ type Dependencies struct {
 	PublicURL string
 	// ExecutionEnabled is whether exams may publish with an execution
 	// environment.
-	ExecutionEnabled bool
+	ExecutionEnabled   bool
+	AssistantEnabled   bool
+	AssistantProviders []string
 	// EnvironmentWaker wakes an attempt environment's owner after its facts
 	// or workspace change. Nil wakes nobody; the runtime's backstop still
 	// finds the change.

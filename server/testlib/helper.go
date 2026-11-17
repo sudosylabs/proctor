@@ -515,3 +515,5 @@ func (lifecycleInstallationStore) ReconcileAdministratorRecovery(
 ) (*store.AdministratorRecoveryReconciliationResult, error) {
 	return &store.AdministratorRecoveryReconciliationResult{}, nil
 }
+
+func (s *LifecycleStore) AssistantProfile() store.AssistantProfileStore { return nil }

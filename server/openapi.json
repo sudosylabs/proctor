@@ -3249,6 +3249,82 @@
         },
         "description": "One page of the User's Affiliations."
       },
+      "AssistantProfileListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "budgets": {
+                    "command_seconds": 0,
+                    "command_timeout_seconds": 60,
+                    "commands": 0,
+                    "input_tokens": 100000,
+                    "output_tokens": 10000,
+                    "tool_calls": 0,
+                    "turns": 100
+                  },
+                  "created_at": "2026-01-01T12:00:00Z",
+                  "data_handling": "self_hosted",
+                  "display_name": "Campus tutor",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "max_level": "tutor",
+                  "model": "teaching-model",
+                  "name": "campus-tutor",
+                  "provider": "campus",
+                  "pseudonymize": true,
+                  "revision": 1
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AssistantProfileListResponse"
+            }
+          }
+        },
+        "description": "The assistant profiles.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "AssistantProfileOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "budgets": {
+                "command_seconds": 0,
+                "command_timeout_seconds": 60,
+                "commands": 0,
+                "input_tokens": 100000,
+                "output_tokens": 10000,
+                "tool_calls": 0,
+                "turns": 100
+              },
+              "created_at": "2026-01-01T12:00:00Z",
+              "data_handling": "self_hosted",
+              "display_name": "Campus tutor",
+              "id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "max_level": "tutor",
+              "model": "teaching-model",
+              "name": "campus-tutor",
+              "provider": "campus",
+              "pseudonymize": true,
+              "revision": 1
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AssistantProfileResponse"
+            }
+          }
+        },
+        "description": "The assistant profile.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
       "AttemptEvidenceListOK": {
         "content": {
           "application/json": {
@@ -12452,6 +12528,223 @@
         ],
         "type": "object"
       },
+      "AssistantBudgets": {
+        "additionalProperties": false,
+        "properties": {
+          "command_seconds": {
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "command_timeout_seconds": {
+            "format": "int64",
+            "maximum": 600,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "commands": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_tokens": {
+            "format": "int64",
+            "maximum": 100000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "output_tokens": {
+            "format": "int64",
+            "maximum": 10000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "tool_calls": {
+            "format": "int64",
+            "maximum": 20000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turns": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turns",
+          "input_tokens",
+          "output_tokens",
+          "tool_calls",
+          "commands",
+          "command_seconds",
+          "command_timeout_seconds"
+        ],
+        "type": "object"
+      },
+      "AssistantProfileListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantProfileResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "AssistantProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "budgets": {
+            "$ref": "#/components/schemas/AssistantBudgets"
+          },
+          "data_handling": {
+            "enum": [
+              "self_hosted",
+              "zero_retention",
+              "standard_30d",
+              "other"
+            ],
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "max_level": {
+            "enum": [
+              "tutor",
+              "reviewer",
+              "pair",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "provider": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "pseudonymize": {
+            "default": true,
+            "description": "Defaults to true when omitted or null. Candidate identity is never sent to a provider.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "display_name",
+          "provider",
+          "model",
+          "max_level",
+          "budgets",
+          "data_handling"
+        ],
+        "type": "object"
+      },
+      "AssistantProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "budgets": {
+            "$ref": "#/components/schemas/AssistantBudgets"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "data_handling": {
+            "enum": [
+              "self_hosted",
+              "zero_retention",
+              "standard_30d",
+              "other"
+            ],
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "max_level": {
+            "enum": [
+              "tutor",
+              "reviewer",
+              "pair",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "provider": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "pseudonymize": {
+            "default": true,
+            "type": "boolean"
+          },
+          "retired_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "display_name",
+          "provider",
+          "model",
+          "max_level",
+          "budgets",
+          "data_handling",
+          "pseudonymize",
+          "created_at",
+          "revision"
+        ],
+        "type": "object"
+      },
       "AttemptConfigurationCandidate": {
         "additionalProperties": false,
         "description": "Sent as `initial_configuration` when Proctor Desktop connects to an Exam Attempt over the WebSocket, so no HTTP operation uses it. A complete proposed Attempt Configuration, at most 16 KiB once encoded. At first admission the server checks the acknowledged User Settings revision, the exact Desktop build and target, the packaged settings registry and manifest, and that every item is safe for candidates. Values out of range are rejected, not adjusted. The digest of the fixed configuration covers this whole object, including where it came from.",
@@ -12810,6 +13103,7 @@
           "academic_unit.view",
           "access_policy.manage",
           "access_policy.view",
+          "assistant_profile.manage",
           "audit.view",
           "authentication.administrator_mfa_reset",
           "authentication.administrator_recovery",
@@ -20019,6 +20313,11 @@
           "affiliation.conflict",
           "affiliation.invalid",
           "affiliation.student_has_active_enrollment",
+          "assistant_profile.invalid",
+          "assistant_profile.limit_reached",
+          "assistant_profile.name_in_use",
+          "assistant_profile.not_found",
+          "assistant_profile.unavailable",
           "audit.internal",
           "audit.query.invalid",
           "audit.unavailable",
@@ -37433,6 +37732,289 @@
           "$ref": "#/components/parameters/AffiliationID"
         }
       ]
+    },
+    "/api/v1/assistant-profiles": {
+      "get": {
+        "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+        "operationId": "listAssistantProfiles",
+        "parameters": [
+          {
+            "description": "Whether retired profiles are listed too.",
+            "in": "query",
+            "name": "include_retired",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AssistantProfileListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the assistant profiles",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "assistant_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "post": {
+        "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+        "operationId": "createAssistantProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budgets": {
+                  "command_seconds": 0,
+                  "command_timeout_seconds": 60,
+                  "commands": 0,
+                  "input_tokens": 100000,
+                  "output_tokens": 10000,
+                  "tool_calls": 0,
+                  "turns": 100
+                },
+                "data_handling": "self_hosted",
+                "display_name": "Campus tutor",
+                "max_level": "tutor",
+                "model": "teaching-model",
+                "name": "campus-tutor",
+                "provider": "campus",
+                "pseudonymize": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AssistantProfileRequest"
+              }
+            }
+          },
+          "description": "The complete profile. Every member is required.",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/AssistantProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create an assistant profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "assistant_profile.invalid",
+          "assistant_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "assistant_profile.name_in_use",
+          "assistant_profile.limit_reached",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/assistant-profiles/{assistant_profile_id}/retire": {
+      "parameters": [
+        {
+          "description": "The assistant profile to retire.",
+          "in": "path",
+          "name": "assistant_profile_id",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ID"
+          }
+        }
+      ],
+      "post": {
+        "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+        "operationId": "retireAssistantProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AssistantProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Retire an assistant profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/assistant-profiles/ybndrfg8ejkmcpqxot1uwisza3/retire' \\\n  --header 'Authorization: Bearer \u003cinteractive-system-administrator-session\u003e' \\\n  --header 'Idempotency-Key: docs-assistant-profile-retire-001'"
+          }
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "assistant_profile.invalid",
+          "assistant_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "assistant_profile.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
     },
     "/api/v1/audits": {
       "get": {

@@ -224,3 +224,6 @@ AttemptEnvironmentStore.Get                                always
 # fence.
 AttemptRuntimeLeaseStore.Renew                             always
 AttemptRuntimeLeaseStore.Release                           always
+
+AssistantProfileStore.Get always
+AssistantProfileStore.List always

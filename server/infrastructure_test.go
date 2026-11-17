@@ -353,3 +353,5 @@ func (s savedPluginSettings) List(context.Context) ([]*model.PluginSettings, err
 func (s savedPluginSettings) ChangeCount(context.Context) (int64, error) {
 	return int64(len(s.rows)), nil
 }
+
+func (layerOrderStore) AssistantProfile() store.AssistantProfileStore { return nil }

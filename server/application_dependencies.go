@@ -69,6 +69,10 @@ func applicationDependencies(
 		return app.Dependencies{}, err
 	}
 
+	providerNames := make([]string, len(cfg.Assistant.Providers))
+	for index, provider := range cfg.Assistant.Providers {
+		providerNames[index] = provider.Name
+	}
 	return app.Dependencies{
 		Store:                   capabilities.persistence,
 		Cache:                   cache,
@@ -84,6 +88,8 @@ func applicationDependencies(
 		NodeID:                  capabilities.nodeID,
 		PublicURL:               cfg.Server.PublicURL,
 		ExecutionEnabled:        cfg.Execution.Enabled,
+		AssistantEnabled:        cfg.Assistant.Enabled,
+		AssistantProviders:      providerNames,
 		SupportAddress:          cfg.Mail.SupportAddress,
 		LoopbackHTTPDevelopment: explicitLoopbackHTTPDevelopment(cfg.Server.PublicURL),
 		Password:                passwordPolicyFromConfig(auth),

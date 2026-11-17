@@ -1117,6 +1117,11 @@ components:
         - affiliation.conflict
         - affiliation.invalid
         - affiliation.student_has_active_enrollment
+        - assistant_profile.invalid
+        - assistant_profile.limit_reached
+        - assistant_profile.name_in_use
+        - assistant_profile.not_found
+        - assistant_profile.unavailable
         - audit.internal
         - audit.query.invalid
         - audit.unavailable
@@ -1469,6 +1474,7 @@ components:
         - academic_unit.view
         - access_policy.manage
         - access_policy.view
+        - assistant_profile.manage
         - audit.view
         - authentication.administrator_mfa_reset
         - authentication.administrator_recovery

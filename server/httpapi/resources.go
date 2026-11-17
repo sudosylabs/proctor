@@ -36,6 +36,7 @@ func productionResources(
 		retentionPolicyResource(application.Administration),
 		pluginAdministrationResource(application.Administration),
 		environmentProfileResource(application.Administration),
+		assistantProfileResource(application.Administration),
 		retentionResource(application.Administration),
 		examRecordsResource(application.ExamRecords),
 		examExportsResource(application.ExamExports),

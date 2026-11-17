@@ -85,6 +85,16 @@ codes:
     description: "An Affiliation field or reference is invalid."
   - code: affiliation.student_has_active_enrollment
     description: "A student Affiliation cannot end while the student has an open Class enrollment."
+  - code: assistant_profile.invalid
+    description: "The assistant profile is outside its bounds; `fields.field` names the part."
+  - code: assistant_profile.limit_reached
+    description: "The installation already keeps the most assistant profiles that are not retired."
+  - code: assistant_profile.name_in_use
+    description: "Another assistant profile that is not retired has that name."
+  - code: assistant_profile.not_found
+    description: "No assistant profile has that ID."
+  - code: assistant_profile.unavailable
+    description: "Environment profiles cannot be read or changed now; retry later."
   - code: audit.internal
     description: "The server produced an audit event it cannot record; the operation is refused."
   - code: audit.query.invalid

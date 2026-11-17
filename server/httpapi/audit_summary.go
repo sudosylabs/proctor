@@ -295,6 +295,7 @@ var auditActionSummaryVariables = map[model.Action][]string{
 	model.ActionClassView:                               {"Actor", "Resource"},
 	model.ActionDesktopCompatibilityPolicyManage:        {"Actor"},
 	model.ActionPluginManage:                            {"Actor"},
+	model.ActionAssistantProfileManage:                  {"Actor"},
 	model.ActionEnvironmentProfileManage:                {"Actor"},
 	model.ActionDesktopRegistrationRename:               {"Actor", "Resource"},
 	model.ActionDesktopRegistrationRevoke:               {"Actor", "Resource"},

@@ -1,0 +1,86 @@
+---
+title: Assistant configuration
+description: Turn the in-exam assistant on for the installation and list the model providers Proctor may call.
+audience: operator
+maturity: preview
+slug: /reference/configuration/assistant/
+---
+
+# Assistant configuration
+
+The in-exam assistant lets a candidate talk to a language model during an
+Attempt, at the help level the Exam allows. Proctor runs the conversation on
+its own application nodes and calls a model provider from there. The
+candidate's environment never talks to a model. This section turns the
+assistant on and lists the providers Proctor may call.
+Changing it needs a restart.
+
+Which model an Exam uses, and its limits, is not configuration. A System
+Administrator manages assistant profiles, each naming one provider from this
+section and a model, with
+`GET /api/v1/assistant-profiles`,
+`POST /api/v1/assistant-profiles` and
+`POST /api/v1/assistant-profiles/{assistant_profile_id}/retire`. An Exam's
+assistant policy names one profile. See
+[assistant profiles](../../institution-admin/assistant-profiles.mdx).
+
+| Path and default | Meaning and accepted value |
+| --- | --- |
+| `Assistant.Enabled`<br />Default: `false` | Whether Exams may be published with the assistant. While it is off, no assistant runs, and publishing an Exam whose assistant policy is enabled is refused with `exam.assistant.disabled`. Turning it on needs at least one provider. |
+| `Assistant.Providers[].Name`<br />Default: no providers | One provider per entry, at most 64. The name assistant profiles refer to: a lowercase letter, then up to 62 lowercase letters, digits or hyphens, unique among the providers. Removing or renaming a provider makes every profile that names it unusable for publication. |
+| `Assistant.Providers[].Kind` | The API the provider speaks: `openai_compatible` for the OpenAI chat completions API, which vLLM, Ollama, LiteLLM and many hosted vendors offer, or `anthropic` for the Anthropic Messages API. |
+| `Assistant.Providers[].BaseURL` | The absolute `https` or `http` URL of the API, including its version path, such as `https://models.internal.example.edu/v1`. It may not carry credentials, a query or a fragment. Proctor adds `chat/completions` or `messages` to it, and never follows a redirect. |
+| `Assistant.Providers[].APIKey` | The credential Proctor sends: as a bearer token for `openai_compatible`, and as `x-api-key` for `anthropic`. A single line of at most 8192 bytes. Leave it empty for a self-hosted server that doesn't ask for one. It is never logged, and `proctor config show` always redacts it. |
+| `Assistant.Providers[].Capabilities.Streaming`<br />Default: `false` | Ask the provider to stream replies. Turn it on for every server that supports streaming, so candidates see the reply as it is written. |
+| `Assistant.Providers[].Capabilities.ToolChoice`<br />Default: `false` | The server accepts `tool_choice`. Leave it off if the deployed server version ignores or rejects it. |
+| `Assistant.Providers[].Capabilities.ParallelTools`<br />Default: `false` | The server accepts the parallel tool call setting. Proctor uses it to ask for one tool call at a time. |
+| `Assistant.Providers[].Capabilities.CompletionTokens`<br />Default: `false` | For `openai_compatible`: send the output limit as `max_completion_tokens` rather than `max_tokens`. Some hosted vendors require it for newer models. |
+| `Assistant.Providers[].Capabilities.StreamUsage`<br />Default: `false` | For `openai_compatible` with `Streaming` on: ask for token usage at the end of the stream. Without it, or when a server drops that last chunk, Proctor estimates usage and charges the budget conservatively. `anthropic` always streams usage and ignores the flag. |
+| `Assistant.Providers[].Timeout` | How long one request to the provider may take, from `1s` to `10m`. There is no default. |
+| `Assistant.Providers[].MaxResponseBytes` | The most bytes Proctor reads from one response, from 1024 to 67108864 (64 MiB). A longer response ends the turn with an error. There is no default. |
+
+The `Capabilities` flags exist because servers that call themselves
+OpenAI-compatible differ. Proctor doesn't probe a server to find out what it
+supports. It sends only what the flags declare. See
+[connect a model provider](../../operator/assistant-providers.mdx) for the
+usual settings.
+
+```json
+{
+  "Assistant": {
+    "Enabled": true,
+    "Providers": [
+      {
+        "Name": "campus-llm",
+        "Kind": "openai_compatible",
+        "BaseURL": "https://models.internal.example.edu/v1",
+        "APIKey": "",
+        "Capabilities": {
+          "Streaming": true,
+          "ToolChoice": true,
+          "ParallelTools": false,
+          "CompletionTokens": false,
+          "StreamUsage": true
+        },
+        "Timeout": "2m",
+        "MaxResponseBytes": 8388608
+      },
+      {
+        "Name": "hosted-vendor",
+        "Kind": "anthropic",
+        "BaseURL": "https://api.vendor.example/v1",
+        "APIKey": "<from your secret store>",
+        "Capabilities": {
+          "Streaming": true,
+          "ToolChoice": true,
+          "ParallelTools": true,
+          "CompletionTokens": false,
+          "StreamUsage": false
+        },
+        "Timeout": "2m",
+        "MaxResponseBytes": 8388608
+      }
+    ]
+  }
+}
+```

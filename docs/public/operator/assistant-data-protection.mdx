@@ -1,0 +1,127 @@
+---
+title: Assistant data protection
+description: What the in-exam assistant sends to a model provider, what pseudonymization does and doesn't hide, and the agreements and assessments to put in place first.
+audience: operator
+maturity: preview
+---
+
+# Assistant data protection
+
+Turning the assistant on sends candidates' exam work to a model provider.
+This page sets out what is sent, what Proctor does to limit it, and the legal
+frameworks institutions usually need to consider. It is not legal advice.
+Your institution's data protection officer or legal counsel decides what
+applies to you.
+
+## What the provider receives
+
+For each turn, Proctor sends the provider:
+
+- the system prompt, which includes the Exam Manager's instructions and the
+  concepts the assistant should avoid;
+- the conversation so far: the candidate's messages and the assistant's
+  replies;
+- at Reviewer and above, what the assistant's tools return: the contents of
+  workspace files and visible text Exam Resources, search results, the screen of a candidate terminal, and
+  the output of commands the assistant ran.
+
+The provider never receives other candidates' work, or anything outside the
+one Attempt. The assistant can't read more than the candidate can.
+
+## What stays in Proctor
+
+- The full transcript: every turn, tool call, approval and output check. It
+  is stored in PostgreSQL with the Attempt, and bound to the Submission when
+  the Attempt is sealed.
+- Provider API keys, which live only in configuration.
+- Structured candidate identity such as the user ID and account details.
+
+The transcript is integrity evidence. It is deleted when the Submission's
+integrity evidence is retired under the retention policy, and it follows the
+same backup rules as the rest of the Submission.
+
+## Pseudonymization
+
+Profiles default `pseudonymize` to true. Proctor omits structured candidate
+identity for every profile, including profiles where the setting is false.
+The prompt refers to "the candidate"; it sends no account or Attempt ID.
+
+Pseudonymization hides what Proctor knows about the candidate. It can't hide
+what the candidate writes. A name in a code comment, a student number in a
+file, or personal details typed into the chat all reach the provider as they
+are. Tell candidates so; the [candidate guide](../candidate/assistant.mdx)
+does.
+
+## Retention depends on the provider
+
+Each assistant profile records its provider's retention terms in
+`data_handling`. The value is shown to Exam Managers when they choose a
+profile, so they know what they are agreeing to. Proctor never sends it to
+the provider, and it doesn't enforce anything by itself: it records the
+agreement you have in place.
+
+| `data_handling` | Use it when |
+| --- | --- |
+| `self_hosted` | The model runs on servers your institution controls, and no third party receives the prompts. |
+| `zero_retention` | A hosted vendor has agreed in writing not to keep prompts or replies after answering. |
+| `standard_30d` | A hosted vendor keeps API data for up to 30 days by default, for example for abuse monitoring, then deletes it. |
+| `other` | Any other arrangement. Describe it in the profile's display name or your own records. |
+
+Check each vendor's current terms rather than relying on a default you read
+once: terms change, and some vendors keep data longer for flagged content.
+Make sure the vendor doesn't use API data to train models.
+
+## Frameworks to consider
+
+### FERPA, in the United States
+
+Candidates' exam work is usually part of their education records. Under the
+[FERPA school-official exception](https://studentprivacy.ed.gov/faq/who-school-official-under-ferpa) (34 CFR 99.31(a)(1)), an institution may
+disclose education records to a contractor without consent when the
+contractor:
+
+- performs a service the institution would otherwise use its own staff for;
+- has a legitimate educational interest under the institution's annual
+  notice;
+- is under the institution's direct control regarding the use and
+  maintenance of the records;
+- uses the records only for the authorized purpose and doesn't redisclose
+  them.
+
+A written agreement is the Department of Education's
+[recommended way to establish direct control](https://studentprivacy.ed.gov/faq/must-school-have-written-agreement-or-contract-community-based-organization-which-it-non).
+Confirm that your arrangement meets the exception; FERPA does not itself
+make a written contract mandatory for this exception.
+
+### GDPR, in the EU and the UK
+
+The institution is the controller. A hosted vendor that processes
+candidates' work on its behalf is a processor, so you need a contract that
+meets [GDPR Article 28](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng): processing only on your instructions,
+confidentiality, security, approved sub-processors, help with data subjects'
+rights, and deletion or return at the end. If the vendor processes data
+outside the EU or the UK, you also need a lawful transfer mechanism under
+Chapter V.
+
+A data protection impact assessment under [Article 35](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng) is likely to be
+required. The assistant uses a new technology, processes students' work
+systematically in an assessment, and may involve a third party. Do the DPIA
+before the first live Exam, and record the profile settings it relies on.
+
+### Other laws
+
+Other jurisdictions have their own student privacy and AI rules. Proctor's
+assistant output is descriptive: it raises no Integrity Flags and makes no
+decision about a candidate, and a person judges the record. Confirm with
+your advisers how your local rules treat the assistant itself.
+
+## A checklist before the first live Exam
+
+1. Decide self-hosted or hosted, and why.
+2. For a hosted vendor: sign the processor or school-official agreement,
+   confirm retention and no training, and check transfers.
+3. Complete the DPIA, or record why one isn't needed.
+4. Create assistant profiles with `pseudonymize` on and the correct
+   `data_handling`.
+5. Tell candidates, before the Exam, that the assistant sends their work to
+   a model and that the conversation is recorded.

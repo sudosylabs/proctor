@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -175,13 +176,23 @@ func appendAssistantRecord(ctx context.Context, tx *sqlxTxWrapper, id model.Exam
 		return nil, err
 	}
 	record.CreatedAt = model.TimeUTC(record.CreatedAt)
+	maximumBytes := min(int64(model.AssistantRecordMaximumBytes), model.AssistantTranscriptMaximumBytes-inventory.Bytes)
+	if !terminal {
+		maximumBytes = min(maximumBytes, model.AssistantTranscriptMaximumBytes-inventory.Bytes-(64<<10))
+	}
 	canonical, err := record.Canonical()
+	if err != nil || int64(len(canonical)) > maximumBytes {
+		if call := record.Call; call != nil && call.Tool == "run_command" && call.Phase == "completed" && call.ProcessTag != "" {
+			record = truncateAssistantCommandRecord(record, int(maximumBytes))
+			canonical, err = record.Canonical()
+		}
+	}
 	if err != nil {
 		return nil, store.NewErrInvalidInput("assistant_record", "document", err)
 	}
 	// Leave enough room to close a pending tool and the turn at any seal.
 	if !terminal && (inventory.Records >= model.AssistantTranscriptMaximumRecords-32 ||
-		inventory.Bytes+int64(len(canonical)) > model.AssistantTranscriptMaximumBytes-(64<<10)) {
+		int64(len(canonical)) > maximumBytes) {
 		return nil, store.NewErrConflict("assistant_transcript", "assistant_budget_exhausted", nil)
 	}
 	next, err := inventory.AssistantInventory.Append(record)
@@ -205,6 +216,36 @@ func appendAssistantRecord(ctx context.Context, tx *sqlxTxWrapper, id model.Exam
 		return nil, fmt.Errorf("extend assistant inventory: %w", err)
 	}
 	return &record, nil
+}
+
+// Keep the largest prefix that fits after JSON escaping and record metadata.
+// A result that fills the remaining inventory must still leave room for the
+// terminal record and retain the command's tag, exit status and gap marker.
+func truncateAssistantCommandRecord(record model.AssistantRecord, limit int) model.AssistantRecord {
+	call := *record.Call
+	record.Call = &call
+	record.Gap, call.Truncated = true, true
+	result := call.Result
+	call.Result = ""
+	low, high := 0, len(result)
+	for low < high {
+		middle := low + (high-low+1)/2
+		end := middle
+		for end < len(result) && !utf8.RuneStart(result[end]) {
+			end--
+		}
+		call.Result = result[:end]
+		if raw, err := record.Canonical(); err == nil && len(raw) <= limit {
+			low = middle
+		} else {
+			high = middle - 1
+		}
+	}
+	for low < len(result) && !utf8.RuneStart(result[low]) {
+		low--
+	}
+	call.Result = result[:low]
+	return record
 }
 
 func (s *SQLAssistantTranscriptStore) Renew(ctx context.Context, a store.AssistantRunAccess) error {

@@ -28,8 +28,8 @@ const AssistantTagPrefix = "assistant:"
 const MaxAssistantCommandTimeout = 10 * time.Minute
 
 // AssistantCommand is one non-interactive command: no terminal, input closed,
-// run from the workspace root. OutputLimit bounds what is kept of the head
-// and of the tail of each stream.
+// run from the workspace root. OutputLimit bounds each stream's evidence
+// prefix. A small trailing buffer lets the model still see how it ended.
 type AssistantCommand struct {
 	Tag         model.AttemptEnvironmentProcessTag
 	Argv        []string
@@ -37,8 +37,8 @@ type AssistantCommand struct {
 	OutputLimit int
 }
 
-// AssistantStream is what a command wrote to one stream: its first and last
-// OutputLimit bytes, and whether anything between them was dropped.
+// AssistantStream holds the captured prefix and tail of one stream. Dropped
+// marks a gap between them, including history that expired before attachment.
 type AssistantStream struct {
 	Head    []byte
 	Tail    []byte
@@ -72,7 +72,8 @@ func (t *Terminals) RunAssistantCommand(
 		return AssistantCommandResult{}, err
 	}
 	if !command.Tag.IsValid() || !strings.HasPrefix(string(command.Tag), AssistantTagPrefix) || len(command.Argv) == 0 ||
-		command.Timeout <= 0 || command.Timeout > MaxAssistantCommandTimeout || command.OutputLimit < 1 {
+		command.Timeout <= 0 || command.Timeout > MaxAssistantCommandTimeout || command.OutputLimit < 1 ||
+		command.OutputLimit > model.AssistantCallResultMaximumBytes {
 		return AssistantCommandResult{}, ErrAssistantCommandInvalid
 	}
 	at, err := t.reach(ctx, candidate.AttemptID)
@@ -125,6 +126,7 @@ func (t *Terminals) RunAssistantCommand(
 			if output.Stream == ProcessStreamStderr {
 				stream = &result.Stderr
 			}
+			stream.Tail = nil
 			stream.Dropped = true
 			stream.Bytes += output.To - output.Offset
 		case OutputExit:
@@ -155,7 +157,7 @@ func (t *Terminals) killAssistantCommand(at reached, tag model.AttemptEnvironmen
 
 func (s *AssistantStream) add(data []byte, limit int) {
 	s.Bytes += uint64(len(data))
-	if room := limit - len(s.Head); room > 0 {
+	if room := limit - len(s.Head); !s.Dropped && room > 0 {
 		take := min(room, len(data))
 		s.Head = append(s.Head, data[:take]...)
 		data = data[take:]
@@ -163,9 +165,16 @@ func (s *AssistantStream) add(data []byte, limit int) {
 	if len(data) == 0 {
 		return
 	}
-	s.Tail = append(s.Tail, data...)
-	if len(s.Tail) > limit {
-		s.Dropped = true
-		s.Tail = append(s.Tail[:0:0], s.Tail[len(s.Tail)-limit:]...)
+	tailLimit := min(limit, 64<<10)
+	if len(data) >= tailLimit {
+		s.Dropped = s.Dropped || len(s.Tail)+len(data) > tailLimit
+		s.Tail = append(s.Tail[:0], data[len(data)-tailLimit:]...)
+		return
 	}
+	if excess := len(s.Tail) + len(data) - tailLimit; excess > 0 {
+		s.Dropped = true
+		copy(s.Tail, s.Tail[excess:])
+		s.Tail = s.Tail[:len(s.Tail)-excess]
+	}
+	s.Tail = append(s.Tail, data...)
 }

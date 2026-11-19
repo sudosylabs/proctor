@@ -344,6 +344,7 @@ func composeApplicationDependencies(
 	applicationDeps.SkipDesktopCompatibility = input.serviceEnvironment == ServiceEnvironmentDev
 	if input.overrides.AssistantGateway != nil && applicationDeps.AssistantEnabled {
 		applicationDeps.AssistantGateway = input.overrides.AssistantGateway
+		applicationDeps.AssistantLimits = input.overrides.AssistantLimits
 	}
 	if input.overrides.DesktopBuildCatalog != nil {
 		applicationDeps.DesktopBuildCatalog = append([]model.DesktopBuildTuple(nil), input.overrides.DesktopBuildCatalog...)

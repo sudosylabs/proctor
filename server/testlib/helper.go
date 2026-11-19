@@ -45,6 +45,7 @@ type setupOptions struct {
 	plugins            []plugin.Plugin
 	executionHostDial  executionhost.Dialer
 	assistantGateway   assistant.ModelGateway
+	assistantLimits    assistant.Limits
 }
 
 // Option customizes one concern in the test graph; everything else is
@@ -118,6 +119,13 @@ func WithExecutionHostDial(dial executionhost.Dialer) Option {
 func WithAssistantGateway(gateway assistant.ModelGateway) Option {
 	return func(options *setupOptions) {
 		options.assistantGateway = gateway
+	}
+}
+
+// WithAssistantLimits shortens the assistant's production timings in tests.
+func WithAssistantLimits(limits assistant.Limits) Option {
+	return func(options *setupOptions) {
+		options.assistantLimits = limits
 	}
 }
 
@@ -243,6 +251,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		Plugins:             settings.plugins,
 		ExecutionHostDial:   settings.executionHostDial,
 		AssistantGateway:    settings.assistantGateway,
+		AssistantLimits:     settings.assistantLimits,
 	})
 	require.NoError(tb, err)
 	helper := &Helper{

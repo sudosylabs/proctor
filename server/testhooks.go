@@ -71,6 +71,8 @@ type TestingOverrides struct {
 	// script the model. It applies only when the configuration enables the
 	// assistant; production always reaches the configured providers.
 	AssistantGateway assistant.ModelGateway
+	// AssistantLimits lets tests exercise expiry without waiting five minutes.
+	AssistantLimits assistant.Limits
 	// AllowMissingJobs is for lifecycle-only tests. Production always
 	// requires durable job persistence and a job runtime.
 	AllowMissingJobs bool

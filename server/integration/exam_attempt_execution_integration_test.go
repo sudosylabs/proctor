@@ -35,6 +35,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
@@ -102,11 +103,17 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	build.NativeAgreement = nativetest.NativeAgreement(t, build)
 	guests, err := memory.New(memory.Config{Images: []execenv.Image{"python-3.12"}, WorkDir: t.TempDir()})
 	require.NoError(t, err)
+	gateway := &commandIntegrationModel{results: make(chan assistant.ModelMessage, 3)}
 	helper := testlib.Setup(t, testlib.WithStore(persistence), testlib.WithDesktopBuildCatalog(build),
+		testlib.WithAssistantGateway(gateway),
+		testlib.WithAssistantLimits(assistant.Limits{ApprovalTimeout: 5 * time.Second}),
 		testlib.WithExecutionHostDial(func(context.Context, config.ExecutionHost) (execenv.Host, error) { return guests, nil }),
 		testlib.WithConfig(func(cfg *config.Config) {
 			cfg.Server.PublicURL = origin
 			cfg.Server.ListenAddress = "127.0.0.1:0"
+			cfg.Assistant.Enabled = true
+			cfg.Assistant.Providers = []config.AssistantProvider{{Name: "campus", Kind: "openai_compatible",
+				BaseURL: "https://llm.example.test/v1", Timeout: config.Duration{Duration: 30 * time.Second}, MaxResponseBytes: 1 << 20}}
 			cfg.Execution.Enabled = true
 			cfg.Execution.Hosts = []config.ExecutionHost{{Name: "alpha", Address: "alpha.example.test:7443",
 				ServerName: "alpha.example.test", CAPEM: executionHostAuthority(t), Token: "execution-test-token"}}
@@ -202,8 +209,18 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 		IdempotencyKey: "execution-flow-policy",
 	})
 	require.NoError(t, err)
+	budgets := model.AssistantBudgets{Turns: 3, InputTokens: 500_000, OutputTokens: 12_000, ToolCalls: 3,
+		Commands: 3, CommandSeconds: 60, CommandTimeoutSeconds: 30}
+	assistantProfile := saveIntegrationAssistantProfile(t, ctx, persistence, bootstrap.Institution.ID, bootstrap.Administrator.ID, model.AssistantLevelPair, budgets)
+	policy := model.DefaultAssistantPolicy()
+	policy.Enabled, policy.ProfileID, policy.Level, policy.Budgets = true, assistantProfile, model.AssistantLevelPair, budgets
+	configuredAssistant, err := helper.App.ExamAuthoring.ConfigureExamDraftAssistant(ctx, managerInv, exam.ConfigureDraftAssistantCommand{
+		ExamID: created.Exam.ID, ExpectedDraftRevision: configured.Draft.Revision, Assistant: policy,
+		IdempotencyKey: "execution-flow-assistant-policy",
+	})
+	require.NoError(t, err)
 	published, err := helper.App.ExamPublication.PublishExamRevision(ctx, managerInv, exam.PublishRevisionCommand{
-		ExamID: created.Exam.ID, ExpectedDraftRevision: configured.Draft.Revision, IdempotencyKey: "execution-flow-publish",
+		ExamID: created.Exam.ID, ExpectedDraftRevision: configuredAssistant.Draft.Revision, IdempotencyKey: "execution-flow-publish",
 	})
 	require.NoError(t, err)
 	startAt := time.Now().UTC().Add(2 * time.Second).Truncate(time.Millisecond)
@@ -298,6 +315,10 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	// owner places it and projects the Attempt Workspace into it.
 	grantID := execenv.ID(connected.Attempt.ID.String() + ".0")
 	eventually(func() bool { return readGuest(grantID, "main.py") == string(starter) }, "the starter file reaches the guest")
+
+	t.Run("assistant command approvals and attribution", func(t *testing.T) {
+		checkAssistantCommandFlow(t, helper.App.Assistant, desktop.inv, access, gateway, journal)
+	})
 
 	// The guest writes a file: the core stores it as the candidate's, by the
 	// environment author.

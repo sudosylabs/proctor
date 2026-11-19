@@ -21,6 +21,7 @@ const (
 	AssistantTranscriptMaximumRecords           = 20000
 	AssistantTranscriptMaximumBytes       int64 = 32 << 20
 	AssistantRecordMaximumBytes                 = 1 << 20
+	AssistantCallResultMaximumBytes             = 768 << 10
 	AssistantCandidateMessageMaximumBytes       = 16 << 10
 )
 
@@ -97,7 +98,7 @@ type AssistantCall struct {
 
 func (c AssistantCall) Valid() bool {
 	if !c.ConversationID.IsValid() || !c.TurnID.IsValid() || !c.CallID.IsValid() || len(c.Arguments) > 64<<10 || !json.Valid(c.Arguments) ||
-		!utf8.ValidString(c.Result) || len(c.Result) > 768<<10 || c.DurationMilliseconds < 0 || c.DurationMilliseconds > 86400000 {
+		!utf8.ValidString(c.Result) || len(c.Result) > AssistantCallResultMaximumBytes || c.DurationMilliseconds < 0 || c.DurationMilliseconds > 86400000 {
 		return false
 	}
 	if len(c.Arguments) == 0 || c.Arguments[0] != '{' {

@@ -87,6 +87,7 @@ type Dependencies struct {
 	// AssistantGateway reaches the configured model providers. Nil, as when
 	// the assistant is off, builds no assistant.
 	AssistantGateway assistant.ModelGateway
+	AssistantLimits  assistant.Limits
 	// EnvironmentWaker wakes an attempt environment's owner after its facts
 	// or workspace change. Nil wakes nobody; the runtime's backstop still
 	// finds the change.

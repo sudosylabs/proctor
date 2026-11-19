@@ -118,7 +118,7 @@ func TestAssistantTutorEndToEnd(t *testing.T) {
 	})
 	require.NoError(t, err)
 	budgets := model.AssistantBudgets{Turns: 10, InputTokens: 200_000, OutputTokens: 20_000, CommandTimeoutSeconds: 60}
-	profile := saveIntegrationAssistantProfile(t, ctx, persistence, bootstrap.Institution.ID, bootstrap.Administrator.ID, budgets)
+	profile := saveIntegrationAssistantProfile(t, ctx, persistence, bootstrap.Institution.ID, bootstrap.Administrator.ID, model.AssistantLevelTutor, budgets)
 	unit, err := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{
 		InstitutionID: bootstrap.Institution.ID, Name: "assistant-flow-computing", DisplayName: "Assistant Flow Computing",
 	})
@@ -310,12 +310,12 @@ func TestAssistantTutorEndToEnd(t *testing.T) {
 }
 
 func saveIntegrationAssistantProfile(t *testing.T, ctx context.Context, persistence store.Store,
-	institutionID model.InstitutionID, administratorID model.UserID, budgets model.AssistantBudgets,
+	institutionID model.InstitutionID, administratorID model.UserID, level model.AssistantLevel, budgets model.AssistantBudgets,
 ) model.AssistantProfileID {
 	t.Helper()
 	profile, err := model.NewAssistantProfile(model.NewAssistantProfileID(), model.AssistantProfileSpecification{
 		Name: "assistant-flow", DisplayName: "Campus tutor", Provider: "campus", Model: "teaching-model",
-		MaxLevel: model.AssistantLevelTutor, Budgets: budgets, DataHandling: "self_hosted", Pseudonymize: true,
+		MaxLevel: level, Budgets: budgets, DataHandling: "self_hosted", Pseudonymize: true,
 	}, administratorID, time.Now())
 	require.NoError(t, err)
 	audit, err := persistence.Audit().Save(ctx, &model.AuditEvent{ActorID: administratorID,

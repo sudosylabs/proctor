@@ -412,6 +412,7 @@ func newAssistant(deps Dependencies, shared sharedMechanics, attempts *attempt.S
 		Attempts:          attempts,
 		Terminals:         terminals,
 		Gateway:           deps.AssistantGateway,
+		Limits:            deps.AssistantLimits,
 		Auditor:           shared.audit,
 		Publisher:         shared.realtime,
 		Now:               time.Now,

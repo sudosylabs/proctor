@@ -49,6 +49,11 @@ func testAssistantAdmissionStore(t *testing.T, ss store.Store, level model.Assis
 	policy.ProfileID = profile.ID
 	policy.Level = level
 	policy.Budgets = spec.Budgets
+	if execution != nil && execution.Profile.IsZero() {
+		withProfile := *execution
+		withProfile.Profile = createFixtureEnvironmentProfile(t, ctx, ss, bootstrap.Institution.ID, actor)
+		execution = &withProfile
+	}
 	fixture := newExamAttemptFixtureWithAssistantOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, false, execution, &policy)
 	auditID, auditAt = saveAssistantProfileAudit(t, ctx, ss, bootstrap.Institution.ID, actor)
 	_, err = ss.AssistantProfile().Retire(ctx, &store.AssistantProfileRetirement{ActorID: actor, ProfileID: profile.ID,

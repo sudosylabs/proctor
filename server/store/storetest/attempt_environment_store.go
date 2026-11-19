@@ -34,16 +34,23 @@ func saveFixtureEnvironmentProfile(t *testing.T, ctx context.Context, ss store.S
 	_, err = SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: actorID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 		ScopeID: institutionID.String(), StartsAt: model.NowUTC().Add(-time.Hour)})
 	require.NoError(t, err)
+	return createFixtureEnvironmentProfile(t, ctx, ss, institutionID, actorID)
+}
+
+func createFixtureEnvironmentProfile(t *testing.T, ctx context.Context, ss store.Store, institutionID model.InstitutionID,
+	administratorID model.UserID,
+) model.EnvironmentProfileID {
+	t.Helper()
 	profile, err := model.NewEnvironmentProfile(model.NewEnvironmentProfileID(), model.EnvironmentProfileSpecification{
 		Name: "fixture-" + strings.ToLower(model.NewID()[:10]), Image: "python-3.12",
 		Resources: model.EnvironmentResources{CPUMillis: 1000, MemoryBytes: 1 << 30, DiskBytes: 2 << 30},
 		Network:   model.EnvironmentNetworkNone, IdleWindow: 10 * time.Minute, MaxTerminals: 4,
-	}, actorID, model.NowUTC())
+	}, administratorID, model.NowUTC())
 	require.NoError(t, err)
 	input := &store.EnvironmentProfileCreation{Profile: profile}
-	input.AuditEventID, input.AuditAt = saveEnvironmentProfileAudit(t, ctx, ss, institutionID, actorID)
+	input.AuditEventID, input.AuditAt = saveEnvironmentProfileAudit(t, ctx, ss, institutionID, administratorID)
 	created, err := ss.EnvironmentProfile().Create(ctx, input,
-		environmentProfileCommand(actorID, store.EnvironmentProfileCreateOperation, "fixture-"+profile.ID.String()))
+		environmentProfileCommand(administratorID, store.EnvironmentProfileCreateOperation, "fixture-"+profile.ID.String()))
 	require.NoError(t, err)
 	return created.Profile.ID
 }

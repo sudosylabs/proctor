@@ -20,15 +20,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// The command bounds: what is kept of each stream, and what the model reads
-// of a command that succeeded or failed. The transcript keeps all that was
-// kept, so a reviewer sees more than the model did.
+// The evidence and model preview have separate limits.
 const (
-	commandStreamBytes   = 32 << 10
-	commandSuccessChars  = 30000
-	commandFailureChars  = 10000
-	commandDefaultTimout = 60 * time.Second
-	commandMaximumBytes  = 4 << 10
+	commandSuccessChars   = 30000
+	commandFailureChars   = 10000
+	commandDefaultTimeout = 60 * time.Second
+	commandMaximumBytes   = 4 << 10
 )
 
 func (r *turnRun) runCommand(arguments json.RawMessage, call model.AssistantCallID) toolResult {
@@ -52,34 +49,34 @@ func (r *turnRun) runCommand(arguments json.RawMessage, call model.AssistantCall
 	if err != nil {
 		return toolError("The command cannot run now.")
 	}
-	timeout := commandDefaultTimout
+	timeout := commandDefaultTimeout
 	if input.TimeoutSeconds > 0 {
 		timeout = time.Duration(input.TimeoutSeconds) * time.Second
 	}
 	timeout = min(timeout, time.Duration(slot.TimeoutSeconds)*time.Second, environment.MaxAssistantCommandTimeout)
 	tag := model.AttemptEnvironmentProcessTag(slot.Tag)
 	result, err := r.service.terminals.RunAssistantCommand(r.ctx, r.inv, r.environmentAccess(), environment.AssistantCommand{
-		Tag: tag, Argv: []string{"/bin/sh", "-c", input.Command}, Timeout: timeout, OutputLimit: commandStreamBytes})
+		Tag: tag, Argv: []string{"/bin/sh", "-c", input.Command}, Timeout: timeout, OutputLimit: model.AssistantCallResultMaximumBytes})
 	if err != nil {
 		failure := toolError("The command could not start: the environment is not running.")
 		failure.processTag = slot.Tag
 		return failure
 	}
 	full, cut := commandOutput(result)
-	outcome := toolResult{duration: result.Duration, record: full, processTag: slot.Tag, truncated: cut, outcome: "ok"}
+	record := truncateUTF8(full, model.AssistantCallResultMaximumBytes)
+	outcome := toolResult{duration: result.Duration, record: record, processTag: slot.Tag, truncated: cut || len(record) < len(full), outcome: "ok"}
+	if result.Exit != nil {
+		outcome.exitCode = &result.Exit.Code
+	}
 	switch {
 	case result.TimedOut:
 		outcome.isError, outcome.outcome = true, "error"
 		outcome.forModel = "The command timed out after " + strconv.FormatInt(int64(timeout/time.Second), 10) +
 			" seconds and was killed.\n" + headTail(full, commandFailureChars)
 	case result.Exit != nil && (result.Exit.Code != 0 || result.Exit.Signal != ""):
-		code := result.Exit.Code
-		outcome.exitCode = &code
 		outcome.isError, outcome.outcome = true, "error"
 		outcome.forModel = exitLine(result.Exit) + headTail(full, commandFailureChars)
 	default:
-		code := 0
-		outcome.exitCode = &code
 		outcome.forModel = exitLine(result.Exit) + headTail(full, commandSuccessChars)
 	}
 	return outcome
@@ -109,11 +106,15 @@ func commandOutput(result environment.AssistantCommandResult) (string, bool) {
 			continue
 		}
 		out.WriteString("[" + stream.name + "]\n")
-		out.WriteString(strings.ToValidUTF8(string(stream.value.Head), "�"))
-		if stream.value.Dropped {
-			cut = true
-			out.WriteString("\n[... output dropped ...]\n")
+		if !stream.value.Dropped {
+			// A UTF-8 character can straddle the two buffers.
+			out.WriteString(strings.ToValidUTF8(string(stream.value.Head)+string(stream.value.Tail), "�"))
+			out.WriteByte('\n')
+			continue
 		}
+		out.WriteString(strings.ToValidUTF8(string(stream.value.Head), "�"))
+		cut = true
+		out.WriteString("\n[... output dropped ...]\n")
 		out.WriteString(strings.ToValidUTF8(string(stream.value.Tail), "�"))
 		out.WriteString("\n")
 	}

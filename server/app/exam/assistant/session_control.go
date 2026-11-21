@@ -9,6 +9,7 @@ package assistant
 
 import (
 	"context"
+	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
@@ -43,7 +44,7 @@ func (s *Service) ListSessions(ctx context.Context, inv invocation.Invocation, a
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(access), candidate.SittingID, candidate.Editor, "", false)
+	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(access), candidate.SittingID, candidate.Editor, "")
 	if err != nil {
 		return nil, storeFailure(err)
 	}
@@ -66,11 +67,19 @@ func (s *Service) StopSession(ctx context.Context, inv invocation.Invocation, co
 	if err != nil {
 		return model.AssistantSession{}, err
 	}
-	output, err := s.terminals.StopAssistantSession(ctx, inv, sessionEnvironmentAccess(command.Access), model.AttemptEnvironmentProcessTag(command.Tag))
+	output, err := s.terminals.StopAssistantSession(ctx, inv, sessionEnvironmentAccess(command.Access),
+		model.AttemptEnvironmentProcessTag(command.Tag), session.ReadOffset)
+	outcome := "stopped"
 	if err != nil {
-		return model.AssistantSession{}, s.failAudit(ctx, auditID, err)
+		switch {
+		case errors.Is(err, environment.ErrEnvironmentNotRunning), errors.Is(err, environment.ErrNoEnvironment),
+			errors.Is(err, environment.ErrTerminalNotFound), errors.Is(err, environment.ErrTerminalEnded):
+			outcome = "ended"
+		default:
+			return model.AssistantSession{}, s.failAudit(ctx, auditID, err)
+		}
 	}
-	end := store.AssistantSessionEnd{Editor: candidate.Editor, Tag: session.Tag, Outcome: "stopped",
+	end := store.AssistantSessionEnd{Editor: candidate.Editor, Tag: session.Tag, Outcome: outcome,
 		AuditEventID: auditID, AuditAt: model.TimeUTC(s.now()),
 		DurationMilliseconds: max(0, s.now().Sub(session.StartedAt).Milliseconds())}
 	if output.Exit != nil {
@@ -79,11 +88,13 @@ func (s *Service) StopSession(ctx context.Context, inv invocation.Invocation, co
 			end.ExitCode = &output.Exit.Code
 		}
 	}
-	record, err := s.transcripts.EndSession(ctx, &end)
+	ended, err := s.transcripts.EndSession(ctx, &end)
 	if err != nil {
 		return model.AssistantSession{}, s.failAudit(ctx, auditID, err)
 	}
-	s.publishSessionEnded(ctx, candidate.SittingID, candidate.Editor.AttemptID, session.CandidateUserID, record)
+	if ended.Changed {
+		s.publishSessionEnded(ctx, candidate.SittingID, candidate.Editor.AttemptID, session.CandidateUserID, ended.Record)
+	}
 	rows, err := s.transcripts.ListSessions(ctx, store.AssistantSessionQuery{Tag: command.Tag, Owner: sessionOwner(candidate.Editor)})
 	if err != nil {
 		return model.AssistantSession{}, storeFailure(err)
@@ -126,7 +137,7 @@ func (s *Service) candidateSession(ctx context.Context, inv invocation.Invocatio
 	if !model.ValidAssistantProcessTag(command.Tag) {
 		return candidate, model.AssistantSession{}, sessionNotFound()
 	}
-	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(command.Access), candidate.SittingID, candidate.Editor, command.Tag, false)
+	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(command.Access), candidate.SittingID, candidate.Editor, command.Tag)
 	if err != nil {
 		return candidate, model.AssistantSession{}, storeFailure(err)
 	}

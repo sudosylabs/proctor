@@ -79,8 +79,9 @@ func parseSessionInput(raw json.RawMessage) (sessionInputArgs, bool) {
 	return input, ok
 }
 
-func (a sessionInputArgs) summary() string {
-	return "\"" + a.Text + "\" + [" + strings.Join(a.Keys, ", ") + "]"
+func (a sessionInputArgs) summary(command string) string {
+	quotedCommand := strconv.QuoteToGraphic(command)
+	return a.Session + " (" + quotedCommand[1:len(quotedCommand)-1] + "): " + strconv.Quote(a.Text) + " + [" + strings.Join(a.Keys, ", ") + "]"
 }
 
 func (a sessionInputArgs) data() []byte {
@@ -106,7 +107,7 @@ func (r *turnRun) startSession(arguments json.RawMessage, call model.AssistantCa
 	if input.Timeout != nil {
 		timeout = *input.Timeout
 	}
-	if _, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.SittingID, r.key.Editor, "", false); err != nil {
+	if _, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.SittingID, r.key.Editor, ""); err != nil {
 		return toolError("The assistant sessions cannot be checked now.")
 	}
 	slot, err := r.service.transcripts.ReserveSession(r.ctx,
@@ -158,11 +159,11 @@ func (r *turnRun) sendInput(arguments json.RawMessage) toolResult {
 }
 
 func (r *turnRun) activeSession(tag string) (model.AssistantSession, error) {
-	rows, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.SittingID, r.key.Editor, tag, false)
+	rows, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.SittingID, r.key.Editor, tag)
 	if err != nil {
 		return model.AssistantSession{}, err
 	}
-	if len(rows) == 0 || rows[0].Starting {
+	if len(rows) == 0 || rows[0].Starting || rows[0].AccessEnded {
 		return model.AssistantSession{}, store.NewErrNotFound("assistant_session", tag)
 	}
 	return rows[0], nil
@@ -173,25 +174,28 @@ func (r *turnRun) readSession(session model.AssistantSession, input sessionInput
 	deadline := session.StartedAt.Add(time.Duration(session.ReservedMilliseconds) * time.Millisecond)
 	output, err := r.service.terminals.ReadAssistantSession(r.ctx, r.inv, r.environmentAccess(), tag, session.ReadOffset,
 		min(wait, deadline.Sub(r.service.now())))
-	if err != nil {
-		if wrote {
-			// A completed host write still counts when its output is unavailable.
-			_ = r.service.transcripts.AdvanceSessionRead(r.ctx, r.key, session.Tag, session.ReadOffset, true)
+	// A host-acknowledged write counts even when the output read failed.
+	if err == nil || wrote {
+		next := output.Next
+		if err != nil {
+			next = session.ReadOffset
 		}
+		if checkpointErr := r.service.transcripts.AdvanceSessionRead(r.ctx, r.key, session.Tag, next, wrote); checkpointErr != nil {
+			return taggedSessionError(session.Tag, "The session output could not be recorded.")
+		}
+	}
+	if err != nil {
 		return taggedSessionError(session.Tag, "The session output could not be read.")
 	}
-	if err = r.service.transcripts.AdvanceSessionRead(r.ctx, r.key, session.Tag, output.Next, wrote); err != nil {
-		return taggedSessionError(session.Tag, "The session output could not be recorded.")
-	}
 	outcome := ""
-	if sessionExpired(session, r.service.now()) {
+	if output.Exit != nil {
+		outcome = "exited"
+	} else if sessionExpired(session, r.service.now()) {
 		status, checkErr := r.service.terminals.CheckAssistantSession(r.ctx, r.inv, r.environmentAccess(), session)
 		if checkErr != nil {
 			return taggedSessionError(session.Tag, "The session deadline could not be enforced.")
 		}
-		outcome, output.Exit = "timed_out", status.Exit
-	} else if output.Exit != nil {
-		outcome = "exited"
+		outcome, output.Exit = status.Outcome, status.Exit
 	}
 	if outcome != "" {
 		if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, outcome, output.Exit); err != nil {
@@ -215,14 +219,14 @@ func (r *turnRun) stopSession(arguments json.RawMessage) toolResult {
 	if session.State == "ended" {
 		return sessionResult(session, sessionInputArgs{}, environment.AssistantSessionOutput{}, session.Outcome)
 	}
-	output, err := r.service.terminals.StopAssistantSession(r.ctx, r.inv, r.environmentAccess(), model.AttemptEnvironmentProcessTag(session.Tag))
+	output, err := r.service.terminals.StopAssistantSession(r.ctx, r.inv, r.environmentAccess(),
+		model.AttemptEnvironmentProcessTag(session.Tag), session.ReadOffset)
 	if err != nil {
 		return taggedSessionError(session.Tag, "The session could not be stopped.")
 	}
 	if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, "stopped", output.Exit); err != nil {
 		return taggedSessionError(session.Tag, "The session could not be settled.")
 	}
-	session.ReadOffset = 0
 	return sessionResult(session, sessionInputArgs{}, output, "stopped")
 }
 
@@ -231,12 +235,13 @@ func sessionExpired(session model.AssistantSession, now time.Time) bool {
 }
 
 func (s *Service) reconcileSessions(ctx context.Context, inv invocation.Invocation, access environment.CandidateAccess,
-	sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess, tag string, stop bool) ([]model.AssistantSession, error) {
+	sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess, tag string) ([]model.AssistantSession, error) {
 	rows, err := s.transcripts.ListSessions(ctx, store.AssistantSessionQuery{Tag: tag,
 		Owner: sessionOwner(editor)})
 	if err != nil {
 		return nil, err
 	}
+	var joined error
 	for i := range rows {
 		session := &rows[i]
 		if session.State != "running" {
@@ -244,27 +249,22 @@ func (s *Service) reconcileSessions(ctx context.Context, inv invocation.Invocati
 		}
 		status, checkErr := s.terminals.CheckAssistantSession(ctx, inv, access, *session)
 		if checkErr != nil {
-			if !stop && (errors.Is(checkErr, environment.ErrEnvironmentNotRunning) || errors.Is(checkErr, environment.ErrNoEnvironment)) {
+			if errors.Is(checkErr, environment.ErrEnvironmentNotRunning) || errors.Is(checkErr, environment.ErrNoEnvironment) {
 				continue
 			}
-			return nil, checkErr
-		}
-		if status.Outcome == "" && stop && !session.Starting {
-			out, stopErr := s.terminals.StopAssistantSession(ctx, inv, access, model.AttemptEnvironmentProcessTag(session.Tag))
-			if stopErr != nil {
-				return nil, stopErr
-			}
-			status.Outcome, status.Exit = "ended", out.Exit
+			joined = errors.Join(joined, checkErr)
+			continue
 		}
 		if status.Outcome != "" {
 			record, endErr := s.endSession(ctx, sittingID, editor, *session, status.Outcome, status.Exit)
 			if endErr != nil {
-				return nil, endErr
+				joined = errors.Join(joined, endErr)
+				continue
 			}
 			session.State, session.Outcome, session.EndedAt, session.Starting = "ended", record.Call.Outcome, record.CreatedAt, false
 		}
 	}
-	return rows, nil
+	return rows, joined
 }
 
 func (s *Service) endSession(ctx context.Context, sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess,
@@ -278,11 +278,14 @@ func (s *Service) endSession(ctx context.Context, sittingID model.ExamSittingID,
 			end.ExitCode = &exit.Code
 		}
 	}
-	record, err := s.transcripts.EndSession(ctx, &end)
-	if err == nil {
-		s.publishSessionEnded(ctx, sittingID, editor.AttemptID, editor.CandidateUserID, record)
+	result, err := s.transcripts.EndSession(ctx, &end)
+	if err != nil {
+		return nil, err
 	}
-	return record, err
+	if result.Changed {
+		s.publishSessionEnded(ctx, sittingID, editor.AttemptID, editor.CandidateUserID, result.Record)
+	}
+	return result.Record, nil
 }
 
 func (s *Service) publishSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
@@ -298,9 +301,9 @@ func taggedSessionError(tag, message string) toolResult {
 }
 
 func sessionResult(session model.AssistantSession, input sessionInputArgs, output environment.AssistantSessionOutput, outcome string) toolResult {
-	text := stripTerminal(string(output.Data))
+	text := string(output.Data)
 	if output.AltScreen {
-		text = stripTerminal(strings.Join(output.Screen, "\n"))
+		text = environment.CleanAssistantScreen(strings.Join(output.Screen, "\n"))
 	}
 	bytesSeen := uint64(len(text))
 	if output.Next >= session.ReadOffset && !output.AltScreen {
@@ -347,68 +350,4 @@ func sessionResult(session model.AssistantSession, input sessionInputArgs, outpu
 		result.isError, result.outcome = true, "error"
 	}
 	return result
-}
-
-func stripTerminal(value string) string {
-	var text strings.Builder
-	for value != "" {
-		r, size := utf8.DecodeRuneInString(value)
-		value = value[size:]
-		switch r {
-		case '\x1b':
-			value = skipTerminalEscape(value)
-		case '\u009b':
-			value = skipTerminalCSI(value)
-		case '\u0090', '\u0098', '\u009d', '\u009e', '\u009f':
-			value = skipTerminalString(value)
-		default:
-			if !unicode.IsControl(r) || r == '\n' || r == '\t' {
-				text.WriteRune(r)
-			}
-		}
-	}
-	return text.String()
-}
-
-func skipTerminalEscape(value string) string {
-	if value == "" {
-		return ""
-	}
-	switch value[0] {
-	case '[':
-		return skipTerminalCSI(value[1:])
-	case ']', 'P', 'X', '^', '_':
-		return skipTerminalString(value[1:])
-	}
-	i := 0
-	for i < len(value) && value[i] >= 0x20 && value[i] <= 0x2f {
-		i++
-	}
-	if i < len(value) && value[i] >= 0x30 && value[i] <= 0x7e {
-		i++
-	}
-	return value[i:]
-}
-
-func skipTerminalCSI(value string) string {
-	for i := range len(value) {
-		if value[i] >= 0x40 && value[i] <= 0x7e {
-			return value[i+1:]
-		}
-	}
-	return ""
-}
-
-func skipTerminalString(value string) string {
-	for i, r := range value {
-		switch {
-		case r == '\a':
-			return value[i+1:]
-		case r == '\u009c':
-			return value[i+2:]
-		case r == '\x1b' && i+1 < len(value) && value[i+1] == '\\':
-			return value[i+2:]
-		}
-	}
-	return ""
 }

@@ -452,7 +452,7 @@ paths:
       summary: Stop an assistant session
       tags:
         - Attempts and workspaces
-      description: Stops the candidate’s assistant session and returns its recorded outcome. Repeating the request returns the same session.
+      description: Stops the candidate’s assistant session and returns its recorded outcome, even if its environment is stopped or frozen. Repeating the request returns the same session.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -477,6 +477,12 @@ paths:
         - exam.attempt.assistant_disabled
         - exam.attempt.assistant_session_not_found
         - audit.unavailable
+        - exam.attempt.environment_unavailable
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.terminal_not_found
+        - exam.attempt.terminal_exited
+        - exam.attempt.terminal_limit_reached
         - authentication.csrf.invalid
         - authentication.required
         - authentication.token_invalid

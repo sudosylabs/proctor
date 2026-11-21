@@ -151,6 +151,7 @@ const MaxAssistantSessions = 2
 
 // AssistantSession is the mutable position and lifetime of a process the assistant started.
 type AssistantSession struct {
+	AccessEnded          bool
 	Starting             bool
 	TurnID               AssistantTurnID
 	CandidateUserID      UserID

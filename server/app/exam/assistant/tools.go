@@ -145,6 +145,21 @@ func (r *turnRun) runTool(call ModelToolCall) (string, bool, *turnEnd) {
 		}
 	}
 	summary := approvalSummary(call.Name, arguments)
+	if approval == "pending" && call.Name == "send_input" {
+		input, _ := parseSessionInput(arguments)
+		rows, sessionErr := r.service.transcripts.ListSessions(r.ctx, store.AssistantSessionQuery{
+			Owner: sessionOwner(r.key.Editor), Tag: input.Session,
+		})
+		switch {
+		case sessionErr != nil || len(rows) != 1 || rows[0].State != "running" || rows[0].Starting || rows[0].AccessEnded:
+			result = taggedSessionError(input.Session, "That session is no longer running.")
+		default:
+			summary = input.summary(rows[0].Command)
+			if len(summary) > realtime.AssistantApprovalMaximumBytes {
+				result = taggedSessionError(input.Session, "The complete input cannot be shown for approval. Send less text.")
+			}
+		}
+	}
 	if approval == "pending" && edit != nil {
 		var summaryErr error
 		summary, summaryErr = r.editApprovalSummary(edit)
@@ -272,10 +287,6 @@ func toolNeedsApproval(tool string, arguments json.RawMessage) bool {
 }
 
 func approvalSummary(tool string, arguments json.RawMessage) string {
-	if tool == "send_input" {
-		input, _ := parseSessionInput(arguments)
-		return input.summary()
-	}
 	var value struct {
 		Command string `json:"command"`
 		Path    string `json:"path"`

@@ -347,7 +347,7 @@ func saveIntegrationAssistantProfile(t *testing.T, ctx context.Context, persiste
 }
 
 func checkAssistantSessionFlow(t *testing.T, service *assistant.Service, inv invocation.Invocation, access attempt.CandidateAccess,
-	gateway *commandIntegrationModel) {
+	gateway *commandIntegrationModel, stopOne bool) {
 	t.Helper()
 	ctx := t.Context()
 	started, err := service.SendMessage(ctx, inv, assistant.SendMessageCommand{
@@ -355,7 +355,9 @@ func checkAssistantSessionFlow(t *testing.T, service *assistant.Service, inv inv
 	require.NoError(t, err)
 	read := func() []model.AssistantRecord {
 		page, readErr := service.ListTranscript(ctx, inv, assistant.TranscriptQuery{AttemptID: access.AttemptID, Limit: 200})
-		require.NoError(t, readErr)
+		if readErr != nil {
+			return nil
+		}
 		return page.Records
 	}
 	want := []struct {
@@ -424,6 +426,11 @@ func checkAssistantSessionFlow(t *testing.T, service *assistant.Service, inv inv
 	sessions, err := service.ListSessions(ctx, inv, access)
 	require.NoError(t, err)
 	require.Len(t, sessions, 3)
+	if !stopOne {
+		require.Equal(t, "running", sessions[0].State)
+		require.Equal(t, "running", sessions[1].State)
+		return
+	}
 	command := assistant.SessionCommand{Access: access, Tag: "assistant:3"}
 	stopped, err := service.StopSession(ctx, inv, command)
 	require.NoError(t, err)

@@ -87,7 +87,10 @@ type DesktopBuildResolver interface {
 
 // Dependencies are the collaborators New validates once.
 type Dependencies struct {
-	AssistantSessions   store.AssistantTranscriptStore
+	AssistantSessions store.AssistantTranscriptStore
+
+	KillSealedAssistantSessions func(context.Context, model.ExamAttemptID, []string) error
+
 	Persistence         store.ExamAttemptStore
 	FocusLoss           store.ExamFocusLossStore
 	SecurityPreflight   store.SecurityPreflightStore
@@ -153,6 +156,8 @@ type EnvironmentWaker interface {
 // Service holds every attempt use case. liveControls and deliveryControls
 // rate-limit control commands by user, per node.
 type Service struct {
+	killSealedAssistantSessions func(context.Context, model.ExamAttemptID, []string) error
+
 	assistantSessions store.AssistantTranscriptStore
 	attempts          store.ExamAttemptStore
 	focusLoss         store.ExamFocusLossStore
@@ -245,6 +250,8 @@ func New(deps Dependencies) (*Service, error) {
 	}
 
 	return &Service{
+		killSealedAssistantSessions: deps.KillSealedAssistantSessions,
+
 		assistantSessions:    deps.AssistantSessions,
 		attempts:             deps.Persistence,
 		focusLoss:            deps.FocusLoss,

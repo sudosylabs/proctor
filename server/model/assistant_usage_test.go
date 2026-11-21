@@ -39,7 +39,7 @@ func TestSummarizeAssistantTranscriptCountsEachCallOnceAndUsageAtTheEnd(t *testi
 		{Turn: &AssistantTurn{ConversationID: conversation, TurnID: turn, Role: "assistant", Final: true, StopReason: "sealed",
 			Usage: AssistantUsage{Input: 100, CacheRead: 20, Output: 30, Estimated: true}}, Gap: true},
 	}
-	summary := SummarizeAssistantTranscript(records)
+	summary := SummarizeAssistantTranscript(records, 0)
 	require.Equal(t, AssistantUsageSummary{Messages: 1, Replies: 1, InputTokens: 120, OutputTokens: 30, Estimated: true,
 		Tools: map[string]int64{"read_file": 1, "run_command": 1, "apply_edit": 1, "propose_edit": 1}, Commands: 1,
 		EditsProposed: 1, Approved: 1, Expired: 1, OutputReplaced: 1, Gaps: 1}, summary)
@@ -55,9 +55,9 @@ func TestSummarizeAssistantTranscriptUsesSettledSessionTime(t *testing.T) {
 		{Call: &AssistantCall{Tool: "send_input", Phase: "completed", Outcome: "declined"}},
 		{Call: &AssistantCall{Tool: "start_session", Phase: "session_ended", Outcome: "stopped", DurationMilliseconds: 1250}},
 	}
-	summary := SummarizeAssistantTranscript(records)
+	summary := SummarizeAssistantTranscript(records, 2)
 	require.EqualValues(t, 1, summary.Commands)
 	require.EqualValues(t, 1, summary.Sessions)
-	require.EqualValues(t, 1, summary.SessionInputs)
+	require.EqualValues(t, 2, summary.SessionInputs)
 	require.EqualValues(t, 1, summary.SessionSeconds)
 }

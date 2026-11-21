@@ -48,6 +48,8 @@ type rig struct {
 	wake         chan struct{}
 	done         chan error
 	cancel       context.CancelFunc
+	newOwner     environment.OwnerFactory
+	sessions     store.AssistantTranscriptStore
 
 	mu      sync.Mutex
 	reports []error
@@ -104,8 +106,14 @@ func newPreparedRig(t *testing.T, timing environment.OwnerTiming, prepare func(*
 	settled, unsubscribe := settles.SubscribeSettled(r.attemptID)
 	t.Cleanup(unsubscribe)
 	r.settled = settled
+	r.workspace.mkdir("src")
+	r.workspace.edit("src/main.py", "print(1)\n")
+	if prepare != nil {
+		prepare(r)
+	}
 	factory, err := environment.NewOwners(environment.OwnerDependencies{
 		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: ported, Timing: timing, Settled: settles,
+		AssistantSessions: r.sessions,
 		Report: func(_ model.ExamAttemptID, err error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
@@ -113,6 +121,7 @@ func newPreparedRig(t *testing.T, timing environment.OwnerTiming, prepare func(*
 		},
 	})
 	require.NoError(t, err)
+	r.newOwner = factory
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
 	// The owner may still be creating the grant's directory when the test
@@ -132,11 +141,6 @@ func newPreparedRig(t *testing.T, timing environment.OwnerTiming, prepare func(*
 			t.Logf("reported: %v", report)
 		}
 	})
-	r.workspace.mkdir("src")
-	r.workspace.edit("src/main.py", "print(1)\n")
-	if prepare != nil {
-		prepare(r)
-	}
 	go func() {
 		defer close(stopped)
 		r.done <- factory(r.attemptID).Run(ctx, store.AttemptRuntimeLease{AttemptID: r.attemptID, NodeID: "node-a", Fence: 7,

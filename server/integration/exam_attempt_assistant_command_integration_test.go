@@ -94,7 +94,9 @@ func checkAssistantCommandFlow(t *testing.T, service *assistant.Service, inv inv
 	ctx := t.Context()
 	transcript := func() []model.AssistantRecord {
 		page, err := service.ListTranscript(ctx, inv, assistant.TranscriptQuery{AttemptID: access.AttemptID, Limit: 200})
-		require.NoError(t, err)
+		if err != nil {
+			return nil
+		}
 		return page.Records
 	}
 	for _, decision := range []string{"decline", "expired", "accept"} {

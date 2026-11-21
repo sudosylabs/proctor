@@ -137,3 +137,36 @@ func (n *Node) Start(ctx context.Context) error {
 func (n *Node) Close(ctx context.Context) error {
 	return errors.Join(n.runtime.Close(ctx), n.waker.Close(ctx), n.settles.Close(ctx), n.hosts.Close())
 }
+
+// KillSealedAssistantSessions signals only the PTYs the committed seal ended.
+func (n *Node) KillSealedAssistantSessions(ctx context.Context, id model.ExamAttemptID, tags []string) error {
+	row, err := n.deps.Environments.Get(ctx, id)
+	if store.IsNotFound(err) {
+		return nil
+	}
+	if err != nil || row.GrantID == "" {
+		return err
+	}
+	machine, err := n.hosts.Ensure(ctx, grantOf(row), machineSpec(row))
+	if errors.Is(err, ErrMachineLost) || errors.Is(err, ErrMachineRevoked) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if machine.Epoch() != row.Epoch {
+		return machine.Revoke(ctx)
+	}
+	at := reached{row: row, machine: machine}
+	var joined error
+	for _, tag := range tags {
+		if !model.ValidAssistantProcessTag(tag) {
+			continue
+		}
+		err := machine.SignalProcess(ctx, at.fence(), model.AttemptEnvironmentProcessTag(tag), SignalKill)
+		if !errors.Is(err, ErrMachineNotFound) && !errors.Is(err, ErrProcessExited) && !errors.Is(err, ErrMachineRevoked) {
+			joined = errors.Join(joined, err)
+		}
+	}
+	return joined
+}

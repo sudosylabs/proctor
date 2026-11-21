@@ -41,7 +41,8 @@ checks replies before you see them.
 
 Unless your Exam says otherwise, the assistant asks you before it runs a
 command, starts a session, types into one, or changes a file. You see
-the command, the exact text and keys, or the diff, and can accept or decline.
+the command, the destination session and its exact text and keys, or the
+diff. You can accept or decline.
 When your Exam requires approval, each new input has its own request. If
 you don't answer within 5 minutes, the request is declined.
 
@@ -53,8 +54,10 @@ of it. Interactive sessions stay open across replies.
 An interactive session lets the assistant try a program that waits for
 input. You can watch its screen and stop the session. Its screen is
 read-only. To type into the program yourself, open it in your own terminal.
-The assistant can have two sessions open at once. Submitting your Attempt
-ends any sessions that are still open.
+The assistant can have two sessions open at once. A lost connection, a
+suspension, an environment freeze, or submitting your Attempt ends open
+sessions. A session's requested timeout also has to fit the time remaining
+in your Exam's command budget.
 
 ## Limits and outages
 

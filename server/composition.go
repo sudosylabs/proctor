@@ -147,6 +147,7 @@ func composeConsumers(
 		applicationDeps.EnvironmentSettles = environments.Settles()
 		applicationDeps.EnvironmentDiagnostics = environments.Report
 		applicationDeps.EnvironmentHosts = environments.Hosts()
+		applicationDeps.KillSealedAssistantSessions = environments.KillSealedAssistantSessions
 	}
 
 	application, err := app.New(applicationDeps)

@@ -70,6 +70,9 @@ func (s *Service) publishConnectionOpened(ctx context.Context, result Connection
 }
 
 func (s *Service) publishConnectionClosed(ctx context.Context, result ConnectionClosedResult) error {
+	if s.environments != nil {
+		s.environments.Wake(result.AttemptID)
+	}
 	event, err := realtime.NewExamAttemptConnectionClosedEvent(
 		result.SittingID,
 		result.AttemptID,
@@ -529,11 +532,22 @@ func (s *Service) publishSealedAssistantSessions(ctx context.Context, result Sub
 	if s.assistantSessions == nil {
 		return nil
 	}
-	rows, err := s.assistantSessions.ListSessions(ctx, store.AssistantSessionQuery{ReviewSubmissionID: result.Receipt.SubmissionID})
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	rows, err := s.assistantSessions.ListSessions(cleanupCtx, store.AssistantSessionQuery{ReviewSubmissionID: result.Receipt.SubmissionID})
 	if err != nil {
 		return err
 	}
+	tags := make([]string, 0, model.MaxAssistantSessions)
+	for _, row := range rows {
+		if row.Outcome == "sealed" {
+			tags = append(tags, row.Tag)
+		}
+	}
 	var joined error
+	if len(tags) != 0 && s.killSealedAssistantSessions != nil {
+		joined = s.killSealedAssistantSessions(cleanupCtx, result.Receipt.AttemptID, tags)
+	}
 	for _, row := range rows {
 		if row.Outcome == "sealed" {
 			joined = errors.Join(joined, s.publishAssistantSessionEnded(ctx, result.SittingID, result.Receipt.AttemptID,

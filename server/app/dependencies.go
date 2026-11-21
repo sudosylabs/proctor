@@ -8,6 +8,7 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
@@ -101,6 +102,8 @@ type Dependencies struct {
 	// EnvironmentHosts lets any node serve a candidate's terminals. Nil
 	// serves none.
 	EnvironmentHosts environment.Hosts
+	// KillSealedAssistantSessions stops the committed seal's remaining PTYs.
+	KillSealedAssistantSessions func(context.Context, model.ExamAttemptID, []string) error
 	// SupportAddress is the help mailbox public discovery publishes; empty
 	// publishes none.
 	SupportAddress string

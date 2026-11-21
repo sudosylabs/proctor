@@ -53,10 +53,10 @@ func assistantErrors(extra ...string) []string {
 	), extra...)
 }
 
-func assistantSessionReadErrors() []string {
-	return assistantErrors("exam.attempt.assistant_session_not_found",
+func assistantSessionErrors(extra ...string) []string {
+	return append(assistantErrors("exam.attempt.assistant_session_not_found",
 		"exam.attempt.environment_unavailable", "exam.attempt.environment_not_found", "exam.attempt.environment_not_running",
-		"exam.attempt.terminal_not_found", "exam.attempt.terminal_exited", "exam.attempt.terminal_limit_reached")
+		"exam.attempt.terminal_not_found", "exam.attempt.terminal_exited", "exam.attempt.terminal_limit_reached"), extra...)
 }
 
 func examAttemptAssistantResource(application *assistant.Service) route.Resource {
@@ -127,21 +127,21 @@ func examAttemptAssistantResource(application *assistant.Service) route.Resource
 			Method: http.MethodGet,
 			Path:   assistantSessionsPath,
 			Auth:   route.AuthSessionRequired,
-			Errors: assistantSessionReadErrors(),
+			Errors: assistantSessionErrors(),
 			Handle: h.listSessions,
 		},
 		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   assistantSessionPath + "/stop",
 			Auth:   route.AuthSessionRequired,
-			Errors: assistantErrors("audit.unavailable", "exam.attempt.assistant_session_not_found"),
+			Errors: assistantSessionErrors("audit.unavailable"),
 			Handle: h.stopSession,
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   assistantSessionPath + "/screen",
 			Auth:   route.AuthSessionRequired,
-			Errors: assistantSessionReadErrors(),
+			Errors: assistantSessionErrors(),
 			Handle: h.viewSession,
 		},
 	)
@@ -379,11 +379,7 @@ func (h examAttemptAssistantHandlers) listSessions(request route.Request) (route
 		return route.Result{}, err
 	}
 	page, err := route.BoundedList(request, "assistant sessions", rows, func(row model.AssistantSession) route.BoundedKey {
-		at := row.StartedAt
-		if !row.EndedAt.IsZero() {
-			at = row.EndedAt
-		}
-		return route.BoundedKey{At: at, ID: row.Tag}
+		return route.BoundedKey{At: row.StartedAt, ID: row.Tag}
 	}, assistantSessionResponseFrom)
 	if err != nil {
 		return route.Result{}, err

@@ -88,6 +88,15 @@ func (b *integrationBodies) Next(context.Context) (io.Reader, error) {
 // change made just before it into the Submission, and the Submission revokes
 // the machine.
 func TestAttemptEnvironmentEndToEnd(t *testing.T) {
+	runAttemptEnvironmentEndToEnd(t, false)
+}
+
+func TestAssistantSessionsEndOnConnectionCloseBetweenTurns(t *testing.T) {
+	runAttemptEnvironmentEndToEnd(t, true)
+}
+
+func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
+	t.Helper()
 	dataSource := os.Getenv("PROCTOR_TEST_DATABASE_URL")
 	require.NotEmpty(t, dataSource, "PROCTOR_TEST_DATABASE_URL is not set")
 	persistence := openAuthenticationStore(t, dataSource)
@@ -269,6 +278,7 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	})
 	require.NoError(t, err)
 	access := attempt.CandidateAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, ContinuityCredential: credential}
+	stopRenewal := renewExecutionTestParticipation(t, helper.App.Attempts, desktop.inv, access, connected)
 
 	t.Cleanup(func() {
 		if t.Failed() {
@@ -393,14 +403,43 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	eventually(func() bool { return readGuest(restarted, "answer.py") == "print(42)\n" }, "the new incarnation holds the harvested file")
 
 	t.Run("interactive assistant sessions", func(t *testing.T) {
-		checkAssistantSessionFlow(t, helper.App.Assistant, desktop.inv, access, gateway)
+		checkAssistantSessionFlow(t, helper.App.Assistant, desktop.inv, access, gateway, !disconnect)
 	})
+
+	if disconnect {
+		stopRenewal()
+		closed, closeErr := helper.App.Attempts.CloseExamAttemptConnection(ctx, desktop.inv, attempt.CloseConnectionCommand{
+			AttemptID: access.AttemptID, SittingID: sittingID, ClassID: connected.ClassID,
+			ConnectionID: access.ConnectionID, Reason: model.AttemptConnectionCloseTransport,
+		})
+		require.NoError(t, closeErr)
+		require.True(t, closed.Changed)
+		require.Eventually(t, func() bool {
+			page, readErr := helper.App.Assistant.ListTranscript(ctx, desktop.inv, assistant.TranscriptQuery{AttemptID: access.AttemptID, Limit: 200})
+			if readErr != nil {
+				return false
+			}
+			killed := map[string]bool{}
+			for _, record := range page.Records {
+				call := record.Call
+				if call != nil && call.Phase == "session_ended" && call.Outcome == "ended" && call.Signal == "KILL" && call.ExitCode == nil {
+					killed[call.ProcessTag] = true
+				}
+			}
+			return killed["assistant:3"] && killed["assistant:4"]
+		}, 10*time.Second, 25*time.Millisecond)
+		row, getErr := persistence.AttemptEnvironment().Get(ctx, access.AttemptID)
+		require.NoError(t, getErr)
+		require.Equal(t, model.AttemptEnvironmentDesiredRunning, row.Desired, "closing the connection did not end the participation")
+		return
+	}
 
 	// The candidate submits with the cursor they last saw, right after the
 	// guest wrote once more: the settle brings that write in, and the seal
 	// takes it though it is past the candidate's cursor.
 	seen := journal().CurrentCursor
 	require.NoError(t, guests.WriteGuest(ctx, restarted, "last.py", []byte("print('last')\n")))
+	stopRenewal()
 	submitted, err := helper.App.Attempts.SubmitExamAttempt(ctx, desktop.inv, attempt.SubmitCommand{
 		Access: mutation, ExpectedCurrentRevisionID: published.ID, ExpectedWorkspaceCursor: seen,
 		IdempotencyKey: "execution-flow-submit",
@@ -505,4 +544,48 @@ func saveIntegrationEnvironmentProfile(t *testing.T, ctx context.Context, persis
 		Retention:   time.Hour, Wait: time.Second})
 	require.NoError(t, err)
 	return created.Profile.ID
+}
+
+func renewExecutionTestParticipation(t *testing.T, service *attempt.Service, inv invocation.Invocation,
+	access attempt.CandidateAccess, connected attempt.ConnectionResult) func() {
+	t.Helper()
+	// The integration flow can outlast the initial lease on a busy runner.
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	var renewErr error
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(4 * time.Second)
+		defer tick.Stop()
+		security := connected.Security
+		for seq := int64(1); ; seq++ {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+			_, err := service.RenewExamAttemptParticipation(ctx, inv, attempt.RenewParticipationCommand{
+				Security: model.SecurityControl{ControlSequence: seq, PolicyDigest: security.Policy.Digest,
+					SecuritySessionID: security.SecuritySessionID, StreamID: security.DeliveryStreamID, DeliveryWatermarks: []model.DeliveryWatermark{}},
+				AttemptID: access.AttemptID, ParticipationID: security.ParticipationID, ConnectionID: access.ConnectionID,
+				Generation: security.Generation, Sequence: seq, ContinuityCredential: access.ContinuityCredential,
+			})
+			if err != nil {
+				if ctx.Err() == nil {
+					renewErr = err
+				}
+				return
+			}
+		}
+	}()
+	stop := func() {
+		cancel()
+		<-done
+	}
+	t.Cleanup(stop)
+	return func() {
+		t.Helper()
+		stop()
+		require.NoError(t, renewErr)
+	}
 }

@@ -90,13 +90,13 @@ func TestAssistantSessionReadsAndWritesUnderALiveCandidate(t *testing.T) {
 	output, err := terminals.ReadAssistantSession(ctx, inv, access, tag, 0, 5*time.Second)
 	require.NoError(t, err)
 	require.Less(t, time.Since(started), 4*time.Second, "settle returns before the full wait once output arrives")
-	require.Contains(t, string(output.Data), "true\r\n", "the memory PTY echoes the starting command")
+	require.Contains(t, string(output.Data), "true\n", "the memory PTY echoes the starting command")
 	require.NotEmpty(t, output.Screen)
 	require.Nil(t, output.Exit)
 	require.NoError(t, terminals.WriteAssistantInput(ctx, inv, access, tag, []byte("echo hello\rexit\r")))
 	finished, err := terminals.ReadAssistantSession(ctx, inv, access, tag, output.Next, 5*time.Second)
 	require.NoError(t, err)
-	require.Contains(t, string(finished.Data), "echo hello\r\nhello\r\n")
+	require.Contains(t, string(finished.Data), "echo hello\nhello\n")
 	require.NotNil(t, finished.Exit)
 	require.Zero(t, finished.Exit.Code)
 	require.Empty(t, finished.Screen)
@@ -105,7 +105,7 @@ func TestAssistantSessionReadsAndWritesUnderALiveCandidate(t *testing.T) {
 	_, err = terminals.ReadAssistantSession(ctx, inv, access, "terminal:1", 0, time.Second)
 	require.ErrorIs(t, err, environment.ErrAssistantCommandInvalid)
 	require.ErrorIs(t, terminals.WriteAssistantInput(ctx, inv, access, "terminal:1", []byte("refused")), environment.ErrAssistantCommandInvalid)
-	_, err = terminals.StopAssistantSession(ctx, inv, access, "terminal:1")
+	_, err = terminals.StopAssistantSession(ctx, inv, access, "terminal:1", 0)
 	require.ErrorIs(t, err, environment.ErrAssistantCommandInvalid)
 	candidate.refuseWith("exam.attempt.unavailable")
 	_, err = terminals.ReadAssistantSession(ctx, inv, access, tag, 0, time.Second)
@@ -132,12 +132,18 @@ func TestAssistantSessionStopsWithInterruptOrKill(t *testing.T) {
 			tag := model.AttemptEnvironmentProcessTag("assistant:1")
 			start := environment.AssistantSessionStart{Tag: tag, Command: "true", Timeout: time.Minute}
 			require.NoError(t, terminals.StartAssistantSession(ctx, inv, access, start))
-			out, err := terminals.StopAssistantSession(ctx, inv, access, tag)
+			first, err := terminals.ReadAssistantSession(ctx, inv, access, tag, 0, time.Second)
 			require.NoError(t, err)
+			require.Contains(t, string(first.Data), "true")
+			require.NoError(t, terminals.WriteAssistantInput(ctx, inv, access, tag, []byte("later")))
+			out, err := terminals.StopAssistantSession(ctx, inv, access, tag, first.Next)
+			require.NoError(t, err)
+			require.Contains(t, string(out.Data), "later")
+			require.NotContains(t, string(out.Data), "true")
 			require.NotNil(t, out.Exit)
 			require.Equal(t, test.signal, out.Exit.Signal)
 			require.Equal(t, test.signals, signals)
-			replayed, err := terminals.StopAssistantSession(ctx, inv, access, tag)
+			replayed, err := terminals.StopAssistantSession(ctx, inv, access, tag, first.Next)
 			require.NoError(t, err)
 			require.Equal(t, out.Exit, replayed.Exit)
 			require.Equal(t, test.signals, signals)
@@ -176,4 +182,25 @@ func TestAssistantSessionKillsAProcessAtTheDurableDeadline(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "timed_out", status.Outcome)
 	require.Equal(t, []environment.ProcessSignal{environment.SignalKill}, signals)
+}
+
+func TestAssistantSessionKeepsANormalExitPastTheDeadline(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	var signals []environment.ProcessSignal
+	terminals, access, _ := sessionTerminals(t, sessionTestHosts{signals: &signals, now: func() time.Time { return now }})
+	ctx := t.Context()
+	var inv invocation.Invocation
+	const tag = "assistant:1"
+	require.NoError(t, terminals.StartAssistantSession(ctx, inv, access,
+		environment.AssistantSessionStart{Tag: tag, Command: "exit", Timeout: time.Minute}))
+	out, err := terminals.ReadAssistantSession(ctx, inv, access, tag, 0, time.Second)
+	require.NoError(t, err)
+	require.NotNil(t, out.Exit)
+	status, err := terminals.CheckAssistantSession(ctx, inv, access, model.AssistantSession{
+		Tag: tag, StartedAt: now.Add(-time.Second), ReservedMilliseconds: 1000})
+	require.NoError(t, err)
+	require.Equal(t, "exited", status.Outcome)
+	require.Equal(t, out.Exit, status.Exit)
+	require.Empty(t, signals)
 }

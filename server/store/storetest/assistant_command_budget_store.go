@@ -128,7 +128,7 @@ func TestAssistantCommandBudgetStore(t *testing.T, ss store.Store, probe Assista
 		require.True(t, proposedApplied, "the ordinary candidate batch matches the proposal fingerprint")
 
 		require.True(t, orphanLinked)
-		require.Equal(t, int64(2), model.SummarizeAssistantTranscript(page.Records).Commands)
+		require.Equal(t, int64(2), model.SummarizeAssistantTranscript(page.Records, page.Inventory.SessionInputs).Commands)
 		verifyBudget(t, input.Access.AttemptID, 2, 1250)
 		usage, err := ss.AssistantProfile().Usage(ctx, first.Recipe.Policy.ProfileID)
 		require.NoError(t, err)

@@ -1815,7 +1815,7 @@ export interface paths {
         put?: never;
         /**
          * Stop an assistant session
-         * @description Stops the candidate’s assistant session and returns its recorded outcome. Repeating the request returns the same session.
+         * @description Stops the candidate’s assistant session and returns its recorded outcome, even if its environment is stopped or frozen. Repeating the request returns the same session.
          */
         post: operations["stopCandidateAssistantSession"];
         delete?: never;

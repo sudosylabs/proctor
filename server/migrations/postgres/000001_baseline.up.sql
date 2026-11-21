@@ -6259,6 +6259,8 @@ CREATE TABLE exam_attempt_assistant_sessions (
  CONSTRAINT exam_attempt_assistant_sessions_call_id_canonical_check CHECK (call_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
  conversation_id varchar(26) NOT NULL
  CONSTRAINT exam_attempt_assistant_sessions_conversation_id_canonical_check CHECK (conversation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ connection_id varchar(26) NOT NULL REFERENCES exam_attempt_connections(id)
+ CONSTRAINT exam_attempt_assistant_sessions_connection_id_canonical_check CHECK (connection_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
  reserved_milliseconds bigint NOT NULL CHECK (reserved_milliseconds >= 0),
  read_offset bigint NOT NULL DEFAULT 0 CHECK (read_offset >= 0),
  state varchar(8) NOT NULL CHECK (state IN ('running','ended')),
@@ -6268,6 +6270,7 @@ CREATE TABLE exam_attempt_assistant_sessions (
  UNIQUE (exam_attempt_id,call_id),
  CHECK ((state='running' AND ended_at IS NULL) OR (state='ended' AND ended_at>=started_at AND ended_at IS NOT NULL))
 );
+CREATE INDEX exam_attempt_assistant_sessions_connection_id_idx ON exam_attempt_assistant_sessions(connection_id);
 CREATE FUNCTION guard_assistant_history() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_OP='INSERT' AND NOT EXISTS(SELECT 1 FROM exam_submissions WHERE exam_attempt_id=NEW.exam_attempt_id) THEN

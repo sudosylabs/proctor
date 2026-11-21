@@ -89,9 +89,11 @@ func TestRetentionSubmissionPrivacy(t *testing.T) {
 			if !retired {
 				// Seed mutable session metadata to prove the retirement deletes it.
 				_, err := s.GetMaster().Exec(ctx, `INSERT INTO exam_attempt_assistant_sessions
-					(exam_attempt_id,tag,call_id,conversation_id,reserved_milliseconds,state,started_at,ended_at)
-					SELECT exam_attempt_id,'assistant:1',?,?,1000,'ended',statement_timestamp(),statement_timestamp()
-					FROM exam_submissions WHERE id=? ON CONFLICT DO NOTHING`,
+					(exam_attempt_id,tag,call_id,conversation_id,connection_id,reserved_milliseconds,state,started_at,ended_at)
+					SELECT submission.exam_attempt_id,'assistant:1',?,?,
+						(SELECT id FROM exam_attempt_connections WHERE exam_attempt_id=submission.exam_attempt_id ORDER BY opened_at DESC,id DESC LIMIT 1),
+						1000,'ended',statement_timestamp(),statement_timestamp()
+					FROM exam_submissions submission WHERE submission.id=? ON CONFLICT DO NOTHING`,
 					model.NewAssistantCallID().String(), model.NewAssistantConversationID().String(), id.String())
 				require.NoError(t, err)
 			}

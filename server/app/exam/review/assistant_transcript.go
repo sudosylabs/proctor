@@ -86,8 +86,6 @@ func (s *Service) SummarizeAssistantUsage(ctx context.Context, inv invocation.In
 		}
 		query.AfterSequence = page.NextSequence
 	}
-	summary := model.SummarizeAssistantTranscript(records)
-	// A host write may have succeeded even if its output could not be read.
-	summary.SessionInputs = inputCount
-	return summary, nil
+	// Only the inventory has the acknowledgement when the output read failed.
+	return model.SummarizeAssistantTranscript(records, inputCount), nil
 }

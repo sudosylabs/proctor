@@ -269,6 +269,7 @@ func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*
 			require.Len(t, sessions, 2)
 			require.Equal(t, slot.Tag, sessions[1].Tag)
 			require.Equal(t, "cat", sessions[1].Command)
+			require.False(t, sessions[1].AccessEnded)
 			require.EqualValues(t, 14, sessions[1].ReadOffset)
 			inventory, err := transcript.Inventory(ctx, store.AssistantTranscriptQuery{AttemptID: id, Owner: &owner})
 			require.NoError(t, err)
@@ -276,8 +277,10 @@ func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*
 			require.EqualValues(t, 1, inventory.SessionInputs)
 
 			end := store.AssistantSessionEnd{Editor: input.Access, Tag: slot.Tag, Outcome: "stopped", Signal: "INT", DurationMilliseconds: 250}
-			record, err := transcript.EndSession(ctx, &end)
+			ended, err := transcript.EndSession(ctx, &end)
 			require.NoError(t, err)
+			require.True(t, ended.Changed)
+			record := ended.Record
 			require.Equal(t, first, record.Call.CallID)
 			require.Equal(t, "session_ended", record.Call.Phase)
 			require.Equal(t, "stopped", record.Call.Outcome)
@@ -285,7 +288,8 @@ func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*
 			end.Outcome, end.DurationMilliseconds = "exited", 300
 			replayed, err := transcript.EndSession(ctx, &end)
 			require.NoError(t, err)
-			require.Equal(t, record, replayed)
+			require.False(t, replayed.Changed)
+			require.Equal(t, record, replayed.Record)
 			verifyBudget(t, id, 3, 11250)
 
 			replacement, err := reserve(third)
@@ -302,9 +306,10 @@ func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*
 				require.Equal(t, "ended", session.State)
 				require.False(t, session.EndedAt.IsZero())
 			}
-			require.Equal(t, other.Tag, sessions[0].Tag)
-			require.Equal(t, "sealed", sessions[0].Outcome)
-			require.Equal(t, replacement.Tag, sessions[1].Tag)
+			require.Equal(t, replacement.Tag, sessions[0].Tag)
+			require.Equal(t, other.Tag, sessions[1].Tag)
+			require.Equal(t, "sealed", sessions[1].Outcome)
+			require.True(t, sessions[1].AccessEnded)
 			page, err := transcript.ListForAttempt(ctx, store.AssistantTranscriptQuery{AttemptID: id, Limit: 100, Owner: &owner})
 			require.NoError(t, err)
 			var sealed *model.AssistantCall

@@ -134,17 +134,21 @@ func checkAssistantSession(ctx context.Context, at reached, session model.Assist
 	if err != nil {
 		return AssistantSessionStatus{}, err
 	}
-	if !now.Before(deadline) {
-		if info.Running {
-			if err = kill(); err != nil && !errors.Is(err, ErrProcessExited) {
-				return AssistantSessionStatus{}, terminalFailure(terminalError(err))
-			}
-			info.Exit = &ProcessExit{Signal: "KILL"}
-		}
-		return AssistantSessionStatus{Outcome: "timed_out", Exit: info.Exit}, nil
-	}
 	if !info.Running {
 		return AssistantSessionStatus{Outcome: "exited", Exit: info.Exit}, nil
+	}
+	if !now.Before(deadline) {
+		if err = kill(); errors.Is(err, ErrProcessExited) {
+			finished, readErr := assistantSessionProcess(ctx, at, tag)
+			if readErr != nil {
+				return AssistantSessionStatus{}, readErr
+			}
+			return AssistantSessionStatus{Outcome: "exited", Exit: finished.Exit}, nil
+		}
+		if err != nil {
+			return AssistantSessionStatus{}, terminalFailure(terminalError(err))
+		}
+		return AssistantSessionStatus{Outcome: "timed_out", Exit: &ProcessExit{Signal: "KILL"}}, nil
 	}
 	return AssistantSessionStatus{}, nil
 }
@@ -209,6 +213,8 @@ func (t *Terminals) collectAssistantSession(ctx context.Context, at reached, tag
 	deadline := t.deps.Now().Add(wait)
 	readUntil := deadline
 	var data AssistantStream
+	var terminal assistantTerminalText
+	const outputLimit = model.AssistantCallResultMaximumBytes - (64 << 10)
 	for {
 		remaining := readUntil.Sub(t.deps.Now())
 		if remaining <= 0 {
@@ -229,7 +235,7 @@ func (t *Terminals) collectAssistantSession(ctx context.Context, at reached, tag
 		}
 		switch event.Kind {
 		case OutputData:
-			data.add(event.Data, model.AssistantCallResultMaximumBytes-(64<<10))
+			data.add(terminal.append(event.Data, event.Offset), outputLimit)
 			out.Next = max(out.Next, event.Offset+uint64(len(event.Data)))
 			if settle > 0 && len(event.Data) != 0 {
 				readUntil = deadline
@@ -238,6 +244,8 @@ func (t *Terminals) collectAssistantSession(ctx context.Context, at reached, tag
 				}
 			}
 		case OutputTruncated:
+			terminal = assistantTerminalText{}
+			data.add([]byte(assistantOutputSeparator), outputLimit)
 			out.Next = max(out.Next, event.To)
 			out.Dropped = true
 		case OutputExit:
@@ -247,14 +255,17 @@ func (t *Terminals) collectAssistantSession(ctx context.Context, at reached, tag
 			break
 		}
 	}
-	out.Data = append(data.Head, data.Tail...)
+	out.Data = sessionStreamBytes(data)
+	if out.Exit == nil {
+		out.Next = terminal.checkpoint(out.Next)
+	}
 	out.Dropped = out.Dropped || data.Dropped
 	return out, nil
 }
 
 // StopAssistantSession interrupts a running PTY and escalates if it does not exit.
 func (t *Terminals) StopAssistantSession(ctx context.Context, inv invocation.Invocation, access CandidateAccess,
-	tag model.AttemptEnvironmentProcessTag) (AssistantSessionOutput, error) {
+	tag model.AttemptEnvironmentProcessTag, from uint64) (AssistantSessionOutput, error) {
 	at, err := t.assistantSessionMachine(ctx, inv, access, tag)
 	if err != nil {
 		return AssistantSessionOutput{}, err
@@ -275,7 +286,7 @@ func (t *Terminals) StopAssistantSession(ctx context.Context, inv invocation.Inv
 			return AssistantSessionOutput{}, err
 		}
 	}
-	out, err := t.collectAssistantSession(ctx, at, tag, 0, 2*time.Second, 0)
+	out, err := t.collectAssistantSession(ctx, at, tag, from, 2*time.Second, 0)
 	if err != nil || out.Exit != nil {
 		return out, err
 	}
@@ -326,40 +337,55 @@ func (o *owner) reconcileAssistantSessions(ctx context.Context, fence Fence, fre
 		return err
 	}
 	at := reached{row: o.row, machine: o.machine}
+	var joined error
 	for _, session := range sessions {
 		if session.State != "running" {
 			continue
 		}
-		tag := model.AttemptEnvironmentProcessTag(session.Tag)
-		signal := func() error { return o.machine.SignalProcess(ctx, fence, tag, SignalKill) }
-		now := o.deps.Now()
-		status, checkErr := checkAssistantSession(ctx, at, session, now, signal)
-		if checkErr != nil {
-			return checkErr
-		}
-		if status.Outcome == "" && freezing && !session.Starting {
-			if stopErr := signal(); stopErr != nil && !errors.Is(stopErr, ErrProcessExited) && !errors.Is(stopErr, ErrMachineNotFound) {
-				return stopErr
-			}
+		joined = errors.Join(joined, o.reconcileAssistantSession(ctx, at, access, fence, session, freezing))
+	}
+	return joined
+}
+
+func (o *owner) reconcileAssistantSession(ctx context.Context, at reached, access store.ExamAttemptWorkspaceEnvironmentAccess,
+	fence Fence, session model.AssistantSession, stopping bool) error {
+	tag := model.AttemptEnvironmentProcessTag(session.Tag)
+	signal := func() error { return o.machine.SignalProcess(ctx, fence, tag, SignalKill) }
+	now := o.deps.Now()
+	status, err := checkAssistantSession(ctx, at, session, now, signal)
+	if err != nil {
+		return err
+	}
+	if status.Outcome == "" && (stopping || session.AccessEnded) {
+		switch err = signal(); {
+		case err == nil:
 			status = AssistantSessionStatus{Outcome: "ended", Exit: &ProcessExit{Signal: "KILL"}}
+		case errors.Is(err, ErrProcessExited), errors.Is(err, ErrMachineNotFound):
+			status = AssistantSessionStatus{Outcome: "ended"}
+		default:
+			return err
 		}
-		if status.Outcome == "" {
-			continue
+	}
+	if status.Outcome == "" {
+		return nil
+	}
+	end := store.AssistantSessionEnd{EnvironmentOwner: &access, Tag: session.Tag, Outcome: status.Outcome,
+		DurationMilliseconds: max(0, now.Sub(session.StartedAt).Milliseconds())}
+	if status.Exit != nil {
+		end.Signal = status.Exit.Signal
+		if end.Signal == "" {
+			end.ExitCode = &status.Exit.Code
 		}
-		end := store.AssistantSessionEnd{EnvironmentOwner: &access, Tag: session.Tag, Outcome: status.Outcome,
-			DurationMilliseconds: max(0, now.Sub(session.StartedAt).Milliseconds())}
-		if status.Exit != nil {
-			end.ExitCode, end.Signal = &status.Exit.Code, status.Exit.Signal
-		}
-		record, endErr := o.deps.AssistantSessions.EndSession(ctx, &end)
-		if endErr != nil && !store.IsNotFound(endErr) {
-			return endErr
-		}
-		if endErr == nil && o.deps.AssistantSessionEnded != nil {
-			if publishErr := o.deps.AssistantSessionEnded(ctx, o.row.SittingID, o.attemptID, session.CandidateUserID, record); publishErr != nil {
-				o.report(publishErr)
-			}
-		}
+	}
+	result, err := o.deps.AssistantSessions.EndSession(ctx, &end)
+	if store.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if result.Changed && o.deps.AssistantSessionEnded != nil {
+		return o.deps.AssistantSessionEnded(ctx, o.row.SittingID, o.attemptID, session.CandidateUserID, result.Record)
 	}
 	return nil
 }

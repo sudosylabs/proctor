@@ -118,6 +118,12 @@ type AssistantSessionEnd struct {
 	DurationMilliseconds int64
 }
 
+// AssistantSessionEndResult identifies the caller that committed the end.
+type AssistantSessionEndResult struct {
+	Record  *model.AssistantRecord
+	Changed bool
+}
+
 type AssistantSessionQuery struct {
 	ReviewSubmissionID model.SubmissionID
 	Tag                string
@@ -179,7 +185,7 @@ type AssistantTranscriptStore interface {
 	ReserveCommand(context.Context, *AssistantCommandReservation) (*AssistantCommandSlot, error)
 	ReserveSession(context.Context, *AssistantSessionReservation) (*AssistantSessionSlot, error)
 	AdvanceSessionRead(context.Context, AssistantSessionAccess, string, uint64, bool) error
-	EndSession(context.Context, *AssistantSessionEnd) (*model.AssistantRecord, error)
+	EndSession(context.Context, *AssistantSessionEnd) (*AssistantSessionEndResult, error)
 	ListSessions(context.Context, AssistantSessionQuery) ([]model.AssistantSession, error)
 	Decide(context.Context, AssistantCallDecision) (*model.AssistantRecord, error)
 	Decision(context.Context, AssistantRunAccess, model.AssistantCallID) (string, error)

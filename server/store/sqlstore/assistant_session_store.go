@@ -20,6 +20,7 @@ import (
 )
 
 type assistantSessionRow struct {
+	AccessEnded          bool         `db:"access_ended"`
 	Starting             bool         `db:"starting"`
 	CandidateUserID      model.UserID `db:"candidate_user_id"`
 	Tag                  string       `db:"tag"`
@@ -85,8 +86,9 @@ func (s *SQLAssistantTranscriptStore) ReserveSession(ctx context.Context,
 			return nil, err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_assistant_sessions
-			(exam_attempt_id,tag,call_id,conversation_id,reserved_milliseconds,state,started_at) VALUES (?,?,?,?,?,'running',?)`,
-			id.String(), tag, input.CallID.String(), run.ConversationID, timeout*1000, now); err != nil {
+			(exam_attempt_id,tag,call_id,conversation_id,connection_id,reserved_milliseconds,state,started_at)
+			VALUES (?,?,?,?,?,?,'running',?)`,
+			id.String(), tag, input.CallID.String(), run.ConversationID, input.Access.Editor.ConnectionID.String(), timeout*1000, now); err != nil {
 			return nil, translateError("assistant_session", tag, err)
 		}
 		reservation := *request
@@ -123,15 +125,17 @@ func (s *SQLAssistantTranscriptStore) AdvanceSessionRead(ctx context.Context, ac
 		if err != nil {
 			return false, err
 		}
-		if row.State != "running" {
+		if row.State != "running" && !wrote {
 			return false, store.NewErrNotFound("assistant_session", tag)
 		}
 		if offset < row.ReadOffset {
 			return false, store.NewErrConflict("assistant_session", "assistant_session_read_offset", nil)
 		}
-		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_sessions SET read_offset=? WHERE exam_attempt_id=? AND tag=?`,
-			offset, id.String(), tag); err != nil {
-			return false, err
+		if row.State == "running" {
+			if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_sessions SET read_offset=? WHERE exam_attempt_id=? AND tag=?`,
+				offset, id.String(), tag); err != nil {
+				return false, err
+			}
 		}
 		if wrote {
 			_, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_inventories SET session_inputs=session_inputs+1 WHERE id=?`, id.String())
@@ -141,7 +145,7 @@ func (s *SQLAssistantTranscriptStore) AdvanceSessionRead(ctx context.Context, ac
 	return err
 }
 
-func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *store.AssistantSessionEnd) (*model.AssistantRecord, error) {
+func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *store.AssistantSessionEnd) (*store.AssistantSessionEndResult, error) {
 	if input == nil || !model.ValidAssistantProcessTag(input.Tag) ||
 		!model.ValidAssistantSessionOutcome(input.Outcome) || input.Outcome == "sealed" || input.DurationMilliseconds < 0 {
 		return nil, store.NewErrInvalidInput("assistant_session", "end", nil)
@@ -159,7 +163,8 @@ func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *sto
 	if !input.AuditEventID.IsZero() && (!input.AuditEventID.IsValid() || input.AuditAt.IsZero() || input.EnvironmentOwner != nil) {
 		return nil, store.NewErrInvalidInput("assistant_session", "end_authority", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "end assistant session", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AssistantRecord, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "end assistant session", func(ctx context.Context,
+		tx *sqlxTxWrapper) (*store.AssistantSessionEndResult, error) {
 		_, now, err := lockAttemptWorkspaceMutationTarget(ctx, tx, authority)
 		if err != nil {
 			return nil, err
@@ -173,15 +178,19 @@ func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *sto
 			return nil, err
 		}
 		record, err := endAssistantSession(ctx, tx, id, row, input, now)
-		if err != nil || input.AuditEventID.IsZero() {
-			return record, err
+		if err != nil {
+			return nil, err
+		}
+		result := &store.AssistantSessionEndResult{Record: record, Changed: row.State == "running"}
+		if input.AuditEventID.IsZero() {
+			return result, nil
 		}
 		data, err := model.EncodeAuditData(map[string]any{"attempt_id": id.String(), "process_tag": row.Tag, "outcome": record.Call.Outcome})
 		if err != nil {
 			return nil, err
 		}
 		_, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", data, input.AuditAt)
-		return record, err
+		return result, err
 	})
 }
 
@@ -273,6 +282,9 @@ func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query st
 		// reconcile a missing process once that turn can no longer start it.
 		if err = tx.Select(ctx, &rows, `SELECT `+assistantSessionColumns+`,
 			(SELECT candidate_user_id FROM exam_attempts WHERE id=session.exam_attempt_id) AS candidate_user_id,
+			NOT EXISTS(SELECT 1 FROM exam_attempt_connections connection
+				JOIN exam_attempt_participations participation ON participation.id=connection.participation_id
+				WHERE connection.id=session.connection_id AND connection.state='open' AND participation.state='active') AS access_ended,
 			EXISTS(SELECT 1 FROM exam_attempt_assistant_runs run
 				JOIN exam_attempt_assistant_calls request ON request.exam_attempt_id=run.id AND request.turn_id=run.turn_id
 				WHERE run.id=session.exam_attempt_id AND run.active AND run.lease_expires_at>statement_timestamp()
@@ -280,7 +292,9 @@ func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query st
 					SELECT 1 FROM exam_attempt_assistant_calls completed WHERE completed.exam_attempt_id=session.exam_attempt_id
 					AND completed.call_id=session.call_id AND completed.phase='completed')) AS starting
 			FROM exam_attempt_assistant_sessions session WHERE exam_attempt_id=? AND (?='' OR tag=?)
-			ORDER BY (state='running') DESC,COALESCE(ended_at,started_at) DESC,tag DESC LIMIT 52`, id.String(), query.Tag, query.Tag); err != nil {
+			AND (NOT ? OR state='running')
+			ORDER BY (state='running') DESC, CASE WHEN ? THEN ended_at ELSE started_at END DESC,tag DESC LIMIT 52`,
+			id.String(), query.Tag, query.Tag, query.EnvironmentOwner != nil, !query.ReviewSubmissionID.IsZero()); err != nil {
 			return nil, fmt.Errorf("list assistant sessions: %w", err)
 		}
 		sessions := make([]model.AssistantSession, 0, len(rows))
@@ -295,7 +309,7 @@ func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query st
 			if err = json.Unmarshal(request.Call.Arguments, &args); err != nil {
 				return nil, invalidPersistedState("assistant_session", "command", err)
 			}
-			session := model.AssistantSession{Tag: row.Tag, Starting: row.Starting, CandidateUserID: row.CandidateUserID,
+			session := model.AssistantSession{Tag: row.Tag, Starting: row.Starting, AccessEnded: row.AccessEnded, CandidateUserID: row.CandidateUserID,
 				TurnID: request.Call.TurnID, CallID: request.Call.CallID, ConversationID: request.Call.ConversationID,
 				Command: args.Command, ReservedMilliseconds: row.ReservedMilliseconds, ReadOffset: row.ReadOffset, State: row.State,
 				StartedAt: model.TimeUTC(row.StartedAt)}

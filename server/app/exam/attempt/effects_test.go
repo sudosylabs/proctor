@@ -9,6 +9,7 @@ package attempt
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -457,4 +458,47 @@ func TestParticipationExpiryEffectOmitsDuplicateCloseAfterTransportTeardown(t *t
 	require.Equal(t, "candidate.exam_activity.changed", calls[2].Event.Name)
 	require.Equal(t, "manager.sitting_board.changed", calls[3].Event.Name)
 	require.Equal(t, realtimetest.Call{Method: realtimetest.InvalidateCurrentUserContext, UserID: result.CandidateUserID}, calls[4])
+}
+
+type sealedAssistantSessions struct {
+	store.AssistantTranscriptStore
+	submission model.SubmissionID
+	rows       []model.AssistantSession
+}
+
+func (s sealedAssistantSessions) ListSessions(_ context.Context, query store.AssistantSessionQuery) ([]model.AssistantSession, error) {
+	if query.ReviewSubmissionID != s.submission {
+		return nil, errors.New("unexpected submission")
+	}
+	return s.rows, nil
+}
+
+func TestSealedSessionEffectKillsOnlyTheSessionsTheSealEnded(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	result := SubmissionResult{SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(),
+		Receipt: store.ExamSubmissionReceipt{SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID()}}
+	publisher := &realtimetest.Publisher{}
+	unavailable := errors.New("guest could not be reached")
+	called := false
+	service := &Service{publisher: publisher,
+		assistantSessions: sealedAssistantSessions{submission: result.Receipt.SubmissionID, rows: []model.AssistantSession{
+			{Tag: "assistant:1", Outcome: "exited", EndedAt: now},
+			{Tag: "assistant:2", Outcome: "sealed", EndedAt: now},
+			{Tag: "assistant:3", Outcome: "sealed", EndedAt: now},
+		}},
+		killSealedAssistantSessions: func(ctx context.Context, id model.ExamAttemptID, tags []string) error {
+			called = true
+			require.NoError(t, ctx.Err())
+			require.Equal(t, result.Receipt.AttemptID, id)
+			require.Equal(t, []string{"assistant:2", "assistant:3"}, tags)
+			require.Empty(t, publisher.Calls())
+			return unavailable
+		}}
+	require.ErrorIs(t, service.publishSealedAssistantSessions(t.Context(), result), unavailable)
+	require.True(t, called)
+	require.Len(t, publisher.Calls(), 2, "a failed best-effort kill does not prevent the committed facts")
+	for _, call := range publisher.Calls() {
+		require.Equal(t, "exam_attempt_assistant_session_ended", call.Event.Name)
+	}
 }

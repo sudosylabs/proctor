@@ -4220,8 +4220,8 @@ func (s *timedAssistantTranscriptStore) AdvanceSessionRead(arg0 context.Context,
 	})
 }
 
-func (s *timedAssistantTranscriptStore) EndSession(arg0 context.Context, arg1 *store.AssistantSessionEnd) (*model.AssistantRecord, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodEndSession), func(callCtx context.Context) (*model.AssistantRecord, error) {
+func (s *timedAssistantTranscriptStore) EndSession(arg0 context.Context, arg1 *store.AssistantSessionEnd) (*store.AssistantSessionEndResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodEndSession), func(callCtx context.Context) (*store.AssistantSessionEndResult, error) {
 		return s.next.EndSession(callCtx, arg1)
 	})
 }

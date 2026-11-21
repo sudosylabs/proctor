@@ -7,8 +7,6 @@
 
 package model
 
-import "encoding/json"
-
 // AssistantUsageSummary describes how a candidate used the assistant. It is
 // descriptive only: assistant use the Exam allows is not misconduct, so no
 // figure here raises an Integrity Flag or scores anything.
@@ -36,8 +34,8 @@ type AssistantUsageSummary struct {
 // SummarizeAssistantTranscript counts a transcript in record order. Each
 // tool call counts once, at its requested phase; usage counts at each turn's
 // final record, which carries the turn's whole usage.
-func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSummary {
-	summary := AssistantUsageSummary{Tools: map[string]int64{}}
+func SummarizeAssistantTranscript(records []AssistantRecord, sessionInputs int64) AssistantUsageSummary {
+	summary := AssistantUsageSummary{Tools: map[string]int64{}, SessionInputs: sessionInputs}
 	var sessionMilliseconds int64
 	for _, record := range records {
 		if record.Gap {
@@ -89,15 +87,6 @@ func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSumma
 		case "session_ended":
 			sessionMilliseconds += call.DurationMilliseconds
 		case "completed", "applied":
-			if call.Tool == "send_input" && call.Outcome == "ok" {
-				var input struct {
-					Text string   `json:"text"`
-					Keys []string `json:"keys"`
-				}
-				if json.Unmarshal([]byte(call.Result), &input) == nil && (input.Text != "" || len(input.Keys) != 0) {
-					summary.SessionInputs++
-				}
-			}
 			switch call.Outcome {
 			case "applied":
 				summary.EditsApplied++

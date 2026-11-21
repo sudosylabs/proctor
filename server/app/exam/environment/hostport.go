@@ -49,6 +49,8 @@ var (
 	ErrMachineTooLarge = errors.New("execution machine too large")
 	// ErrMachineBusy means the machine runs as many processes as it may.
 	ErrMachineBusy = errors.New("execution machine busy")
+	// ErrPortRefused means no listener accepted the guest connection.
+	ErrPortRefused = errors.New("execution port refused")
 	// ErrProcessExited means the process has exited and takes no more input,
 	// size or signal.
 	ErrProcessExited = errors.New("execution process exited")
@@ -376,7 +378,22 @@ type Machine interface {
 	ObserveProcesses(ctx context.Context, fence Fence, after uint64, limit int) (ProcessPage, error)
 	AcknowledgeProcesses(ctx context.Context, fence Fence, through uint64) error
 	Processes
+	ConnectPort(ctx context.Context, fence Fence, port int) (PortConn, error)
+	ListPorts(ctx context.Context) ([]ListeningPort, error)
 	Revoke(ctx context.Context) error
+}
+
+// PortConn permits a concurrent reader and writer. Closing it unblocks both.
+type PortConn interface {
+	io.ReadWriteCloser
+	CloseWrite() error
+}
+
+// ListeningPort describes a port bound to loopback or a wildcard address.
+type ListeningPort struct {
+	Port    int
+	Address string
+	Tag     model.AttemptEnvironmentProcessTag
 }
 
 // Window is a terminal's size in character cells.

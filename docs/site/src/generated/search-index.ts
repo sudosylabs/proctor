@@ -2636,6 +2636,28 @@ export const searchEntries = [
     "searchText": "getcandidateenvironment read the attempt's execution environment returns what the attempt's execution environment does and the sync status of its files in both directions. a workspace entry whose last journal change is past projection_cursor is not in the machine yet, which a client can mark as not yet synced. a guest change waits about a second at most before it is saved; paths lists the guest paths the environment did not save, each ignored (by the workspace's .proctorignore, the default patterns, or a parent directory that is not saved) or refused with the workspace's reason, such as a quota or a conflict the workspace won. every other guest path is synced. the list keeps the latest status of at most 256 paths, the newest last, and a path leaves it once a later change to it is saved or the guest removes it. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/environment session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.environment_not_found exam.attempt.environment_unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listCandidatePreviewPorts",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "List the listening ports in the Attempt environment",
+    "description": "Lists TCP listeners bound to loopback or a wildcard address in the candidate's running Attempt environment. Each entry shows whether the published Exam policy permits opening a preview.",
+    "href": "/api/reference/list-candidate-preview-ports",
+    "method": "GET",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/environment/ports",
+    "searchText": "listcandidatepreviewports list the listening ports in the attempt environment lists tcp listeners bound to loopback or a wildcard address in the candidate's running attempt environment. each entry shows whether the published exam policy permits opening a preview. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/environment/ports session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.environment_not_found exam.attempt.environment_not_running exam.attempt.environment_unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:connectCandidatePreview",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Upgrade to a preview port socket",
+    "description": "Upgrades to a binary WebSocket carrying one TCP connection to a guest listener. Proctor checks live candidate access and the frozen policy and dials the guest before it upgrades. Each connection goes to the execution host from the node handling the request. The first byte of each binary message is its type. Clients send `0x01` followed by 1 to 32,768 bytes of data, or `0x02` with no payload to close their write side. The server sends `0x81` followed by up to 32,768 bytes, `0x82` with no payload for EOF from the guest, or `0x86` followed by a public UTF-8 error code. Each direction can close independently. Proctor rechecks access every 15 seconds. Close code 4003 indicates lost access, a freeze or a seal. A connection closes after 10 minutes without bytes in either direction. The local limit is 32 connections per Attempt. Candidate content travels only in binary frames.",
+    "href": "/api/reference/connect-candidate-preview",
+    "method": "GET",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/environment/ports/{port}/socket",
+    "searchText": "connectcandidatepreview upgrade to a preview port socket upgrades to a binary websocket carrying one tcp connection to a guest listener. proctor checks live candidate access and the frozen policy and dials the guest before it upgrades. each connection goes to the execution host from the node handling the request. the first byte of each binary message is its type. clients send `0x01` followed by 1 to 32,768 bytes of data, or `0x02` with no payload to close their write side. the server sends `0x81` followed by up to 32,768 bytes, `0x82` with no payload for eof from the guest, or `0x86` followed by a public utf-8 error code. each direction can close independently. proctor rechecks access every 15 seconds. close code 4003 indicates lost access, a freeze or a seal. a connection closes after 10 minutes without bytes in either direction. the local limit is 32 connections per attempt. candidate content travels only in binary frames. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/environment/ports/{port}/socket session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.environment_not_found exam.attempt.environment_not_running exam.attempt.environment_unavailable exam.attempt.preview_not_allowed exam.attempt.preview_limit_reached exam.attempt.preview_port_closed websocket.origin.invalid websocket.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:listCandidateTerminals",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
@@ -7089,6 +7111,33 @@ export const searchEntries = [
     "description": "The Attempt does not exist or is not visible to the caller.",
     "href": "/problems/exam.attempt.not_found",
     "searchText": "exam.attempt.not_found exam attempt not found 404 the attempt does not exist or is not visible to the caller."
+  },
+  {
+    "id": "problem:exam.attempt.preview_limit_reached",
+    "kind": "problem",
+    "group": "Error codes / Exam attempt",
+    "title": "exam.attempt.preview_limit_reached",
+    "description": "The Attempt has reached its preview connection limit. Close a preview connection and retry.",
+    "href": "/problems/exam.attempt.preview_limit_reached",
+    "searchText": "exam.attempt.preview_limit_reached exam attempt preview limit reached 429 the attempt has reached its preview connection limit. close a preview connection and retry."
+  },
+  {
+    "id": "problem:exam.attempt.preview_not_allowed",
+    "kind": "problem",
+    "group": "Error codes / Exam attempt",
+    "title": "exam.attempt.preview_not_allowed",
+    "description": "The Exam does not allow a preview on this port.",
+    "href": "/problems/exam.attempt.preview_not_allowed",
+    "searchText": "exam.attempt.preview_not_allowed exam attempt preview not allowed 403 the exam does not allow a preview on this port."
+  },
+  {
+    "id": "problem:exam.attempt.preview_port_closed",
+    "kind": "problem",
+    "group": "Error codes / Exam attempt",
+    "title": "exam.attempt.preview_port_closed",
+    "description": "No service is listening on this port in the Attempt environment.",
+    "href": "/problems/exam.attempt.preview_port_closed",
+    "searchText": "exam.attempt.preview_port_closed exam attempt preview port closed 404 no service is listening on this port in the attempt environment."
   },
   {
     "id": "problem:exam.attempt.registered_desktop_required",

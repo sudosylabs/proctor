@@ -117,6 +117,17 @@
           "type": "string"
         }
       },
+      "CandidatePreviewPortNumber": {
+        "description": "The guest port. The Exam's allowed ranges can include ports from 1024 to 65535.",
+        "in": "path",
+        "name": "port",
+        "required": true,
+        "schema": {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
       "CandidateTerminalNumber": {
         "description": "The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1.",
         "in": "path",
@@ -16858,6 +16869,59 @@
         ],
         "type": "object"
       },
+      "CandidatePreviewPort": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "examples": [
+              "127.0.0.1",
+              "::1"
+            ],
+            "type": "string"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "port": {
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "process_tag": {
+            "examples": [
+              "terminal:1"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "port",
+          "address",
+          "allowed"
+        ],
+        "type": "object"
+      },
+      "CandidatePreviewPorts": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_limit": {
+            "const": 32,
+            "description": "The maximum concurrent connections for this Attempt on one node.",
+            "type": "integer"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/CandidatePreviewPort"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "connection_limit",
+          "ports"
+        ],
+        "type": "object"
+      },
       "CandidateRuntimeCapabilities": {
         "additionalProperties": false,
         "description": "What the candidate may do in the Attempt at the moment the server answered.",
@@ -21274,6 +21338,9 @@
           "exam.attempt.invalid",
           "exam.attempt.management_authority_conflict",
           "exam.attempt.not_found",
+          "exam.attempt.preview_limit_reached",
+          "exam.attempt.preview_not_allowed",
+          "exam.attempt.preview_port_closed",
           "exam.attempt.registered_desktop_required",
           "exam.attempt.renewal_conflict",
           "exam.attempt.revision_conflict",
@@ -44802,6 +44869,208 @@
       "parameters": [
         {
           "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/ports": {
+      "get": {
+        "description": "Lists TCP listeners bound to loopback or a wildcard address in the candidate's running Attempt environment. Each entry shows whether the published Exam policy permits opening a preview.",
+        "operationId": "listCandidatePreviewPorts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "connection_limit": 32,
+                  "ports": [
+                    {
+                      "address": "127.0.0.1",
+                      "allowed": true,
+                      "port": 5173,
+                      "process_tag": "terminal:1"
+                    },
+                    {
+                      "address": "::1",
+                      "allowed": false,
+                      "port": 9090
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/CandidatePreviewPorts"
+                }
+              }
+            },
+            "description": "Listening ports reported by the execution host",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the listening ports in the Attempt environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/ports/{port}/socket": {
+      "get": {
+        "description": "Upgrades to a binary WebSocket carrying one TCP connection to a guest listener. Proctor checks live\ncandidate access and the frozen policy and dials the guest before it upgrades. Each connection goes\nto the execution host from the node handling the request.\n\nThe first byte of each binary message is its type. Clients send `0x01` followed by 1 to 32,768 bytes\nof data, or `0x02` with no payload to close their write side. The server sends `0x81` followed by\nup to 32,768 bytes, `0x82` with no payload for EOF from the guest, or `0x86` followed by a public\nUTF-8 error code. Each direction can close independently.\n\nProctor rechecks access every 15 seconds. Close code 4003 indicates lost access, a freeze or a seal.\nA connection closes after 10 minutes without bytes in either direction. The local limit is 32\nconnections per Attempt. Candidate content travels only in binary frames.",
+        "operationId": "connectCandidatePreview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols to the preview socket"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Upgrade to a preview port socket",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.preview_not_allowed",
+          "exam.attempt.preview_limit_reached",
+          "exam.attempt.preview_port_closed",
+          "websocket.origin.invalid",
+          "websocket.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/CandidatePreviewPortNumber"
         }
       ]
     },

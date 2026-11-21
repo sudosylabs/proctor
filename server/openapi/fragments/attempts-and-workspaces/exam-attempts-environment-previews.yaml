@@ -1,0 +1,176 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exam-attempts/{exam_attempt_id}/environment/ports:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listCandidatePreviewPorts
+      summary: List the listening ports in the Attempt environment
+      tags:
+        - Attempts and workspaces
+      description: Lists TCP listeners bound to loopback or a wildcard address in the candidate's running Attempt environment.
+        Each entry shows whether the published Exam policy permits opening a preview.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '200':
+          description: Listening ports reported by the execution host
+          headers:
+            Cache-Control:
+              schema: {type: string, const: 'private, no-store'}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidatePreviewPorts'
+              example:
+                connection_limit: 32
+                ports:
+                  - {port: 5173, address: '127.0.0.1', allowed: true, process_tag: 'terminal:1'}
+                  - {port: 9090, address: '::1', allowed: false}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/environment/ports/{port}/socket:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/CandidatePreviewPortNumber'
+    get:
+      operationId: connectCandidatePreview
+      summary: Upgrade to a preview port socket
+      tags:
+        - Attempts and workspaces
+      description: |-
+        Upgrades to a binary WebSocket carrying one TCP connection to a guest listener. Proctor checks live
+        candidate access and the frozen policy and dials the guest before it upgrades. Each connection goes
+        to the execution host from the node handling the request.
+
+        The first byte of each binary message is its type. Clients send `0x01` followed by 1 to 32,768 bytes
+        of data, or `0x02` with no payload to close their write side. The server sends `0x81` followed by
+        up to 32,768 bytes, `0x82` with no payload for EOF from the guest, or `0x86` followed by a public
+        UTF-8 error code. Each direction can close independently.
+
+        Proctor rechecks access every 15 seconds. Close code 4003 indicates lost access, a freeze or a seal.
+        A connection closes after 10 minutes without bytes in either direction. The local limit is 32
+        connections per Attempt. Candidate content travels only in binary frames.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
+        - exam.attempt.preview_not_allowed
+        - exam.attempt.preview_limit_reached
+        - exam.attempt.preview_port_closed
+        - websocket.origin.invalid
+        - websocket.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '101':
+          description: Switching Protocols to the preview socket
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  parameters:
+    CandidatePreviewPortNumber:
+      name: port
+      in: path
+      required: true
+      description: The guest port. The Exam's allowed ranges can include ports from 1024 to 65535.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 65535
+  schemas:
+    CandidatePreviewPort:
+      type: object
+      additionalProperties: false
+      required: [port, address, allowed]
+      properties:
+        port: {type: integer, minimum: 1, maximum: 65535}
+        address: {type: string, examples: ['127.0.0.1', '::1']}
+        allowed: {type: boolean}
+        process_tag: {type: string, examples: ['terminal:1']}
+    CandidatePreviewPorts:
+      type: object
+      additionalProperties: false
+      required: [connection_limit, ports]
+      properties:
+        connection_limit: {type: integer, const: 32, description: The maximum concurrent connections for this Attempt on one node.}
+        ports:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidatePreviewPort'

@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -121,6 +122,7 @@ func New(deps Dependencies) (*App, error) {
 
 	return &App{
 		Terminals:         terminals,
+		Previews:          environment.NewPreviews(terminals),
 		Assistant:         assistants,
 		Identity:          identities,
 		Onboarding:        onboardings,

@@ -44,6 +44,7 @@ type App struct {
 	Attempts        *attempt.Service
 	// Terminals is nil when the installation runs no execution environments.
 	Terminals *environment.Terminals
+	Previews  *environment.Previews
 	// Assistant is nil when the installation has the assistant off.
 	Assistant *assistant.Service
 	// Reviews covers integrity review and result release; it does not grade.

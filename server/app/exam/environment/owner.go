@@ -104,7 +104,8 @@ func (t OwnerTiming) withDefaults() OwnerTiming {
 // OwnerDependencies configures NewOwners; Environments, Evidence, Workspace
 // and Hosts are required.
 type OwnerDependencies struct {
-	Environments store.AttemptEnvironmentStore
+	AssistantSessions store.AssistantTranscriptStore
+	Environments      store.AttemptEnvironmentStore
 	// Evidence stores attempt evidence through the owner's access.
 	Evidence  store.ExamAttemptWorkspaceStore
 	Workspace Workspace
@@ -595,6 +596,14 @@ func (o *owner) place(ctx context.Context) error {
 
 // setControl takes the next fence revision and moves the machine to state.
 func (o *owner) setControl(ctx context.Context, state ControlState) error {
+	if state == ControlFrozen && o.control == ControlRunning {
+		stopCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := o.reconcileAssistantSessions(stopCtx, o.fence, true)
+		cancel()
+		if err != nil {
+			o.report(err)
+		}
+	}
 	if state != ControlRunning {
 		// A frozen or revoked machine serves no observation.
 		o.stopObserving()
@@ -610,6 +619,13 @@ func (o *owner) setControl(ctx context.Context, state ControlState) error {
 	}
 	if !receipt.Confirmed || receipt.Fence != fence || receipt.State != state {
 		return errors.New("the execution machine did not confirm the control")
+	}
+	// The guest can still hold a process whose host timeout expired while it
+	// was frozen. Finish its reservation before publishing the running state.
+	if state == ControlRunning {
+		if err = o.reconcileAssistantSessions(ctx, fence, false); err != nil {
+			return err
+		}
 	}
 	o.fence, o.control = fence, state
 	return nil

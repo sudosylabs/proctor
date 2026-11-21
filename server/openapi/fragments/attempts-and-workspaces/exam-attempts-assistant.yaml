@@ -612,6 +612,9 @@ components:
             - search
             - read_terminal
             - run_command
+            - start_session
+            - send_input
+            - stop_session
             - propose_edit
             - apply_edit
             - output_check
@@ -623,6 +626,7 @@ components:
             - decision
             - completed
             - applied
+            - session_ended
         arguments:
           type: object
           additionalProperties: true
@@ -649,6 +653,11 @@ components:
             - applied
             - rewrite
             - replaced
+            - exited
+            - stopped
+            - timed_out
+            - sealed
+            - ended
         duration_milliseconds:
           type: integer
           format: int64
@@ -666,6 +675,9 @@ components:
           type: string
         exit_code:
           type: integer
+        signal:
+          type: string
+          maxLength: 16
         truncated:
           type: boolean
     AssistantInventory:

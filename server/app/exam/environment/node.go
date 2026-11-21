@@ -39,12 +39,13 @@ type NodeHosts interface {
 
 // NodeDependencies is what NewNode takes from composition.
 type NodeDependencies struct {
-	Cluster      cluster.Transport
-	Environments store.AttemptEnvironmentStore
-	Evidence     store.ExamAttemptWorkspaceStore
-	Leases       store.AttemptRuntimeLeaseStore
-	Hosts        NodeHosts
-	NodeID       string
+	AssistantSessions store.AssistantTranscriptStore
+	Cluster           cluster.Transport
+	Environments      store.AttemptEnvironmentStore
+	Evidence          store.ExamAttemptWorkspaceStore
+	Leases            store.AttemptRuntimeLeaseStore
+	Hosts             NodeHosts
+	NodeID            string
 	// Owners bounds how many environments this node owns at once.
 	Owners int
 	Logger *logging.Logger
@@ -93,12 +94,13 @@ func (n *Node) Complete(attempts *attempt.Service) error {
 		return fmt.Errorf("construct attempt environment workspace: %w", err)
 	}
 	owners, err := NewOwners(OwnerDependencies{
-		Environments: n.deps.Environments,
-		Evidence:     n.deps.Evidence,
-		Workspace:    workspace,
-		Hosts:        n.hosts,
-		Settled:      n.settles,
-		Report:       n.Report,
+		Environments:      n.deps.Environments,
+		AssistantSessions: n.deps.AssistantSessions,
+		Evidence:          n.deps.Evidence,
+		Workspace:         workspace,
+		Hosts:             n.hosts,
+		Settled:           n.settles,
+		Report:            n.Report,
 	})
 	if err != nil {
 		return fmt.Errorf("construct attempt environment owners: %w", err)

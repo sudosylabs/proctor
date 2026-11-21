@@ -269,14 +269,15 @@ func composeEnvironments(
 		return nil, fmt.Errorf("construct execution hosts: %w", err)
 	}
 	node, err := environment.NewNode(environment.NodeDependencies{
-		Cluster:      capabilities.cluster,
-		Environments: persistence.AttemptEnvironment(),
-		Evidence:     persistence.ExamAttemptWorkspace(),
-		Leases:       persistence.AttemptRuntimeLease(),
-		Hosts:        hosts,
-		NodeID:       capabilities.nodeID,
-		Owners:       snapshot.Execution.Owners,
-		Logger:       capabilities.logger,
+		Cluster:           capabilities.cluster,
+		Environments:      persistence.AttemptEnvironment(),
+		AssistantSessions: persistence.AssistantTranscript(),
+		Evidence:          persistence.ExamAttemptWorkspace(),
+		Leases:            persistence.AttemptRuntimeLease(),
+		Hosts:             hosts,
+		NodeID:            capabilities.nodeID,
+		Owners:            snapshot.Execution.Owners,
+		Logger:            capabilities.logger,
 	})
 	if err != nil {
 		return nil, errors.Join(err, hosts.Close())

@@ -130,7 +130,7 @@ func NewAssistantApprovalRequestedEvent(target AssistantTarget, call model.Assis
 	if len(summary) > AssistantApprovalMaximumBytes {
 		summary, truncated = truncateUTF8(summary, AssistantApprovalMaximumBytes), true
 	}
-	if !target.valid() || !call.IsValid() || (tool != "run_command" && tool != "apply_edit") || summary == "" ||
+	if !target.valid() || !call.IsValid() || (tool != "run_command" && tool != "apply_edit" && tool != "start_session" && tool != "send_input") || summary == "" ||
 		!utf8.ValidString(summary) || expires.IsZero() {
 		return Event{}, errors.New("assistant approval event requires valid bounded metadata")
 	}

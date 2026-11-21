@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // Assistant session limits bound the time and bytes of each interaction.
@@ -125,6 +126,9 @@ func checkAssistantSession(ctx context.Context, at reached, session model.Assist
 	deadline := session.StartedAt.Add(time.Duration(session.ReservedMilliseconds) * time.Millisecond)
 	info, err := assistantSessionProcess(ctx, at, tag)
 	if errors.Is(err, ErrTerminalNotFound) {
+		if session.Starting {
+			return AssistantSessionStatus{}, nil
+		}
 		return AssistantSessionStatus{Outcome: "ended"}, nil
 	}
 	if err != nil {
@@ -305,4 +309,51 @@ func AssistantKeyBytes(name string) ([]byte, bool) {
 		return nil, false
 	}
 	return []byte(value), true
+}
+
+// reconcileAssistantSessions is driven by the environment owner's confirmed
+// fence, so it can end abandoned sessions after candidate access is gone.
+func (o *owner) reconcileAssistantSessions(ctx context.Context, fence Fence, freezing bool) error {
+	if o.deps.AssistantSessions == nil {
+		return nil
+	}
+	access := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: o.attemptID, Incarnation: o.row.Incarnation, Fence: o.access().Fence}
+	sessions, err := o.deps.AssistantSessions.ListSessions(ctx, store.AssistantSessionQuery{EnvironmentOwner: &access})
+	if store.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	at := reached{row: o.row, machine: o.machine}
+	for _, session := range sessions {
+		if session.State != "running" {
+			continue
+		}
+		tag := model.AttemptEnvironmentProcessTag(session.Tag)
+		signal := func() error { return o.machine.SignalProcess(ctx, fence, tag, SignalKill) }
+		now := o.deps.Now()
+		status, checkErr := checkAssistantSession(ctx, at, session, now, signal)
+		if checkErr != nil {
+			return checkErr
+		}
+		if status.Outcome == "" && freezing && !session.Starting {
+			if stopErr := signal(); stopErr != nil && !errors.Is(stopErr, ErrProcessExited) && !errors.Is(stopErr, ErrMachineNotFound) {
+				return stopErr
+			}
+			status = AssistantSessionStatus{Outcome: "ended", Exit: &ProcessExit{Signal: "KILL"}}
+		}
+		if status.Outcome == "" {
+			continue
+		}
+		end := store.AssistantSessionEnd{EnvironmentOwner: &access, Tag: session.Tag, Outcome: status.Outcome,
+			DurationMilliseconds: max(0, now.Sub(session.StartedAt).Milliseconds())}
+		if status.Exit != nil {
+			end.ExitCode, end.Signal = &status.Exit.Code, status.Exit.Signal
+		}
+		if _, endErr := o.deps.AssistantSessions.EndSession(ctx, &end); endErr != nil && !store.IsNotFound(endErr) {
+			return endErr
+		}
+	}
+	return nil
 }

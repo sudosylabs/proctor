@@ -20,14 +20,16 @@ import (
 )
 
 type assistantSessionRow struct {
-	Tag                  string     `db:"tag"`
-	CallID               string     `db:"call_id"`
-	ConversationID       string     `db:"conversation_id"`
-	ReservedMilliseconds int64      `db:"reserved_milliseconds"`
-	ReadOffset           uint64     `db:"read_offset"`
-	State                string     `db:"state"`
-	StartedAt            time.Time  `db:"started_at"`
-	EndedAt              *time.Time `db:"ended_at"`
+	Starting             bool         `db:"starting"`
+	CandidateUserID      model.UserID `db:"candidate_user_id"`
+	Tag                  string       `db:"tag"`
+	CallID               string       `db:"call_id"`
+	ConversationID       string       `db:"conversation_id"`
+	ReservedMilliseconds int64        `db:"reserved_milliseconds"`
+	ReadOffset           uint64       `db:"read_offset"`
+	State                string       `db:"state"`
+	StartedAt            time.Time    `db:"started_at"`
+	EndedAt              *time.Time   `db:"ended_at"`
 }
 
 const assistantSessionColumns = `tag,call_id,conversation_id,reserved_milliseconds,read_offset,state,started_at,ended_at`
@@ -140,16 +142,26 @@ func (s *SQLAssistantTranscriptStore) AdvanceSessionRead(ctx context.Context, ac
 }
 
 func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *store.AssistantSessionEnd) (*model.AssistantRecord, error) {
-	if input == nil || !model.ValidAssistantProcessTag(input.Tag) || !validAttemptWorkspaceWriteAccess(input.Editor) ||
+	if input == nil || !model.ValidAssistantProcessTag(input.Tag) ||
 		!model.ValidAssistantSessionOutcome(input.Outcome) || input.Outcome == "sealed" || input.DurationMilliseconds < 0 {
 		return nil, store.NewErrInvalidInput("assistant_session", "end", nil)
 	}
+	var authority store.ExamAttemptWorkspaceWriteAccess = input.Editor
+	if input.EnvironmentOwner != nil {
+		if input.Editor != (store.ExamAttemptWorkspaceEditorAccess{}) {
+			return nil, store.NewErrInvalidInput("assistant_session", "end_authority", nil)
+		}
+		authority = *input.EnvironmentOwner
+	}
+	if !validAttemptWorkspaceWriteAccess(authority) {
+		return nil, store.NewErrInvalidInput("assistant_session", "end_authority", nil)
+	}
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "end assistant session", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AssistantRecord, error) {
-		_, now, err := lockAttemptWorkspaceMutationTarget(ctx, tx, input.Editor)
+		_, now, err := lockAttemptWorkspaceMutationTarget(ctx, tx, authority)
 		if err != nil {
 			return nil, err
 		}
-		id := input.Editor.AttemptID
+		id := authority.WorkspaceAttemptID()
 		if _, err = lockAssistantInventory(ctx, tx, id); err != nil {
 			return nil, err
 		}
@@ -226,13 +238,33 @@ func sealAssistantSessions(ctx context.Context, tx *sqlxTxWrapper, id model.Exam
 
 func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query store.AssistantSessionQuery) ([]model.AssistantSession, error) {
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "list assistant sessions", func(ctx context.Context, tx *sqlxTxWrapper) ([]model.AssistantSession, error) {
-		id, err := assistantReadAttempt(ctx, tx, store.AssistantTranscriptQuery{AttemptID: query.Owner.AttemptID, Owner: &query.Owner})
+		var id model.ExamAttemptID
+		var err error
+		if query.EnvironmentOwner != nil {
+			if query.Owner != (store.AssistantTranscriptOwnerAccess{}) {
+				return nil, store.NewErrInvalidInput("assistant_session", "list_authority", nil)
+			}
+			_, _, err = lockAttemptWorkspaceMutationTarget(ctx, tx, *query.EnvironmentOwner)
+			id = query.EnvironmentOwner.AttemptID
+		} else {
+			id, err = assistantReadAttempt(ctx, tx, store.AssistantTranscriptQuery{AttemptID: query.Owner.AttemptID, Owner: &query.Owner})
+		}
 		if err != nil {
 			return nil, err
 		}
 		var rows []assistantSessionRow
-		if err = tx.Select(ctx, &rows, `SELECT `+assistantSessionColumns+` FROM exam_attempt_assistant_sessions
-			WHERE exam_attempt_id=? ORDER BY (state='running') DESC,started_at DESC,tag DESC LIMIT 52`, id.String()); err != nil {
+		// A live turn may be between its reservation and the host start. Only
+		// reconcile a missing process once that turn can no longer start it.
+		if err = tx.Select(ctx, &rows, `SELECT `+assistantSessionColumns+`,
+			(SELECT candidate_user_id FROM exam_attempts WHERE id=session.exam_attempt_id) AS candidate_user_id,
+			EXISTS(SELECT 1 FROM exam_attempt_assistant_runs run
+				JOIN exam_attempt_assistant_calls request ON request.exam_attempt_id=run.id AND request.turn_id=run.turn_id
+				WHERE run.id=session.exam_attempt_id AND run.active AND run.lease_expires_at>statement_timestamp()
+				AND request.call_id=session.call_id AND request.phase='requested' AND NOT EXISTS(
+					SELECT 1 FROM exam_attempt_assistant_calls completed WHERE completed.exam_attempt_id=session.exam_attempt_id
+					AND completed.call_id=session.call_id AND completed.phase='completed')) AS starting
+			FROM exam_attempt_assistant_sessions session WHERE exam_attempt_id=? AND (?='' OR tag=?)
+			ORDER BY (state='running') DESC,started_at DESC,tag DESC LIMIT 52`, id.String(), query.Tag, query.Tag); err != nil {
 			return nil, fmt.Errorf("list assistant sessions: %w", err)
 		}
 		sessions := make([]model.AssistantSession, 0, len(rows))
@@ -247,7 +279,8 @@ func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query st
 			if err = json.Unmarshal(request.Call.Arguments, &args); err != nil {
 				return nil, invalidPersistedState("assistant_session", "command", err)
 			}
-			session := model.AssistantSession{Tag: row.Tag, CallID: request.Call.CallID, ConversationID: request.Call.ConversationID,
+			session := model.AssistantSession{Tag: row.Tag, Starting: row.Starting, CandidateUserID: row.CandidateUserID,
+				TurnID: request.Call.TurnID, CallID: request.Call.CallID, ConversationID: request.Call.ConversationID,
 				Command: args.Command, ReservedMilliseconds: row.ReservedMilliseconds, ReadOffset: row.ReadOffset, State: row.State,
 				StartedAt: model.TimeUTC(row.StartedAt)}
 			if row.EndedAt != nil {

@@ -200,6 +200,13 @@ func (s *Service) NotifyEvent(event realtime.Event) {
 	defer s.mu.Unlock()
 	for id, run := range s.runs {
 		if data.AttemptID == id.String() || (data.AttemptID == "" && data.SittingID == run.candidate.SittingID.String()) {
+			switch event.Name {
+			case "exam_attempt_access_suspended", "exam_attempt_suspended", "exam_attempt_connection_closed", "exam_attempt_submitted":
+				if s.terminals != nil && s.base.Err() == nil {
+					s.group.Add(1)
+					go s.finishParticipationSessions(run)
+				}
+			}
 			// A submitted event follows the durable seal, which already closed the run.
 			if event.Name == "exam_attempt_submitted" && data.AttemptID == id.String() {
 				run.stop(errFenceLost)
@@ -222,4 +229,13 @@ func (s *Service) notifyCommitted(ctx context.Context, id model.ExamAttemptID) {
 			s.publisher.Report(ctx, "assistant_wake", err)
 		}
 	}
+}
+
+// An environment owner also reconciles sessions while freezing. This path
+// shortens cleanup when candidate proof is still usable on this node.
+func (s *Service) finishParticipationSessions(run *turnRun) {
+	defer s.group.Done()
+	ctx, cancel := context.WithTimeout(s.base, 3*time.Second)
+	defer cancel()
+	_, _ = s.reconcileSessions(ctx, run.inv, run.environmentAccess(), run.key.Editor, "", true)
 }

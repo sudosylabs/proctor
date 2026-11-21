@@ -7369,14 +7369,15 @@ export interface components {
             duration_milliseconds: number;
             exit_code?: number;
             /** @enum {string} */
-            outcome: "" | "ok" | "error" | "declined" | "canceled" | "proposed" | "applied" | "rewrite" | "replaced";
+            outcome: "" | "ok" | "error" | "declined" | "canceled" | "proposed" | "applied" | "rewrite" | "replaced" | "exited" | "stopped" | "timed_out" | "sealed" | "ended";
             /** @enum {string} */
-            phase: "requested" | "reserved" | "decision" | "completed" | "applied";
+            phase: "requested" | "reserved" | "decision" | "completed" | "applied" | "session_ended";
             process_tag: string;
             /** @description Bounded tool result text. On a completed propose_edit call with outcome proposed, this is a JSON object serialized as text, with path (workspace path), base_content_version (the expected current file version, or an empty string for a new file), sha256 (lowercase hexadecimal SHA-256 of the full replacement), size_bytes (replacement UTF-8 byte count), and diff (a complete unified replacement diff). A matching ordinary candidate batch adds an applied phase to this call; the workspace write remains authored by the candidate. Other tools return text, and an applied phase contains a matching marker rather than the proposal object. */
             result: string;
+            signal?: string;
             /** @enum {string} */
-            tool: "list_files" | "read_file" | "search" | "read_terminal" | "run_command" | "propose_edit" | "apply_edit" | "output_check";
+            tool: "list_files" | "read_file" | "search" | "read_terminal" | "run_command" | "start_session" | "send_input" | "stop_session" | "propose_edit" | "apply_edit" | "output_check";
             truncated: boolean;
             turn_id: components["schemas"]["ID"];
         };

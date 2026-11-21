@@ -4653,6 +4653,8 @@
           "tool": {
             "enum": [
               "run_command",
+              "start_session",
+              "send_input",
               "apply_edit"
             ],
             "type": "string"

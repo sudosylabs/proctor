@@ -495,11 +495,12 @@ func (e ProcessExit) SignalNumber() int {
 
 // ProcessInfo describes one process a Start created, running or exited.
 // Output is the end offset of each of its streams and Input how many bytes
-// of input it took. Exit is nil while it runs.
+// of input it took. Ended is zero and Exit is nil while it runs.
 type ProcessInfo struct {
 	Tag     model.AttemptEnvironmentProcessTag
 	Streams ProcessStreams
 	Started time.Time
+	Ended   time.Time
 	Running bool
 	Exit    *ProcessExit
 	Output  map[ProcessStream]uint64

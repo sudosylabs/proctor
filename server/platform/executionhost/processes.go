@@ -35,7 +35,7 @@ func fromStream(stream execenv.Stream) environment.ProcessStream {
 
 func fromInfo(info execenv.ProcessInfo) environment.ProcessInfo {
 	result := environment.ProcessInfo{
-		Tag: model.AttemptEnvironmentProcessTag(info.Tag), Streams: environment.ProcessStreamsPipes, Started: info.Started,
+		Tag: model.AttemptEnvironmentProcessTag(info.Tag), Streams: environment.ProcessStreamsPipes, Started: info.Started, Ended: info.Ended,
 		Running: info.Running, Output: make(map[environment.ProcessStream]uint64, len(info.Output)), Input: info.Input,
 	}
 	if info.PTY {

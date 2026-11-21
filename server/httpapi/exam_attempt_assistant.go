@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -25,6 +26,8 @@ const (
 	assistantCancelPath    = assistantTurnsPath + "/{turn_id}/cancel"
 	assistantExportPath    = assistantPath + "/export"
 	assistantApprovalPath  = assistantPath + "/approvals/{call_id}"
+	assistantSessionsPath  = assistantPath + "/sessions"
+	assistantSessionPath   = assistantSessionsPath + "/{tag:assistant-tag}"
 	assistantRequestBytes  = 32 << 10
 	assistantDecisionBytes = 1 << 10
 	assistantPageDefault   = 50
@@ -48,6 +51,12 @@ func assistantErrors(extra ...string) []string {
 		"exam.attempt.assistant_unavailable",
 		"exam.attempt.assistant_disabled",
 	), extra...)
+}
+
+func assistantSessionReadErrors() []string {
+	return assistantErrors("exam.attempt.assistant_session_not_found",
+		"exam.attempt.environment_unavailable", "exam.attempt.environment_not_found", "exam.attempt.environment_not_running",
+		"exam.attempt.terminal_not_found", "exam.attempt.terminal_exited", "exam.attempt.terminal_limit_reached")
 }
 
 func examAttemptAssistantResource(application *assistant.Service) route.Resource {
@@ -113,6 +122,27 @@ func examAttemptAssistantResource(application *assistant.Service) route.Resource
 				"exam.attempt.assistant_approval_conflict",
 			),
 			Handle: h.decide,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   assistantSessionsPath,
+			Auth:   route.AuthSessionRequired,
+			Errors: assistantSessionReadErrors(),
+			Handle: h.listSessions,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   assistantSessionPath + "/stop",
+			Auth:   route.AuthSessionRequired,
+			Errors: assistantErrors("audit.unavailable", "exam.attempt.assistant_session_not_found"),
+			Handle: h.stopSession,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   assistantSessionPath + "/screen",
+			Auth:   route.AuthSessionRequired,
+			Errors: assistantSessionReadErrors(),
+			Handle: h.viewSession,
 		},
 	)
 }
@@ -313,4 +343,90 @@ func assistantTranscriptResponseFrom(page *store.AssistantTranscriptPage, limit 
 		response.NextCursor = cursor
 	}
 	return response, nil
+}
+
+type assistantSessionResponse struct {
+	Tag       string `json:"tag"`
+	Command   string `json:"command"`
+	State     string `json:"state"`
+	StartedAt string `json:"started_at"`
+	EndedAt   string `json:"ended_at,omitempty"`
+	Outcome   string `json:"outcome,omitempty"`
+}
+
+type assistantSessionListResponse = route.List[assistantSessionResponse]
+
+type assistantSessionScreenResponse struct {
+	Text string `json:"text"`
+}
+
+func assistantSessionResponseFrom(session model.AssistantSession) assistantSessionResponse {
+	result := assistantSessionResponse{Tag: session.Tag, Command: session.Command, State: session.State,
+		StartedAt: model.FormatRFC3339(session.StartedAt), Outcome: session.Outcome}
+	if !session.EndedAt.IsZero() {
+		result.EndedAt = model.FormatRFC3339(session.EndedAt)
+	}
+	return result
+}
+
+func (h examAttemptAssistantHandlers) listSessions(request route.Request) (route.Result, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	rows, err := h.app.ListSessions(request.Context, request.Invocation(), access)
+	if err != nil {
+		return route.Result{}, err
+	}
+	page, err := route.BoundedList(request, "assistant sessions", rows, func(row model.AssistantSession) route.BoundedKey {
+		at := row.StartedAt
+		if !row.EndedAt.IsZero() {
+			at = row.EndedAt
+		}
+		return route.BoundedKey{At: at, ID: row.Tag}
+	}, assistantSessionResponseFrom)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, page).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func (h examAttemptAssistantHandlers) stopSession(request route.Request) (route.Result, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	tag, err := assistantSessionTag(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	session, err := h.app.StopSession(request.Context, request.Invocation(), assistant.SessionCommand{Access: access, Tag: tag})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, assistantSessionResponseFrom(session)).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func (h examAttemptAssistantHandlers) viewSession(request route.Request) (route.Result, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	tag, err := assistantSessionTag(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	rows, err := h.app.ViewSession(request.Context, request.Invocation(), assistant.SessionCommand{Access: access, Tag: tag})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, assistantSessionScreenResponse{Text: strings.Join(rows, "\n")}).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func assistantSessionTag(request route.Request) (string, error) {
+	tag := request.Params["tag"]
+	if !model.ValidAssistantProcessTag(tag) {
+		return "", route.InvalidRequest(errors.New("assistant session tag is not canonical"))
+	}
+	return tag, nil
 }

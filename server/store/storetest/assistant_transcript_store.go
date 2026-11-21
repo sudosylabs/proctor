@@ -302,9 +302,9 @@ func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*
 				require.Equal(t, "ended", session.State)
 				require.False(t, session.EndedAt.IsZero())
 			}
-			require.Equal(t, replacement.Tag, sessions[0].Tag)
-			require.Equal(t, other.Tag, sessions[1].Tag)
-			require.Equal(t, "sealed", sessions[1].Outcome)
+			require.Equal(t, other.Tag, sessions[0].Tag)
+			require.Equal(t, "sealed", sessions[0].Outcome)
+			require.Equal(t, replacement.Tag, sessions[1].Tag)
 			page, err := transcript.ListForAttempt(ctx, store.AssistantTranscriptQuery{AttemptID: id, Limit: 100, Owner: &owner})
 			require.NoError(t, err)
 			var sealed *model.AssistantCall

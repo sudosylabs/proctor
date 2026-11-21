@@ -237,5 +237,5 @@ func (s *Service) finishParticipationSessions(run *turnRun) {
 	defer s.group.Done()
 	ctx, cancel := context.WithTimeout(s.base, 3*time.Second)
 	defer cancel()
-	_, _ = s.reconcileSessions(ctx, run.inv, run.environmentAccess(), run.key.Editor, "", true)
+	_, _ = s.reconcileSessions(ctx, run.inv, run.environmentAccess(), run.target.SittingID, run.key.Editor, "", true)
 }

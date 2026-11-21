@@ -95,6 +95,10 @@ channels:
         $ref: '#/components/messages/exam_attempt_assistant_text_delta'
       exam_attempt_assistant_tool_call:
         $ref: '#/components/messages/exam_attempt_assistant_tool_call'
+      exam_attempt_assistant_session_started:
+        $ref: '#/components/messages/exam_attempt_assistant_session_started'
+      exam_attempt_assistant_session_ended:
+        $ref: '#/components/messages/exam_attempt_assistant_session_ended'
       exam_attempt_assistant_approval_requested:
         $ref: '#/components/messages/exam_attempt_assistant_approval_requested'
       exam_attempt_assistant_turn_ended:
@@ -223,6 +227,8 @@ operations:
       - $ref: '#/channels/websocket/messages/exam_attempt_assistant_turn_started'
       - $ref: '#/channels/websocket/messages/exam_attempt_assistant_text_delta'
       - $ref: '#/channels/websocket/messages/exam_attempt_assistant_tool_call'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_session_started'
+      - $ref: '#/channels/websocket/messages/exam_attempt_assistant_session_ended'
       - $ref: '#/channels/websocket/messages/exam_attempt_assistant_approval_requested'
       - $ref: '#/channels/websocket/messages/exam_attempt_assistant_turn_ended'
       - $ref: '#/channels/websocket/messages/exam_attempt_assistant_unavailable'

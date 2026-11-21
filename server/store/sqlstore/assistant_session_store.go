@@ -156,6 +156,9 @@ func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *sto
 	if !validAttemptWorkspaceWriteAccess(authority) {
 		return nil, store.NewErrInvalidInput("assistant_session", "end_authority", nil)
 	}
+	if !input.AuditEventID.IsZero() && (!input.AuditEventID.IsValid() || input.AuditAt.IsZero() || input.EnvironmentOwner != nil) {
+		return nil, store.NewErrInvalidInput("assistant_session", "end_authority", nil)
+	}
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "end assistant session", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AssistantRecord, error) {
 		_, now, err := lockAttemptWorkspaceMutationTarget(ctx, tx, authority)
 		if err != nil {
@@ -169,7 +172,16 @@ func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *sto
 		if err != nil {
 			return nil, err
 		}
-		return endAssistantSession(ctx, tx, id, row, input, now)
+		record, err := endAssistantSession(ctx, tx, id, row, input, now)
+		if err != nil || input.AuditEventID.IsZero() {
+			return record, err
+		}
+		data, err := model.EncodeAuditData(map[string]any{"attempt_id": id.String(), "process_tag": row.Tag, "outcome": record.Call.Outcome})
+		if err != nil {
+			return nil, err
+		}
+		_, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", data, input.AuditAt)
+		return record, err
 	})
 }
 
@@ -241,13 +253,17 @@ func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query st
 		var id model.ExamAttemptID
 		var err error
 		if query.EnvironmentOwner != nil {
-			if query.Owner != (store.AssistantTranscriptOwnerAccess{}) {
+			if query.Owner != (store.AssistantTranscriptOwnerAccess{}) || !query.ReviewSubmissionID.IsZero() {
 				return nil, store.NewErrInvalidInput("assistant_session", "list_authority", nil)
 			}
 			_, _, err = lockAttemptWorkspaceMutationTarget(ctx, tx, *query.EnvironmentOwner)
 			id = query.EnvironmentOwner.AttemptID
 		} else {
-			id, err = assistantReadAttempt(ctx, tx, store.AssistantTranscriptQuery{AttemptID: query.Owner.AttemptID, Owner: &query.Owner})
+			read := store.AssistantTranscriptQuery{ReviewSubmissionID: query.ReviewSubmissionID}
+			if query.Owner != (store.AssistantTranscriptOwnerAccess{}) {
+				read.AttemptID, read.Owner = query.Owner.AttemptID, &query.Owner
+			}
+			id, err = assistantReadAttempt(ctx, tx, read)
 		}
 		if err != nil {
 			return nil, err
@@ -264,7 +280,7 @@ func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query st
 					SELECT 1 FROM exam_attempt_assistant_calls completed WHERE completed.exam_attempt_id=session.exam_attempt_id
 					AND completed.call_id=session.call_id AND completed.phase='completed')) AS starting
 			FROM exam_attempt_assistant_sessions session WHERE exam_attempt_id=? AND (?='' OR tag=?)
-			ORDER BY (state='running') DESC,started_at DESC,tag DESC LIMIT 52`, id.String(), query.Tag, query.Tag); err != nil {
+			ORDER BY (state='running') DESC,COALESCE(ended_at,started_at) DESC,tag DESC LIMIT 52`, id.String(), query.Tag, query.Tag); err != nil {
 			return nil, fmt.Errorf("list assistant sessions: %w", err)
 		}
 		sessions := make([]model.AssistantSession, 0, len(rows))

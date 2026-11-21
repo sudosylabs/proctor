@@ -103,7 +103,7 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	build.NativeAgreement = nativetest.NativeAgreement(t, build)
 	guests, err := memory.New(memory.Config{Images: []execenv.Image{"python-3.12"}, WorkDir: t.TempDir()})
 	require.NoError(t, err)
-	gateway := &commandIntegrationModel{results: make(chan assistant.ModelMessage, 3)}
+	gateway := &commandIntegrationModel{results: make(chan assistant.ModelMessage, 3), sessionResults: make(chan assistant.ModelMessage, 7)}
 	helper := testlib.Setup(t, testlib.WithStore(persistence), testlib.WithDesktopBuildCatalog(build),
 		testlib.WithAssistantGateway(gateway),
 		testlib.WithAssistantLimits(assistant.Limits{ApprovalTimeout: 5 * time.Second}),
@@ -209,8 +209,8 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 		IdempotencyKey: "execution-flow-policy",
 	})
 	require.NoError(t, err)
-	budgets := model.AssistantBudgets{Turns: 3, InputTokens: 500_000, OutputTokens: 12_000, ToolCalls: 3,
-		Commands: 3, CommandSeconds: 60, CommandTimeoutSeconds: 30}
+	budgets := model.AssistantBudgets{Turns: 6, InputTokens: 500_000, OutputTokens: 24_000, ToolCalls: 16,
+		Commands: 6, CommandSeconds: 180, CommandTimeoutSeconds: 30}
 	assistantProfile := saveIntegrationAssistantProfile(t, ctx, persistence, bootstrap.Institution.ID, bootstrap.Administrator.ID, model.AssistantLevelPair, budgets)
 	policy := model.DefaultAssistantPolicy()
 	policy.Enabled, policy.ProfileID, policy.Level, policy.Budgets = true, assistantProfile, model.AssistantLevelPair, budgets
@@ -392,6 +392,10 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	restarted := execenv.ID(connected.Attempt.ID.String() + ".1")
 	eventually(func() bool { return readGuest(restarted, "answer.py") == "print(42)\n" }, "the new incarnation holds the harvested file")
 
+	t.Run("interactive assistant sessions", func(t *testing.T) {
+		checkAssistantSessionFlow(t, helper.App.Assistant, desktop.inv, access, gateway)
+	})
+
 	// The candidate submits with the cursor they last saw, right after the
 	// guest wrote once more: the settle brings that write in, and the seal
 	// takes it though it is past the candidate's cursor.
@@ -408,6 +412,22 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 		require.NoError(t, readyErr)
 		return report.Grants == 0
 	}, "the Submission revokes the machine")
+
+	sealed, err := helper.App.Assistant.ExportTranscript(ctx, desktop.inv, connected.Attempt.ID)
+	require.NoError(t, err)
+	require.Equal(t, submitted.AssistantTranscriptDigest, sealed.Inventory.Digest)
+	recomputed := model.NewAssistantInventory()
+	var sealedSession *model.AssistantCall
+	for _, record := range sealed.Records {
+		recomputed, err = recomputed.Append(record)
+		require.NoError(t, err)
+		if call := record.Call; call != nil && call.Phase == "session_ended" && call.ProcessTag == "assistant:4" {
+			sealedSession = call
+		}
+	}
+	require.Equal(t, submitted.AssistantTranscriptDigest, recomputed.Digest)
+	require.NotNil(t, sealedSession)
+	require.Equal(t, "sealed", sealedSession.Outcome)
 
 	evidence, err := persistence.ExamIntegrityReview().ListAttemptEvidence(ctx, store.AttemptEvidenceListOptions{
 		SubmissionID: submitted.SubmissionID, Limit: 100,

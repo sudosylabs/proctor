@@ -474,7 +474,8 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 		return nil, err
 	}
 
-	return errors.Join(s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
+	sessionErr := s.publishSealedAssistantSessions(ctx, result)
+	return errors.Join(sessionErr, s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
 }
 
 // publishAttemptSealedForSittingClose unbinds the connection the seal closed
@@ -507,4 +508,37 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 		result.SittingID,
 		result.CandidateUserID,
 	), s.publisher.UnbindExamAttemptConnection(ctx, result.ConnectionID))
+}
+
+// PublishAssistantSessionEnded delivers a session closure the environment owner committed.
+func (s *Service) PublishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+	candidate model.UserID, record *model.AssistantRecord) error {
+	return s.publishAssistantSessionEnded(ctx, sittingID, attemptID, candidate, record.Call.ProcessTag, record.Call.Outcome, record.CreatedAt)
+}
+
+func (s *Service) publishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+	candidate model.UserID, tag, outcome string, at time.Time) error {
+	event, err := realtime.NewAssistantSessionEndedEvent(sittingID, attemptID, candidate, tag, outcome, at)
+	if err != nil {
+		return err
+	}
+	return s.publisher.Publish(ctx, event)
+}
+
+func (s *Service) publishSealedAssistantSessions(ctx context.Context, result SubmissionResult) error {
+	if s.assistantSessions == nil {
+		return nil
+	}
+	rows, err := s.assistantSessions.ListSessions(ctx, store.AssistantSessionQuery{ReviewSubmissionID: result.Receipt.SubmissionID})
+	if err != nil {
+		return err
+	}
+	var joined error
+	for _, row := range rows {
+		if row.Outcome == "sealed" {
+			joined = errors.Join(joined, s.publishAssistantSessionEnded(ctx, result.SittingID, result.Receipt.AttemptID,
+				result.CandidateUserID, row.Tag, row.Outcome, row.EndedAt))
+		}
+	}
+	return joined
 }

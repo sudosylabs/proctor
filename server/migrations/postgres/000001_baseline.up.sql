@@ -6253,12 +6253,12 @@ CREATE TABLE exam_attempt_assistant_runs (
 );
 CREATE TABLE exam_attempt_assistant_sessions (
  exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id)
- CONSTRAINT exam_attempt_assistant_sessions_attempt_canonical_check CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ CONSTRAINT exam_attempt_assistant_sessions_exam_attempt_id_canonical_check CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
  tag varchar(64) NOT NULL CHECK (tag LIKE 'assistant:%'),
  call_id varchar(26) NOT NULL
- CONSTRAINT exam_attempt_assistant_sessions_call_canonical_check CHECK (call_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ CONSTRAINT exam_attempt_assistant_sessions_call_id_canonical_check CHECK (call_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
  conversation_id varchar(26) NOT NULL
- CONSTRAINT exam_attempt_assistant_sessions_conversation_canonical_check CHECK (conversation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ CONSTRAINT exam_attempt_assistant_sessions_conversation_id_canonical_check CHECK (conversation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
  reserved_milliseconds bigint NOT NULL CHECK (reserved_milliseconds >= 0),
  read_offset bigint NOT NULL DEFAULT 0 CHECK (read_offset >= 0),
  state varchar(8) NOT NULL CHECK (state IN ('running','ended')),

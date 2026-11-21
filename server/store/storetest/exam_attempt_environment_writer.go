@@ -343,6 +343,11 @@ func testAttemptWorkspaceJournalRetention(t *testing.T, ctx context.Context, ss 
 	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	cursor := projected
 	for batch := 0; cursor-projected <= model.AttemptWorkspaceJournalRetention+model.AttemptWorkspaceBatchMaximumMutations; batch++ {
+		// The projection stays live throughout the build, as does its owner.
+		lease, leaseErr := ss.AttemptRuntimeLease().Renew(ctx, &store.AttemptRuntimeLeaseRenewal{Lease: owner.lease, Lifetime: time.Minute})
+		require.NoError(t, leaseErr)
+		require.NotNil(t, lease)
+		owner.lease = *lease
 		renewal.Sequence++
 		_, renewErr := ss.ExamAttempt().RenewParticipation(ctx, renewal)
 		require.NoError(t, renewErr)

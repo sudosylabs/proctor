@@ -107,6 +107,8 @@ type AssistantSessionSlot struct {
 type AssistantSessionAccess = AssistantRunAccess
 
 type AssistantSessionEnd struct {
+	AuditEventID         model.AuditEventID
+	AuditAt              time.Time
 	EnvironmentOwner     *ExamAttemptWorkspaceEnvironmentAccess
 	Editor               ExamAttemptWorkspaceEditorAccess
 	Tag                  string
@@ -117,9 +119,10 @@ type AssistantSessionEnd struct {
 }
 
 type AssistantSessionQuery struct {
-	Tag              string
-	EnvironmentOwner *ExamAttemptWorkspaceEnvironmentAccess
-	Owner            AssistantTranscriptOwnerAccess
+	ReviewSubmissionID model.SubmissionID
+	Tag                string
+	EnvironmentOwner   *ExamAttemptWorkspaceEnvironmentAccess
+	Owner              AssistantTranscriptOwnerAccess
 }
 
 // AssistantCallDecision is the candidate answering an approval request. Like

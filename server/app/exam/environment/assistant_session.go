@@ -351,9 +351,33 @@ func (o *owner) reconcileAssistantSessions(ctx context.Context, fence Fence, fre
 		if status.Exit != nil {
 			end.ExitCode, end.Signal = &status.Exit.Code, status.Exit.Signal
 		}
-		if _, endErr := o.deps.AssistantSessions.EndSession(ctx, &end); endErr != nil && !store.IsNotFound(endErr) {
+		record, endErr := o.deps.AssistantSessions.EndSession(ctx, &end)
+		if endErr != nil && !store.IsNotFound(endErr) {
 			return endErr
+		}
+		if endErr == nil && o.deps.AssistantSessionEnded != nil {
+			if publishErr := o.deps.AssistantSessionEnded(ctx, o.row.SittingID, o.attemptID, session.CandidateUserID, record); publishErr != nil {
+				o.report(publishErr)
+			}
 		}
 	}
 	return nil
+}
+
+// ViewAssistantSession returns screen text only. The candidate never gets
+// an input-capable attachment to an assistant-owned process.
+func (t *Terminals) ViewAssistantSession(ctx context.Context, inv invocation.Invocation, access CandidateAccess,
+	tag model.AttemptEnvironmentProcessTag) ([]string, error) {
+	at, err := t.assistantSessionMachine(ctx, inv, access, tag)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = assistantSessionProcess(ctx, at, tag); err != nil {
+		return nil, err
+	}
+	screen, err := at.machine.Screen(ctx, tag)
+	if err != nil {
+		return nil, terminalFailure(terminalError(err))
+	}
+	return append([]string{}, screen.Text...), nil
 }

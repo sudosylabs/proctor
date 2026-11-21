@@ -2460,6 +2460,39 @@ export const searchEntries = [
     "searchText": "sendcandidateassistantmessage ask the assistant records the candidate's message and starts the assistant's reply, which streams to the candidate's originating session as exam_attempt_assistant_* events and is recorded in the transcript. the answer is 202 with the turn the message started; a retry with the same idempotency-key and text returns the same turn without starting another. one turn runs at a time per attempt: while one runs the request fails with exam.attempt.assistant_busy. the request also fails when the exam revision does not offer the assistant, when the installation has it off, and when the attempt's allowance of turns or tokens is spent. the assistant acts only while the candidate's own access holds: a seal or the end of the participation ends a running turn, which the transcript records. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/assistant/messages session_required required request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.sitting_not_open exam.attempt.state_conflict exam.attempt.connection_closed exam.attempt.assistant_unavailable exam.attempt.assistant_disabled audit.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.attempt.assistant_busy exam.attempt.assistant_budget_exhausted authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:listCandidateAssistantSessions",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "List assistant sessions",
+    "description": "Returns the candidate’s live and recently ended assistant sessions after checking process state.",
+    "href": "/api/reference/list-candidate-assistant-sessions",
+    "method": "GET",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions",
+    "searchText": "listcandidateassistantsessions list assistant sessions returns the candidate’s live and recently ended assistant sessions after checking process state. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.sitting_not_open exam.attempt.state_conflict exam.attempt.connection_closed exam.attempt.assistant_unavailable exam.attempt.assistant_disabled exam.attempt.assistant_session_not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable exam.attempt.environment_unavailable exam.attempt.environment_not_found exam.attempt.environment_not_running exam.attempt.terminal_not_found exam.attempt.terminal_exited exam.attempt.terminal_limit_reached"
+  },
+  {
+    "id": "operation:readCandidateAssistantSessionScreen",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Read an assistant session screen",
+    "description": "Returns the current screen of a running assistant session as text. The caller needs current access to the Attempt.",
+    "href": "/api/reference/read-candidate-assistant-session-screen",
+    "method": "GET",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/screen",
+    "searchText": "readcandidateassistantsessionscreen read an assistant session screen returns the current screen of a running assistant session as text. the caller needs current access to the attempt. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/screen session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.sitting_not_open exam.attempt.state_conflict exam.attempt.connection_closed exam.attempt.assistant_unavailable exam.attempt.assistant_disabled exam.attempt.assistant_session_not_found exam.attempt.environment_unavailable exam.attempt.environment_not_found exam.attempt.environment_not_running exam.attempt.terminal_not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable exam.attempt.terminal_exited exam.attempt.terminal_limit_reached"
+  },
+  {
+    "id": "operation:stopCandidateAssistantSession",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Stop an assistant session",
+    "description": "Stops the candidate’s assistant session and returns its recorded outcome. Repeating the request returns the same session.",
+    "href": "/api/reference/stop-candidate-assistant-session",
+    "method": "POST",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/stop",
+    "searchText": "stopcandidateassistantsession stop an assistant session stops the candidate’s assistant session and returns its recorded outcome. repeating the request returns the same session. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/stop session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.sitting_not_open exam.attempt.state_conflict exam.attempt.connection_closed exam.attempt.assistant_unavailable exam.attempt.assistant_disabled exam.attempt.assistant_session_not_found audit.unavailable authentication.csrf.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:listCandidateAssistantTranscript",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
@@ -5276,6 +5309,24 @@ export const searchEntries = [
     "searchText": "exam_attempt_assistant_approval_requested exam_attempt_assistant_approval_requested assistant approval requested a command or edit waits for the candidate's approval. delivered only to the originating candidate session. event attempts"
   },
   {
+    "id": "realtime:exam_attempt_assistant_session_ended",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Assistant session ended",
+    "description": "A candidate's assistant session ended.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-assistant-session-ended",
+    "searchText": "exam_attempt_assistant_session_ended exam_attempt_assistant_session_ended assistant session ended delivered only to the candidate after the session state commits. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_assistant_session_started",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Assistant session started",
+    "description": "A candidate's assistant session started.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-assistant-session-started",
+    "searchText": "exam_attempt_assistant_session_started exam_attempt_assistant_session_started assistant session started delivered only to the candidate after the session state commits. event attempts"
+  },
+  {
     "id": "realtime:exam_attempt_assistant_text_delta",
     "kind": "realtime-message",
     "group": "Realtime",
@@ -6822,6 +6873,24 @@ export const searchEntries = [
     "description": "The Attempt's Exam Revision does not offer the assistant.",
     "href": "/problems/exam.attempt.assistant_disabled",
     "searchText": "exam.attempt.assistant_disabled exam attempt assistant disabled 403 the attempt's exam revision does not offer the assistant."
+  },
+  {
+    "id": "problem:exam.attempt.assistant_session_limit",
+    "kind": "problem",
+    "group": "Error codes / Exam attempt",
+    "title": "exam.attempt.assistant_session_limit",
+    "description": "Two assistant sessions are already running.",
+    "href": "/problems/exam.attempt.assistant_session_limit",
+    "searchText": "exam.attempt.assistant_session_limit exam attempt assistant session limit 409 two assistant sessions are already running."
+  },
+  {
+    "id": "problem:exam.attempt.assistant_session_not_found",
+    "kind": "problem",
+    "group": "Error codes / Exam attempt",
+    "title": "exam.attempt.assistant_session_not_found",
+    "description": "The assistant session was not found.",
+    "href": "/problems/exam.attempt.assistant_session_not_found",
+    "searchText": "exam.attempt.assistant_session_not_found exam attempt assistant session not found 404 the assistant session was not found."
   },
   {
     "id": "problem:exam.attempt.assistant_turn_not_found",

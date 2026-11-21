@@ -94,13 +94,14 @@ func (n *Node) Complete(attempts *attempt.Service) error {
 		return fmt.Errorf("construct attempt environment workspace: %w", err)
 	}
 	owners, err := NewOwners(OwnerDependencies{
-		Environments:      n.deps.Environments,
-		AssistantSessions: n.deps.AssistantSessions,
-		Evidence:          n.deps.Evidence,
-		Workspace:         workspace,
-		Hosts:             n.hosts,
-		Settled:           n.settles,
-		Report:            n.Report,
+		Environments:          n.deps.Environments,
+		AssistantSessions:     n.deps.AssistantSessions,
+		AssistantSessionEnded: attempts.PublishAssistantSessionEnded,
+		Evidence:              n.deps.Evidence,
+		Workspace:             workspace,
+		Hosts:                 n.hosts,
+		Settled:               n.settles,
+		Report:                n.Report,
 	})
 	if err != nil {
 		return fmt.Errorf("construct attempt environment owners: %w", err)

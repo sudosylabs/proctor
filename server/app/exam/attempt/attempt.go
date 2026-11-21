@@ -87,6 +87,7 @@ type DesktopBuildResolver interface {
 
 // Dependencies are the collaborators New validates once.
 type Dependencies struct {
+	AssistantSessions   store.AssistantTranscriptStore
 	Persistence         store.ExamAttemptStore
 	FocusLoss           store.ExamFocusLossStore
 	SecurityPreflight   store.SecurityPreflightStore
@@ -152,6 +153,7 @@ type EnvironmentWaker interface {
 // Service holds every attempt use case. liveControls and deliveryControls
 // rate-limit control commands by user, per node.
 type Service struct {
+	assistantSessions store.AssistantTranscriptStore
 	attempts          store.ExamAttemptStore
 	focusLoss         store.ExamFocusLossStore
 	securityPreflight store.SecurityPreflightStore
@@ -243,6 +245,7 @@ func New(deps Dependencies) (*Service, error) {
 	}
 
 	return &Service{
+		assistantSessions:    deps.AssistantSessions,
 		attempts:             deps.Persistence,
 		focusLoss:            deps.FocusLoss,
 		securityPreflight:    deps.SecurityPreflight,

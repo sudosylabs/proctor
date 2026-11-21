@@ -28,6 +28,7 @@ const (
 	parameterPositiveSequence
 	parameterCanonicalUUID
 	parameterPluginID
+	parameterAssistantTag
 )
 
 type pathPart interface {
@@ -89,6 +90,9 @@ func (p pathParameter) compile() (string, string, error) {
 	case parameterProviderID:
 		pattern = providerIDRoutePattern()
 		normalized = "provider_id"
+	case parameterAssistantTag:
+		pattern = "assistant:[1-9][0-9]{0,9}"
+		normalized = "assistant_tag"
 	case parameterPluginID:
 		pattern = "[a-z][a-z0-9.-]{0,63}"
 		normalized = "plugin_id"
@@ -158,6 +162,8 @@ func parsePathTemplate(template string) ([]pathPart, error) {
 			parts = append(parts, positiveSequence(name))
 		case kind == "provider":
 			parts = append(parts, providerID(name))
+		case kind == "assistant-tag":
+			parts = append(parts, pathParameter{name: name, kind: parameterAssistantTag})
 		case kind == "plugin":
 			parts = append(parts, pluginID(name))
 		default:

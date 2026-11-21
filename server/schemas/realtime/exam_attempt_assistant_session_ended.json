@@ -1,0 +1,39 @@
+{
+  "title": "Assistant session ended",
+  "description": "A session ended for the candidate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "tag",
+    "ended_at",
+    "outcome"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^assistant:[1-9][0-9]{0,9}$"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "exited",
+        "stopped",
+        "timed_out",
+        "sealed",
+        "ended"
+      ]
+    }
+  }
+}

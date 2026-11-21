@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -258,6 +259,16 @@ func mustJSON(t *testing.T, value any) []byte {
 	return encoded
 }
 
+func waitForAssistantTurnEnded(t *testing.T, publisher *realtimetest.Publisher) {
+	t.Helper()
+	// The worker commits the final transcript record before publishing its events.
+	require.Eventually(t, func() bool {
+		return slices.ContainsFunc(publisher.Calls(), func(call realtimetest.Call) bool {
+			return call.Method == realtimetest.Publish && call.Event.Name == "exam_attempt_assistant_turn_ended"
+		})
+	}, 5*time.Second, 10*time.Millisecond, "assistant turn-ended event was not published")
+}
+
 func TestCandidateAssistantTutorTurnStreamsAndRecordsAReply(t *testing.T) {
 	f := newAttemptFixture(t)
 	transcripts := newTranscriptLedger(f, model.AssistantLevelTutor)
@@ -270,8 +281,10 @@ func TestCandidateAssistantTutorTurnStreamsAndRecordsAReply(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &started))
 	require.False(t, started.Replayed)
 
-	require.Eventually(t, func() bool { return transcripts.finalTurn() != nil }, 5*time.Second, 10*time.Millisecond)
-	require.Equal(t, "end_turn", transcripts.finalTurn().StopReason)
+	waitForAssistantTurnEnded(t, f.publisher)
+	turn := transcripts.finalTurn()
+	require.NotNil(t, turn)
+	require.Equal(t, "end_turn", turn.StopReason)
 	asked := gateway.asked()
 	require.Len(t, asked, 1)
 	require.Empty(t, asked[0].Tools, "Tutor offers the model no tools")
@@ -359,8 +372,10 @@ func TestCandidateAssistantRecordsAProviderFailureAsAGap(t *testing.T) {
 
 	response := sendAssistantMessage(t, f, api, "failing", "Hello?")
 	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
-	require.Eventually(t, func() bool { return transcripts.finalTurn() != nil }, 5*time.Second, 10*time.Millisecond)
-	require.Equal(t, "rate_limited", transcripts.finalTurn().StopReason)
+	waitForAssistantTurnEnded(t, f.publisher)
+	turn := transcripts.finalTurn()
+	require.NotNil(t, turn)
+	require.Equal(t, "rate_limited", turn.StopReason)
 	transcripts.mu.Lock()
 	last := transcripts.record[len(transcripts.record)-1]
 	transcripts.mu.Unlock()

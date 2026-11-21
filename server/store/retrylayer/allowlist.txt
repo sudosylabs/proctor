@@ -230,6 +230,7 @@ AssistantProfileStore.Get always
 AssistantProfileStore.List always
 
 AssistantTranscriptStore.ListForAttempt always
+AssistantTranscriptStore.ListSessions always
 AssistantTranscriptStore.Inventory always
 AssistantTranscriptStore.Decision always
 

@@ -52,7 +52,7 @@ func assistantReadAttempt(ctx context.Context, tx *sqlxTxWrapper, query store.As
 }
 func readAssistantInventory(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID) (model.AssistantInventory, error) {
 	var value model.AssistantInventory
-	err := tx.Get(ctx, &value, `SELECT records,bytes,gaps,digest FROM exam_attempt_assistant_inventories WHERE id=?`, id.String())
+	err := tx.Get(ctx, &value, `SELECT records,bytes,gaps,digest,sessions,session_inputs FROM exam_attempt_assistant_inventories WHERE id=?`, id.String())
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.NewAssistantInventory(), nil
 	}

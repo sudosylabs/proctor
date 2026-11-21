@@ -52,9 +52,9 @@ func TestLevelsOfferOnlyTheirTools(t *testing.T) {
 	require.Equal(t, []string{"list_files", "read_file", "search", "read_terminal"}, run(model.AssistantLevelReviewer, true))
 	require.Equal(t, []string{"list_files", "read_file", "search", "propose_edit"}, run(model.AssistantLevelPair, false),
 		"Pair without execution is never offered run_command")
-	require.Equal(t, []string{"list_files", "read_file", "search", "read_terminal", "propose_edit", "run_command"},
+	require.Equal(t, []string{"list_files", "read_file", "search", "read_terminal", "propose_edit", "run_command", "start_session", "send_input", "stop_session"},
 		run(model.AssistantLevelPair, true))
-	require.Equal(t, []string{"list_files", "read_file", "search", "read_terminal", "propose_edit", "run_command", "apply_edit"},
+	require.Equal(t, []string{"list_files", "read_file", "search", "read_terminal", "propose_edit", "run_command", "start_session", "send_input", "stop_session", "apply_edit"},
 		run(model.AssistantLevelAgent, true))
 }
 

@@ -70,6 +70,9 @@ func (s *Service) publishConnectionOpened(ctx context.Context, result Connection
 }
 
 func (s *Service) publishConnectionClosed(ctx context.Context, result ConnectionClosedResult) error {
+	if s.environments != nil {
+		s.environments.Wake(result.AttemptID)
+	}
 	event, err := realtime.NewExamAttemptConnectionClosedEvent(
 		result.SittingID,
 		result.AttemptID,
@@ -474,7 +477,8 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 		return nil, err
 	}
 
-	return errors.Join(s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
+	sessionErr := s.publishSealedAssistantSessions(ctx, result)
+	return errors.Join(sessionErr, s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
 }
 
 // publishAttemptSealedForSittingClose unbinds the connection the seal closed
@@ -507,4 +511,48 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 		result.SittingID,
 		result.CandidateUserID,
 	), s.publisher.UnbindExamAttemptConnection(ctx, result.ConnectionID))
+}
+
+// PublishAssistantSessionEnded delivers a session closure the environment owner committed.
+func (s *Service) PublishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+	candidate model.UserID, record *model.AssistantRecord) error {
+	return s.publishAssistantSessionEnded(ctx, sittingID, attemptID, candidate, record.Call.ProcessTag, record.Call.Outcome, record.CreatedAt)
+}
+
+func (s *Service) publishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+	candidate model.UserID, tag, outcome string, at time.Time) error {
+	event, err := realtime.NewAssistantSessionEndedEvent(sittingID, attemptID, candidate, tag, outcome, at)
+	if err != nil {
+		return err
+	}
+	return s.publisher.Publish(ctx, event)
+}
+
+func (s *Service) publishSealedAssistantSessions(ctx context.Context, result SubmissionResult) error {
+	if s.assistantSessions == nil {
+		return nil
+	}
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	rows, err := s.assistantSessions.ListSessions(cleanupCtx, store.AssistantSessionQuery{ReviewSubmissionID: result.Receipt.SubmissionID})
+	if err != nil {
+		return err
+	}
+	tags := make([]string, 0, model.MaxAssistantSessions)
+	for _, row := range rows {
+		if row.Outcome == "sealed" {
+			tags = append(tags, row.Tag)
+		}
+	}
+	var joined error
+	if len(tags) != 0 && s.killSealedAssistantSessions != nil {
+		joined = s.killSealedAssistantSessions(cleanupCtx, result.Receipt.AttemptID, tags)
+	}
+	for _, row := range rows {
+		if row.Outcome == "sealed" {
+			joined = errors.Join(joined, s.publishAssistantSessionEnded(ctx, result.SittingID, result.Receipt.AttemptID,
+				result.CandidateUserID, row.Tag, row.Outcome, row.EndedAt))
+		}
+	}
+	return joined
 }

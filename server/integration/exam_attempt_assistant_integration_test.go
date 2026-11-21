@@ -345,3 +345,97 @@ func saveIntegrationAssistantProfile(t *testing.T, ctx context.Context, persiste
 	require.NoError(t, err)
 	return created.Profile.ID
 }
+
+func checkAssistantSessionFlow(t *testing.T, service *assistant.Service, inv invocation.Invocation, access attempt.CandidateAccess,
+	gateway *commandIntegrationModel, stopOne bool) {
+	t.Helper()
+	ctx := t.Context()
+	started, err := service.SendMessage(ctx, inv, assistant.SendMessageCommand{
+		Access: access, Text: "Try the interactive program.", IdempotencyKey: "assistant-interactive-program"})
+	require.NoError(t, err)
+	read := func() []model.AssistantRecord {
+		page, readErr := service.ListTranscript(ctx, inv, assistant.TranscriptQuery{AttemptID: access.AttemptID, Limit: 200})
+		if readErr != nil {
+			return nil
+		}
+		return page.Records
+	}
+	want := []struct {
+		tool, approval, tag string
+	}{
+		{"start_session", "accept", "assistant:2"},
+		{"send_input", "decline", ""},
+		{"send_input", "", "assistant:2"},
+		{"send_input", "accept", "assistant:2"},
+		{"stop_session", "", "assistant:2"},
+		{"start_session", "accept", "assistant:3"},
+		{"start_session", "accept", "assistant:4"},
+	}
+	var after int64
+	for _, step := range want {
+		var request *model.AssistantCall
+		require.Eventually(t, func() bool {
+			for _, record := range read() {
+				if call := record.Call; record.Sequence > after && call != nil && call.TurnID == started.TurnID && call.Phase == "requested" {
+					after, request = record.Sequence, call
+					return true
+				}
+			}
+			return false
+		}, 15*time.Second, 25*time.Millisecond)
+		require.Equal(t, step.tool, request.Tool)
+		if step.approval != "" {
+			require.Equal(t, "pending", request.Approval)
+			require.NoError(t, service.DecideApproval(ctx, inv, assistant.DecideApprovalCommand{
+				Access: access, CallID: request.CallID, Accept: step.approval == "accept",
+			}))
+		} else {
+			require.Empty(t, request.Approval, "polling and stopping never wait for approval")
+		}
+	}
+	require.Eventually(t, func() bool {
+		for _, record := range read() {
+			if turn := record.Turn; turn != nil && turn.TurnID == started.TurnID && turn.Role == "assistant" && turn.Final {
+				return turn.StopReason == "end_turn"
+			}
+		}
+		return false
+	}, 20*time.Second, 25*time.Millisecond)
+	index := 0
+	for _, record := range read() {
+		if call := record.Call; call != nil && call.TurnID == started.TurnID && call.Phase == "completed" {
+			require.Less(t, index, len(want))
+			require.Equal(t, want[index].tool, call.Tool)
+			require.Equal(t, want[index].tag, call.ProcessTag)
+			require.Equal(t, want[index].approval, call.Approval)
+			if index == 3 {
+				require.Contains(t, call.Result, "hello")
+				require.Contains(t, call.Result, "enter")
+			}
+			index++
+		}
+	}
+	require.Equal(t, len(want), index)
+	for i := range want {
+		result := <-gateway.sessionResults
+		require.NotContains(t, result.Text, "never-sent")
+		if i == 3 {
+			require.Contains(t, result.Text, "hello", "the memory PTY echoes the approved input")
+		}
+	}
+	sessions, err := service.ListSessions(ctx, inv, access)
+	require.NoError(t, err)
+	require.Len(t, sessions, 3)
+	if !stopOne {
+		require.Equal(t, "running", sessions[0].State)
+		require.Equal(t, "running", sessions[1].State)
+		return
+	}
+	command := assistant.SessionCommand{Access: access, Tag: "assistant:3"}
+	stopped, err := service.StopSession(ctx, inv, command)
+	require.NoError(t, err)
+	require.Equal(t, "stopped", stopped.Outcome)
+	replay, err := service.StopSession(ctx, inv, command)
+	require.NoError(t, err)
+	require.Equal(t, stopped, replay)
+}

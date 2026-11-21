@@ -199,3 +199,127 @@ func TestAssistantTranscriptStore(t *testing.T, ss store.Store, probe AssistantT
 		probe.VerifyBound(t, input.Access.AttemptID, page.Inventory)
 	})
 }
+
+// TestAssistantSessionStore covers reservation, release, and sealing through the Store layers.
+func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*testing.T, model.ExamAttemptID, int64, int64)) {
+	budgets := model.AssistantBudgets{Turns: 10, InputTokens: 100000, OutputTokens: 10000, ToolCalls: 10,
+		Commands: 10, CommandSeconds: 60, CommandTimeoutSeconds: 10}
+	testAssistantAdmissionStore(t, ss, model.AssistantLevelPair, &model.ExecutionPolicy{Enabled: true, Terminals: 1},
+		budgets, func(*testing.T, model.ExamAttemptID, model.AssistantPolicy) {}, func(t *testing.T, input *store.AssistantMessageStart, seal func()) {
+			ctx := t.Context()
+			transcript := ss.AssistantTranscript()
+			id := input.Access.AttemptID
+			started, err := transcript.Start(ctx, input, examCommand(input.Access.CandidateUserID, store.AssistantMessageOperation, "sessions", "sessions"))
+			require.NoError(t, err)
+			access := store.AssistantRunAccess{Editor: input.Access, TurnID: started.TurnID, OwnerToken: input.OwnerToken}
+			owner := store.AssistantTranscriptOwnerAccess{AttemptID: id, CandidateUserID: input.Access.CandidateUserID, SessionID: input.Access.SessionID}
+			query := store.AssistantSessionQuery{Owner: owner}
+			request := func(tool string) model.AssistantCallID {
+				t.Helper()
+				call := model.AssistantCall{ConversationID: started.ConversationID, TurnID: started.TurnID, CallID: model.NewAssistantCallID(),
+					Tool: tool, Phase: "requested", Approval: "pending", Arguments: json.RawMessage(`{"command":"cat"}`)}
+				_, appendErr := transcript.AppendCall(ctx, &store.AssistantCallAppend{Access: access, Call: call})
+				require.NoError(t, appendErr)
+				return call.CallID
+			}
+			audit, err := ss.Audit().Get(ctx, input.AuditEventID)
+			require.NoError(t, err)
+			approve := func(call model.AssistantCallID) {
+				t.Helper()
+				a, saveErr := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: audit.ActorID, Action: audit.Action, Resource: audit.Resource,
+					ScopeType: audit.ScopeType, ScopeID: audit.ScopeID, Status: model.AuditStatusAttempt, NodeID: "assistant-session-test"})
+				require.NoError(t, saveErr)
+				_, decideErr := transcript.Decide(ctx, store.AssistantCallDecision{Editor: input.Access, CallID: call, Accept: true, AuditEventID: a.ID, AuditAt: a.CreatedAt})
+				require.NoError(t, decideErr)
+			}
+
+			first := request("start_session")
+			reserve := func(call model.AssistantCallID) (*store.AssistantSessionSlot, error) {
+				return transcript.ReserveSession(ctx, &store.AssistantSessionReservation{Access: access, CallID: call, TimeoutSeconds: 30})
+			}
+			_, err = reserve(first)
+			require.True(t, store.IsNotFound(err), "a session needs the candidate's approval")
+			approve(first)
+			slot, err := reserve(first)
+			require.NoError(t, err)
+			require.Equal(t, "assistant:1", slot.Tag)
+			require.EqualValues(t, 10, slot.TimeoutSeconds)
+
+			command := request("run_command")
+			approve(command)
+			commandSlot, err := transcript.ReserveCommand(ctx, &store.AssistantCommandReservation{Access: access, CallID: command, TimeoutSeconds: 1})
+			require.NoError(t, err)
+			require.Equal(t, "assistant:2", commandSlot.Tag)
+			second := request("start_session")
+			approve(second)
+			other, err := reserve(second)
+			require.NoError(t, err)
+			require.Equal(t, "assistant:3", other.Tag)
+			third := request("start_session")
+			approve(third)
+			_, err = reserve(third)
+			requireConflictConstraint(t, err, "assistant_session_limit")
+			verifyBudget(t, id, 3, 21000)
+
+			require.NoError(t, transcript.AdvanceSessionRead(ctx, access, slot.Tag, 12, true))
+			require.NoError(t, transcript.AdvanceSessionRead(ctx, access, slot.Tag, 14, false))
+			requireConflictConstraint(t, transcript.AdvanceSessionRead(ctx, access, slot.Tag, 13, true), "assistant_session_read_offset")
+			sessions, err := transcript.ListSessions(ctx, query)
+			require.NoError(t, err)
+			require.Len(t, sessions, 2)
+			require.Equal(t, slot.Tag, sessions[1].Tag)
+			require.Equal(t, "cat", sessions[1].Command)
+			require.False(t, sessions[1].AccessEnded)
+			require.EqualValues(t, 14, sessions[1].ReadOffset)
+			inventory, err := transcript.Inventory(ctx, store.AssistantTranscriptQuery{AttemptID: id, Owner: &owner})
+			require.NoError(t, err)
+			require.EqualValues(t, 2, inventory.Sessions)
+			require.EqualValues(t, 1, inventory.SessionInputs)
+
+			end := store.AssistantSessionEnd{Editor: input.Access, Tag: slot.Tag, Outcome: "stopped", Signal: "INT", DurationMilliseconds: 250}
+			ended, err := transcript.EndSession(ctx, &end)
+			require.NoError(t, err)
+			require.True(t, ended.Changed)
+			record := ended.Record
+			require.Equal(t, first, record.Call.CallID)
+			require.Equal(t, "session_ended", record.Call.Phase)
+			require.Equal(t, "stopped", record.Call.Outcome)
+			require.Equal(t, "INT", record.Call.Signal)
+			end.Outcome, end.DurationMilliseconds = "exited", 300
+			replayed, err := transcript.EndSession(ctx, &end)
+			require.NoError(t, err)
+			require.False(t, replayed.Changed)
+			require.Equal(t, record, replayed.Record)
+			verifyBudget(t, id, 3, 11250)
+
+			replacement, err := reserve(third)
+			require.NoError(t, err, "ending a dead session makes its slot available")
+			require.Equal(t, "assistant:4", replacement.Tag)
+			_, err = transcript.EndSession(ctx, &store.AssistantSessionEnd{Editor: input.Access, Tag: replacement.Tag, Outcome: "ended"})
+			require.NoError(t, err)
+
+			seal()
+			sessions, err = transcript.ListSessions(ctx, query)
+			require.NoError(t, err)
+			require.Len(t, sessions, 3)
+			for _, session := range sessions {
+				require.Equal(t, "ended", session.State)
+				require.False(t, session.EndedAt.IsZero())
+			}
+			require.Equal(t, replacement.Tag, sessions[0].Tag)
+			require.Equal(t, other.Tag, sessions[1].Tag)
+			require.Equal(t, "sealed", sessions[1].Outcome)
+			require.True(t, sessions[1].AccessEnded)
+			page, err := transcript.ListForAttempt(ctx, store.AssistantTranscriptQuery{AttemptID: id, Limit: 100, Owner: &owner})
+			require.NoError(t, err)
+			var sealed *model.AssistantCall
+			for _, record := range page.Records {
+				if record.Call != nil && record.Call.CallID == second && record.Call.Phase == "session_ended" {
+					sealed = record.Call
+				}
+			}
+			require.NotNil(t, sealed)
+			require.Equal(t, "sealed", sealed.Outcome)
+			verifyBudget(t, id, 4, 1250+sealed.DurationMilliseconds)
+		})
+}

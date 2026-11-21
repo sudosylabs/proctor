@@ -339,6 +339,10 @@ codes:
     retry_after: 5
   - code: exam.attempt.assistant_disabled
     description: "The Attempt's Exam Revision does not offer the assistant."
+  - code: exam.attempt.assistant_session_limit
+    description: "Two assistant sessions are already running."
+  - code: exam.attempt.assistant_session_not_found
+    description: "The assistant session was not found."
   - code: exam.attempt.assistant_turn_not_found
     description: "No assistant turn with that ID is running for the Attempt."
   - code: exam.attempt.assistant_unavailable

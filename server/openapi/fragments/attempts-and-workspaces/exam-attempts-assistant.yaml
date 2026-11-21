@@ -361,6 +361,253 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listCandidateAssistantSessions
+      summary: List assistant sessions
+      tags:
+        - Attempts and workspaces
+      description: Returns the candidate’s live and recently ended assistant sessions after checking process state.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.sitting_not_open
+        - exam.attempt.state_conflict
+        - exam.attempt.connection_closed
+        - exam.attempt.assistant_unavailable
+        - exam.attempt.assistant_disabled
+        - exam.attempt.assistant_session_not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - exam.attempt.environment_unavailable
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.terminal_not_found
+        - exam.attempt.terminal_exited
+        - exam.attempt.terminal_limit_reached
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          description: List assistant sessions
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSessionList'
+              example:
+                items:
+                  - tag: assistant:1
+                    command: cat
+                    state: running
+                    started_at: '2026-11-21T12:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/stop:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - name: tag
+        in: path
+        required: true
+        description: The process tag allocated by the assistant.
+        schema:
+          type: string
+          pattern: '^assistant:[1-9][0-9]{0,9}$'
+    post:
+      operationId: stopCandidateAssistantSession
+      summary: Stop an assistant session
+      tags:
+        - Attempts and workspaces
+      description: Stops the candidate’s assistant session and returns its recorded outcome, even if its environment is stopped or frozen. Repeating the request returns the same session.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --request POST \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/8kpous3h9nfemqtwz47ydgjcx1/assistant/sessions/assistant:1/stop' \
+              --header 'Authorization: Bearer <token>' \
+              --header 'X-Proctor-Attempt-Connection-ID: <connection-id>' \
+              --header 'X-Proctor-Attempt-Credential: <continuity-credential>'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.sitting_not_open
+        - exam.attempt.state_conflict
+        - exam.attempt.connection_closed
+        - exam.attempt.assistant_unavailable
+        - exam.attempt.assistant_disabled
+        - exam.attempt.assistant_session_not_found
+        - audit.unavailable
+        - exam.attempt.environment_unavailable
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.terminal_not_found
+        - exam.attempt.terminal_exited
+        - exam.attempt.terminal_limit_reached
+        - authentication.csrf.invalid
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '200':
+          description: Stop an assistant session
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSession'
+              example:
+                tag: assistant:1
+                command: cat
+                state: ended
+                started_at: '2026-11-21T12:00:00Z'
+                ended_at: '2026-11-21T12:00:03Z'
+                outcome: stopped
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/screen:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - name: tag
+        in: path
+        required: true
+        description: The process tag allocated by the assistant.
+        schema:
+          type: string
+          pattern: '^assistant:[1-9][0-9]{0,9}$'
+    get:
+      operationId: readCandidateAssistantSessionScreen
+      summary: Read an assistant session screen
+      tags:
+        - Attempts and workspaces
+      description: Returns the current screen of a running assistant session as text. The caller needs current access to the Attempt.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.sitting_not_open
+        - exam.attempt.state_conflict
+        - exam.attempt.connection_closed
+        - exam.attempt.assistant_unavailable
+        - exam.attempt.assistant_disabled
+        - exam.attempt.assistant_session_not_found
+        - exam.attempt.environment_unavailable
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.terminal_not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - exam.attempt.terminal_exited
+        - exam.attempt.terminal_limit_reached
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '200':
+          description: Read an assistant session screen
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSessionScreen'
+              example:
+                text: hello
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
 components:
   responses:
     AssistantTranscript:
@@ -612,6 +859,9 @@ components:
             - search
             - read_terminal
             - run_command
+            - start_session
+            - send_input
+            - stop_session
             - propose_edit
             - apply_edit
             - output_check
@@ -623,6 +873,7 @@ components:
             - decision
             - completed
             - applied
+            - session_ended
         arguments:
           type: object
           additionalProperties: true
@@ -649,6 +900,11 @@ components:
             - applied
             - rewrite
             - replaced
+            - exited
+            - stopped
+            - timed_out
+            - sealed
+            - ended
         duration_milliseconds:
           type: integer
           format: int64
@@ -666,8 +922,52 @@ components:
           type: string
         exit_code:
           type: integer
+        signal:
+          type: string
+          maxLength: 16
         truncated:
           type: boolean
+    AssistantSession:
+      type: object
+      additionalProperties: false
+      required: [tag, command, state, started_at]
+      properties:
+        tag:
+          type: string
+          pattern: '^assistant:[1-9][0-9]{0,9}$'
+        command:
+          type: string
+        state:
+          type: string
+          enum: [running, ended]
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        outcome:
+          type: string
+          enum: [exited, stopped, timed_out, sealed, ended]
+    AssistantSessionList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 52
+          items:
+            $ref: '#/components/schemas/AssistantSession'
+        next_cursor:
+          type: string
+    AssistantSessionScreen:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
     AssistantInventory:
       type: object
       additionalProperties: false

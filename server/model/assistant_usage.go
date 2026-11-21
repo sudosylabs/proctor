@@ -18,6 +18,9 @@ type AssistantUsageSummary struct {
 	Estimated       bool             `json:"estimated"`
 	Tools           map[string]int64 `json:"tools"`
 	Commands        int64            `json:"commands"`
+	Sessions        int64            `json:"sessions"`
+	SessionInputs   int64            `json:"session_inputs"`
+	SessionSeconds  int64            `json:"session_seconds"`
 	EditsProposed   int64            `json:"edits_proposed"`
 	EditsApplied    int64            `json:"edits_applied"`
 	Approved        int64            `json:"approved"`
@@ -31,8 +34,9 @@ type AssistantUsageSummary struct {
 // SummarizeAssistantTranscript counts a transcript in record order. Each
 // tool call counts once, at its requested phase; usage counts at each turn's
 // final record, which carries the turn's whole usage.
-func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSummary {
-	summary := AssistantUsageSummary{Tools: map[string]int64{}}
+func SummarizeAssistantTranscript(records []AssistantRecord, sessionInputs int64) AssistantUsageSummary {
+	summary := AssistantUsageSummary{Tools: map[string]int64{}, SessionInputs: sessionInputs}
+	var sessionMilliseconds int64
 	for _, record := range records {
 		if record.Gap {
 			summary.Gaps++
@@ -73,9 +77,15 @@ func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSumma
 				summary.Expired++
 			}
 		case "reserved":
-			if call.Tool == "run_command" {
+			switch call.Tool {
+			case "run_command":
 				summary.Commands++
+			case "start_session":
+				summary.Commands++
+				summary.Sessions++
 			}
+		case "session_ended":
+			sessionMilliseconds += call.DurationMilliseconds
 		case "completed", "applied":
 			switch call.Outcome {
 			case "applied":
@@ -87,6 +97,7 @@ func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSumma
 			}
 		}
 	}
+	summary.SessionSeconds = sessionMilliseconds / 1000
 	return summary
 }
 

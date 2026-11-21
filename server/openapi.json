@@ -12714,7 +12714,12 @@
               "proposed",
               "applied",
               "rewrite",
-              "replaced"
+              "replaced",
+              "exited",
+              "stopped",
+              "timed_out",
+              "sealed",
+              "ended"
             ],
             "type": "string"
           },
@@ -12724,7 +12729,8 @@
               "reserved",
               "decision",
               "completed",
-              "applied"
+              "applied",
+              "session_ended"
             ],
             "type": "string"
           },
@@ -12735,6 +12741,10 @@
             "description": "Bounded tool result text. On a completed propose_edit call with outcome proposed, this is a JSON object serialized as text, with path (workspace path), base_content_version (the expected current file version, or an empty string for a new file), sha256 (lowercase hexadecimal SHA-256 of the full replacement), size_bytes (replacement UTF-8 byte count), and diff (a complete unified replacement diff). A matching ordinary candidate batch adds an applied phase to this call; the workspace write remains authored by the candidate. Other tools return text, and an applied phase contains a matching marker rather than the proposal object.",
             "type": "string"
           },
+          "signal": {
+            "maxLength": 16,
+            "type": "string"
+          },
           "tool": {
             "enum": [
               "list_files",
@@ -12742,6 +12752,9 @@
               "search",
               "read_terminal",
               "run_command",
+              "start_session",
+              "send_input",
+              "stop_session",
               "propose_edit",
               "apply_edit",
               "output_check"
@@ -13162,6 +13175,81 @@
         ],
         "type": "object"
       },
+      "AssistantSession": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "ended_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "exited",
+              "stopped",
+              "timed_out",
+              "sealed",
+              "ended"
+            ],
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "ended"
+            ],
+            "type": "string"
+          },
+          "tag": {
+            "pattern": "^assistant:[1-9][0-9]{0,9}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "command",
+          "state",
+          "started_at"
+        ],
+        "type": "object"
+      },
+      "AssistantSessionList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantSession"
+            },
+            "maxItems": 52,
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "AssistantSessionScreen": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
       "AssistantTranscriptExportResponse": {
         "additionalProperties": false,
         "properties": {
@@ -13403,6 +13491,24 @@
             "minimum": 0,
             "type": "integer"
           },
+          "session_inputs": {
+            "description": "Writes into assistant sessions. A poll does not count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "session_seconds": {
+            "description": "Total settled duration from the session-ended records, in whole seconds.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessions": {
+            "description": "Assistant session reservations, also counted in commands.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "tools": {
             "additionalProperties": {
               "format": "int64",
@@ -13421,6 +13527,9 @@
           "estimated",
           "tools",
           "commands",
+          "sessions",
+          "session_inputs",
+          "session_seconds",
           "edits_proposed",
           "edits_applied",
           "approved",
@@ -21133,6 +21242,8 @@
           "exam.attempt.assistant_budget_exhausted",
           "exam.attempt.assistant_busy",
           "exam.attempt.assistant_disabled",
+          "exam.attempt.assistant_session_limit",
+          "exam.attempt.assistant_session_not_found",
           "exam.attempt.assistant_turn_not_found",
           "exam.attempt.assistant_unavailable",
           "exam.attempt.browser_activity_conflict",
@@ -42946,6 +43057,365 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions": {
+      "get": {
+        "description": "Returns the candidate’s live and recently ended assistant sessions after checking process state.",
+        "operationId": "listCandidateAssistantSessions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "command": "cat",
+                      "started_at": "2026-11-21T12:00:00Z",
+                      "state": "running",
+                      "tag": "assistant:1"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSessionList"
+                }
+              }
+            },
+            "description": "List assistant sessions",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List assistant sessions",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.assistant_unavailable",
+          "exam.attempt.assistant_disabled",
+          "exam.attempt.assistant_session_not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "exam.attempt.terminal_limit_reached"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/screen": {
+      "get": {
+        "description": "Returns the current screen of a running assistant session as text. The caller needs current access to the Attempt.",
+        "operationId": "readCandidateAssistantSessionScreen",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "text": "hello"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSessionScreen"
+                }
+              }
+            },
+            "description": "Read an assistant session screen",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read an assistant session screen",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.assistant_unavailable",
+          "exam.attempt.assistant_disabled",
+          "exam.attempt.assistant_session_not_found",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.terminal_not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "exam.attempt.terminal_exited",
+          "exam.attempt.terminal_limit_reached"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "description": "The process tag allocated by the assistant.",
+          "in": "path",
+          "name": "tag",
+          "required": true,
+          "schema": {
+            "pattern": "^assistant:[1-9][0-9]{0,9}$",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/sessions/{tag}/stop": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "description": "The process tag allocated by the assistant.",
+          "in": "path",
+          "name": "tag",
+          "required": true,
+          "schema": {
+            "pattern": "^assistant:[1-9][0-9]{0,9}$",
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Stops the candidate’s assistant session and returns its recorded outcome, even if its environment is stopped or frozen. Repeating the request returns the same session.",
+        "operationId": "stopCandidateAssistantSession",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "command": "cat",
+                  "ended_at": "2026-11-21T12:00:03Z",
+                  "outcome": "stopped",
+                  "started_at": "2026-11-21T12:00:00Z",
+                  "state": "ended",
+                  "tag": "assistant:1"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSession"
+                }
+              }
+            },
+            "description": "Stop an assistant session",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Stop an assistant session",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/8kpous3h9nfemqtwz47ydgjcx1/assistant/sessions/assistant:1/stop' \\\n  --header 'Authorization: Bearer \u003ctoken\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cconnection-id\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003ccontinuity-credential\u003e'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.assistant_unavailable",
+          "exam.attempt.assistant_disabled",
+          "exam.attempt.assistant_session_not_found",
+          "audit.unavailable",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "exam.attempt.terminal_limit_reached",
+          "authentication.csrf.invalid",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/assistant/turns": {
       "get": {
         "description": "Pages the candidate's own assistant transcript in record order: each message, reply, tool call, approval and output check, as recorded. Realtime deltas are hints; this is what a client keeps, and it reloads from here after a dropped socket. It needs only the candidate's Session, so the transcript stays readable after submission. The inventory covers the whole transcript, and at the seal its digest is bound to the Submission.",
@@ -59312,7 +59782,7 @@
             "content": {
               "application/json": {
                 "example": {
-                  "approved": 2,
+                  "approved": 3,
                   "commands": 2,
                   "declined": 0,
                   "edits_applied": 0,
@@ -59326,9 +59796,14 @@
                   "output_rewritten": 1,
                   "output_tokens": 2210,
                   "replies": 6,
+                  "session_inputs": 1,
+                  "session_seconds": 12,
+                  "sessions": 1,
                   "tools": {
                     "read_file": 4,
-                    "run_command": 2
+                    "run_command": 1,
+                    "send_input": 1,
+                    "start_session": 1
                   }
                 },
                 "schema": {

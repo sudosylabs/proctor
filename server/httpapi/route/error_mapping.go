@@ -134,6 +134,8 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"exam.attempt.assistant_budget_exhausted":                     {status: http.StatusConflict},
 	"exam.attempt.assistant_busy":                                 {status: http.StatusServiceUnavailable, retryAfter: 5},
 	"exam.attempt.assistant_disabled":                             {status: http.StatusForbidden},
+	"exam.attempt.assistant_session_limit":                        {status: http.StatusConflict},
+	"exam.attempt.assistant_session_not_found":                    {status: http.StatusNotFound},
 	"exam.attempt.assistant_turn_not_found":                       {status: http.StatusNotFound},
 	"exam.attempt.assistant_unavailable":                          {status: http.StatusServiceUnavailable},
 	"exam.attempt.browser_activity_conflict":                      {status: http.StatusConflict},

@@ -88,6 +88,8 @@ var (
 	examAttemptAssistantApprovalMessage       = declare("exam_attempt_assistant_approval_requested", "exam_attempt_assistant_approval_requested")
 	examAttemptAssistantTurnEndedMessage      = declare("exam_attempt_assistant_turn_ended", "exam_attempt_assistant_turn_ended")
 	examAttemptAssistantUnavailableMessage    = declare("exam_attempt_assistant_unavailable", "exam_attempt_assistant_unavailable")
+	examAttemptAssistantSessionStartedMessage = declare("exam_attempt_assistant_session_started", "exam_attempt_assistant_session_started")
+	examAttemptAssistantSessionEndedMessage   = declare("exam_attempt_assistant_session_ended", "exam_attempt_assistant_session_ended")
 	examIntegrityDiscrepancyRecordedMessage   = declare("exam_integrity_discrepancy_recorded", "exam_integrity_discrepancy_recorded")
 	examIntegrityReviewChangedMessage         = declare("exam_integrity_review_changed", "exam_integrity_review_changed")
 	examIntegrityReviewFinalizedMessage       = declare("exam_integrity_review_finalized", "exam_integrity_review_finalized")

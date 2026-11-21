@@ -49,8 +49,14 @@ Use these API records together when reviewing:
 - **Per file:** which lines the assistant last wrote, from the manifest's
   last author and the journal.
 - **Per command:** what the assistant ran, its exit code and its output.
+- **Per session:** group the start, input calls, and end by the process tag.
+  The end records how the session finished. Proctor measures the duration
+  from the start to when it saw the session end, up to the session's time
+  limit.
 - **The usage summary:** turns, tokens, tools used, commands, edits proposed,
-  accepted and declined, and output checks.
+  accepted and declined, and output checks. It also includes the number of
+  sessions, writes into them, and their total run time in whole seconds.
+  Reading a session's output does not count as a write.
 
 At Pair, a proposed diff the candidate applied is the candidate's own edit
 in the journal. The transcript records the proposal and whether it was

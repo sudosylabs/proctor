@@ -130,7 +130,7 @@ func NewAssistantApprovalRequestedEvent(target AssistantTarget, call model.Assis
 	if len(summary) > AssistantApprovalMaximumBytes {
 		summary, truncated = truncateUTF8(summary, AssistantApprovalMaximumBytes), true
 	}
-	if !target.valid() || !call.IsValid() || (tool != "run_command" && tool != "apply_edit") || summary == "" ||
+	if !target.valid() || !call.IsValid() || (tool != "run_command" && tool != "apply_edit" && tool != "start_session" && tool != "send_input") || summary == "" ||
 		!utf8.ValidString(summary) || expires.IsZero() {
 		return Event{}, errors.New("assistant approval event requires valid bounded metadata")
 	}
@@ -193,4 +193,43 @@ func truncateUTF8(value string, limit int) string {
 		cut--
 	}
 	return value[:cut]
+}
+
+type assistantSessionData struct {
+	SittingID string `json:"exam_sitting_id"`
+	AttemptID string `json:"exam_attempt_id"`
+	Tag       string `json:"tag"`
+	StartedAt string `json:"started_at,omitempty"`
+	EndedAt   string `json:"ended_at,omitempty"`
+	Outcome   string `json:"outcome,omitempty"`
+}
+
+// NewAssistantSessionStartedEvent tells the candidate to refresh the session list.
+func NewAssistantSessionStartedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+	candidate model.UserID, tag string, at time.Time) (Event, error) {
+	return assistantSessionEvent(examAttemptAssistantSessionStartedMessage, sittingID, attemptID, candidate,
+		assistantSessionData{Tag: tag, StartedAt: model.FormatRFC3339(at)}, at)
+}
+
+// NewAssistantSessionEndedEvent reports a committed session closure to its candidate.
+func NewAssistantSessionEndedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+	candidate model.UserID, tag, outcome string, at time.Time) (Event, error) {
+	if !model.ValidAssistantSessionOutcome(outcome) {
+		return Event{}, errors.New("assistant session end requires a valid outcome")
+	}
+	return assistantSessionEvent(examAttemptAssistantSessionEndedMessage, sittingID, attemptID, candidate,
+		assistantSessionData{Tag: tag, Outcome: outcome, EndedAt: model.FormatRFC3339(at)}, at)
+}
+
+func assistantSessionEvent(declared message, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+	candidate model.UserID, data assistantSessionData, at time.Time) (Event, error) {
+	if !sittingID.IsValid() || !attemptID.IsValid() || !candidate.IsValid() || !model.ValidAssistantProcessTag(data.Tag) || at.IsZero() {
+		return Event{}, errors.New("assistant session event requires valid bounded metadata")
+	}
+	data.SittingID, data.AttemptID = sittingID.String(), attemptID.String()
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return Event{}, err
+	}
+	return Event{Name: declared.name, UserID: candidate, Data: raw}, nil
 }

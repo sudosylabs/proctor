@@ -45,7 +45,8 @@ What depends on execution:
 - **Reviewer** reads terminal screens only when the Exam has execution.
   Without it, it reads files only.
 - **Pair** works without execution: the assistant proposes diffs, and has no
-  command tool. With execution, it also gets `run_command`.
+  command tools. With execution, it can run commands and start interactive
+  sessions.
 - **Agent** needs execution. Publishing an Exam at the Agent level without
   execution is refused.
 
@@ -62,22 +63,27 @@ Each read is limited in size.
 
 ### How commands run
 
-Commands run in the assistant's own processes, never in the candidate's
-terminal, so the record always shows who ran what. A command starts in the
-workspace root with no input and no terminal, so programs that wait for
-input time out. Each command has a time limit set by your budgets, and file
-changes it makes are marked as the assistant's.
+The assistant starts commands in its own processes in the workspace root.
+Ordinary commands run without input. For a program that accepts input,
+such as a Python prompt, Pair and Agent can start an interactive session
+when execution is enabled. The session can stay open across replies. The assistant can keep
+two sessions open at once. Changes these processes make are marked as
+the assistant's.
 
 ## Approvals
 
 `approvals` controls whether the candidate must agree before the assistant
-runs a command or changes a file.
+runs a command, starts a session, enters input into a session, or changes a
+file.
 
-- **`always_ask`, the default:** the candidate sees the exact command, or
-  the diff, and accepts or declines it. The decision is recorded.
+- **`always_ask`, the default:** the candidate sees the exact command, text and
+  keys, or diff, and accepts or declines it. Each new input needs its own
+  approval. The decision is recorded.
   A request nobody answers within 5 minutes is declined.
 - **`auto_within_level`:** the assistant acts without asking, within its
   level. Everything is still recorded.
+
+Reading output and stopping a session are always available without approval.
 
 A proposed diff at Pair never needs approval, because the assistant writes
 nothing: applying it is the candidate's own edit.
@@ -117,6 +123,11 @@ the transcript.
 the [assistant profiles](../institution-admin/assistant-profiles.mdx) page
 lists their bounds. When a budget runs out, the assistant says so and stops,
 and the candidate carries on with the Exam.
+
+Starting a session uses one command from the budget. Its full lifetime
+is reserved against `command_seconds`. Proctor returns unused time when
+the session ends. The default session limit is 300 seconds, capped by
+`command_timeout_seconds`.
 
 For a level without commands, set `commands` and `command_seconds` to `0`.
 

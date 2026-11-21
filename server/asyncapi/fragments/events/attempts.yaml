@@ -443,6 +443,81 @@ components:
             resource:
               type: ''
               id: ''
+    exam_attempt_assistant_session_started:
+      name: exam_attempt_assistant_session_started
+      title: Assistant session started
+      summary: A candidate's assistant session started.
+      description: Delivered only to the candidate after the session state commits.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: ../../../schemas/realtime/event_frame.json
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_assistant_session_started
+              data:
+                $ref: ../../../schemas/realtime/exam_attempt_assistant_session_started.json
+      examples:
+        - name: example
+          payload:
+            id: 8kpous3h9nfemqtwz47ydgjcx1
+            event: exam_attempt_assistant_session_started
+            sequence: 47
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            data:
+              exam_sitting_id: 8kpous3h9nfemqtwz47ydgjcx1
+              exam_attempt_id: h9nfemqtwz47ydgjcx1ia56br8
+              tag: assistant:1
+              started_at: '2026-11-21T12:00:00Z'
+            resource:
+              type: ''
+              id: ''
+    exam_attempt_assistant_session_ended:
+      name: exam_attempt_assistant_session_ended
+      title: Assistant session ended
+      summary: A candidate's assistant session ended.
+      description: Delivered only to the candidate after the session state commits.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: ../../../schemas/realtime/event_frame.json
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_assistant_session_ended
+              data:
+                $ref: ../../../schemas/realtime/exam_attempt_assistant_session_ended.json
+      examples:
+        - name: example
+          payload:
+            id: 8kpous3h9nfemqtwz47ydgjcx1
+            event: exam_attempt_assistant_session_ended
+            sequence: 47
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            data:
+              exam_sitting_id: 8kpous3h9nfemqtwz47ydgjcx1
+              exam_attempt_id: h9nfemqtwz47ydgjcx1ia56br8
+              tag: assistant:1
+              ended_at: '2026-11-21T12:00:00Z'
+              outcome: stopped
+            resource:
+              type: ''
+              id: ''
     exam_attempt_assistant_approval_requested:
       name: exam_attempt_assistant_approval_requested
       title: Assistant approval requested

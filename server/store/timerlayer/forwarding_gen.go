@@ -4208,6 +4208,30 @@ func (s *timedAssistantTranscriptStore) ReserveCommand(arg0 context.Context, arg
 	})
 }
 
+func (s *timedAssistantTranscriptStore) ReserveSession(arg0 context.Context, arg1 *store.AssistantSessionReservation) (*store.AssistantSessionSlot, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodReserveSession), func(callCtx context.Context) (*store.AssistantSessionSlot, error) {
+		return s.next.ReserveSession(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) AdvanceSessionRead(arg0 context.Context, arg1 store.AssistantSessionAccess, arg2 string, arg3 uint64, arg4 bool) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodAdvanceSessionRead), func(callCtx context.Context) error {
+		return s.next.AdvanceSessionRead(callCtx, arg1, arg2, arg3, arg4)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) EndSession(arg0 context.Context, arg1 *store.AssistantSessionEnd) (*store.AssistantSessionEndResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodEndSession), func(callCtx context.Context) (*store.AssistantSessionEndResult, error) {
+		return s.next.EndSession(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) ListSessions(arg0 context.Context, arg1 store.AssistantSessionQuery) ([]model.AssistantSession, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodListSessions), func(callCtx context.Context) ([]model.AssistantSession, error) {
+		return s.next.ListSessions(callCtx, arg1)
+	})
+}
+
 func (s *timedAssistantTranscriptStore) Decide(arg0 context.Context, arg1 store.AssistantCallDecision) (*model.AssistantRecord, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodDecide), func(callCtx context.Context) (*model.AssistantRecord, error) {
 		return s.next.Decide(callCtx, arg1)

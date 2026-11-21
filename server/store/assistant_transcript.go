@@ -91,6 +91,46 @@ type AssistantCommandSlot struct {
 	TimeoutSeconds int64
 }
 
+type AssistantSessionReservation struct {
+	Access         AssistantRunAccess
+	CallID         model.AssistantCallID
+	TimeoutSeconds int64
+}
+
+type AssistantSessionSlot struct {
+	Tag            string
+	StartedAt      time.Time
+	TimeoutSeconds int64
+}
+
+// AssistantSessionAccess fences model reads and writes by the running turn.
+type AssistantSessionAccess = AssistantRunAccess
+
+type AssistantSessionEnd struct {
+	AuditEventID         model.AuditEventID
+	AuditAt              time.Time
+	EnvironmentOwner     *ExamAttemptWorkspaceEnvironmentAccess
+	Editor               ExamAttemptWorkspaceEditorAccess
+	Tag                  string
+	Outcome              string
+	ExitCode             *int
+	Signal               string
+	DurationMilliseconds int64
+}
+
+// AssistantSessionEndResult identifies the caller that committed the end.
+type AssistantSessionEndResult struct {
+	Record  *model.AssistantRecord
+	Changed bool
+}
+
+type AssistantSessionQuery struct {
+	ReviewSubmissionID model.SubmissionID
+	Tag                string
+	EnvironmentOwner   *ExamAttemptWorkspaceEnvironmentAccess
+	Owner              AssistantTranscriptOwnerAccess
+}
+
 // AssistantCallDecision is the candidate answering an approval request. Like
 // a cancel it needs no owner token: the owner may run on another node and
 // reads the decision back.
@@ -143,6 +183,10 @@ type AssistantTranscriptStore interface {
 	Renew(context.Context, AssistantRunAccess) error
 	Cancel(context.Context, AssistantRunCancel) error
 	ReserveCommand(context.Context, *AssistantCommandReservation) (*AssistantCommandSlot, error)
+	ReserveSession(context.Context, *AssistantSessionReservation) (*AssistantSessionSlot, error)
+	AdvanceSessionRead(context.Context, AssistantSessionAccess, string, uint64, bool) error
+	EndSession(context.Context, *AssistantSessionEnd) (*AssistantSessionEndResult, error)
+	ListSessions(context.Context, AssistantSessionQuery) ([]model.AssistantSession, error)
 	Decide(context.Context, AssistantCallDecision) (*model.AssistantRecord, error)
 	Decision(context.Context, AssistantRunAccess, model.AssistantCallID) (string, error)
 	ReserveModel(context.Context, *AssistantModelReservation) error

@@ -1,0 +1,28 @@
+{
+  "title": "Assistant session started",
+  "description": "A session started for the candidate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "tag",
+    "started_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^assistant:[1-9][0-9]{0,9}$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

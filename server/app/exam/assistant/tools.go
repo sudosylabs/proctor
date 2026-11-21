@@ -32,8 +32,14 @@ var toolDefinitions = map[string]ModelTool{
 		Parameters: json.RawMessage(`{"type":"object","properties":{"terminal":{"type":"integer","minimum":1}},"required":["terminal"],"additionalProperties":false}`)},
 	"propose_edit": {Name: "propose_edit", Description: "Propose the complete new content of one file. The candidate sees it and decides whether to apply it; nothing is written for them.",
 		Parameters: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"explanation":{"type":"string"}},"required":["path","content"],"additionalProperties":false}`)},
-	"run_command": {Name: "run_command", Description: "Run a shell command in your own process from the workspace root, without a terminal or input.",
+	"run_command": {Name: "run_command", Description: "Run a shell command that finishes by itself, in your own process from the workspace root, without a terminal or input. For programs that wait for input or keep running, use start_session.",
 		Parameters: json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600}},"required":["command"],"additionalProperties":false}`)},
+	"start_session": {Name: "start_session", Description: "Start a program in an assistant terminal and return its output and session tag.",
+		Parameters: json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600},"wait_ms":{"type":"integer","minimum":250,"maximum":30000}},"required":["command"],"additionalProperties":false}`)},
+	"send_input": {Name: "send_input", Description: "Send text and named keys to a running assistant session. Omit both to read new output without writing.",
+		Parameters: json.RawMessage(`{"type":"object","properties":{"session":{"type":"string"},"text":{"type":"string"},"keys":{"type":"array","maxItems":32,"items":{"type":"string","enum":["enter","tab","escape","backspace","up","down","right","left","home","end","page_up","page_down","ctrl_c","ctrl_d","ctrl_z","ctrl_l"]}},"wait_ms":{"type":"integer","minimum":250,"maximum":30000}},"required":["session"],"additionalProperties":false}`)},
+	"stop_session": {Name: "stop_session", Description: "Stop a running assistant session and return its final output and exit status.",
+		Parameters: json.RawMessage(`{"type":"object","properties":{"session":{"type":"string"}},"required":["session"],"additionalProperties":false}`)},
 	"apply_edit": {Name: "apply_edit", Description: "Write the complete new content of one file in the candidate's workspace.",
 		Parameters: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"],"additionalProperties":false}`)},
 }
@@ -61,7 +67,7 @@ func (r *turnRun) offered() []string {
 	if atLeast(level, model.AssistantLevelPair) {
 		names = append(names, "propose_edit")
 		if execution {
-			names = append(names, "run_command")
+			names = append(names, "run_command", "start_session", "send_input", "stop_session")
 		}
 	}
 	if atLeast(level, model.AssistantLevelAgent) {
@@ -88,6 +94,7 @@ type toolResult struct {
 	outcome    string
 	processTag string
 	exitCode   *int
+	signal     string
 	truncated  bool
 	duration   time.Duration
 }
@@ -113,7 +120,7 @@ func (r *turnRun) runTool(call ModelToolCall) (string, bool, *turnEnd) {
 	}
 	arguments = compact.Bytes()
 	approval := ""
-	if call.Name == "run_command" || call.Name == "apply_edit" {
+	if toolNeedsApproval(call.Name, arguments) {
 		approval = "auto"
 		if r.recipe.Policy.Approvals == model.AssistantApprovalAlwaysAsk {
 			approval = "pending"
@@ -138,6 +145,21 @@ func (r *turnRun) runTool(call ModelToolCall) (string, bool, *turnEnd) {
 		}
 	}
 	summary := approvalSummary(call.Name, arguments)
+	if approval == "pending" && call.Name == "send_input" {
+		input, _ := parseSessionInput(arguments)
+		rows, sessionErr := r.service.transcripts.ListSessions(r.ctx, store.AssistantSessionQuery{
+			Owner: sessionOwner(r.key.Editor), Tag: input.Session,
+		})
+		switch {
+		case sessionErr != nil || len(rows) != 1 || rows[0].State != "running" || rows[0].Starting || rows[0].AccessEnded:
+			result = taggedSessionError(input.Session, "That session is no longer running.")
+		default:
+			summary = input.summary(rows[0].Command)
+			if len(summary) > realtime.AssistantApprovalMaximumBytes {
+				result = taggedSessionError(input.Session, "The complete input cannot be shown for approval. Send less text.")
+			}
+		}
+	}
 	if approval == "pending" && edit != nil {
 		var summaryErr error
 		summary, summaryErr = r.editApprovalSummary(edit)
@@ -167,6 +189,7 @@ func (r *turnRun) runTool(call ModelToolCall) (string, bool, *turnEnd) {
 	}
 	record.Phase, record.Arguments, record.Result, record.Outcome = "completed", json.RawMessage(`{}`), result.record, result.outcome
 	record.Approval, record.ProcessTag, record.ExitCode, record.Truncated = approval, result.processTag, result.exitCode, result.truncated
+	record.Signal = result.signal
 	if record.Approval == "pending" {
 		record.Approval = ""
 	}
@@ -201,6 +224,12 @@ func (r *turnRun) execute(name string, arguments json.RawMessage, call model.Ass
 		return r.proposeEdit(arguments)
 	case "run_command":
 		return r.runCommand(arguments, call)
+	case "start_session":
+		return r.startSession(arguments, call)
+	case "send_input":
+		return r.sendInput(arguments)
+	case "stop_session":
+		return r.stopSession(arguments)
 	case "apply_edit":
 		return r.applyEdit(call, edit)
 	}
@@ -245,6 +274,18 @@ func (r *turnRun) awaitApproval(call model.AssistantCallID, tool, summary string
 	}
 }
 
+func toolNeedsApproval(tool string, arguments json.RawMessage) bool {
+	switch tool {
+	case "run_command", "apply_edit", "start_session":
+		return true
+	case "send_input":
+		input, ok := parseSessionInput(arguments)
+		return ok && (input.Text != "" || len(input.Keys) != 0)
+	default:
+		return false
+	}
+}
+
 func approvalSummary(tool string, arguments json.RawMessage) string {
 	var value struct {
 		Command string `json:"command"`
@@ -252,7 +293,7 @@ func approvalSummary(tool string, arguments json.RawMessage) string {
 		Content string `json:"content"`
 	}
 	_ = json.Unmarshal(arguments, &value)
-	if tool == "run_command" && value.Command != "" {
+	if (tool == "run_command" || tool == "start_session") && value.Command != "" {
 		return value.Command
 	}
 	if value.Path != "" {

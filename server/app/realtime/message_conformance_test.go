@@ -59,6 +59,12 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		SessionID: model.NewSessionID(), TurnID: model.NewAssistantTurnID()}
 
 	return map[string]func() (Event, error){
+		"exam_attempt_assistant_session_started": func() (Event, error) {
+			return NewAssistantSessionStartedEvent(sittingID, attemptID, candidateID, "assistant:1", at)
+		},
+		"exam_attempt_assistant_session_ended": func() (Event, error) {
+			return NewAssistantSessionEndedEvent(sittingID, attemptID, candidateID, "assistant:1", "stopped", at)
+		},
 		"exam_attempt_assistant_turn_started": func() (Event, error) {
 			return NewAssistantTurnStartedEvent(assistantTarget, model.NewAssistantConversationID(), at)
 		},

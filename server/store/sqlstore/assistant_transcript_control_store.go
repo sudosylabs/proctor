@@ -83,31 +83,9 @@ func (s *SQLAssistantTranscriptStore) ReserveCommand(ctx context.Context,
 		if run.ReservedCommandMilliseconds != 0 {
 			return nil, store.NewErrConflict("assistant_command", "assistant_busy", nil)
 		}
-		var raw []byte
-		if err = tx.Get(ctx, &raw, `SELECT canonical FROM exam_attempt_assistant_calls WHERE exam_attempt_id=? AND turn_id=? AND call_id=?
-		AND phase='requested'`, input.Access.Editor.AttemptID.String(), run.TurnID, input.CallID.String()); err != nil {
-			return nil, translateError("assistant_call", input.CallID.String(), err)
-		}
-		request, err := model.DecodeAssistantRecord(raw)
+		request, err := readAssistantExecutionRequest(ctx, tx, input.Access.Editor.AttemptID, run, input.CallID, "run_command", recipe.Policy.Approvals)
 		if err != nil {
 			return nil, err
-		}
-		if request.Call == nil || request.Call.Tool != "run_command" {
-			return nil, store.NewErrInvalidInput("assistant_command", "call", nil)
-		}
-		if recipe.Policy.Approvals == model.AssistantApprovalAlwaysAsk {
-			var decisionRaw []byte
-			if err = tx.Get(ctx, &decisionRaw, `SELECT canonical FROM exam_attempt_assistant_calls WHERE exam_attempt_id=? AND call_id=? AND
-			phase='decision'`, input.Access.Editor.AttemptID.String(), input.CallID.String()); err != nil {
-				return nil, translateError("assistant_call", input.CallID.String(), err)
-			}
-			decision, decodeErr := model.DecodeAssistantRecord(decisionRaw)
-			if decodeErr != nil {
-				return nil, decodeErr
-			}
-			if decision.Call == nil || decision.Call.Approval != "accept" || !decision.CreatedAt.Before(request.CreatedAt.Add(5*time.Minute)) {
-				return nil, store.NewErrConflict("assistant_call", "assistant_approval_decided", nil)
-			}
 		}
 
 		inventory, err := lockAssistantInventory(ctx, tx, input.Access.Editor.AttemptID)
@@ -129,7 +107,7 @@ func (s *SQLAssistantTranscriptStore) ReserveCommand(ctx context.Context,
 			input.Access.Editor.AttemptID.String()); err != nil {
 			return nil, err
 		}
-		reservation := *request.Call
+		reservation := *request
 		reservation.Phase = "reserved"
 		reservation.Arguments = json.RawMessage(`{}`)
 		reservation.ProcessTag = "assistant:" + strconv.FormatInt(next, 10)
@@ -140,6 +118,39 @@ func (s *SQLAssistantTranscriptStore) ReserveCommand(ctx context.Context,
 
 		return &store.AssistantCommandSlot{Tag: "assistant:" + strconv.FormatInt(next, 10), TimeoutSeconds: timeout}, nil
 	})
+}
+
+// readAssistantExecutionRequest ties an execution reservation to the original
+// call and, when required, a timely candidate approval.
+func readAssistantExecutionRequest(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID, run assistantRunRow,
+	callID model.AssistantCallID, tool string, mode model.AssistantApprovalMode) (*model.AssistantCall, error) {
+	var raw []byte
+	if err := tx.Get(ctx, &raw, `SELECT canonical FROM exam_attempt_assistant_calls WHERE exam_attempt_id=? AND turn_id=? AND call_id=?
+	AND phase='requested'`, id.String(), run.TurnID, callID.String()); err != nil {
+		return nil, translateError("assistant_call", callID.String(), err)
+	}
+	request, err := model.DecodeAssistantRecord(raw)
+	if err != nil {
+		return nil, err
+	}
+	if request.Call == nil || request.Call.Tool != tool {
+		return nil, store.NewErrInvalidInput("assistant_command", "call", nil)
+	}
+	if mode == model.AssistantApprovalAlwaysAsk {
+		var decisionRaw []byte
+		if err = tx.Get(ctx, &decisionRaw, `SELECT canonical FROM exam_attempt_assistant_calls WHERE exam_attempt_id=? AND call_id=? AND
+		phase='decision'`, id.String(), callID.String()); err != nil {
+			return nil, translateError("assistant_call", callID.String(), err)
+		}
+		decision, decodeErr := model.DecodeAssistantRecord(decisionRaw)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if decision.Call == nil || decision.Call.Approval != "accept" || !decision.CreatedAt.Before(request.CreatedAt.Add(5*time.Minute)) {
+			return nil, store.NewErrConflict("assistant_call", "assistant_approval_decided", nil)
+		}
+	}
+	return request.Call, nil
 }
 
 // Decide records the candidate's answer once. The unique call phase makes a

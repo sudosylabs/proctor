@@ -10,6 +10,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/exam/assistant"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -77,16 +79,17 @@ func reply(text string) []assistant.ModelEvent {
 // would, with one turn at a time and the recipe admission froze.
 type transcriptLedger struct {
 	store.AssistantTranscriptStore
-	f      *attemptFixture
-	mu     sync.Mutex
-	recipe store.AssistantRecipe
-	turn   model.AssistantTurnID
-	token  string
-	active bool
-	sealed bool
-	keys   map[string]*store.AssistantRunStart
-	record []model.AssistantRecord
-	cancel []store.AssistantRunCancel
+	f        *attemptFixture
+	mu       sync.Mutex
+	recipe   store.AssistantRecipe
+	turn     model.AssistantTurnID
+	token    string
+	active   bool
+	sealed   bool
+	keys     map[string]*store.AssistantRunStart
+	record   []model.AssistantRecord
+	cancel   []store.AssistantRunCancel
+	sessions []model.AssistantSession
 }
 
 func newTranscriptLedger(f *attemptFixture, level model.AssistantLevel) *transcriptLedger {
@@ -213,6 +216,40 @@ func (l *transcriptLedger) ListForAttempt(_ context.Context, query store.Assista
 		page.Records = append(page.Records, record)
 	}
 	return page, nil
+}
+
+func (l *transcriptLedger) ListSessions(_ context.Context, query store.AssistantSessionQuery) ([]model.AssistantSession, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if query.Owner.AttemptID != l.f.attempt.ID || query.Owner.CandidateUserID != l.f.candidate.UserID {
+		return nil, store.NewErrNotFound("assistant_session", query.Tag)
+	}
+	var sessions []model.AssistantSession
+	for _, session := range l.sessions {
+		if query.Tag == "" || query.Tag == session.Tag {
+			sessions = append(sessions, session)
+		}
+	}
+	return sessions, nil
+}
+
+func (l *transcriptLedger) EndSession(_ context.Context, input *store.AssistantSessionEnd) (*store.AssistantSessionEndResult, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := range l.sessions {
+		session := &l.sessions[i]
+		if session.Tag != input.Tag {
+			continue
+		}
+		changed := session.State == "running"
+		if changed {
+			session.State, session.Outcome, session.EndedAt = "ended", input.Outcome, input.AuditAt
+		}
+		return &store.AssistantSessionEndResult{Changed: changed, Record: &model.AssistantRecord{
+			CreatedAt: session.EndedAt, Call: &model.AssistantCall{ProcessTag: session.Tag, Outcome: session.Outcome},
+		}}, nil
+	}
+	return nil, store.NewErrNotFound("assistant_session", input.Tag)
 }
 
 func (l *transcriptLedger) finalTurn() *model.AssistantTurn {
@@ -595,4 +632,116 @@ func TestCandidateAssistantUsesVisibleResourcesAndProposesWithoutExecution(t *te
 			}
 		})
 	}
+}
+
+func TestCandidateAssistantListsAndRepeatsAStopWithinTheAttempt(t *testing.T) {
+	f := newAttemptFixture(t)
+	ledger := newTranscriptLedger(f, model.AssistantLevelPair)
+	now := time.Now().UTC()
+	ledger.sessions = []model.AssistantSession{{Tag: "assistant:1", Command: "cat", State: "ended",
+		StartedAt: now.Add(-time.Second), EndedAt: now, Outcome: "stopped"}}
+	api := f.api(t, examAttemptAssistantResource(newAssistantService(t, f, ledger, &scriptedModel{})))
+	send := func(method, path string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, f.candidateRequest(t, method, f.candidatePath(path)))
+		return response
+	}
+	list := send(http.MethodGet, "/assistant/sessions")
+	require.Equal(t, http.StatusOK, list.Code, list.Body.String())
+	require.Contains(t, list.Body.String(), "assistant:1")
+	stop := send(http.MethodPost, "/assistant/sessions/assistant:1/stop")
+	require.Equal(t, http.StatusOK, stop.Code, stop.Body.String())
+	require.Contains(t, stop.Body.String(), "stopped")
+	repeat := send(http.MethodPost, "/assistant/sessions/assistant:1/stop")
+	require.Equal(t, stop.Body.String(), repeat.Body.String())
+	unknown := send(http.MethodPost, "/assistant/sessions/assistant:2/stop")
+	require.Equal(t, http.StatusNotFound, unknown.Code, unknown.Body.String())
+	require.Contains(t, unknown.Body.String(), "exam.attempt.assistant_session_not_found")
+	otherAttempt := httptest.NewRecorder()
+	otherPath := "/api/v1/exam-attempts/" + model.NewExamAttemptID().String() + "/assistant/sessions/assistant:1/stop"
+	api.ServeHTTP(otherAttempt, f.candidateRequest(t, http.MethodPost, otherPath))
+	require.Equal(t, http.StatusNotFound, otherAttempt.Code, otherAttempt.Body.String())
+	terminal := send(http.MethodPost, "/assistant/sessions/terminal:1/stop")
+	require.Equal(t, http.StatusNotFound, terminal.Code, terminal.Body.String())
+}
+
+type assistantRouteEnvironment struct {
+	store.AttemptEnvironmentStore
+	row model.AttemptEnvironment
+	err error
+}
+
+func (e assistantRouteEnvironment) Get(context.Context, model.ExamAttemptID) (*model.AttemptEnvironment, error) {
+	return &e.row, e.err
+}
+
+type assistantRouteHosts struct{ environment.Hosts }
+
+func newFrozenAssistantService(t *testing.T, f *attemptFixture, ledger *transcriptLedger, storeErr error) *assistant.Service {
+	t.Helper()
+	terminals, err := environment.NewTerminals(environment.TerminalsDependencies{
+		Environments: assistantRouteEnvironment{row: model.AttemptEnvironment{State: model.AttemptEnvironmentFrozen,
+			Desired: model.AttemptEnvironmentDesiredFrozen}, err: storeErr},
+		Evidence: f.workspaceStore, Candidates: environment.AttemptCandidates(f.service), Hosts: assistantRouteHosts{},
+	})
+	require.NoError(t, err)
+	service, err := assistant.New(assistant.Dependencies{Transcripts: ledger, Attempts: f.service, Gateway: &scriptedModel{},
+		Terminals: terminals, Auditor: f.access.Auditor, Publisher: f.publisher, Now: time.Now, NewConversationID: model.NewAssistantConversationID,
+		NewTurnID: model.NewAssistantTurnID, NewCallID: model.NewAssistantCallID, NewOwnerToken: model.NewCredentialToken})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, service.Close(context.Background())) })
+	return service
+}
+
+func TestCandidateStopSettlesFrozenSessionAndDeclaresEnvironmentErrors(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		storeErr error
+		wantCode int
+		wantBody string
+	}{
+		{"frozen", nil, http.StatusOK, `"outcome":"ended"`},
+		{"environment store unavailable", errors.New("unavailable environment store"), http.StatusServiceUnavailable, "exam.attempt.environment_unavailable"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newAttemptFixture(t)
+			ledger := newTranscriptLedger(f, model.AssistantLevelPair)
+			ledger.sessions = []model.AssistantSession{{Tag: "assistant:1", Command: "cat", State: "running",
+				StartedAt: time.Now().Add(-time.Second), CandidateUserID: f.candidate.UserID}}
+			api := f.api(t, examAttemptAssistantResource(newFrozenAssistantService(t, f, ledger, tt.storeErr)))
+			request := f.candidateRequest(t, http.MethodPost, f.candidatePath("/assistant/sessions/assistant:1/stop"))
+			response := httptest.NewRecorder()
+			api.ServeHTTP(response, request)
+			require.Equal(t, tt.wantCode, response.Code, response.Body.String())
+			require.Contains(t, response.Body.String(), tt.wantBody)
+		})
+	}
+}
+
+func TestCandidateAssistantSessionCursorDoesNotMoveWhenSessionEnds(t *testing.T) {
+	f := newAttemptFixture(t)
+	ledger := newTranscriptLedger(f, model.AssistantLevelPair)
+	now := time.Now().UTC()
+	ledger.sessions = []model.AssistantSession{
+		{Tag: "assistant:2", Command: "cat", State: "ended", StartedAt: now.Add(-time.Minute), EndedAt: now, Outcome: "stopped"},
+		{Tag: "assistant:1", Command: "python", State: "running", StartedAt: now.Add(-2 * time.Minute)},
+	}
+	api := f.api(t, examAttemptAssistantResource(newFrozenAssistantService(t, f, ledger, nil)))
+	page := func(query string) assistantSessionListResponse {
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, f.candidateRequest(t, http.MethodGet, f.candidatePath("/assistant/sessions")+query))
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var result assistantSessionListResponse
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+		return result
+	}
+	first := page("?limit=1")
+	require.Len(t, first.Items, 1)
+	require.Equal(t, "assistant:2", first.Items[0].Tag)
+	require.NotEmpty(t, first.NextCursor)
+	ledger.sessions[1].State, ledger.sessions[1].EndedAt, ledger.sessions[1].Outcome = "ended", now.Add(time.Minute), "stopped"
+	second := page("?limit=1&cursor=" + first.NextCursor)
+	require.Len(t, second.Items, 1)
+	require.Equal(t, "assistant:1", second.Items[0].Tag)
+	require.Empty(t, second.NextCursor)
 }

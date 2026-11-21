@@ -37,7 +37,7 @@ func TestAssistantTranscriptStore(t *testing.T) {
 				},
 				VerifyBound: func(t *testing.T, id model.ExamAttemptID, expected model.AssistantInventory) {
 					var value model.AssistantInventory
-					err := persistence.GetMaster().Get(context.Background(), &value, `SELECT i.records,i.bytes,i.gaps,i.digest FROM
+					err := persistence.GetMaster().Get(context.Background(), &value, `SELECT i.records,i.bytes,i.gaps,i.digest,i.sessions,i.session_inputs FROM
 					exam_attempt_assistant_inventories i JOIN exam_submissions sub ON sub.id=i.submission_id WHERE i.id=? AND sub.exam_attempt_id=i.id AND
 					sub.sealed=true`, id.String())
 					require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestAssistantTranscriptStore(t *testing.T) {
 			}
 			storetest.TestAssistantTranscriptStore(t, test.Wrap(t, persistence), probe)
 			resetPristineTestStore(t, persistence)
-			storetest.TestAssistantCommandBudgetStore(t, test.Wrap(t, persistence), probe, func(t *testing.T, id model.ExamAttemptID, commands, milliseconds int64) {
+			verifyBudget := func(t *testing.T, id model.ExamAttemptID, commands, milliseconds int64) {
 				var row struct {
 					Commands     int64 `db:"commands"`
 					Milliseconds int64 `db:"command_milliseconds"`
@@ -60,7 +60,10 @@ func TestAssistantTranscriptStore(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, commands, row.Commands)
 				require.Equal(t, milliseconds, row.Milliseconds)
-			})
+			}
+			storetest.TestAssistantCommandBudgetStore(t, test.Wrap(t, persistence), probe, verifyBudget)
+			resetPristineTestStore(t, persistence)
+			storetest.TestAssistantSessionStore(t, test.Wrap(t, persistence), verifyBudget)
 		})
 	}
 }

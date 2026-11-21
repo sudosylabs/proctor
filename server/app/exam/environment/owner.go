@@ -104,7 +104,9 @@ func (t OwnerTiming) withDefaults() OwnerTiming {
 // OwnerDependencies configures NewOwners; Environments, Evidence, Workspace
 // and Hosts are required.
 type OwnerDependencies struct {
-	Environments store.AttemptEnvironmentStore
+	AssistantSessionEnded func(context.Context, model.ExamSittingID, model.ExamAttemptID, model.UserID, *model.AssistantRecord) error
+	AssistantSessions     store.AssistantTranscriptStore
+	Environments          store.AttemptEnvironmentStore
 	// Evidence stores attempt evidence through the owner's access.
 	Evidence  store.ExamAttemptWorkspaceStore
 	Workspace Workspace
@@ -190,6 +192,7 @@ type owner struct {
 	hostCursor uint64
 	// journalDue says a workspace commit may wait to be projected.
 	journalDue    bool
+	assistantWake bool
 	journalReadAt time.Time
 	echoes        map[int64]echo
 	diverged      int
@@ -287,6 +290,7 @@ func (o *owner) wait(ctx context.Context, wake <-chan struct{}, delay time.Durat
 		return false
 	case <-wake:
 		o.journalDue = true
+		o.assistantWake = true
 		if row, err := o.deps.Environments.Get(ctx, o.attemptID); err == nil {
 			// The facts come from the store; the owner's fields, saved or
 			// not, are this owner's.
@@ -351,6 +355,10 @@ func (o *owner) step(ctx context.Context) (time.Duration, error) {
 		if err := o.setControl(ctx, ControlRunning); err != nil {
 			return 0, err
 		}
+	}
+	if o.assistantWake {
+		o.assistantWake = false
+		o.checkAssistantSessions(ctx, o.fence, false)
 	}
 	if !o.ready {
 		if err := o.prepare(ctx); err != nil {
@@ -595,6 +603,11 @@ func (o *owner) place(ctx context.Context) error {
 
 // setControl takes the next fence revision and moves the machine to state.
 func (o *owner) setControl(ctx context.Context, state ControlState) error {
+	if state == ControlFrozen && o.control != ControlFrozen {
+		// A new owner can inherit a running machine before confirming control.
+		prior := Fence{GrantID: o.row.GrantID, Epoch: o.row.Epoch, Revision: o.row.ControlFence}
+		o.checkAssistantSessions(ctx, prior, true)
+	}
 	if state != ControlRunning {
 		// A frozen or revoked machine serves no observation.
 		o.stopObserving()
@@ -612,7 +625,20 @@ func (o *owner) setControl(ctx context.Context, state ControlState) error {
 		return errors.New("the execution machine did not confirm the control")
 	}
 	o.fence, o.control = fence, state
+	if state == ControlRunning {
+		o.assistantWake = false
+		// A deadline that passed while frozen may still have a process.
+		o.checkAssistantSessions(ctx, fence, false)
+	}
 	return nil
+}
+
+func (o *owner) checkAssistantSessions(ctx context.Context, fence Fence, stopping bool) {
+	checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := o.reconcileAssistantSessions(checkCtx, fence, stopping); err != nil {
+		o.report(err)
+	}
 }
 
 // machineError turns a machine failure into what the owner does next.

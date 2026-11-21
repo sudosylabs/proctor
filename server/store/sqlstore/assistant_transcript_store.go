@@ -40,7 +40,7 @@ type assistantInventoryRow struct {
 	CommandMilliseconds int64          `db:"command_milliseconds"`
 }
 
-const assistantInventoryColumns = `records,bytes,gaps,digest,submission_id,turns,input_tokens,output_tokens,tool_calls,commands,command_milliseconds`
+const assistantInventoryColumns = `records,bytes,gaps,digest,submission_id,turns,input_tokens,output_tokens,tool_calls,commands,command_milliseconds,sessions,session_inputs`
 
 func lockAssistantInventory(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID) (assistantInventoryRow, error) {
 	var row assistantInventoryRow
@@ -365,7 +365,7 @@ func (s *SQLAssistantTranscriptStore) CompleteCall(ctx context.Context, input *s
 	return s.appendCall(ctx, input, true)
 }
 func (s *SQLAssistantTranscriptStore) appendCall(ctx context.Context, input *store.AssistantCallAppend, complete bool) (*model.AssistantRecord, error) {
-	if input == nil || !input.Call.Valid() || complete != (input.Call.Phase == "completed") {
+	if input == nil || !input.Call.Valid() || input.Call.Phase == "session_ended" || complete != (input.Call.Phase == "completed") {
 		return nil, store.NewErrInvalidInput("assistant_call", "append", nil)
 	}
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "append assistant tool call", func(ctx context.Context,
@@ -433,13 +433,15 @@ func (s *SQLAssistantTranscriptStore) appendCall(ctx context.Context, input *sto
 func sealAssistantTranscript(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID) error {
 	var run assistantRunRow
 	err := tx.Get(ctx, &run, `SELECT `+assistantRunColumns+` FROM exam_attempt_assistant_runs WHERE id=? AND active=true FOR UPDATE`, id.String())
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("lock sealed assistant run: %w", err)
 	}
-	return endAssistantRun(ctx, tx, id, run, "sealed")
+	if run.Active {
+		if err = endAssistantRun(ctx, tx, id, run, "sealed"); err != nil {
+			return err
+		}
+	}
+	return sealAssistantSessions(ctx, tx, id)
 }
 func endAssistantRun(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID, run assistantRunRow, reason string) error {
 	recipe, err := readAssistantRecipe(ctx, tx, id)

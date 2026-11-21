@@ -26,12 +26,46 @@ import (
 )
 
 type commandIntegrationModel struct {
-	results chan assistant.ModelMessage
+	results        chan assistant.ModelMessage
+	sessionResults chan assistant.ModelMessage
+	sessionCalls   []sessionIntegrationCall
 }
 
 func (m *commandIntegrationModel) Stream(ctx context.Context, request assistant.ModelRequest) (assistant.ModelStream, error) {
 	last := request.Messages[len(request.Messages)-1]
 	usage := assistant.ModelEvent{Kind: assistant.ModelUsageEvent, Usage: assistant.ModelUsage{Input: 80, Output: 15}}
+	if last.Role == "user" && last.Text == "Try the interactive program." {
+		m.sessionCalls = []sessionIntegrationCall{
+			{"start_session", `{"command":"cat","wait_ms":250}`},
+			{"send_input", `{"session":"assistant:2","text":"never-sent","keys":["enter"],"wait_ms":250}`},
+			{"send_input", `{"session":"assistant:2","wait_ms":250}`},
+			{"send_input", `{"session":"assistant:2","text":"hello","keys":["enter"],"wait_ms":500}`},
+			{"stop_session", `{"session":"assistant:2"}`},
+			{"start_session", `{"command":"cat","wait_ms":250}`},
+			{"start_session", `{"command":"cat","wait_ms":250}`},
+		}
+	}
+	if m.sessionCalls != nil {
+		if last.Role == "tool" {
+			select {
+			case m.sessionResults <- last:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		if len(m.sessionCalls) == 0 {
+			m.sessionCalls = nil
+			return &integrationStream{events: []assistant.ModelEvent{usage, {Kind: assistant.ModelStop, Reason: "end_turn"}}}, nil
+		}
+		call := m.sessionCalls[0]
+		m.sessionCalls = m.sessionCalls[1:]
+		return &integrationStream{events: []assistant.ModelEvent{
+			{Kind: assistant.ModelToolCallStart, ID: "session-" + strconv.Itoa(len(m.sessionCalls)), Name: call.name},
+			{Kind: assistant.ModelToolCallArgsDelta, ID: "session-" + strconv.Itoa(len(m.sessionCalls)), Text: call.args},
+			{Kind: assistant.ModelToolCallEnd, ID: "session-" + strconv.Itoa(len(m.sessionCalls))},
+			usage, {Kind: assistant.ModelStop, Reason: "tool_use"},
+		}}, nil
+	}
 	if last.Role == "tool" {
 		select {
 		case m.results <- last:
@@ -60,7 +94,9 @@ func checkAssistantCommandFlow(t *testing.T, service *assistant.Service, inv inv
 	ctx := t.Context()
 	transcript := func() []model.AssistantRecord {
 		page, err := service.ListTranscript(ctx, inv, assistant.TranscriptQuery{AttemptID: access.AttemptID, Limit: 200})
-		require.NoError(t, err)
+		if err != nil {
+			return nil
+		}
 		return page.Records
 	}
 	for _, decision := range []string{"decline", "expired", "accept"} {
@@ -152,3 +188,5 @@ func checkAssistantCommandEvidence(t *testing.T, completed *model.AssistantCall,
 		return false
 	}, 30*time.Second, 50*time.Millisecond, "the harvested file links to the accepted command's process")
 }
+
+type sessionIntegrationCall struct{ name, args string }

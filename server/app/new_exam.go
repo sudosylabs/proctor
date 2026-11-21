@@ -198,6 +198,9 @@ func newAttempts(
 		Revisions: deps.Store.ExamRevision(),
 	}
 	return attempt.New(attempt.Dependencies{
+		KillSealedAssistantSessions: deps.KillSealedAssistantSessions,
+
+		AssistantSessions: deps.Store.AssistantTranscript(),
 		Persistence:       deps.Store.ExamAttempt(),
 		FocusLoss:         deps.Store.ExamFocusLoss(),
 		SecurityPreflight: deps.Store.SecurityPreflight(),

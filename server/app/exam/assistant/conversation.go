@@ -34,10 +34,14 @@ var storeRules = slices.Concat(
 		{Kind: apperror.StoreNotFound, Entity: "assistant_recipe", Code: "exam.attempt.assistant_disabled"},
 		{Kind: apperror.StoreNotFound, Entity: "assistant_run", Code: "exam.attempt.assistant_turn_not_found"},
 		{Kind: apperror.StoreNotFound, Entity: "assistant_call", Code: "exam.attempt.assistant_approval_not_found"},
+		{Kind: apperror.StoreNotFound, Entity: "assistant_session", Code: "exam.attempt.assistant_session_not_found"},
 	},
 	apperror.Conflicts("assistant_run", map[string]apperror.Code{
 		"assistant_busy":             "exam.attempt.assistant_busy",
 		"assistant_budget_exhausted": "exam.attempt.assistant_budget_exhausted",
+	}),
+	apperror.Conflicts("assistant_session", map[string]apperror.Code{
+		"assistant_session_limit": "exam.attempt.assistant_session_limit",
 	}),
 	apperror.Conflicts("assistant_call", map[string]apperror.Code{
 		"assistant_approval_decided": "exam.attempt.assistant_approval_conflict",

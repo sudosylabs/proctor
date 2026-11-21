@@ -112,11 +112,14 @@ paths:
                 input_tokens: 18240
                 output_tokens: 2210
                 estimated: false
-                tools: {read_file: 4, run_command: 2}
+                tools: {read_file: 4, start_session: 1, send_input: 1, run_command: 1}
                 commands: 2
+                sessions: 1
+                session_inputs: 1
+                session_seconds: 12
                 edits_proposed: 0
                 edits_applied: 0
-                approved: 2
+                approved: 3
                 declined: 0
                 expired: 0
                 output_rewritten: 1
@@ -139,8 +142,9 @@ components:
     AssistantUsageSummary:
       type: object
       additionalProperties: false
-      required: [messages, replies, input_tokens, output_tokens, estimated, tools, commands, edits_proposed, edits_applied,
-        approved, declined, expired, output_rewritten, output_replaced, gaps]
+      required: [messages, replies, input_tokens, output_tokens, estimated, tools, commands, sessions,
+        session_inputs, session_seconds, edits_proposed, edits_applied, approved, declined, expired,
+        output_rewritten, output_replaced, gaps]
       properties:
         messages:
           type: integer
@@ -171,6 +175,21 @@ components:
           type: integer
           format: int64
           minimum: 0
+        sessions:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Assistant session reservations, also counted in commands.
+        session_inputs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Writes into assistant sessions. A poll does not count.
+        session_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total settled duration from the session-ended records, in whole seconds.
         edits_proposed:
           type: integer
           format: int64

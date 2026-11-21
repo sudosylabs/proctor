@@ -55,12 +55,11 @@ type rig struct {
 
 func newRig(t *testing.T, timing environment.OwnerTiming, wrap ...func(environment.Hosts) environment.Hosts) *rig {
 	t.Helper()
-	return newSeededRig(t, timing, nil, wrap...)
+	return newPreparedRig(t, timing, nil, wrap...)
 }
 
-// newSeededRig is newRig over a Workspace that seed adds to before the
-// owner starts.
-func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*workspaceFake),
+// newPreparedRig lets tests set the initial fixture state before the owner starts.
+func newPreparedRig(t *testing.T, timing environment.OwnerTiming, prepare func(*rig),
 	wrap ...func(environment.Hosts) environment.Hosts) *rig {
 	t.Helper()
 	host, err := memory.New(memory.Config{Images: []execenv.Image{"python"}, WorkDir: t.TempDir()})
@@ -135,8 +134,8 @@ func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*works
 	})
 	r.workspace.mkdir("src")
 	r.workspace.edit("src/main.py", "print(1)\n")
-	if seed != nil {
-		seed(r.workspace)
+	if prepare != nil {
+		prepare(r)
 	}
 	go func() {
 		defer close(stopped)
@@ -270,8 +269,9 @@ func TestOwnerReplacesALostMachine(t *testing.T) {
 
 func TestOwnerWaitsForCapacityAndRecordsTheWait(t *testing.T) {
 	t.Parallel()
-	r := newRig(t, environment.OwnerTiming{})
-	r.host.SetDraining(true)
+	r := newPreparedRig(t, environment.OwnerTiming{}, func(r *rig) {
+		r.host.SetDraining(true)
+	})
 	require.Eventually(t, func() bool {
 		row := r.environments.snapshot()
 		return row.State == model.AttemptEnvironmentWaitingCapacity && !row.WaitingSince.IsZero()
@@ -345,8 +345,8 @@ func TestOwnerGivesANewWorkspaceTheDefaultIgnoreFile(t *testing.T) {
 
 func TestOwnerKeepsTheStartersIgnoreFile(t *testing.T) {
 	t.Parallel()
-	r := newSeededRig(t, environment.OwnerTiming{}, func(workspace *workspaceFake) {
-		workspace.edit(environment.IgnoreFile, "secret/\n")
+	r := newPreparedRig(t, environment.OwnerTiming{}, func(r *rig) {
+		r.workspace.edit(environment.IgnoreFile, "secret/\n")
 	})
 	r.running()
 	held, _ := r.workspace.file(environment.IgnoreFile)
@@ -503,9 +503,9 @@ func TestOwnerRecordsASuspendedMachineAndThawsIt(t *testing.T) {
 
 func TestOwnerReportsThePathsItDidNotStore(t *testing.T) {
 	t.Parallel()
-	r := newSeededRig(t, environment.OwnerTiming{ObserveWait: time.Second, HarvestQuiet: 300 * time.Millisecond, HarvestMax: time.Second,
-		Idle: 50 * time.Millisecond, Retry: 10 * time.Millisecond, RetryMax: 50 * time.Millisecond}, func(workspace *workspaceFake) {
-		workspace.edit(environment.IgnoreFile, "")
+	r := newPreparedRig(t, environment.OwnerTiming{ObserveWait: time.Second, HarvestQuiet: 300 * time.Millisecond, HarvestMax: time.Second,
+		Idle: 50 * time.Millisecond, Retry: 10 * time.Millisecond, RetryMax: 50 * time.Millisecond}, func(r *rig) {
+		r.workspace.edit(environment.IgnoreFile, "")
 	})
 	ctx := t.Context()
 	r.running()

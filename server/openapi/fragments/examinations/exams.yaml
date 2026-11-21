@@ -13,7 +13,10 @@ paths:
       tags:
         - Examinations
       description: >-
-        Returns one row for each Exam you can see, most recently updated first. When you filter by Sitting state or schedule, an Exam is included only if at least one of its Sittings matches every Sitting filter you gave. To get the next page, send next_cursor back unchanged. A cursor does not give access to anything you could not already see.
+        Returns one row for each Exam you can see, most recently updated first. When you filter by Sitting state or
+        schedule, an Exam is included only if at least one of its Sittings matches every Sitting filter you gave.
+        To get the next page, send next_cursor back unchanged. A cursor does not give access to anything you could
+        not already see.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -50,12 +53,14 @@ paths:
           in: query
           required: false
           schema:
-            $ref: '#/components/schemas/ID'
+            $ref: "#/components/schemas/ID"
           description: Return only Exams owned by this Academic Unit. You still see only the Exams you are allowed to see.
         - name: q
           in: query
           required: false
-          description: Return only Exams whose current Draft title contains this text. Matching ignores case, and wildcard characters are treated as plain text.
+          description: >-
+            Return only Exams whose current Draft title contains this text. Matching ignores case, and wildcard
+            characters are treated as plain text.
           schema:
             type: string
         - name: archive_state
@@ -79,8 +84,10 @@ paths:
             maxItems: 6
             uniqueItems: true
             items:
-              $ref: '#/components/schemas/ExamSittingState'
-          description: Return only Exams with a Sitting in one of these states. Repeat the parameter for several states. With ends_after and starts_before, the same Sitting must also fall in that time range.
+              $ref: "#/components/schemas/ExamSittingState"
+          description: >-
+            Return only Exams with a Sitting in one of these states. Repeat the parameter for several states. With
+            ends_after and starts_before, the same Sitting must also fall in that time range.
         - name: ends_after
           in: query
           required: false
@@ -94,7 +101,9 @@ paths:
           schema:
             type: string
             format: date-time
-          description: Return only Exams with a Sitting scheduled to start before this time. Send it together with ends_after, and make it later than ends_after.
+          description: >-
+            Return only Exams with a Sitting scheduled to start before this time. Send it together with ends_after,
+            and make it later than ends_after.
         - name: limit
           in: query
           required: false
@@ -109,29 +118,34 @@ paths:
           required: false
           schema:
             type: string
-          description: The next_cursor value from the previous page, sent back unchanged. Omit it for the first page. Don't parse it or store it as an ID.
+          description: >-
+            The next_cursor value from the previous page, sent back unchanged. Omit it for the first page. Don't
+            parse it or store it as an ID.
       responses:
         "200":
-          $ref: '#/components/responses/ExamListOK'
+          $ref: "#/components/responses/ExamListOK"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
     post:
       operationId: createExam
       summary: Create an Exam and its initial Draft
       tags:
         - Examinations
       description: >-
-        Creates an Exam in the Academic Unit you choose, together with its first Draft. You become its creator, owner and first Manager. You need permission to author Exams in that Academic Unit. Send an Idempotency-Key. Retrying with the same key and body returns the original result. Reusing the key with a different body is rejected as a conflict.
+        Creates an Exam in the Academic Unit you choose, together with its first Draft. You become its creator,
+        owner and first Manager. You need permission to author Exams in that Academic Unit. Send an
+        Idempotency-Key. Retrying with the same key and body returns the original result. Reusing the key with a
+        different body is rejected as a conflict.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -172,34 +186,35 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
       requestBody:
-        $ref: '#/components/requestBodies/CreateExam'
+        $ref: "#/components/requestBodies/CreateExam"
       responses:
         "201":
-          $ref: '#/components/responses/ExamCreated'
+          $ref: "#/components/responses/ExamCreated"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "409":
-          $ref: '#/components/responses/Conflict'
+          $ref: "#/components/responses/Conflict"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/exams/{exam_id}:
     parameters:
-      - $ref: '#/components/parameters/ExamID'
+      - $ref: "#/components/parameters/ExamID"
     get:
       operationId: getExam
       summary: Get one bounded Exam authoring view
       description: >-
-        Returns the Exam, its current Draft, its owner and how many Managers it has. You must currently be allowed to manage the Exam. Published Revisions can't change, and you read them through the Revision operations.
+        Returns the Exam, its current Draft, its owner and how many Managers it has. You must currently be allowed
+        to manage the Exam. Published Revisions can't change, and you read them through the Revision operations.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -224,19 +239,19 @@ paths:
         - sessionCookie: []
       responses:
         "200":
-          $ref: '#/components/responses/ExamOK'
+          $ref: "#/components/responses/ExamOK"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   requestBodies:
     CreateExam:
@@ -244,7 +259,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/CreateExamRequest'
+            $ref: "#/components/schemas/CreateExamRequest"
           example:
             academic_unit_id: q4nzk1xwe7rbdg3cyjoth5mupa
             title: Algorithms — final examination
@@ -256,15 +271,15 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ExamResponse'
+            $ref: "#/components/schemas/ExamResponse"
           example:
             exam:
               id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
               academic_unit_id: q4nzk1xwe7rbdg3cyjoth5mupa
               creator_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
               owner_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
-              created_at: '2026-07-20T10:00:00Z'
-              updated_at: '2026-07-20T10:00:00Z'
+              created_at: "2026-07-20T10:00:00Z"
+              updated_at: "2026-07-20T10:00:00Z"
               revision: 1
             draft:
               exam_id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
@@ -275,17 +290,50 @@ components:
                   registry_digest: sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d
                   baseline_id: desktop_candidate
                   families:
-                    - {allowed_application_ids: [], id: process_application, mode: disabled, outcome: flag}
-                    - {id: interactive_session, mode: disabled, outcome: flag}
-                    - {id: clipboard, mode: disabled, observe_os_clipboard_changes: false, outcome: flag, strategy: disabled}
-                    - {candidate_print_commands: not_applied, id: printing, mode: disabled, monitored_spooler: not_required, outcome: flag}
-                    - {enabled_sub_capabilities: [], id: removable_storage, mode: disabled, outcome: flag}
-                    - {id: virtualization, mode: disabled, outcome: flag, rule: not_applied}
-                    - {enabled_sub_capabilities: [], id: network_configuration, mode: disabled, outcome: flag}
-                    - {concurrent_use_check: not_required, id: camera, mode: disabled, outcome: flag, require_ready: false}
-                    - {concurrent_use_check: not_required, id: microphone, mode: disabled, outcome: flag, require_ready: false}
-                    - {id: external_capture, mode: disabled, outcome: flag}
-                  screen_recording: {enabled: false}
+                    - allowed_application_ids: []
+                      id: process_application
+                      mode: disabled
+                      outcome: flag
+                    - id: interactive_session
+                      mode: disabled
+                      outcome: flag
+                    - id: clipboard
+                      mode: disabled
+                      observe_os_clipboard_changes: false
+                      outcome: flag
+                      strategy: disabled
+                    - candidate_print_commands: not_applied
+                      id: printing
+                      mode: disabled
+                      monitored_spooler: not_required
+                      outcome: flag
+                    - enabled_sub_capabilities: []
+                      id: removable_storage
+                      mode: disabled
+                      outcome: flag
+                    - id: virtualization
+                      mode: disabled
+                      outcome: flag
+                      rule: not_applied
+                    - enabled_sub_capabilities: []
+                      id: network_configuration
+                      mode: disabled
+                      outcome: flag
+                    - concurrent_use_check: not_required
+                      id: camera
+                      mode: disabled
+                      outcome: flag
+                      require_ready: false
+                    - concurrent_use_check: not_required
+                      id: microphone
+                      mode: disabled
+                      outcome: flag
+                      require_ready: false
+                    - id: external_capture
+                      mode: disabled
+                      outcome: flag
+                  screen_recording:
+                    enabled: false
                 connection_loss:
                   outcome: flag_and_suspend
                 focus_loss:
@@ -294,7 +342,26 @@ components:
                   incident_count: 3
                   window_milliseconds: 300000
                   outcome: flag_and_warn
-                execution: {enabled: false, record_input: false, terminals: 0}
+                execution:
+                  enabled: false
+                  record_input: false
+                  terminals: 0
+                assistant:
+                  enabled: false
+                  profile_id: ""
+                  level: "off"
+                  approvals: always_ask
+                  instructions: ""
+                  concepts_to_avoid: []
+                  budgets:
+                    turns: 0
+                    input_tokens: 0
+                    output_tokens: 0
+                    tool_calls: 0
+                    commands: 0
+                    command_seconds: 0
+                    command_timeout_seconds: 0
+                  code_line_budget: 10
               browser_policy:
                 enabled: false
               capacity:
@@ -303,7 +370,7 @@ components:
                 workspace_maximum_entries: 500
                 workspace_maximum_file_bytes: 10485760
                 workspace_maximum_total_bytes: 52428800
-              updated_at: '2026-07-20T10:00:00Z'
+              updated_at: "2026-07-20T10:00:00Z"
               revision: 1
               resource_count: 0
               has_starter_workspace: false
@@ -313,11 +380,11 @@ components:
       description: One page of the Exams you can see.
       headers:
         Cache-Control:
-          $ref: '#/components/headers/NoStore'
+          $ref: "#/components/headers/NoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ExamListResponse'
+            $ref: "#/components/schemas/ExamListResponse"
           example:
             items:
               - id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
@@ -326,7 +393,7 @@ components:
                 creator_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
                 owner_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
                 title: Algorithms — final examination
-                updated_at: '2026-08-03T14:20:00Z'
+                updated_at: "2026-08-03T14:20:00Z"
                 revision: 3
                 manager_count: 2
                 sitting_count: 2
@@ -336,11 +403,12 @@ components:
                   exam_revision_id: t1oekp5dqa7nwrzhcx3by9mug4
                   class_id: z3ymh7rnet5ugo1bwkqxd9ca8p
                   class_display_name: Algorithms, autumn 2026
-                  scheduled_start_at: '2026-08-14T09:00:00Z'
-                  scheduled_end_at: '2026-08-14T12:00:00Z'
+                  scheduled_start_at: "2026-08-14T09:00:00Z"
+                  scheduled_end_at: "2026-08-14T12:00:00Z"
                   state: open
                   revision: 4
-            next_cursor: eyJ1cGRhdGVkX2F0IjoiMjAyNi0wOC0wM1QxNDoyMDowMFoiLCJleGFtX2lkIjoiOHVrM2ZoN3N3MW14cWRidDV5cmNnNG96OWEifQ
+            next_cursor: >-
+              eyJ1cGRhdGVkX2F0IjoiMjAyNi0wOC0wM1QxNDoyMDowMFoiLCJleGFtX2lkIjoiOHVrM2ZoN3N3MW14cWRidDV5cmNnNG96OWEifQ
   schemas:
     CreateExamRequest:
       type: object
@@ -350,7 +418,7 @@ components:
         - title
       properties:
         academic_unit_id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The Academic Unit that will own the Exam.
         title:
           type: string
@@ -359,7 +427,9 @@ components:
           description: The Draft title, up to 200 characters. Leading and trailing spaces are removed.
         instructions_markdown:
           type: string
-          description: Optional instructions for candidates, as Markdown. Up to 65,536 bytes of UTF-8. Leave it out or send an empty string for no instructions.
+          description: >-
+            Optional instructions for candidates, as Markdown. Up to 65,536 bytes of UTF-8. Leave it out or send an
+            empty string for no instructions.
     ExamListResponse:
       type: object
       additionalProperties: false
@@ -370,13 +440,15 @@ components:
           type: array
           description: The Exams on this page, most recently updated first.
           items:
-            $ref: '#/components/schemas/ExamSummaryResponse'
+            $ref: "#/components/schemas/ExamSummaryResponse"
         next_cursor:
           type: string
           description: Send this back as cursor to get the next page. Omitted on the last page.
     ExamSummaryResponse:
       type: object
-      description: A short summary of one Exam for lists. It leaves out the instructions, policies, Resources and Starter Workspace.
+      description: >-
+        A short summary of one Exam for lists. It leaves out the instructions, policies, Resources and Starter
+        Workspace.
       additionalProperties: false
       required:
         - id
@@ -393,20 +465,20 @@ components:
         - sitting_summary
       properties:
         id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The Exam ID.
         academic_unit_id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The Academic Unit that owns the Exam.
         academic_unit_display_name:
           type: string
           minLength: 1
           description: The name of the owning Academic Unit.
         creator_user_id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The User who created the Exam.
         owner_user_id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The User who currently owns the Exam.
         title:
           type: string
@@ -425,7 +497,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: The Exam's current revision number. Send it as expected_revision when you archive the Exam or change its Managers or owner.
+          description: >-
+            The Exam's current revision number. Send it as expected_revision when you archive the Exam or change
+            its Managers or owner.
         manager_count:
           type: integer
           minimum: 1
@@ -437,14 +511,16 @@ components:
         matching_sitting_count:
           type: integer
           minimum: 0
-          description: How many of the Exam's Sittings match the Sitting filters. Without Sitting filters, this equals sitting_count.
+          description: >-
+            How many of the Exam's Sittings match the Sitting filters. Without Sitting filters, this equals
+            sitting_count.
         sitting_summary:
           type:
             - object
             - "null"
           description: >-
-            The most relevant matching Sitting. Paused, closing and open Sittings come first, then the next scheduled
-            one, then the most recently ended closed or canceled one. Null when no Sitting matches.
+            The most relevant matching Sitting. Paused, closing and open Sittings come first, then the next
+            scheduled one, then the most recently ended closed or canceled one. Null when no Sitting matches.
           additionalProperties: false
           required:
             - id
@@ -457,13 +533,13 @@ components:
             - revision
           properties:
             id:
-              $ref: '#/components/schemas/ID'
+              $ref: "#/components/schemas/ID"
               description: The Sitting ID.
             exam_revision_id:
-              $ref: '#/components/schemas/ID'
+              $ref: "#/components/schemas/ID"
               description: The published Revision the Sitting delivers.
             class_id:
-              $ref: '#/components/schemas/ID'
+              $ref: "#/components/schemas/ID"
               description: The Class taking the Sitting.
             class_display_name:
               type: string
@@ -478,7 +554,7 @@ components:
               format: date-time
               description: When the Sitting is scheduled to end.
             state:
-              $ref: '#/components/schemas/ExamSittingState'
+              $ref: "#/components/schemas/ExamSittingState"
               description: Where the Sitting is in its lifecycle.
             revision:
               type: integer

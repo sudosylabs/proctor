@@ -39,6 +39,8 @@ func IsValidWorkspaceSHA256(value string) bool {
 //     also requires current class membership, an open sitting before its
 //     deadline, an active attempt, the exact active unexpired participation
 //     generation and no pending workspace correction acknowledgement.
+//   - ExamAttemptWorkspaceAssistantAccess: the same live editor proof, with
+//     the recorded conversation, turn and call as its author reference.
 //   - ExamAttemptWorkspaceEnvironmentAccess: the attempt's execution
 //     environment, proved by its owner's current runtime lease. It requires
 //     only that lease, the current incarnation and no submission, so the
@@ -85,6 +87,21 @@ func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAuthor() model.AttemptWorkspa
 }
 
 func (ExamAttemptWorkspaceEditorAccess) examAttemptWorkspaceWriteAccess() {}
+
+// ExamAttemptWorkspaceAssistantAccess requires the candidate's live editor
+// proof; the conversation identifiers only attribute the write, never grant it.
+type ExamAttemptWorkspaceAssistantAccess struct {
+	ExamAttemptWorkspaceEditorAccess
+	ConversationID model.AssistantConversationID
+	TurnID         model.AssistantTurnID
+	CallID         model.AssistantCallID
+}
+
+func (a ExamAttemptWorkspaceAssistantAccess) WorkspaceAuthor() model.AttemptWorkspaceAuthor {
+	return model.NewAssistantWorkspaceAuthor(a.ConversationID, a.TurnID, a.CallID)
+}
+
+func (ExamAttemptWorkspaceAssistantAccess) examAttemptWorkspaceWriteAccess() {}
 
 // ExamAttemptWorkspaceEnvironmentAccess is the selector the owner of an
 // attempt's execution environment writes and reads through. The store

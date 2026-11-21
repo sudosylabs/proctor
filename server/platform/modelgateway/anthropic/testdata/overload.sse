@@ -1,0 +1,5 @@
+event: message_start
+data: {"type":"message_start","message":{"usage":{"input_tokens":10,"cache_read_input_tokens":3,"cache_creation_input_tokens":2,"output_tokens":0}}}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"untrusted synthetic detail"}}

@@ -187,7 +187,7 @@ func (s sealingSubmissionStore) SealForSittingClose(_ context.Context, seal *sto
 	s.stores.seals = append(s.stores.seals, seal)
 	target := seal.Target
 	return &store.ExamSubmissionAutomaticSealResult{ExamSubmissionSealResult: store.ExamSubmissionSealResult{
-		Receipt: store.ExamSubmissionReceipt{SubmissionID: seal.SubmissionID, ReceiptCode: seal.ReceiptCode, AttemptID: target.AttemptID,
+		Receipt: store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, SubmissionID: seal.SubmissionID, ReceiptCode: seal.ReceiptCode, AttemptID: target.AttemptID,
 			ExamRevisionID: target.CurrentRevisionID, State: model.ExamAttemptSubmitted,
 			ManifestDigest: "0000000000000000000000000000000000000000000000000000000000000000", SubmittedAt: seal.AuditAt},
 		ExamID: target.ExamID, SittingID: target.SittingID, ClassID: target.ClassID, CandidateUserID: target.CandidateUserID,

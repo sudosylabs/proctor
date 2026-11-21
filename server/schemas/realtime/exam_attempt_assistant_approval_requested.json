@@ -1,0 +1,48 @@
+{
+  "title": "Assistant approval requested",
+  "description": "A command or edit waits for the candidate's approval. The summary is the command, or the path and new content, cut to 8 KiB. An unanswered request is declined at expires_at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "turn_id",
+    "call_id",
+    "tool",
+    "summary",
+    "truncated",
+    "expires_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "turn_id": {
+      "$ref": "id.json"
+    },
+    "call_id": {
+      "$ref": "id.json"
+    },
+    "tool": {
+      "type": "string",
+      "enum": [
+        "run_command",
+        "apply_edit"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "expires_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

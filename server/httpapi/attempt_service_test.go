@@ -817,7 +817,7 @@ func (s *attemptSubmissionLedger) ResolveSealTarget(_ context.Context, access st
 }
 
 func (s *attemptSubmissionLedger) receipt(id model.SubmissionID, code model.SubmissionReceiptCode, cursor int64, at time.Time) store.ExamSubmissionReceipt {
-	return store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
+	return store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		SubmissionID: id, ReceiptCode: code, AttemptID: s.f.attempt.ID, ExamRevisionID: s.f.attempt.AdmissionRevisionID,
 		State: model.ExamAttemptSubmitted, WorkspaceCursor: cursor, ManifestDigest: s.submission.ManifestDigest, SubmittedAt: at}
 }
@@ -1124,4 +1124,8 @@ func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, record *model.
 		ExamRevision: store.CandidateExamRevisionCapability{AdmissionRevisionID: record.AdmissionRevisionID,
 			CurrentRevisionID: model.NewExamRevisionID()},
 		Departure: store.CandidateDepartureCapability{Allowed: false, Reason: "attempt_in_progress"}}
+}
+
+func (s *attemptLedger) ListCandidateStarterWorkspace(_ context.Context, access store.CandidateAttemptAccess, _ int) ([]store.CandidateStarterWorkspaceFile, error) {
+	return []store.CandidateStarterWorkspaceFile{}, s.prove(access)
 }

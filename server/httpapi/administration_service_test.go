@@ -44,6 +44,7 @@ type administrationFixture struct {
 	audits            *administrationAuditStore
 	accessPolicies    *administrationAccessPolicyStore
 	retentionPolicies *administrationRetentionPolicyStore
+	assistantProfiles *httpAssistantProfileStore
 	retention         *administrationRetentionStore
 	publisher         *realtimetest.Publisher
 	service           *administration.Service
@@ -74,6 +75,7 @@ func newAdministrationFixture(t *testing.T, grants ...accesstest.Grant) *adminis
 		audits:            &administrationAuditStore{},
 		accessPolicies:    &administrationAccessPolicyStore{},
 		retentionPolicies: &administrationRetentionPolicyStore{},
+		assistantProfiles: &httpAssistantProfileStore{},
 		retention:         &administrationRetentionStore{},
 		publisher:         &realtimetest.Publisher{},
 	}
@@ -93,6 +95,7 @@ func newAdministrationFixture(t *testing.T, grants ...accesstest.Grant) *adminis
 		PasswordMinimumLength:   12,
 		RecentAuthenticationTTL: administrationRecentAuthentication,
 		Sessions:                administrationSessions(),
+		AssistantProviders:      []string{"campus"},
 		Now:                     time.Now,
 	})
 	require.NoError(t, err)
@@ -735,3 +738,9 @@ func administrationStrongPrincipal() model.Principal {
 func administrationAccessPolicyGrant(userID model.UserID) accesstest.Grant {
 	return institutionWide(userID, model.ActionAccessPolicyView, model.ActionAccessPolicyManage)
 }
+
+func (c administrationCatalog) AssistantProfile() store.AssistantProfileStore {
+	return c.fixture.assistantProfiles
+}
+
+func (c administrationCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }

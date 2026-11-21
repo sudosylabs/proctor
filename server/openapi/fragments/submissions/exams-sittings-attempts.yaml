@@ -304,6 +304,7 @@ components:
             state: submitted
             workspace_cursor: 18
             manifest_digest: 11ae3038c1fe627502b6596d5598808bb5339e26b1bfed1924adec0458cc1b26
+            assistant_transcript_digest: sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
             submitted_at: '2026-12-14T10:48:09Z'
             browser_activity:
               state: not_applicable
@@ -330,6 +331,7 @@ components:
             manifest_schema_version: 1
             workspace_cursor: 18
             manifest_digest: 11ae3038c1fe627502b6596d5598808bb5339e26b1bfed1924adec0458cc1b26
+            assistant_transcript_digest: sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
             manifest_entry_count: 3
             manifest_total_file_bytes: 2841
             final_focus_loss_sequence: 3
@@ -482,6 +484,10 @@ components:
         manifest_digest:
           $ref: '#/components/schemas/SHA256'
           description: The SHA-256 digest of the sealed manifest, as lowercase hex.
+        assistant_transcript_digest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+          description: The digest on the sealed receipt. Omitted after transcript retirement.
         manifest_entry_count:
           type: integer
           minimum: 0

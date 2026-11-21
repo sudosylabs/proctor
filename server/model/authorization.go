@@ -95,6 +95,7 @@ const (
 	// ActionEnvironmentProfileManage views, creates and retires the profiles
 	// exams' execution environments are created from.
 	ActionEnvironmentProfileManage Action = "environment_profile.manage"
+	ActionAssistantProfileManage   Action = "assistant_profile.manage"
 	ActionRetentionPolicyView      Action = "retention_policy.view"
 	ActionRetentionPolicyManage    Action = "retention_policy.manage"
 	ActionRetentionCleanupManage   Action = "retention_cleanup.manage"
@@ -670,6 +671,13 @@ var actionDefinitions = map[Action]ActionDefinition{
 	},
 	ActionEnvironmentProfileManage: {
 		Action:                       ActionEnvironmentProfileManage,
+		ResourceType:                 ResourceInstitution,
+		InheritInstitutionScope:      true,
+		PersonalAccessTokenForbidden: true,
+		SystemAdministratorOnly:      true,
+	},
+	ActionAssistantProfileManage: {
+		Action:                       ActionAssistantProfileManage,
 		ResourceType:                 ResourceInstitution,
 		InheritInstitutionScope:      true,
 		PersonalAccessTokenForbidden: true,

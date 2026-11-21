@@ -3249,6 +3249,128 @@
         },
         "description": "One page of the User's Affiliations."
       },
+      "AssistantProfileListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "budgets": {
+                    "command_seconds": 0,
+                    "command_timeout_seconds": 60,
+                    "commands": 0,
+                    "input_tokens": 100000,
+                    "output_tokens": 10000,
+                    "tool_calls": 0,
+                    "turns": 100
+                  },
+                  "created_at": "2026-01-01T12:00:00Z",
+                  "data_handling": "self_hosted",
+                  "display_name": "Campus tutor",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "max_level": "tutor",
+                  "model": "teaching-model",
+                  "name": "campus-tutor",
+                  "provider": "campus",
+                  "pseudonymize": true,
+                  "revision": 1
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AssistantProfileListResponse"
+            }
+          }
+        },
+        "description": "The assistant profiles.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "AssistantProfileOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "budgets": {
+                "command_seconds": 0,
+                "command_timeout_seconds": 60,
+                "commands": 0,
+                "input_tokens": 100000,
+                "output_tokens": 10000,
+                "tool_calls": 0,
+                "turns": 100
+              },
+              "created_at": "2026-01-01T12:00:00Z",
+              "data_handling": "self_hosted",
+              "display_name": "Campus tutor",
+              "id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "max_level": "tutor",
+              "model": "teaching-model",
+              "name": "campus-tutor",
+              "provider": "campus",
+              "pseudonymize": true,
+              "revision": 1
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AssistantProfileResponse"
+            }
+          }
+        },
+        "description": "The assistant profile.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "AssistantTranscript": {
+        "content": {
+          "application/json": {
+            "example": {
+              "inventory": {
+                "bytes": 312,
+                "digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "gaps": 0,
+                "records": 1
+              },
+              "items": [
+                {
+                  "created_at": "2026-08-01T09:30:00Z",
+                  "gap": false,
+                  "sequence": 1,
+                  "turn": {
+                    "conversation_id": "8kpous3h9nfemqtwz47ydgjcx1",
+                    "final": true,
+                    "model": "",
+                    "role": "candidate",
+                    "stop_reason": "",
+                    "text": "Why does my loop never end?",
+                    "turn_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                    "usage": {
+                      "cache_read": 0,
+                      "cache_write": 0,
+                      "estimated": false,
+                      "input": 0,
+                      "output": 0
+                    }
+                  }
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AssistantTranscriptResponse"
+            }
+          }
+        },
+        "description": "One page of an assistant transcript and the inventory that binds all of it",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "AttemptEvidenceListOK": {
         "content": {
           "application/json": {
@@ -5367,6 +5489,24 @@
                 "has_starter_workspace": false,
                 "instructions_markdown": "Read every question before you begin.",
                 "policy": {
+                  "assistant": {
+                    "approvals": "always_ask",
+                    "budgets": {
+                      "command_seconds": 0,
+                      "command_timeout_seconds": 0,
+                      "commands": 0,
+                      "input_tokens": 0,
+                      "output_tokens": 0,
+                      "tool_calls": 0,
+                      "turns": 0
+                    },
+                    "code_line_budget": 10,
+                    "concepts_to_avoid": [],
+                    "enabled": false,
+                    "instructions": "",
+                    "level": "off",
+                    "profile_id": ""
+                  },
                   "connection_loss": {
                     "outcome": "flag_and_suspend"
                   },
@@ -6038,6 +6178,24 @@
                 "has_starter_workspace": true,
                 "instructions_markdown": "Read every question before you begin.\n\nYou may use the formula sheet in Resources.",
                 "policy": {
+                  "assistant": {
+                    "approvals": "always_ask",
+                    "budgets": {
+                      "command_seconds": 0,
+                      "command_timeout_seconds": 0,
+                      "commands": 0,
+                      "input_tokens": 0,
+                      "output_tokens": 0,
+                      "tool_calls": 0,
+                      "turns": 0
+                    },
+                    "code_line_budget": 10,
+                    "concepts_to_avoid": [],
+                    "enabled": false,
+                    "instructions": "",
+                    "level": "off",
+                    "profile_id": ""
+                  },
                   "connection_loss": {
                     "outcome": "flag_and_suspend"
                   },
@@ -6381,7 +6539,7 @@
               "id": "t1oekp5dqa7nwrzhcx3by9mug4",
               "number": 2,
               "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-              "policy_schema_version": 1,
+              "policy_schema_version": 2,
               "publication_kind": "standard",
               "published_at": "2026-08-01T16:45:00Z",
               "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -6423,7 +6581,7 @@
                   "id": "t1oekp5dqa7nwrzhcx3by9mug4",
                   "number": 2,
                   "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-                  "policy_schema_version": 1,
+                  "policy_schema_version": 2,
                   "publication_kind": "standard",
                   "published_at": "2026-08-01T16:45:00Z",
                   "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -6466,7 +6624,7 @@
               "id": "t1oekp5dqa7nwrzhcx3by9mug4",
               "number": 2,
               "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-              "policy_schema_version": 1,
+              "policy_schema_version": 2,
               "publication_kind": "standard",
               "published_at": "2026-08-01T16:45:00Z",
               "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -6971,6 +7129,7 @@
         "content": {
           "application/json": {
             "example": {
+              "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
               "browser_activity": {
                 "incomplete_source_count": 0,
                 "inventory_revision": 1,
@@ -7055,6 +7214,7 @@
         "content": {
           "application/json": {
             "example": {
+              "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
               "browser_activity": {
                 "incomplete_source_count": 0,
                 "inventory_revision": 1,
@@ -7087,6 +7247,7 @@
         "content": {
           "application/json": {
             "example": {
+              "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
               "browser_activity": {
                 "incomplete_source_count": 0,
                 "inventory_revision": 1,
@@ -12452,6 +12613,825 @@
         ],
         "type": "object"
       },
+      "AssistantBudgets": {
+        "additionalProperties": false,
+        "properties": {
+          "command_seconds": {
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "command_timeout_seconds": {
+            "format": "int64",
+            "maximum": 600,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "commands": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_tokens": {
+            "format": "int64",
+            "maximum": 100000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "output_tokens": {
+            "format": "int64",
+            "maximum": 10000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "tool_calls": {
+            "format": "int64",
+            "maximum": 20000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turns": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turns",
+          "input_tokens",
+          "output_tokens",
+          "tool_calls",
+          "commands",
+          "command_seconds",
+          "command_timeout_seconds"
+        ],
+        "type": "object"
+      },
+      "AssistantCall": {
+        "additionalProperties": false,
+        "description": "One phase of a tool call: requested, decision (an approval answer), reserved (a command slot), completed, or applied (a Pair proposal matched by a candidate batch). A command's reservation names its assistant:N process tag before the process starts. Its completion carries the exit code; the Workspace journal names the call in the author of every change an Agent edit made.",
+        "properties": {
+          "approval": {
+            "enum": [
+              "",
+              "pending",
+              "accept",
+              "decline",
+              "auto",
+              "expired"
+            ],
+            "type": "string"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "description": "The arguments as the model sent them, on the requested phase.",
+            "type": "object"
+          },
+          "call_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "conversation_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "duration_milliseconds": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "outcome": {
+            "enum": [
+              "",
+              "ok",
+              "error",
+              "declined",
+              "canceled",
+              "proposed",
+              "applied",
+              "rewrite",
+              "replaced"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "requested",
+              "reserved",
+              "decision",
+              "completed",
+              "applied"
+            ],
+            "type": "string"
+          },
+          "process_tag": {
+            "type": "string"
+          },
+          "result": {
+            "description": "Bounded tool result text. On a completed propose_edit call with outcome proposed, this is a JSON object serialized as text, with path (workspace path), base_content_version (the expected current file version, or an empty string for a new file), sha256 (lowercase hexadecimal SHA-256 of the full replacement), size_bytes (replacement UTF-8 byte count), and diff (a complete unified replacement diff). A matching ordinary candidate batch adds an applied phase to this call; the workspace write remains authored by the candidate. Other tools return text, and an applied phase contains a matching marker rather than the proposal object.",
+            "type": "string"
+          },
+          "tool": {
+            "enum": [
+              "list_files",
+              "read_file",
+              "search",
+              "read_terminal",
+              "run_command",
+              "propose_edit",
+              "apply_edit",
+              "output_check"
+            ],
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "turn_id",
+          "call_id",
+          "tool",
+          "phase",
+          "arguments",
+          "result",
+          "outcome",
+          "duration_milliseconds",
+          "approval",
+          "process_tag",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "AssistantInventory": {
+        "additionalProperties": false,
+        "description": "The transcript's record and byte counts, its gaps, and a SHA-256 digest chained over every record in order.",
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "gaps": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "records": {
+            "format": "int64",
+            "maximum": 20000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records",
+          "bytes",
+          "gaps",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "AssistantPolicy": {
+        "additionalProperties": false,
+        "description": "Frozen assistant allowances. Instructions and avoided concepts are visible to managers only. Only Tutor is currently available.",
+        "properties": {
+          "approvals": {
+            "enum": [
+              "always_ask",
+              "auto_within_level"
+            ],
+            "type": "string"
+          },
+          "budgets": {
+            "$ref": "#/components/schemas/AssistantPolicyBudgets"
+          },
+          "code_line_budget": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "concepts_to_avoid": {
+            "items": {
+              "maxLength": 80,
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "instructions": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "off",
+              "tutor",
+              "reviewer",
+              "pair",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "profile_id": {
+            "description": "An assistant profile ID when enabled; empty when disabled.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "profile_id",
+          "level",
+          "approvals",
+          "instructions",
+          "concepts_to_avoid",
+          "budgets",
+          "code_line_budget"
+        ],
+        "type": "object"
+      },
+      "AssistantPolicyBudgets": {
+        "additionalProperties": false,
+        "properties": {
+          "command_seconds": {
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "command_timeout_seconds": {
+            "format": "int64",
+            "maximum": 600,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "commands": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_tokens": {
+            "format": "int64",
+            "maximum": 100000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output_tokens": {
+            "format": "int64",
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tool_calls": {
+            "format": "int64",
+            "maximum": 20000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turns": {
+            "format": "int64",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turns",
+          "input_tokens",
+          "output_tokens",
+          "tool_calls",
+          "commands",
+          "command_seconds",
+          "command_timeout_seconds"
+        ],
+        "type": "object"
+      },
+      "AssistantProfileListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantProfileResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "AssistantProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "budgets": {
+            "$ref": "#/components/schemas/AssistantBudgets"
+          },
+          "data_handling": {
+            "enum": [
+              "self_hosted",
+              "zero_retention",
+              "standard_30d",
+              "other"
+            ],
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "max_level": {
+            "enum": [
+              "tutor",
+              "reviewer",
+              "pair",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "provider": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "pseudonymize": {
+            "default": true,
+            "description": "Defaults to true when omitted or null. Candidate identity is never sent to a provider.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "display_name",
+          "provider",
+          "model",
+          "max_level",
+          "budgets",
+          "data_handling"
+        ],
+        "type": "object"
+      },
+      "AssistantProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "budgets": {
+            "$ref": "#/components/schemas/AssistantBudgets"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "data_handling": {
+            "enum": [
+              "self_hosted",
+              "zero_retention",
+              "standard_30d",
+              "other"
+            ],
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "max_level": {
+            "enum": [
+              "tutor",
+              "reviewer",
+              "pair",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "provider": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "pseudonymize": {
+            "default": true,
+            "type": "boolean"
+          },
+          "retired_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "display_name",
+          "provider",
+          "model",
+          "max_level",
+          "budgets",
+          "data_handling",
+          "pseudonymize",
+          "created_at",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "AssistantProfileUsageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "command_milliseconds": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "commands": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_tokens": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output_tokens": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tool_calls": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turns": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attempts",
+          "turns",
+          "input_tokens",
+          "output_tokens",
+          "tool_calls",
+          "commands",
+          "command_milliseconds"
+        ],
+        "type": "object"
+      },
+      "AssistantRecord": {
+        "additionalProperties": false,
+        "description": "One transcript record, a turn or a tool call. Gap marks a record the server wrote for a turn that ended abnormally, such as at a seal or a provider failure.",
+        "properties": {
+          "call": {
+            "$ref": "#/components/schemas/AssistantCall"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "gap": {
+            "type": "boolean"
+          },
+          "sequence": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/AssistantTurn"
+          }
+        },
+        "required": [
+          "sequence",
+          "created_at",
+          "gap"
+        ],
+        "type": "object"
+      },
+      "AssistantTranscriptExportResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/AssistantInventory"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantRecord"
+            },
+            "maxItems": 20000,
+            "type": "array"
+          }
+        },
+        "required": [
+          "exam_attempt_id",
+          "records",
+          "inventory"
+        ],
+        "type": "object"
+      },
+      "AssistantTranscriptResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "inventory": {
+            "$ref": "#/components/schemas/AssistantInventory"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantRecord"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "description": "Token for the next page. Send it back unchanged as `cursor`, and do not parse it. Omitted on the last page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "inventory"
+        ],
+        "type": "object"
+      },
+      "AssistantTurn": {
+        "additionalProperties": false,
+        "description": "A candidate message, or part of a reply. A reply's text and its end are separate records; the final record carries the stop reason and the turn's usage, which includes any rewrite.",
+        "properties": {
+          "conversation_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "final": {
+            "type": "boolean"
+          },
+          "model": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "candidate",
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "stop_reason": {
+            "enum": [
+              "",
+              "end_turn",
+              "tool_use",
+              "max_tokens",
+              "stop_sequence",
+              "refusal",
+              "canceled",
+              "sealed",
+              "access_lost",
+              "budget_exhausted",
+              "rate_limited",
+              "overloaded",
+              "invalid",
+              "context_too_long",
+              "unavailable",
+              "lease_expired"
+            ],
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AssistantUsage"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "turn_id",
+          "role",
+          "text",
+          "model",
+          "usage",
+          "final",
+          "stop_reason"
+        ],
+        "type": "object"
+      },
+      "AssistantTurnStartedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "replayed": {
+            "description": "Whether this answers a retry of an earlier send.",
+            "type": "boolean"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "turn_id",
+          "replayed"
+        ],
+        "type": "object"
+      },
+      "AssistantUsage": {
+        "additionalProperties": false,
+        "description": "Tokens a turn used. Estimated marks a figure the server estimated because the provider's count was lost.",
+        "properties": {
+          "cache_read": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cache_write": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimated": {
+            "type": "boolean"
+          },
+          "input": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input",
+          "cache_read",
+          "cache_write",
+          "output",
+          "estimated"
+        ],
+        "type": "object"
+      },
+      "AssistantUsageSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "approved": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "commands": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "declined": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "edits_applied": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "edits_proposed": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "estimated": {
+            "type": "boolean"
+          },
+          "expired": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "gaps": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_tokens": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "messages": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output_replaced": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output_rewritten": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output_tokens": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "replies": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tools": {
+            "additionalProperties": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "description": "Calls by tool name.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "messages",
+          "replies",
+          "input_tokens",
+          "output_tokens",
+          "estimated",
+          "tools",
+          "commands",
+          "edits_proposed",
+          "edits_applied",
+          "approved",
+          "declined",
+          "expired",
+          "output_rewritten",
+          "output_replaced",
+          "gaps"
+        ],
+        "type": "object"
+      },
       "AttemptConfigurationCandidate": {
         "additionalProperties": false,
         "description": "Sent as `initial_configuration` when Proctor Desktop connects to an Exam Attempt over the WebSocket, so no HTTP operation uses it. A complete proposed Attempt Configuration, at most 16 KiB once encoded. At first admission the server checks the acknowledged User Settings revision, the exact Desktop build and target, the packaged settings registry and manifest, and that every item is safe for candidates. Values out of range are rejected, not adjusted. The digest of the fixed configuration covers this whole object, including where it came from.",
@@ -12810,6 +13790,7 @@
           "academic_unit.view",
           "access_policy.manage",
           "access_policy.view",
+          "assistant_profile.manage",
           "audit.view",
           "authentication.administrator_mfa_reset",
           "authentication.administrator_recovery",
@@ -16495,6 +17476,24 @@
         ],
         "type": "object"
       },
+      "ConfigureExamDraftAssistantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assistant": {
+            "$ref": "#/components/schemas/AssistantPolicy"
+          },
+          "expected_revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "assistant"
+        ],
+        "type": "object"
+      },
       "ConfigureExamDraftBrowserPolicyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -17354,6 +18353,22 @@
           "last_activity_at",
           "idle_expires_at",
           "expires_at"
+        ],
+        "type": "object"
+      },
+      "DecideAssistantApprovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "accept",
+              "decline"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
         ],
         "type": "object"
       },
@@ -20019,6 +21034,11 @@
           "affiliation.conflict",
           "affiliation.invalid",
           "affiliation.student_has_active_enrollment",
+          "assistant_profile.invalid",
+          "assistant_profile.limit_reached",
+          "assistant_profile.name_in_use",
+          "assistant_profile.not_found",
+          "assistant_profile.unavailable",
           "audit.internal",
           "audit.query.invalid",
           "audit.unavailable",
@@ -20105,7 +21125,16 @@
           "environment_profile.not_found",
           "environment_profile.unavailable",
           "exam.archived",
+          "exam.assistant.disabled",
+          "exam.assistant.profile_unusable",
           "exam.attempt.already_connected",
+          "exam.attempt.assistant_approval_conflict",
+          "exam.attempt.assistant_approval_not_found",
+          "exam.attempt.assistant_budget_exhausted",
+          "exam.attempt.assistant_busy",
+          "exam.attempt.assistant_disabled",
+          "exam.attempt.assistant_turn_not_found",
+          "exam.attempt.assistant_unavailable",
           "exam.attempt.browser_activity_conflict",
           "exam.attempt.configuration_frozen",
           "exam.attempt.configuration_required",
@@ -21723,6 +22752,9 @@
         "additionalProperties": false,
         "description": "The integrity rules for an Attempt.",
         "properties": {
+          "assistant": {
+            "$ref": "#/components/schemas/AssistantPolicy"
+          },
           "connection_loss": {
             "$ref": "#/components/schemas/ConnectionLossPolicy",
             "description": "What happens when the server loses its connection to an Attempt."
@@ -21744,7 +22776,8 @@
           "native",
           "connection_loss",
           "focus_loss",
-          "execution"
+          "execution",
+          "assistant"
         ],
         "type": "object"
       },
@@ -22154,8 +23187,8 @@
             "description": "The SHA-256 digest of the Revision's integrity policy, as lowercase hex. Two Revisions with the same policy have the same digest."
           },
           "policy_schema_version": {
-            "const": 1,
-            "description": "The version of the policy format the Revision was saved in. Always 1 today.",
+            "const": 2,
+            "description": "The version of the policy format the Revision was saved in. Always 2 today.",
             "type": "integer"
           },
           "publication_kind": {
@@ -23049,6 +24082,11 @@
         "additionalProperties": false,
         "description": "A summary of one sealed Submission, without file contents or integrity evidence. When the Institution's retention policy has retired the integrity data, the summary gives the retirement time and leaves out the focus-loss and unresolved counts. The submitted work stays available.",
         "properties": {
+          "assistant_transcript_digest": {
+            "description": "The digest on the sealed receipt. Omitted after transcript retirement.",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "type": "string"
+          },
           "browser_activity": {
             "$ref": "#/components/schemas/BrowserSubmissionSettlement"
           },
@@ -23305,6 +24343,11 @@
         "additionalProperties": false,
         "description": "The receipt for a sealed Submission. It is safe to show the candidate and is the same every time it is returned.",
         "properties": {
+          "assistant_transcript_digest": {
+            "description": "The digest of the assistant transcript inventory the seal bound, chained over every record in order. An Attempt that never used the assistant has the empty transcript's digest.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
           "browser_activity": {
             "$ref": "#/components/schemas/BrowserSubmissionSettlement"
           },
@@ -23354,6 +24397,7 @@
           "state",
           "workspace_cursor",
           "manifest_digest",
+          "assistant_transcript_digest",
           "submitted_at",
           "browser_activity"
         ],
@@ -32598,6 +33642,21 @@
         ],
         "type": "object"
       },
+      "SendAssistantMessageRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "description": "The message; line breaks and tabs are its only control characters.",
+            "maxLength": 16384,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
       "SequenceRange": {
         "additionalProperties": false,
         "properties": {
@@ -34835,15 +35894,16 @@
         "description": "Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was.",
         "properties": {
           "kind": {
-            "description": "`candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed.",
+            "description": "`candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed. `assistant` acts on the candidate's behalf through a recorded tool call.",
             "enum": [
               "candidate",
-              "environment"
+              "environment",
+              "assistant"
             ],
             "type": "string"
           },
           "ref": {
-            "description": "The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known.",
+            "description": "The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known. For `assistant`, the compact conversation, turn and tool-call IDs, separated by slashes.",
             "maxLength": 96,
             "minLength": 1,
             "type": "string"
@@ -37432,6 +38492,379 @@
           "$ref": "#/components/parameters/AffiliationID"
         }
       ]
+    },
+    "/api/v1/assistant-profiles": {
+      "get": {
+        "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+        "operationId": "listAssistantProfiles",
+        "parameters": [
+          {
+            "description": "Whether retired profiles are listed too.",
+            "in": "query",
+            "name": "include_retired",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AssistantProfileListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the assistant profiles",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "assistant_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "post": {
+        "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+        "operationId": "createAssistantProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budgets": {
+                  "command_seconds": 0,
+                  "command_timeout_seconds": 60,
+                  "commands": 0,
+                  "input_tokens": 100000,
+                  "output_tokens": 10000,
+                  "tool_calls": 0,
+                  "turns": 100
+                },
+                "data_handling": "self_hosted",
+                "display_name": "Campus tutor",
+                "max_level": "tutor",
+                "model": "teaching-model",
+                "name": "campus-tutor",
+                "provider": "campus",
+                "pseudonymize": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AssistantProfileRequest"
+              }
+            }
+          },
+          "description": "The complete profile. Every member is required.",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/AssistantProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create an assistant profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "assistant_profile.invalid",
+          "assistant_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "assistant_profile.name_in_use",
+          "assistant_profile.limit_reached",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/assistant-profiles/{assistant_profile_id}/retire": {
+      "parameters": [
+        {
+          "description": "The assistant profile to retire.",
+          "in": "path",
+          "name": "assistant_profile_id",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ID"
+          }
+        }
+      ],
+      "post": {
+        "description": "System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.",
+        "operationId": "retireAssistantProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AssistantProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Retire an assistant profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/assistant-profiles/ybndrfg8ejkmcpqxot1uwisza3/retire' \\\n  --header 'Authorization: Bearer \u003cinteractive-system-administrator-session\u003e' \\\n  --header 'Idempotency-Key: docs-assistant-profile-retire-001'"
+          }
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "assistant_profile.invalid",
+          "assistant_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "assistant_profile.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/assistant-profiles/{assistant_profile_id}/usage": {
+      "get": {
+        "description": "System administrators read counters for retained attempts, including outstanding reservations. No candidate identity or transcript is returned. Counters fall when histories are retired.",
+        "operationId": "getAssistantProfileUsage",
+        "parameters": [
+          {
+            "description": "The assistant profile to retire.",
+            "in": "path",
+            "name": "assistant_profile_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "attempts": 2,
+                  "command_milliseconds": 1000,
+                  "commands": 1,
+                  "input_tokens": 1000,
+                  "output_tokens": 200,
+                  "tool_calls": 3,
+                  "turns": 4
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantProfileUsageResponse"
+                }
+              }
+            },
+            "description": "Retained aggregate usage, including reservations."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read aggregate assistant profile usage",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "assistant_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "assistant_profile.invalid",
+          "assistant_profile.not_found"
+        ],
+        "x-proctor-idempotency": "none"
+      }
     },
     "/api/v1/audits": {
       "get": {
@@ -41189,6 +42622,506 @@
           "authentication.reauthentication_required"
         ],
         "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/approvals/{call_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "description": "The tool call that waits for the candidate's approval.",
+          "in": "path",
+          "name": "call_id",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ID"
+          }
+        }
+      ],
+      "post": {
+        "description": "Answers an exam_attempt_assistant_approval_requested event. When the Exam asks for approvals, each command and each edit waits for the candidate; an unanswered request is declined after five minutes. The answer is recorded once: a second answer, or one after the expiry, fails with exam.attempt.assistant_approval_conflict.",
+        "operationId": "decideCandidateAssistantApproval",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "decision": "accept"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/DecideAssistantApprovalRequest"
+              }
+            }
+          },
+          "description": "Accept or decline this pending command or edit.",
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The answer was recorded"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Approve or decline an assistant command or edit",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.assistant_unavailable",
+          "exam.attempt.assistant_disabled",
+          "exam.attempt.assistant_approval_not_found",
+          "exam.attempt.assistant_approval_conflict",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "audit.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/export": {
+      "get": {
+        "description": "Downloads the candidate's own sealed assistant transcript and the inventory that verifies it as one JSON attachment. A current candidate Session is required. The download is unavailable before sealing or after retirement.",
+        "operationId": "exportCandidateAssistantTranscript",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTranscriptExportResponse"
+                }
+              }
+            },
+            "description": "The candidate's complete sealed transcript",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              },
+              "Content-Disposition": {
+                "description": "Instructs the client to download the JSON document.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Download the sealed assistant transcript",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.assistant_unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "exam.delivery.metadata_capacity"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/messages": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "Records the candidate's message and starts the assistant's reply, which streams to the candidate's originating session as exam_attempt_assistant_* events and is recorded in the transcript. The answer is 202 with the turn the message started; a retry with the same Idempotency-Key and text returns the same turn without starting another. One turn runs at a time per Attempt: while one runs the request fails with exam.attempt.assistant_busy. The request also fails when the Exam Revision does not offer the assistant, when the installation has it off, and when the Attempt's allowance of turns or tokens is spent. The assistant acts only while the candidate's own access holds: a seal or the end of the participation ends a running turn, which the transcript records.",
+        "operationId": "sendCandidateAssistantMessage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "text": "Why does my loop never end?"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/SendAssistantMessageRequest"
+              }
+            }
+          },
+          "description": "The candidate's message, 1 to 16 KiB of text.",
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "conversation_id": "8kpous3h9nfemqtwz47ydgjcx1",
+                  "replayed": false,
+                  "turn_id": "h9nfemqtwz47ydgjcx1ia56br8"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTurnStartedResponse"
+                }
+              }
+            },
+            "description": "The message was recorded and the reply started",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Ask the assistant",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.assistant_unavailable",
+          "exam.attempt.assistant_disabled",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.attempt.assistant_busy",
+          "exam.attempt.assistant_budget_exhausted",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/turns": {
+      "get": {
+        "description": "Pages the candidate's own assistant transcript in record order: each message, reply, tool call, approval and output check, as recorded. Realtime deltas are hints; this is what a client keeps, and it reloads from here after a dropped socket. It needs only the candidate's Session, so the transcript stays readable after submission. The inventory covers the whole transcript, and at the seal its digest is bound to the Submission.",
+        "operationId": "listCandidateAssistantTranscript",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AssistantTranscript"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the assistant transcript",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.assistant_unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "exam.delivery.metadata_capacity"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/turns/{turn_id}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "description": "The running turn to stop.",
+          "in": "path",
+          "name": "turn_id",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ID"
+          }
+        }
+      ],
+      "post": {
+        "description": "Stops the running turn wherever it runs: the model call ends, any assistant command is killed, and the transcript records the turn as canceled. Tokens already spent stay spent.",
+        "operationId": "cancelCandidateAssistantTurn",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The turn was stopped"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Stop the assistant's turn",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/8kpous3h9nfemqtwz47ydgjcx1/assistant/turns/h9nfemqtwz47ydgjcx1ia56br8/cancel' \\\n  --header 'Authorization: Bearer \u003ctoken\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cconnection-id\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003ccontinuity-credential\u003e'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.assistant_unavailable",
+          "exam.attempt.assistant_disabled",
+          "exam.attempt.assistant_turn_not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "audit.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
       }
     },
     "/api/v1/exam-attempts/{exam_attempt_id}/browser-activity/sources": {
@@ -45399,6 +47332,123 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exams/{exam_id}/draft/assistant": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        }
+      ],
+      "put": {
+        "description": "Replace the assistant policy behind the Draft revision fence. The profile must be active and permit the requested level and budgets. Publication checks installation availability.",
+        "operationId": "configureExamDraftAssistant",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "assistant": {
+                  "approvals": "always_ask",
+                  "budgets": {
+                    "command_seconds": 0,
+                    "command_timeout_seconds": 0,
+                    "commands": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "tool_calls": 0,
+                    "turns": 0
+                  },
+                  "code_line_budget": 10,
+                  "concepts_to_avoid": [],
+                  "enabled": false,
+                  "instructions": "",
+                  "level": "off",
+                  "profile_id": ""
+                },
+                "expected_revision": 4
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureExamDraftAssistantRequest"
+              }
+            }
+          },
+          "description": "The complete replacement assistant policy.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Configure the Draft assistant",
+        "tags": [
+          "Examinations"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.invalid",
+          "exam.archived",
+          "exam.draft.revision_conflict",
+          "exam.draft.no_changes",
+          "exam.assistant.profile_unusable",
+          "exam.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exams/{exam_id}/draft/browser-policy": {
       "parameters": [
         {
@@ -47857,7 +49907,9 @@
           "authentication.dpop.replayed",
           "authentication.dpop.use_nonce",
           "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
+          "authentication.csrf.invalid",
+          "exam.assistant.disabled",
+          "exam.assistant.profile_unusable"
         ],
         "x-proctor-idempotency": "required"
       }
@@ -57172,6 +59224,182 @@
       "parameters": [
         {
           "$ref": "#/components/parameters/StudentProgressionID"
+        }
+      ]
+    },
+    "/api/v1/submissions/{submission_id}/assistant-transcript": {
+      "get": {
+        "description": "Requires the same Submission integrity-view authorization as Attempt evidence. Returns the candidate's assistant conversation in record order: messages, replies, tool calls with their arguments and results, approvals and output checks. A command's call names its assistant:N process, whose commands are in the Attempt evidence; an edit's call is the author of the Workspace changes it made. Read it as a timeline beside the candidate's own work. The inventory is the one the seal bound. Assistant use the Exam allows raises no Flag. No-store.",
+        "operationId": "listSubmissionAssistantTranscript",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AssistantTranscript"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the assistant transcript sealed with a Submission",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubmissionID"
+        }
+      ]
+    },
+    "/api/v1/submissions/{submission_id}/assistant-usage": {
+      "get": {
+        "description": "Requires the same Submission integrity-view authorization as Attempt evidence. Counts the sealed transcript: messages and replies, tokens, the tools used, commands, edits proposed and applied, approvals and output checks. It is descriptive only and never a score or a Flag; estimated marks token figures the server estimated. No-store.",
+        "operationId": "getSubmissionAssistantUsage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "approved": 2,
+                  "commands": 2,
+                  "declined": 0,
+                  "edits_applied": 0,
+                  "edits_proposed": 0,
+                  "estimated": false,
+                  "expired": 0,
+                  "gaps": 0,
+                  "input_tokens": 18240,
+                  "messages": 6,
+                  "output_replaced": 0,
+                  "output_rewritten": 1,
+                  "output_tokens": 2210,
+                  "replies": 6,
+                  "tools": {
+                    "read_file": 4,
+                    "run_command": 2
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantUsageSummary"
+                }
+              }
+            },
+            "description": "How the assistant was used",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Summarize how the candidate used the assistant",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubmissionID"
         }
       ]
     },

@@ -28,6 +28,7 @@ const (
 	aggregateDesktopCompatibilityPolicy aggregateName = "desktop_compatibility_policy"
 	aggregatePluginSettings             aggregateName = "plugin_settings"
 	aggregateEnvironmentProfile         aggregateName = "environment_profile"
+	aggregateAssistantProfile           aggregateName = "assistant_profile"
 	aggregateAttemptEnvironment         aggregateName = "attempt_environment"
 	aggregateAttemptRuntimeLease        aggregateName = "attempt_runtime_lease"
 	aggregateRetentionPolicy            aggregateName = "retention_policy"
@@ -403,6 +404,7 @@ const (
 	methodUpdateDraftNativePolicy                   methodName = "update_draft_native_policy"
 	methodUpdateDraftFocusLoss                      methodName = "update_draft_focus_loss"
 	methodUpdateDraftExecution                      methodName = "update_draft_execution"
+	methodUpdateDraftAssistant                      methodName = "update_draft_assistant"
 	methodUpdateDraftText                           methodName = "update_draft_text"
 	methodArchive                                   methodName = "archive"
 	methodSchedule                                  methodName = "schedule"
@@ -494,3 +496,22 @@ const (
 func storeOperation(aggregate aggregateName, method methodName) Operation {
 	return Operation{name: string(aggregate) + "." + string(method)}
 }
+
+const aggregateAssistantTranscript aggregateName = "assistant_transcript"
+const (
+	methodStart          methodName = "start"
+	methodReserveModel   methodName = "reserve_model"
+	methodReserveCommand methodName = "reserve_command"
+	methodDecide         methodName = "decide"
+	methodDecision       methodName = "decision"
+	methodCompleteModel  methodName = "complete_model"
+	methodAppendTurn     methodName = "append_turn"
+	methodAppendCall     methodName = "append_call"
+	methodCompleteCall   methodName = "complete_call"
+	methodListForAttempt methodName = "list_for_attempt"
+	methodInventory      methodName = "inventory"
+)
+
+const methodUsage methodName = "usage"
+
+const methodListCandidateStarterWorkspace methodName = "list_candidate_starter_workspace"

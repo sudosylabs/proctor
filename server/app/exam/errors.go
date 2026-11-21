@@ -34,6 +34,8 @@ var examStoreErrors = apperror.StoreTable{
 		"exam_owner_manager":              "exam.manager.owner_protected",
 		"exam_owner_no_changes":           "exam.owner.no_changes",
 		"environment_profile_unusable":    "exam.execution.profile_unusable",
+		"assistant_disabled":              "exam.assistant.disabled",
+		"assistant_profile_unusable":      "exam.assistant.profile_unusable",
 		"execution_disabled":              "exam.execution.disabled",
 	},
 	NotFound:    "exam.not_found",

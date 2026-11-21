@@ -464,10 +464,12 @@ const (
 	// AttemptWorkspaceAuthorEnvironment is the attempt's execution
 	// environment, writing back what its programs changed.
 	AttemptWorkspaceAuthorEnvironment AttemptWorkspaceAuthorKind = "environment"
+	// AttemptWorkspaceAuthorAssistant acts through one recorded tool call.
+	AttemptWorkspaceAuthorAssistant AttemptWorkspaceAuthorKind = "assistant"
 )
 
 func (k AttemptWorkspaceAuthorKind) IsValid() bool {
-	return k == AttemptWorkspaceAuthorCandidate || k == AttemptWorkspaceAuthorEnvironment
+	return k == AttemptWorkspaceAuthorCandidate || k == AttemptWorkspaceAuthorEnvironment || k == AttemptWorkspaceAuthorAssistant
 }
 
 // AttemptWorkspaceAuthorRefMaximumBytes bounds an author reference, in bytes.
@@ -476,7 +478,8 @@ const AttemptWorkspaceAuthorRefMaximumBytes = 96
 // AttemptWorkspaceAuthor is who made one workspace change. A candidate's
 // reference is the attempt connection the editor wrote through; an
 // environment's is its decimal incarnation, then a slash and the writing
-// process's tag when known.
+// process's tag when known. An assistant's reference identifies its
+// conversation, turn and tool call, separated by slashes.
 type AttemptWorkspaceAuthor struct {
 	Kind AttemptWorkspaceAuthorKind `json:"kind"`
 	Ref  string                     `json:"ref"`
@@ -497,16 +500,24 @@ func NewEnvironmentWorkspaceAuthor(incarnation int64, processTag AttemptEnvironm
 	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorEnvironment, Ref: ref}
 }
 
+func NewAssistantWorkspaceAuthor(conversation AssistantConversationID, turn AssistantTurnID, call AssistantCallID) AttemptWorkspaceAuthor {
+	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorAssistant, Ref: conversation.String() + "/" + turn.String() + "/" + call.String()}
+}
+
 // IsValid reports whether the reference is well formed for the kind.
 func (a AttemptWorkspaceAuthor) IsValid() bool {
+	if len(a.Ref) > AttemptWorkspaceAuthorRefMaximumBytes {
+		return false
+	}
 	switch a.Kind {
+	case AttemptWorkspaceAuthorAssistant:
+		parts := strings.Split(a.Ref, "/")
+		return len(parts) == 3 && AssistantConversationID(parts[0]).IsValid() &&
+			AssistantTurnID(parts[1]).IsValid() && AssistantCallID(parts[2]).IsValid()
 	case AttemptWorkspaceAuthorCandidate:
 		id, err := ParseAttemptConnectionID(a.Ref)
 		return err == nil && id.String() == a.Ref
 	case AttemptWorkspaceAuthorEnvironment:
-		if len(a.Ref) > AttemptWorkspaceAuthorRefMaximumBytes {
-			return false
-		}
 		incarnation, tag, tagged := strings.Cut(a.Ref, "/")
 		value, err := strconv.ParseInt(incarnation, 10, 64)
 		if err != nil || value < 0 || strconv.FormatInt(value, 10) != incarnation {

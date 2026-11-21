@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
@@ -303,6 +304,8 @@ type runtimeComponents struct {
 	// environments owns this node's execution environments; nil when the
 	// installation runs none.
 	environments runtimeComponent
+	// assistant runs candidates' turns on this node; nil when it is off.
+	assistant    *assistant.Service
 	servingLease monitoredRuntimeComponent
 	// plugins deactivates the plugins once nothing can call into them.
 	plugins interface{ Close(context.Context) error }

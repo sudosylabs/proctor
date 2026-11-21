@@ -9,6 +9,7 @@ package storetest
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,7 @@ func editorSealAccess(editor store.ExamAttemptWorkspaceEditorAccess, revisionID 
 }
 
 // testEnvironmentChangesBeforeTheSeal checks that a voluntary seal's
-// expected cursor fences only the candidate's own changes: the environment's
+// expected cursor fences the candidate's and assistant's changes: the environment's
 // later changes are sealed, a later editor change still conflicts, and every
 // seal stops the environment.
 func testEnvironmentChangesBeforeTheSeal(t *testing.T, ctx context.Context, ss store.Store, submissions store.ExamSubmissionStore) {
@@ -83,6 +84,44 @@ func testEnvironmentChangesBeforeTheSeal(t *testing.T, ctx context.Context, ss s
 		requireConflictConstraint(t, err, "attempt_workspace_cursor")
 		_, err = seal(t, fixture, editorSealAccess(editor, fixture.sitting.ExamRevisionID, edited+10), "seal-future")
 		requireConflictConstraint(t, err, "attempt_workspace_cursor")
+	})
+
+	t.Run("assistant changes require the candidate's current seal cursor", func(t *testing.T) {
+		fixture := newExecutionAttemptFixture(t, ctx, ss)
+		connected, editor := connectEnvironmentFixture(t, ctx, ss, fixture, "seal-assistant-connect")
+		assistant := store.ExamAttemptWorkspaceAssistantAccess{ExamAttemptWorkspaceEditorAccess: editor,
+			ConversationID: model.NewAssistantConversationID(), TurnID: model.NewAssistantTurnID(), CallID: model.NewAssistantCallID()}
+		edited := write(t, fixture, editor, "edited")
+		object, applied := createAttemptWorkspaceTestFile(t, ctx, ss, fixture, assistant, "assistant.txt",
+			model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 4, SHA256: strings.Repeat("a", 64)}, "assistant-file")
+		author := assistant.WorkspaceAuthor()
+		require.Equal(t, author, applied.Changes[0].Author)
+		candidate := journalAccess(editor)
+		journal, err := ss.ExamAttemptWorkspace().ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: candidate, AfterCursor: edited, Limit: 200})
+		require.NoError(t, err)
+		require.Len(t, journal.Entries, 1)
+		require.Equal(t, author, journal.Entries[0].Author)
+		live, err := ss.ExamAttemptWorkspace().ResolveFile(ctx, candidate, applied.Changes[0].EntryID)
+		require.NoError(t, err)
+		require.Equal(t, object.ContentVersion, live.ContentVersion)
+
+		_, err = seal(t, fixture, editorSealAccess(editor, fixture.sitting.ExamRevisionID, edited), "seal-assistant-stale")
+		requireConflictConstraint(t, err, "attempt_workspace_cursor")
+		sealed, err := seal(t, fixture, editorSealAccess(editor, fixture.sitting.ExamRevisionID, applied.Changes[0].Cursor), "seal-assistant-current")
+		require.NoError(t, err)
+		manifest, err := submissions.ListManifest(ctx, store.ExamSubmissionManifestListOptions{SubmissionID: sealed.Receipt.SubmissionID, Limit: 200})
+		require.NoError(t, err)
+		var found bool
+		for _, item := range manifest.Items {
+			if item.EntryID == applied.Changes[0].EntryID {
+				found = true
+				require.Equal(t, author, item.Author)
+			}
+		}
+		require.True(t, found)
+		_, err = ss.ExamAttemptWorkspace().ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: assistant})
+		require.Error(t, err, "a sealed attempt refuses assistant writes")
+		require.Equal(t, connected.Attempt.ID, assistant.WorkspaceAttemptID())
 	})
 
 	t.Run("manager end stops the environment", func(t *testing.T) {

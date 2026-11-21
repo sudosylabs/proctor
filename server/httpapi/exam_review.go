@@ -413,6 +413,38 @@ func examIntegrityReviewResource(app *review.Service) route.Resource {
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
+			Path:   "/submissions/{submission_id}/assistant-transcript",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.unavailable",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.listAssistantTranscript,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/submissions/{submission_id}/assistant-usage",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.unavailable",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.assistantUsage,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
 			Path:   discrepancies,
 			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
@@ -1135,4 +1167,40 @@ func (h examIntegrityReviewHandlers) listNativeConditions(request route.Request)
 	}
 
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+// listAssistantTranscript pages the assistant transcript sealed with the
+// submission, in record order.
+func (h examIntegrityReviewHandlers) listAssistantTranscript(request route.Request) (route.Result, error) {
+	submissionID, err := reviewSubmissionID(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	query := review.AssistantTranscriptQuery{SubmissionID: submissionID}
+	if query.AfterSequence, query.Limit, err = assistantPageQuery(request); err != nil {
+		return route.Result{}, err
+	}
+	page, err := h.app.ListAssistantTranscript(request.Context, request.Invocation(), query)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response, err := assistantTranscriptResponseFrom(page, query.Limit)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+// assistantUsage describes how the candidate used the assistant. It is a
+// description for a person to judge, never a flag or a score.
+func (h examIntegrityReviewHandlers) assistantUsage(request route.Request) (route.Result, error) {
+	submissionID, err := reviewSubmissionID(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	summary, err := h.app.SummarizeAssistantUsage(request.Context, request.Invocation(), submissionID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, summary).WithHeaders(noStoreHeaders()), nil
 }

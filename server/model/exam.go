@@ -324,6 +324,30 @@ func (d *ExamDraft) ApplyExecutionPolicy(policy ExecutionPolicy, at time.Time) (
 	return true, nil
 }
 
+// ApplyAssistantPolicy replaces the draft's assistant policy. Whether the
+// profile it names is usable is checked by the store and at publication.
+func (d *ExamDraft) ApplyAssistantPolicy(policy AssistantPolicy, at time.Time) (bool, error) {
+	if d == nil {
+		return false, invalidModelError("ExamDraft.ApplyAssistantPolicy", "exam_draft", "value", "is required", "")
+	}
+	if policy.Equal(d.Policy.Assistant) {
+		return false, nil
+	}
+	candidate := *d
+	candidate.Policy = d.Policy.Clone()
+	candidate.Policy.Assistant = policy.Clone()
+	candidate.Revision++
+	candidate.UpdatedAt = TimeUTC(at)
+	if candidate.UpdatedAt.Before(d.UpdatedAt) {
+		candidate.UpdatedAt = d.UpdatedAt
+	}
+	if err := candidate.Validate(); err != nil {
+		return false, err
+	}
+	*d = candidate
+	return true, nil
+}
+
 // ExamManager grants authoring responsibility independently of role bindings.
 type ExamManager struct {
 	ExamID          ExamID

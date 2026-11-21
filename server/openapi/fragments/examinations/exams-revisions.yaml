@@ -8,12 +8,14 @@
 paths:
   /api/v1/exams/{exam_id}/revisions:
     parameters:
-      - $ref: '#/components/parameters/ExamID'
+      - $ref: "#/components/parameters/ExamID"
     get:
       operationId: listExamRevisions
       summary: List bounded immutable Exam Revision metadata
       description: >-
-        Lists the Exam's published Revisions, newest first. Each entry includes digests of the policy and content, the capacity limits, Resource and Starter Workspace counts, and who published it and when. It does not return Resource content or the current Draft.
+        Lists the Exam's published Revisions, newest first. Each entry includes digests of the policy and content,
+        the capacity limits, Resource and Starter Workspace counts, and who published it and when. It does not
+        return Resource content or the current Draft.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -54,26 +56,30 @@ paths:
             type: string
       responses:
         "200":
-          $ref: '#/components/responses/ExamRevisionListOK'
+          $ref: "#/components/responses/ExamRevisionListOK"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
     post:
       operationId: publishExamRevision
       summary: Publish the complete validated Draft as an immutable Exam Revision
       tags:
         - Examinations
       description: >-
-        Checks the whole current Draft and publishes it as a new Revision, which can't change afterwards. Publishing happens only if expected_revision still matches the Draft's current revision, so you never publish edits you haven't seen. Send an Idempotency-Key: if the response is lost, retrying with the same key returns the same result. The Revision captures the text, policies, capacity limits, Resources and Starter Workspace together.
+        Checks the whole current Draft and publishes it as a new Revision, which can't change afterwards.
+        Publishing happens only if expected_revision still matches the Draft's current revision, so you never
+        publish edits you haven't seen. Send an Idempotency-Key: if the response is lost, retrying with the same
+        key returns the same result. The Revision captures the text, policies, capacity limits, Resources and
+        Starter Workspace together.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -113,41 +119,45 @@ paths:
         - authentication.dpop.use_nonce
         - authentication.dpop.unavailable
         - authentication.csrf.invalid
+        - exam.assistant.disabled
+        - exam.assistant.profile_unusable
       security:
         - bearerAuth: []
         - dpopAuth: []
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
       requestBody:
-        $ref: '#/components/requestBodies/PublishExamRevision'
+        $ref: "#/components/requestBodies/PublishExamRevision"
       responses:
         "201":
-          $ref: '#/components/responses/ExamRevisionCreated'
+          $ref: "#/components/responses/ExamRevisionCreated"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "409":
-          $ref: '#/components/responses/Conflict'
+          $ref: "#/components/responses/Conflict"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
   /api/v1/exams/{exam_id}/revisions/{exam_revision_id}:
     parameters:
-      - $ref: '#/components/parameters/ExamID'
-      - $ref: '#/components/parameters/ExamRevisionID'
+      - $ref: "#/components/parameters/ExamID"
+      - $ref: "#/components/parameters/ExamRevisionID"
     get:
       operationId: getExamRevision
       summary: Get bounded immutable Exam Revision metadata
       description: >-
-        Returns one published Revision. It checks that the Revision belongs to this Exam and that you can currently manage the Exam. The response holds publication details and digests, not the current Draft or any file content.
+        Returns one published Revision. It checks that the Revision belongs to this Exam and that you can currently
+        manage the Exam. The response holds publication details and digests, not the current Draft or any file
+        content.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -172,19 +182,19 @@ paths:
         - sessionCookie: []
       responses:
         "200":
-          $ref: '#/components/responses/ExamRevisionOK'
+          $ref: "#/components/responses/ExamRevisionOK"
         "400":
-          $ref: '#/components/responses/BadRequest'
+          $ref: "#/components/responses/BadRequest"
         "401":
-          $ref: '#/components/responses/Unauthorized'
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: '#/components/responses/Forbidden'
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: '#/components/responses/NotFound'
+          $ref: "#/components/responses/NotFound"
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: "#/components/responses/InternalError"
         "503":
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   parameters:
     ExamRevisionID:
@@ -192,7 +202,7 @@ components:
       in: path
       required: true
       schema:
-        $ref: '#/components/schemas/ID'
+        $ref: "#/components/schemas/ID"
       description: The ID of a published Revision of this Exam.
   requestBodies:
     PublishExamRevision:
@@ -200,28 +210,29 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/PublishExamRevisionRequest'
+            $ref: "#/components/schemas/PublishExamRevisionRequest"
           example:
             expected_revision: 12
       description: >-
-        The Draft revision you expect to publish. If the Draft has changed since, publishing fails instead of including changes you haven't seen.
+        The Draft revision you expect to publish. If the Draft has changed since, publishing fails instead of
+        including changes you haven't seen.
   responses:
     ExamRevisionOK:
       description: The published Revision.
       headers:
         Cache-Control:
-          $ref: '#/components/headers/NoStore'
+          $ref: "#/components/headers/NoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ExamRevisionResponse'
+            $ref: "#/components/schemas/ExamRevisionResponse"
           example:
             id: t1oekp5dqa7nwrzhcx3by9mug4
             exam_id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
             number: 2
             source_draft_revision: 8
             title: Algorithms — final examination
-            policy_schema_version: 1
+            policy_schema_version: 2
             policy_digest: 823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812
             capacity:
               resource_maximum_count: 10
@@ -235,25 +246,25 @@ components:
             starter_workspace_entry_count: 3
             starter_workspace_total_bytes: 128
             published_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
-            published_at: '2026-08-01T16:45:00Z'
+            published_at: "2026-08-01T16:45:00Z"
             base_revision_id: gx7ab3nwh1ekqmd9pzucsoyt5r
             publication_kind: standard
     ExamRevisionCreated:
       description: The new Revision, published from the Draft.
       headers:
         Cache-Control:
-          $ref: '#/components/headers/NoStore'
+          $ref: "#/components/headers/NoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ExamRevisionResponse'
+            $ref: "#/components/schemas/ExamRevisionResponse"
           example:
             id: t1oekp5dqa7nwrzhcx3by9mug4
             exam_id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
             number: 2
             source_draft_revision: 8
             title: Algorithms — final examination
-            policy_schema_version: 1
+            policy_schema_version: 2
             policy_digest: 823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812
             capacity:
               resource_maximum_count: 10
@@ -267,18 +278,18 @@ components:
             starter_workspace_entry_count: 3
             starter_workspace_total_bytes: 128
             published_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
-            published_at: '2026-08-01T16:45:00Z'
+            published_at: "2026-08-01T16:45:00Z"
             base_revision_id: gx7ab3nwh1ekqmd9pzucsoyt5r
             publication_kind: standard
     ExamRevisionListOK:
       description: One page of the Exam's published Revisions, newest first.
       headers:
         Cache-Control:
-          $ref: '#/components/headers/NoStore'
+          $ref: "#/components/headers/NoStore"
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ExamRevisionListResponse'
+            $ref: "#/components/schemas/ExamRevisionListResponse"
           example:
             items:
               - id: t1oekp5dqa7nwrzhcx3by9mug4
@@ -286,7 +297,7 @@ components:
                 number: 2
                 source_draft_revision: 8
                 title: Algorithms — final examination
-                policy_schema_version: 1
+                policy_schema_version: 2
                 policy_digest: 823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812
                 capacity:
                   resource_maximum_count: 10
@@ -300,7 +311,7 @@ components:
                 starter_workspace_entry_count: 3
                 starter_workspace_total_bytes: 128
                 published_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
-                published_at: '2026-08-01T16:45:00Z'
+                published_at: "2026-08-01T16:45:00Z"
                 base_revision_id: gx7ab3nwh1ekqmd9pzucsoyt5r
                 publication_kind: standard
             next_cursor: eyJudW1iZXIiOjIsInJldmlzaW9uX2lkIjoidDFvZWtwNWRxYTdud3J6aGN4M2J5OW11ZzQifQ
@@ -315,7 +326,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: The Draft revision you expect to publish. If the Draft has changed since, the request fails with a conflict.
+          description: >-
+            The Draft revision you expect to publish. If the Draft has changed since, the request fails with a
+            conflict.
     ExamRevisionResponse:
       type: object
       description: >-
@@ -341,10 +354,10 @@ components:
         - publication_kind
       properties:
         id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The Revision ID.
         exam_id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The Exam this Revision belongs to.
         number:
           type: integer
@@ -363,19 +376,21 @@ components:
           description: The Exam title at publication.
         policy_schema_version:
           type: integer
-          const: 1
-          description: The version of the policy format the Revision was saved in. Always 1 today.
+          const: 2
+          description: The version of the policy format the Revision was saved in. Always 2 today.
         policy_digest:
-          $ref: '#/components/schemas/SHA256'
-          description: The SHA-256 digest of the Revision's integrity policy, as lowercase hex. Two Revisions with the same policy have the same digest.
+          $ref: "#/components/schemas/SHA256"
+          description: >-
+            The SHA-256 digest of the Revision's integrity policy, as lowercase hex. Two Revisions with the same
+            policy have the same digest.
         capacity:
-          $ref: '#/components/schemas/ExamCapacityPolicy'
+          $ref: "#/components/schemas/ExamCapacityPolicy"
           description: The Resource and Starter Workspace limits that applied at publication.
         starter_workspace_digest:
-          $ref: '#/components/schemas/SHA256'
+          $ref: "#/components/schemas/SHA256"
           description: The SHA-256 digest of the Starter Workspace file list and contents, as lowercase hex.
         content_digest:
-          $ref: '#/components/schemas/SHA256'
+          $ref: "#/components/schemas/SHA256"
           description: >-
             The SHA-256 digest of everything the Revision holds, as lowercase hex: title, instructions, policies,
             capacity, Resources and Starter Workspace. Two Revisions with the same content have the same digest.
@@ -396,14 +411,14 @@ components:
           maximum: 1073741824
           description: The total size of the Starter Workspace files, in bytes.
         published_by_user_id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: The User who published the Revision.
         published_at:
           type: string
           format: date-time
           description: When the Revision was published.
         base_revision_id:
-          $ref: '#/components/schemas/ID'
+          $ref: "#/components/schemas/ID"
           description: >-
             The Revision this one was based on: the one the Draft was last published as, or the Revision a live
             correction changes. Omitted for the first Revision.
@@ -426,7 +441,7 @@ components:
           maxItems: 200
           description: The Revisions on this page, newest first.
           items:
-            $ref: '#/components/schemas/ExamRevisionResponse'
+            $ref: "#/components/schemas/ExamRevisionResponse"
         next_cursor:
           type: string
           description: Send this back as cursor to get the next page. Omitted on the last page.

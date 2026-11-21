@@ -123,6 +123,10 @@ type timedStores struct {
 	pluginSettingsOnce             sync.Once
 	environmentProfile             store.EnvironmentProfileStore
 	environmentProfileOnce         sync.Once
+	assistantProfile               store.AssistantProfileStore
+	assistantProfileOnce           sync.Once
+	assistantTranscript            store.AssistantTranscriptStore
+	assistantTranscriptOnce        sync.Once
 	attemptEnvironment             store.AttemptEnvironmentStore
 	attemptEnvironmentOnce         sync.Once
 	attemptRuntimeLease            store.AttemptRuntimeLeaseStore
@@ -397,6 +401,16 @@ type timedPluginSettingsStore struct {
 type timedEnvironmentProfileStore struct {
 	layer *Layer
 	next  store.EnvironmentProfileStore
+}
+
+type timedAssistantProfileStore struct {
+	layer *Layer
+	next  store.AssistantProfileStore
+}
+
+type timedAssistantTranscriptStore struct {
+	layer *Layer
+	next  store.AssistantTranscriptStore
 }
 
 type timedAttemptEnvironmentStore struct {
@@ -954,6 +968,26 @@ func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
 	return l.stores.environmentProfile
 }
 
+func (l *Layer) AssistantProfile() store.AssistantProfileStore {
+	l.stores.assistantProfileOnce.Do(func() {
+		next := l.next.AssistantProfile()
+		if next != nil {
+			l.stores.assistantProfile = &timedAssistantProfileStore{layer: l, next: next}
+		}
+	})
+	return l.stores.assistantProfile
+}
+
+func (l *Layer) AssistantTranscript() store.AssistantTranscriptStore {
+	l.stores.assistantTranscriptOnce.Do(func() {
+		next := l.next.AssistantTranscript()
+		if next != nil {
+			l.stores.assistantTranscript = &timedAssistantTranscriptStore{layer: l, next: next}
+		}
+	})
+	return l.stores.assistantTranscript
+}
+
 func (l *Layer) AttemptEnvironment() store.AttemptEnvironmentStore {
 	l.stores.attemptEnvironmentOnce.Do(func() {
 		next := l.next.AttemptEnvironment()
@@ -1312,6 +1346,12 @@ func (s *timedExamAuthoringStore) UpdateDraftExecution(arg0 context.Context, arg
 	})
 }
 
+func (s *timedExamAuthoringStore) UpdateDraftAssistant(arg0 context.Context, arg1 *store.ExamDraftAssistantUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftAssistant), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
+		return s.next.UpdateDraftAssistant(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamAuthoringStore) UpdateDraftNativePolicy(arg0 context.Context, arg1 *store.ExamDraftNativePolicyUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftNativePolicy), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
 		return s.next.UpdateDraftNativePolicy(callCtx, arg1, arg2)
@@ -1543,6 +1583,12 @@ func (s *timedExamSittingStore) ListMailReconciliationDue(arg0 context.Context, 
 func (s *timedExamSittingStore) ReconcileMail(arg0 context.Context, arg1 *store.ExamSittingMailReconciliation) (*store.ExamSittingMailFanoutSnapshot, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodReconcileMail), func(callCtx context.Context) (*store.ExamSittingMailFanoutSnapshot, error) {
 		return s.next.ReconcileMail(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) ListCandidateStarterWorkspace(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 int) ([]store.CandidateStarterWorkspaceFile, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListCandidateStarterWorkspace), func(callCtx context.Context) ([]store.CandidateStarterWorkspaceFile, error) {
+		return s.next.ListCandidateStarterWorkspace(callCtx, arg1, arg2)
 	})
 }
 
@@ -4108,6 +4154,114 @@ func (s *timedEnvironmentProfileStore) List(ctx context.Context, includeRetired 
 	})
 }
 
+func (s *timedAssistantProfileStore) Usage(arg0 context.Context, arg1 model.AssistantProfileID) (model.AssistantProfileUsage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantProfile, methodUsage), func(callCtx context.Context) (model.AssistantProfileUsage, error) {
+		return s.next.Usage(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantProfileStore) Create(arg0 context.Context, arg1 *store.AssistantProfileCreation, arg2 *store.CommandIdempotency) (*store.AssistantProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantProfile, methodCreate), func(callCtx context.Context) (*store.AssistantProfileCommandResult, error) {
+		return s.next.Create(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAssistantProfileStore) Retire(arg0 context.Context, arg1 *store.AssistantProfileRetirement, arg2 *store.CommandIdempotency) (*store.AssistantProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantProfile, methodRetire), func(callCtx context.Context) (*store.AssistantProfileCommandResult, error) {
+		return s.next.Retire(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAssistantProfileStore) Get(arg0 context.Context, arg1 model.AssistantProfileID) (*model.AssistantProfile, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantProfile, methodGet), func(callCtx context.Context) (*model.AssistantProfile, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantProfileStore) List(ctx context.Context, includeRetired bool) ([]*model.AssistantProfile, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateAssistantProfile, methodList), func(callCtx context.Context) ([]*model.AssistantProfile, error) {
+		return s.next.List(callCtx, includeRetired)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) Start(arg0 context.Context, arg1 *store.AssistantMessageStart, arg2 *store.CommandIdempotency) (*store.AssistantRunStart, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodStart), func(callCtx context.Context) (*store.AssistantRunStart, error) {
+		return s.next.Start(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) Renew(arg0 context.Context, arg1 store.AssistantRunAccess) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodRenew), func(callCtx context.Context) error {
+		return s.next.Renew(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) Cancel(arg0 context.Context, arg1 store.AssistantRunCancel) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodCancel), func(callCtx context.Context) error {
+		return s.next.Cancel(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) ReserveCommand(arg0 context.Context, arg1 *store.AssistantCommandReservation) (*store.AssistantCommandSlot, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodReserveCommand), func(callCtx context.Context) (*store.AssistantCommandSlot, error) {
+		return s.next.ReserveCommand(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) Decide(arg0 context.Context, arg1 store.AssistantCallDecision) (*model.AssistantRecord, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodDecide), func(callCtx context.Context) (*model.AssistantRecord, error) {
+		return s.next.Decide(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) Decision(arg0 context.Context, arg1 store.AssistantRunAccess, arg2 model.AssistantCallID) (string, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodDecision), func(callCtx context.Context) (string, error) {
+		return s.next.Decision(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) ReserveModel(arg0 context.Context, arg1 *store.AssistantModelReservation) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodReserveModel), func(callCtx context.Context) error {
+		return s.next.ReserveModel(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) CompleteModel(arg0 context.Context, arg1 *store.AssistantModelCompletion) (model.AssistantUsage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodCompleteModel), func(callCtx context.Context) (model.AssistantUsage, error) {
+		return s.next.CompleteModel(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) AppendTurn(arg0 context.Context, arg1 *store.AssistantTurnAppend) (*model.AssistantRecord, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodAppendTurn), func(callCtx context.Context) (*model.AssistantRecord, error) {
+		return s.next.AppendTurn(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) AppendCall(arg0 context.Context, arg1 *store.AssistantCallAppend) (*model.AssistantRecord, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodAppendCall), func(callCtx context.Context) (*model.AssistantRecord, error) {
+		return s.next.AppendCall(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) CompleteCall(arg0 context.Context, arg1 *store.AssistantCallAppend) (*model.AssistantRecord, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodCompleteCall), func(callCtx context.Context) (*model.AssistantRecord, error) {
+		return s.next.CompleteCall(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) ListForAttempt(arg0 context.Context, arg1 store.AssistantTranscriptQuery) (*store.AssistantTranscriptPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodListForAttempt), func(callCtx context.Context) (*store.AssistantTranscriptPage, error) {
+		return s.next.ListForAttempt(callCtx, arg1)
+	})
+}
+
+func (s *timedAssistantTranscriptStore) Inventory(arg0 context.Context, arg1 store.AssistantTranscriptQuery) (model.AssistantInventory, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAssistantTranscript, methodInventory), func(callCtx context.Context) (model.AssistantInventory, error) {
+		return s.next.Inventory(callCtx, arg1)
+	})
+}
+
 func (s *timedAttemptEnvironmentStore) ApplyFact(arg0 context.Context, arg1 model.AttemptEnvironmentFact) (*store.AttemptEnvironmentFactResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodApplyFact), func(callCtx context.Context) (*store.AttemptEnvironmentFactResult, error) {
 		return s.next.ApplyFact(callCtx, arg1)
@@ -4366,6 +4520,8 @@ var (
 	_ store.DesktopCompatibilityPolicyStore = (*timedDesktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*timedPluginSettingsStore)(nil)
 	_ store.EnvironmentProfileStore         = (*timedEnvironmentProfileStore)(nil)
+	_ store.AssistantProfileStore           = (*timedAssistantProfileStore)(nil)
+	_ store.AssistantTranscriptStore        = (*timedAssistantTranscriptStore)(nil)
 	_ store.AttemptEnvironmentStore         = (*timedAttemptEnvironmentStore)(nil)
 	_ store.AttemptRuntimeLeaseStore        = (*timedAttemptRuntimeLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*timedRetentionPolicyStore)(nil)

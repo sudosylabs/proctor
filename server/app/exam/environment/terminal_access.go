@@ -150,12 +150,30 @@ func (t *Terminals) AttachTerminal(
 	if err != nil {
 		return nil, err
 	}
-	session, err := t.attach(ctx, candidate, tag)
+	session, _, err := t.attach(ctx, candidate, tag, true)
 	if err != nil {
 		return nil, terminalFailure(err)
 	}
 	session.inv, session.access = inv, access
 	return session, nil
+}
+
+// ViewTerminal returns the current screen of one of the candidate's
+// terminals as text, under the access checks of AttachTerminal. It reads
+// through a session that is not the terminal's author, so it never types,
+// resizes, signals or records input.
+func (t *Terminals) ViewTerminal(
+	ctx context.Context,
+	inv invocation.Invocation,
+	access CandidateAccess,
+	tag model.AttemptEnvironmentProcessTag,
+) (TerminalScreen, error) {
+	candidate, err := t.verify(ctx, inv, access)
+	if err != nil {
+		return TerminalScreen{}, err
+	}
+	screen, err := t.view(ctx, candidate, tag)
+	return screen, terminalFailure(err)
 }
 
 // Check reports ErrTerminalAccessEnded once the session must end. Any other

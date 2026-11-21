@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/lib/pq"
@@ -231,6 +232,19 @@ func publishExamRevision(
 	}
 	if err = requireUsableEnvironmentProfile(ctx, tx, decodedPolicy.Execution); err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
+	}
+
+	if decodedPolicy.Assistant.Enabled {
+		if !input.AssistantEnabled {
+			return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "assistant_disabled", nil)
+		}
+		profile, profileErr := requireUsableAssistantProfile(ctx, tx, decodedPolicy.Assistant)
+		if profileErr != nil {
+			return examRevisionPublicationOutcomeRow{}, profileErr
+		}
+		if !slices.Contains(input.AssistantProviders, profile.Provider) {
+			return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "assistant_profile_unusable", nil)
+		}
 	}
 
 	browserPolicy, err := model.ParseBrowserPolicyDocument([]byte(draft.BrowserPolicy))

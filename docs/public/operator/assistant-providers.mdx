@@ -1,0 +1,121 @@
+---
+title: Connect a model provider
+description: Choose between a self-hosted and a hosted model for the in-exam assistant, declare what the server supports, and keep the assistant from ever blocking an Exam.
+audience: operator
+maturity: preview
+---
+
+# Connect a model provider
+
+The in-exam assistant is off until you turn it on. When it is on, Proctor's
+application nodes call the model providers you list in the
+[`Assistant` configuration](../reference/configuration/assistant.mdx). This
+page helps you choose a provider and connect it safely. Before you choose,
+read [assistant data protection](./assistant-data-protection.mdx): where the
+model runs decides who receives candidates' work.
+
+## Where the assistant runs
+
+The conversation runs inside Proctor, never in the candidate's environment.
+
+- **Network:** environment profiles keep their network setting. The guest
+  doesn't need any route to a model, and you shouldn't give it one for the
+  assistant.
+- **Egress:** every application node must reach each provider's `BaseURL`.
+  Proctor calls only the configured URLs, with a timeout and a response size
+  limit, and never follows a redirect. Allow exactly those hosts in your
+  firewall or proxy.
+- **Keys:** API keys stay in the configuration file or your secret manager.
+  They never enter the database, and institution and exam staff never handle
+  them.
+
+## Self-hosted or hosted
+
+| | Self-hosted, through vLLM or Ollama | Hosted vendor |
+| --- | --- | --- |
+| Who receives candidates' work | Only you | The vendor, under its terms |
+| Retention | Whatever your server keeps; usually nothing | The vendor's default, or what your agreement says |
+| Legal work | Your usual controls | A processor agreement, and often a transfer assessment |
+| Model quality and tool use | Depends on the model and the server's tool support | Usually strong tool use out of the box |
+| Operational work | GPUs, upgrades, capacity for a full Sitting | An account, a key and spend limits |
+| Cost | Hardware and power | Per token |
+
+Many schools will prefer a self-hosted model because it keeps the third
+party out entirely. A hosted vendor is simpler to start with, and needs the
+contracts described in [assistant data protection](./assistant-data-protection.mdx).
+You can list both and let each assistant profile pick one.
+
+### Self-hosted servers
+
+Use `Kind: "openai_compatible"` for vLLM, Ollama and LiteLLM.
+
+- **vLLM:** the levels above Tutor use tools, so start the server with tool
+  calling turned on and the tool call parser that matches your model. Without
+  a parser, tool calls come back as plain text and the assistant can't use
+  them. vLLM accepts `tool_choice`, so set `ToolChoice` to `true`.
+- **Ollama:** current releases [list `tool_choice` as supported](https://docs.ollama.com/api/openai-compatibility).
+  Enable `ToolChoice` after testing the installed server and model; leave it
+  off for versions that reject or ignore it.
+- **Either:** set `APIKey` only if you put the server behind an
+  authenticating proxy. Use TLS between Proctor and the server, even inside
+  your network, because prompts carry candidates' work.
+
+### Hosted vendors
+
+Use `Kind: "openai_responses"` for OpenAI with the versioned API base URL.
+Proctor sends `store: false` and keeps the conversation history itself.
+It returns encrypted reasoning items with tool results during the active
+turn. These items stay out of the transcript.
+
+Use `Kind: "anthropic"` for the Anthropic Messages API. Use
+`Kind: "openai_compatible"` for a vendor that offers the OpenAI chat
+completions API. Take the base URL, including its version path, from the
+vendor's documentation, and keep the key in your secret store.
+
+## Declare what the server supports
+
+Proctor sends only what the `Capabilities` flags declare. A flag the server
+doesn't support usually makes every request fail, so start conservative.
+
+| Flag | Turn it on when |
+| --- | --- |
+| `Streaming` | the server streams replies. Almost all do. Without it, the candidate sees each reply only when it is complete. |
+| `ToolChoice` | the server accepts `tool_choice`. verify this against the installed server and model. |
+| `ParallelTools` | the server accepts the parallel tool call setting. Proctor uses it to keep the model to one tool call at a time. |
+| `CompletionTokens` | the vendor wants `max_completion_tokens` instead of `max_tokens`. |
+| `StreamUsage` | the server reports token usage at the end of a stream. Without it, Proctor estimates usage and charges budgets conservatively. |
+
+## Check a provider before an Exam uses it
+
+1. Add the provider, run `proctor config validate`, and restart the nodes.
+2. Ask a System Administrator to create an
+   [assistant profile](../institution-admin/assistant-profiles.mdx) that
+   names the provider and a model.
+3. Publish a practice Exam that uses the profile at the highest level you
+   expect to offer, and take it as a test candidate. Check that replies
+   stream, and at Reviewer and above that the assistant can read a file.
+4. Check the provider's own logs or dashboard for errors and rate limits.
+
+Size the provider for a full Sitting. Every candidate in a Sitting may ask
+at the same time, and each turn at Reviewer and above can make several model
+calls.
+
+## Cost and budgets
+
+Proctor enforces budgets itself, before each model call and each tool call.
+Each assistant profile sets ceilings per Attempt, and each Exam sets its own
+budgets within them. When a budget runs out, the turn ends with `budget_exhausted` and
+the Exam carries on. For a hosted vendor, also set a spend limit in the
+vendor's account, as a second line.
+
+## When a provider fails
+
+If a provider is down, slow or rate limited, the assistant shows as
+unavailable to the candidate and the Attempt carries on. The outage is
+recorded in the transcript as a gap. The assistant never blocks a
+Submission: when an Attempt is sealed, any running turn is cancelled and
+recorded first.
+
+API keys appear in configuration only, and `proctor config show` redacts
+them. Rotate a key by replacing it in the file or the secret store and
+restarting the nodes.

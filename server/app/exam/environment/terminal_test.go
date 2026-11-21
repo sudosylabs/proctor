@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -249,6 +250,87 @@ func TestTerminalsOverAnExecutionHost(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return errors.Is(reattached.Check(ctx), environment.ErrTerminalAccessEnded)
 	}, eventually, tick)
+}
+
+func TestViewTerminalReadsTheScreenAndWritesNothing(t *testing.T) {
+	t.Parallel()
+	r := newRig(t, environment.OwnerTiming{})
+	r.environments.mu.Lock()
+	r.environments.row.RecordInput = true
+	r.environments.mu.Unlock()
+	r.running()
+	ctx := t.Context()
+	candidates := &candidatesFake{userID: model.NewUserID()}
+	terminals := newTerminals(t, r, candidates)
+	var inv invocation.Invocation
+	access := environment.CandidateAccess{AttemptID: r.attemptID, ConnectionID: model.NewAttemptConnectionID()}
+
+	opened, err := terminals.OpenTerminal(ctx, inv, access, environment.Window{})
+	require.NoError(t, err)
+	session, err := terminals.AttachTerminal(ctx, inv, access, opened.Tag)
+	require.NoError(t, err)
+	line := []byte("echo hi\n")
+	_, err = session.Write(ctx, 0, line)
+	require.NoError(t, err)
+	session.Close(ctx)
+
+	var screen environment.TerminalScreen
+	require.Eventually(t, func() bool {
+		screen, err = terminals.ViewTerminal(ctx, inv, access, opened.Tag)
+		return err == nil && slices.Contains(screen.Text, "hi")
+	}, eventually, tick)
+	require.Equal(t, environment.DefaultTerminalWindow.Cols, screen.Cols)
+	require.Equal(t, environment.DefaultTerminalWindow.Rows, screen.Rows)
+	require.True(t, screen.Running)
+	require.Nil(t, screen.Exit)
+	for range 3 {
+		_, err = terminals.ViewTerminal(ctx, inv, access, opened.Tag)
+		require.NoError(t, err)
+	}
+
+	// Viewing typed nothing, resized nothing and recorded nothing.
+	listed, err := terminals.ListTerminals(ctx, inv, access)
+	require.NoError(t, err)
+	require.Len(t, listed.Terminals, 1)
+	require.EqualValues(t, len(line), listed.Terminals[0].Input, "only the author's input reached the terminal")
+	require.True(t, listed.Terminals[0].Running)
+	require.Len(t, r.evidence.terminalInputs(), 1, "only the author's session recorded input")
+	again, err := terminals.ViewTerminal(ctx, inv, access, opened.Tag)
+	require.NoError(t, err)
+	require.Equal(t, screen.Text, again.Text, "the screen is as the author left it")
+
+	// The same refusals as an attach.
+	_, err = terminals.ViewTerminal(ctx, inv, access, "terminal:9")
+	require.ErrorIs(t, err, environment.ErrTerminalNotFound)
+	require.True(t, apperror.Is(err, "exam.attempt.terminal_not_found"))
+	_, err = terminals.ViewTerminal(ctx, inv, access, "assistant:1")
+	require.ErrorIs(t, err, environment.ErrTerminalNotFound, "only a candidate's terminal is viewed")
+	candidates.refuseWith("exam.attempt.invalid")
+	_, err = terminals.ViewTerminal(ctx, inv, access, opened.Tag)
+	require.True(t, apperror.Is(err, "exam.attempt.invalid"), "a refused candidate views nothing")
+	candidates.refuseWith("")
+	other := environment.CandidateAccess{AttemptID: model.NewExamAttemptID(), ConnectionID: model.NewAttemptConnectionID()}
+	_, err = terminals.ViewTerminal(ctx, inv, other, opened.Tag)
+	require.ErrorIs(t, err, environment.ErrNoEnvironment)
+	var none *environment.Terminals
+	_, err = none.ViewTerminal(ctx, inv, access, opened.Tag)
+	require.True(t, apperror.Is(err, "exam.attempt.environment_unavailable"))
+
+	// An exited terminal still shows its last screen, and how it ended.
+	require.NoError(t, terminals.InterruptTerminal(ctx, inv, access, opened.Tag))
+	require.Eventually(t, func() bool {
+		screen, err = terminals.ViewTerminal(ctx, inv, access, opened.Tag)
+		return err == nil && !screen.Running
+	}, eventually, tick)
+	require.Equal(t, &environment.ProcessExit{Signal: "INT"}, screen.Exit)
+	require.Contains(t, screen.Text, "hi")
+
+	// A frozen environment is not viewed.
+	r.environments.desire(model.AttemptEnvironmentDesiredFrozen)
+	r.poke()
+	require.Eventually(t, func() bool { return r.environments.snapshot().State == model.AttemptEnvironmentFrozen }, eventually, tick)
+	_, err = terminals.ViewTerminal(ctx, inv, access, opened.Tag)
+	require.ErrorIs(t, err, environment.ErrEnvironmentNotRunning)
 }
 
 func TestTerminalsRefuseAnAttemptWithoutAnEnvironment(t *testing.T) {

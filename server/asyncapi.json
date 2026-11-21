@@ -56,6 +56,24 @@
         "exam_attempt_access_suspended": {
           "$ref": "#/components/messages/exam_attempt_access_suspended"
         },
+        "exam_attempt_assistant_approval_requested": {
+          "$ref": "#/components/messages/exam_attempt_assistant_approval_requested"
+        },
+        "exam_attempt_assistant_text_delta": {
+          "$ref": "#/components/messages/exam_attempt_assistant_text_delta"
+        },
+        "exam_attempt_assistant_tool_call": {
+          "$ref": "#/components/messages/exam_attempt_assistant_tool_call"
+        },
+        "exam_attempt_assistant_turn_ended": {
+          "$ref": "#/components/messages/exam_attempt_assistant_turn_ended"
+        },
+        "exam_attempt_assistant_turn_started": {
+          "$ref": "#/components/messages/exam_attempt_assistant_turn_started"
+        },
+        "exam_attempt_assistant_unavailable": {
+          "$ref": "#/components/messages/exam_attempt_assistant_unavailable"
+        },
         "exam_attempt_connect_reply": {
           "$ref": "#/components/messages/exam_attempt_connect_reply"
         },
@@ -1114,6 +1132,379 @@
         ],
         "title": "Your Attempt was suspended"
       },
+      "exam_attempt_assistant_approval_requested": {
+        "description": "A command or edit waits for the candidate's approval. Delivered only to the originating candidate session.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "call_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "expires_at": "2026-08-01T09:35:00Z",
+                "summary": "go test ./...",
+                "tool": "run_command",
+                "truncated": false,
+                "turn_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
+              "event": "exam_attempt_assistant_approval_requested",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 46,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_assistant_approval_requested",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_assistant_approval_requested"
+                },
+                "event": {
+                  "const": "exam_attempt_assistant_approval_requested",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A command or edit waits for the candidate's approval.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Assistant approval requested"
+      },
+      "exam_attempt_assistant_text_delta": {
+        "description": "One chunk of the assistant's reply, numbered from zero within the turn. Delivered only to the originating candidate session.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "index": 0,
+                "text": "Look at the loop's exit condition: ",
+                "turn_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
+              "event": "exam_attempt_assistant_text_delta",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 46,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_assistant_text_delta",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_assistant_text_delta"
+                },
+                "event": {
+                  "const": "exam_attempt_assistant_text_delta",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "One chunk of the assistant's reply, numbered from zero within the turn.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Assistant text delta"
+      },
+      "exam_attempt_assistant_tool_call": {
+        "description": "The assistant started or ended a tool call. Delivered only to the originating candidate session.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "call_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "outcome": "ok",
+                "phase": "ended",
+                "tool": "read_file",
+                "turn_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
+              "event": "exam_attempt_assistant_tool_call",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 46,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_assistant_tool_call",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_assistant_tool_call"
+                },
+                "event": {
+                  "const": "exam_attempt_assistant_tool_call",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The assistant started or ended a tool call.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Assistant tool call"
+      },
+      "exam_attempt_assistant_turn_ended": {
+        "description": "The assistant's turn ended. Delivered only to the originating candidate session.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "ended_at": "2026-08-01T09:30:04Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "stop_reason": "end_turn",
+                "turn_id": "ia56br8kpous3h9nfemqtwz47y",
+                "usage": {
+                  "cache_read": 0,
+                  "cache_write": 0,
+                  "estimated": false,
+                  "input": 812,
+                  "output": 164
+                }
+              },
+              "event": "exam_attempt_assistant_turn_ended",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 46,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_assistant_turn_ended",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_assistant_turn_ended"
+                },
+                "event": {
+                  "const": "exam_attempt_assistant_turn_ended",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The assistant's turn ended.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Assistant turn ended"
+      },
+      "exam_attempt_assistant_turn_started": {
+        "description": "The assistant started answering the candidate's message. Delivered only to the originating candidate session.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "conversation_id": "8kpous3h9nfemqtwz47ydgjcx1",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "started_at": "2026-08-01T09:30:00Z",
+                "turn_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
+              "event": "exam_attempt_assistant_turn_started",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 46,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_assistant_turn_started",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_assistant_turn_started"
+                },
+                "event": {
+                  "const": "exam_attempt_assistant_turn_started",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The assistant started answering the candidate's message.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Assistant turn started"
+      },
+      "exam_attempt_assistant_unavailable": {
+        "description": "The model provider failed the turn. Delivered only to the originating candidate session.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "changed_at": "2026-08-01T09:30:04Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "reason": "rate_limited",
+                "retry_after_seconds": 20,
+                "turn_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
+              "event": "exam_attempt_assistant_unavailable",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 46,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_assistant_unavailable",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_assistant_unavailable"
+                },
+                "event": {
+                  "const": "exam_attempt_assistant_unavailable",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The model provider failed the turn.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Assistant unavailable"
+      },
       "exam_attempt_connect_reply": {
         "description": "security, candidate_runtime_capabilities, browser_policy and live_corrections have exactly the shapes of the OpenAPI components AdmittedSecurity, CandidateRuntimeCapabilities, CandidateBrowserPolicy and CandidateLiveCorrection.",
         "examples": [
@@ -1668,6 +2059,7 @@
             "payload": {
               "action": "exam.sitting.view",
               "data": {
+                "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
@@ -1736,6 +2128,7 @@
             "payload": {
               "action": "exam.sitting.participate",
               "data": {
+                "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "manifest_digest": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
@@ -4236,6 +4629,265 @@
         "title": "Attempt access changed",
         "type": "object"
       },
+      "exam_attempt_assistant_approval_requested": {
+        "additionalProperties": false,
+        "description": "A command or edit waits for the candidate's approval. The summary is the command, or the path and new content, cut to 8 KiB. An unanswered request is declined at expires_at.",
+        "properties": {
+          "call_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "summary": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "tool": {
+            "enum": [
+              "run_command",
+              "apply_edit"
+            ],
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "turn_id",
+          "call_id",
+          "tool",
+          "summary",
+          "truncated",
+          "expires_at"
+        ],
+        "title": "Assistant approval requested",
+        "type": "object"
+      },
+      "exam_attempt_assistant_text_delta": {
+        "additionalProperties": false,
+        "description": "One chunk of the assistant's reply, numbered from zero within the turn. Deltas are hints: a client that misses one reloads the transcript.",
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "index": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "turn_id",
+          "index",
+          "text"
+        ],
+        "title": "Assistant text delta",
+        "type": "object"
+      },
+      "exam_attempt_assistant_tool_call": {
+        "additionalProperties": false,
+        "description": "The assistant started or ended a tool call. Only the tool and the outcome are included; the arguments and result are in the transcript.",
+        "properties": {
+          "call_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "outcome": {
+            "maxLength": 32,
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "started",
+              "ended"
+            ],
+            "type": "string"
+          },
+          "tool": {
+            "maxLength": 32,
+            "type": "string"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "turn_id",
+          "call_id",
+          "tool",
+          "phase"
+        ],
+        "title": "Assistant tool call",
+        "type": "object"
+      },
+      "exam_attempt_assistant_turn_ended": {
+        "additionalProperties": false,
+        "description": "The assistant's turn ended. Reload the transcript for the recorded reply.",
+        "properties": {
+          "ended_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "stop_reason": {
+            "maxLength": 32,
+            "type": "string"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "usage": {
+            "additionalProperties": false,
+            "properties": {
+              "cache_read": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "cache_write": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "estimated": {
+                "type": "boolean"
+              },
+              "input": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "output": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "input",
+              "cache_read",
+              "cache_write",
+              "output",
+              "estimated"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "turn_id",
+          "stop_reason",
+          "usage",
+          "ended_at"
+        ],
+        "title": "Assistant turn ended",
+        "type": "object"
+      },
+      "exam_attempt_assistant_turn_started": {
+        "additionalProperties": false,
+        "description": "The assistant started answering the candidate's message.",
+        "properties": {
+          "conversation_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "turn_id",
+          "conversation_id",
+          "started_at"
+        ],
+        "title": "Assistant turn started",
+        "type": "object"
+      },
+      "exam_attempt_assistant_unavailable": {
+        "additionalProperties": false,
+        "description": "The model provider failed the turn. The exam goes on; the candidate may ask again after retry_after_seconds.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "reason": {
+            "enum": [
+              "rate_limited",
+              "overloaded",
+              "invalid",
+              "context_too_long",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "retry_after_seconds": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turn_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "turn_id",
+          "reason",
+          "changed_at"
+        ],
+        "title": "Assistant unavailable",
+        "type": "object"
+      },
       "exam_attempt_connect": {
         "additionalProperties": false,
         "description": "Binds this WebSocket to the candidate's Attempt in the Sitting: admits a new Attempt, rejoins a Ready one, or resumes the current Participation.",
@@ -4756,6 +5408,10 @@
         "additionalProperties": false,
         "description": "A submitted Attempt for Sitting viewers, with who or what submitted it.",
         "properties": {
+          "assistant_transcript_digest": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "type": "string"
+          },
           "candidate_user_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -4800,6 +5456,7 @@
           "provenance",
           "workspace_cursor",
           "manifest_digest",
+          "assistant_transcript_digest",
           "submitted_at"
         ],
         "title": "Attempt submitted",
@@ -4809,6 +5466,10 @@
         "additionalProperties": false,
         "description": "The candidate's own copy of the submission. It leaves out the candidate identity.",
         "properties": {
+          "assistant_transcript_digest": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "type": "string"
+          },
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -4849,6 +5510,7 @@
           "provenance",
           "workspace_cursor",
           "manifest_digest",
+          "assistant_transcript_digest",
           "submitted_at"
         ],
         "title": "Attempt submitted, candidate copy",
@@ -6207,6 +6869,24 @@
         },
         {
           "$ref": "#/channels/websocket/messages/exam_attempt_workspace_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_assistant_turn_started"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_assistant_text_delta"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_assistant_tool_call"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_assistant_approval_requested"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_assistant_turn_ended"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_assistant_unavailable"
         },
         {
           "$ref": "#/channels/websocket/messages/exam_attempt_focus_warning"

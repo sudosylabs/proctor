@@ -628,3 +628,7 @@ func TestAcademicAdministrationSensitiveBatchRequiresStrongRecentInteractiveSess
 	require.Empty(t, world.ledger.calls, "a refused batch reaches no Store mutation")
 	require.Empty(t, world.access.Audits.Attempts(), "a refused batch begins no mutation audit")
 }
+
+func (c *batchCatalog) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (c *batchCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }

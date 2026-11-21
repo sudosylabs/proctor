@@ -1055,3 +1055,7 @@ func (f *onboardingFixture) storedFilterPreview(state model.OnboardingImportStat
 	value.Filter = &store.AcademicAdministrationFilter{Operation: string(onboarding.AcademicAdministrationUserDisable)}
 	return value
 }
+
+func (c onboardingCatalog) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (c onboardingCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }

@@ -8,6 +8,16 @@
 -- Rolls back the pre-release schema baseline. Development databases should
 -- normally be dropped and recreated rather than rolled back.
 
+DROP TRIGGER IF EXISTS exam_submissions_seal_assistant ON exam_submissions;
+DROP FUNCTION IF EXISTS seal_assistant_inventory();
+DROP TABLE IF EXISTS exam_attempt_assistant_runs;
+DROP TABLE IF EXISTS exam_attempt_assistant_calls;
+DROP TABLE IF EXISTS exam_attempt_assistant_turns;
+DROP TABLE IF EXISTS exam_attempt_assistant_inventories;
+DROP FUNCTION IF EXISTS guard_assistant_history();
+DROP FUNCTION IF EXISTS guard_assistant_inventory();
+DROP TABLE IF EXISTS exam_attempt_assistants;
+DROP FUNCTION IF EXISTS guard_attempt_assistant_recipe();
 DROP TABLE IF EXISTS attempt_runtime_leases;
 DROP SEQUENCE IF EXISTS attempt_runtime_fences;
 DROP TABLE IF EXISTS exam_attempt_environments;
@@ -78,6 +88,8 @@ DROP TABLE IF EXISTS jobs;
 DROP TABLE IF EXISTS administrator_recovery_records;
 DROP TABLE IF EXISTS installation_states;
 DROP TABLE IF EXISTS retention_policies;
+DROP TABLE IF EXISTS assistant_profiles;
+DROP FUNCTION IF EXISTS guard_assistant_profile_mutation();
 DROP TABLE IF EXISTS environment_profiles;
 DROP FUNCTION IF EXISTS guard_environment_profile_mutation();
 DROP TABLE IF EXISTS plugin_settings;

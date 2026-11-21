@@ -109,8 +109,19 @@ func New(deps Dependencies) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	assistants, err := newAssistant(deps, shared, exams.attempts, terminals)
+	if err != nil {
+		return nil, err
+	}
+	if assistants != nil {
+		if err = shared.realtime.AttachAssistantListener(assistants.NotifyEvent); err != nil {
+			return nil, err
+		}
+	}
+
 	return &App{
 		Terminals:         terminals,
+		Assistant:         assistants,
 		Identity:          identities,
 		Onboarding:        onboardings,
 		Administration:    administrations,
@@ -314,6 +325,7 @@ func newAdministration(
 		RecentAuthenticationTTL: deps.RecentAuthenticationTTL,
 		Sessions:                deps.Sessions,
 		Plugins:                 deps.Plugins,
+		AssistantProviders:      deps.AssistantProviders,
 		Now:                     time.Now,
 	})
 }

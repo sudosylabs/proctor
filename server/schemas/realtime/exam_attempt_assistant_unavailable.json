@@ -1,0 +1,41 @@
+{
+  "title": "Assistant unavailable",
+  "description": "The model provider failed the turn. The exam goes on; the candidate may ask again after retry_after_seconds.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "turn_id",
+    "reason",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "turn_id": {
+      "$ref": "id.json"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "rate_limited",
+        "overloaded",
+        "invalid",
+        "context_too_long",
+        "unavailable"
+      ]
+    },
+    "retry_after_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

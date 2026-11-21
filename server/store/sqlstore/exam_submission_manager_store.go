@@ -349,6 +349,9 @@ func endExamAttemptByManager(
 	}
 
 	outcome := automaticExamSubmissionOutcome(submission, target)
+	if err = bindAssistantDigest(ctx, tx, &outcome); err != nil {
+		return zero, err
+	}
 	outcome.ConnectionClosed = beforeConnection == model.AttemptConnectionOpen
 	if err = completeExamSubmissionAudit(ctx, tx, outcome, input.AuditEventID, input.AuditAt, false, ""); err != nil {
 		return zero, err

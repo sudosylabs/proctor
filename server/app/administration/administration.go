@@ -44,8 +44,9 @@ type Dependencies struct {
 	// session lengths.
 	Sessions identity.SessionPolicy
 	// Plugins nil makes plugin administration unavailable.
-	Plugins PluginCatalog
-	Now     func() time.Time
+	Plugins            PluginCatalog
+	AssistantProviders []string
+	Now                func() time.Time
 }
 
 // Service holds every administration use case.
@@ -62,6 +63,8 @@ type Service struct {
 	// environmentProfiles is nil without persistence, which makes profile
 	// administration unavailable.
 	environmentProfiles store.EnvironmentProfileStore
+	assistantProfiles   store.AssistantProfileStore
+	assistantProviders  []string
 
 	authorizer *access.Authorizer
 	// auditor fails the attempt of a mutation that does not commit; the store
@@ -126,6 +129,8 @@ func New(deps Dependencies) (*Service, error) {
 		retentionPolicies:       catalog.RetentionPolicy(),
 		pluginSettings:          catalog.PluginSettings(),
 		environmentProfiles:     catalog.EnvironmentProfile(),
+		assistantProfiles:       catalog.AssistantProfile(),
+		assistantProviders:      append([]string(nil), deps.AssistantProviders...),
 		retention:               catalog.Retention(),
 		authorizer:              deps.Authorizer,
 		auditor:                 deps.Auditor.MutationAudit(),

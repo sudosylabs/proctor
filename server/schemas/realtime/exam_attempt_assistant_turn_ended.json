@@ -1,0 +1,64 @@
+{
+  "title": "Assistant turn ended",
+  "description": "The assistant's turn ended. Reload the transcript for the recorded reply.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "turn_id",
+    "stop_reason",
+    "usage",
+    "ended_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "turn_id": {
+      "$ref": "id.json"
+    },
+    "stop_reason": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input",
+        "cache_read",
+        "cache_write",
+        "output",
+        "estimated"
+      ],
+      "properties": {
+        "input": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_read": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_write": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ended_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

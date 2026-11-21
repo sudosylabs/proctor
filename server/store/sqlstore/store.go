@@ -138,6 +138,8 @@ type SQLStoreStores struct {
 	desktopCompatibilityPolicy store.DesktopCompatibilityPolicyStore
 	pluginSettings             store.PluginSettingsStore
 	environmentProfile         store.EnvironmentProfileStore
+	assistantProfile           store.AssistantProfileStore
+	assistantTranscript        store.AssistantTranscriptStore
 	attemptEnvironment         store.AttemptEnvironmentStore
 	attemptRuntimeLease        store.AttemptRuntimeLeaseStore
 	retentionPolicy            store.RetentionPolicyStore
@@ -274,6 +276,8 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.desktopCompatibilityPolicy = newSQLDesktopCompatibilityPolicyStore(sqlStore)
 	sqlStore.stores.pluginSettings = newSQLPluginSettingsStore(sqlStore)
 	sqlStore.stores.environmentProfile = newSQLEnvironmentProfileStore(sqlStore)
+	sqlStore.stores.assistantProfile = newSQLAssistantProfileStore(sqlStore)
+	sqlStore.stores.assistantTranscript = newSQLAssistantTranscriptStore(sqlStore)
 	sqlStore.stores.attemptEnvironment = newSQLAttemptEnvironmentStore(sqlStore)
 	sqlStore.stores.attemptRuntimeLease = newSQLAttemptRuntimeLeaseStore(sqlStore)
 	sqlStore.stores.retentionPolicy = newSQLRetentionPolicyStore(sqlStore)
@@ -552,3 +556,9 @@ var _ store.Store = (*SQLStore)(nil)
 func (ss *SQLStore) ExamRecords() store.ExamRecordsStore { return ss.stores.examRecords }
 
 func (ss *SQLStore) ExamExport() store.ExamExportStore { return ss.stores.examExport }
+
+func (ss *SQLStore) AssistantProfile() store.AssistantProfileStore { return ss.stores.assistantProfile }
+
+func (ss *SQLStore) AssistantTranscript() store.AssistantTranscriptStore {
+	return ss.stores.assistantTranscript
+}

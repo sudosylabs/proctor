@@ -364,6 +364,14 @@ writesComplete:
 	require.Equal(t, model.AttemptWorkspaceStorageAttempt, cowResolved.StorageOrigin)
 	require.Equal(t, cowObject.ObjectID, cowResolved.AttemptObjectID)
 	require.Equal(t, starterFile.EntryID, cowResolved.Entry.EntryID)
+	originals, err := ss.ExamAttempt().ListCandidateStarterWorkspace(ctx, journalAccess(access), 128)
+	require.NoError(t, err)
+	require.Contains(t, originals, store.CandidateStarterWorkspaceFile{ObjectID: starterResolved.StarterObjectID}, "candidate replacement keeps original admitted starter context")
+	outsider := journalAccess(access)
+	outsider.CandidateUserID = model.NewUserID()
+	_, err = ss.ExamAttempt().ListCandidateStarterWorkspace(ctx, outsider, 128)
+	require.True(t, store.IsNotFound(err), "another candidate cannot read original starter context")
+
 	childObject := stage(textContent("child"))[0]
 	childID := model.NewAttemptWorkspaceEntryID()
 	child, err := apply("create-child", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
@@ -571,6 +579,7 @@ writesComplete:
 	if len(probes) > 0 && probes[0].SetParticipationLeaseExpired != nil {
 		testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t, ctx, ss, workspace, probes[0])
 	}
+	testAssistantWorkspaceProof(t, ctx, ss, workspace)
 	testAttemptEnvironmentWriter(t, ss, workspace, probes...)
 	testAttemptWorkspaceBatches(t, ss, workspace)
 	testAttemptWorkspaceRecursiveDeletion(t, ss, workspace, probes...)
@@ -1210,4 +1219,42 @@ func createAttemptWorkspaceTestFile(t *testing.T, ctx context.Context, ss store.
 	require.NoError(t, err)
 	require.Len(t, result.Changes, 1)
 	return object, result
+}
+
+func testAssistantWorkspaceProof(t *testing.T, ctx context.Context, ss store.Store, workspace store.ExamAttemptWorkspaceStore) {
+	t.Helper()
+	fixture := newExamAttemptFixture(t, ctx, ss)
+	_, editor := connectEnvironmentFixture(t, ctx, ss, fixture, "assistant-proof")
+	assistant := store.ExamAttemptWorkspaceAssistantAccess{ExamAttemptWorkspaceEditorAccess: editor,
+		ConversationID: model.NewAssistantConversationID(), TurnID: model.NewAssistantTurnID(), CallID: model.NewAssistantCallID()}
+	_, err := workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: assistant})
+	require.NoError(t, err)
+	for name, corrupt := range map[string]func(*store.ExamAttemptWorkspaceAssistantAccess){
+		"another candidate":  func(a *store.ExamAttemptWorkspaceAssistantAccess) { a.CandidateUserID = model.NewUserID() },
+		"another session":    func(a *store.ExamAttemptWorkspaceAssistantAccess) { a.SessionID = model.NewSessionID() },
+		"another connection": func(a *store.ExamAttemptWorkspaceAssistantAccess) { a.ConnectionID = model.NewAttemptConnectionID() },
+		"wrong credential": func(a *store.ExamAttemptWorkspaceAssistantAccess) {
+			a.ContinuityCredentialHash = model.HashToken(model.NewCredentialToken())
+		},
+		"stale generation": func(a *store.ExamAttemptWorkspaceAssistantAccess) { a.Generation++ },
+		"missing call":     func(a *store.ExamAttemptWorkspaceAssistantAccess) { a.CallID = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := assistant
+			corrupt(&invalid)
+			_, proofErr := workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: invalid})
+			require.Error(t, proofErr)
+		})
+	}
+	objects := stageAttemptWorkspaceObjects(t, ctx, workspace, assistant,
+		model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 4, SHA256: strings.Repeat("b", 64)})
+	_, err = ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID,
+		ExpectedRevision: fixture.membership.Revision, EndAt: model.NowUTC()})
+	require.NoError(t, err)
+	time.Sleep(100 * time.Millisecond)
+	_, err = workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, assistant,
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "refused.txt", ObjectID: objects[0].ObjectID}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "assistant-revoked"))
+	require.True(t, store.IsNotFound(err), "assistant cannot finish a staged write after membership ends")
 }

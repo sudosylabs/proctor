@@ -1264,10 +1264,16 @@ type ExamAttemptSecurityUpdate struct {
 	Control                            model.SecurityControl
 }
 
+// CandidateStarterWorkspaceFile identifies admitted starter bytes.
+type CandidateStarterWorkspaceFile struct {
+	ObjectID model.StarterWorkspaceObjectID
+}
+
 // ExamAttemptStore holds attempts and their participations, connections,
 // suspensions and screen clips. Each mutation commits its audit, and its
 // idempotent outcome where it takes a command, with the change.
 type ExamAttemptStore interface {
+	ListCandidateStarterWorkspace(context.Context, CandidateAttemptAccess, int) ([]CandidateStarterWorkspaceFile, error)
 	// Connect admits the candidate to the sitting, creating the attempt and
 	// its workspace on first admission, and opens a connection under a new or
 	// continued participation. A replayed command returns the stored outcome.

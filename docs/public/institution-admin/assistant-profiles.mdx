@@ -1,0 +1,114 @@
+---
+title: Assistant profiles
+description: Define which model the in-exam assistant uses, the highest help level and the budgets Exams may choose, and how the provider handles data.
+audience: institution-administrator
+maturity: preview
+---
+
+# Assistant profiles
+
+An assistant profile is a named, fixed choice of model and limits for the
+in-exam assistant. Exam Managers pick a profile for their Exam, then choose a
+help level and budgets within its ceilings. Profiles are how the institution
+decides what the assistant may ever do, and which provider sees candidates'
+work.
+
+Profiles exist only when the operator has turned the assistant on and listed
+at least one provider in the
+[`Assistant` configuration](../reference/configuration/assistant.mdx). API
+keys stay in that configuration. You never handle them.
+
+A System Administrator manages profiles with
+`GET /api/v1/assistant-profiles`,
+`POST /api/v1/assistant-profiles` and
+`POST /api/v1/assistant-profiles/{assistant_profile_id}/retire`. Creating and
+retiring a profile need a recent strong sign-in and an idempotency key, and
+can't use a personal access token. Each change is recorded in the
+[audit history](./audit-history.mdx).
+
+## What each field means
+
+| Field | Meaning |
+| --- | --- |
+| `name` | A short unique name among the profiles that aren't retired: a lowercase letter, then up to 62 lowercase letters, digits or hyphens. |
+| `display_name` | What Exam Managers and candidates see, up to 160 bytes. Candidates are shown it, with the model, so they know what they are talking to. |
+| `provider` | The name of a provider in the installation configuration. If the operator later removes it, Exams can no longer be published with this profile. |
+| `model` | The model ID the provider expects, up to 256 bytes, such as `example-coder-32b`. |
+| `max_level` | The highest help level an Exam using this profile may choose: `tutor`, `reviewer`, `pair` or `agent`. See [help levels](../exam-manager/assistant.mdx#help-levels). |
+| `budgets` | Ceilings for each Attempt. An Exam's budgets must be at or below each of them. |
+| `data_handling` | The provider's retention terms: `self_hosted`, `zero_retention`, `standard_30d` or `other`. |
+| `pseudonymize` | On by default. The model is told about "the candidate", never their name, email address or ID. |
+
+The budget ceilings are:
+
+| Budget | Meaning and bounds |
+| --- | --- |
+| `turns` | Candidate messages per Attempt, from 1 to 2000. |
+| `input_tokens` | Tokens sent to the model per Attempt, from 1 to 100,000,000. |
+| `output_tokens` | Tokens the model writes per Attempt, from 1 to 10,000,000. |
+| `tool_calls` | Tool calls per Attempt, from 0 to 20000. |
+| `commands` | Commands the assistant may run per Attempt, from 0 to 2000. |
+| `command_seconds` | Total command run time per Attempt, from 0 to 86400. When `commands` is more than zero, it must be at least `command_timeout_seconds`. |
+| `command_timeout_seconds` | The longest one command may run, from 1 to 600. |
+
+```json
+{
+  "name": "campus-coder",
+  "display_name": "Campus coding model",
+  "provider": "campus-llm",
+  "model": "example-coder-32b",
+  "max_level": "reviewer",
+  "budgets": {
+    "turns": 60,
+    "input_tokens": 2000000,
+    "output_tokens": 200000,
+    "tool_calls": 400,
+    "commands": 0,
+    "command_seconds": 0,
+    "command_timeout_seconds": 60
+  },
+  "data_handling": "self_hosted",
+  "pseudonymize": true
+}
+```
+
+## Profiles never change
+
+A profile can't be edited. To change anything, create a new profile with the
+new values and retire the old one. This is deliberate:
+
+- a published Exam Revision keeps exactly the profile it was published with;
+- an admitted candidate keeps the assistant policy copied onto their Attempt,
+  even if the profile is retired during the Sitting;
+- the record of what the assistant was allowed to do stays true.
+
+Retiring a profile stops new Exams from being published with it. Drafts
+that name it must choose another profile before they can be published.
+A retired profile's name can be reused by a new profile.
+
+## The data-handling note
+
+`data_handling` is a record of the agreement your institution has with the
+provider. It is shown to Exam Managers when they choose a profile, and it is
+never sent to the provider. Proctor doesn't enforce it, so set it to what
+the contract actually says, and create a separate profile for each
+arrangement. See [assistant data protection](../operator/assistant-data-protection.mdx)
+for what each value means and the agreements behind it.
+
+Leave `pseudonymize` on. Structured candidate identity is currently omitted
+even when it is off. Candidates' own writing still reaches the provider as
+they wrote it.
+
+## What profiles don't show
+
+Profiles don't give you access to conversations. Transcripts belong to the
+Submission, and only the Exam's Managers read them during review.
+
+## Read aggregate usage
+
+`GET /api/v1/assistant-profiles/{assistant_profile_id}/usage` returns counters
+for retained Attempts using the profile: turns, tokens, tools, commands and
+command time. Outstanding reservations are included conservatively; counters
+fall when the underlying transcripts are retired. This endpoint contains no
+candidate identity, message, tool arguments or command output. Transcript
+access remains with the candidate and authorized Exam Managers.

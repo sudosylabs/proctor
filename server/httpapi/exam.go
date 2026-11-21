@@ -111,6 +111,7 @@ type examPolicyResponse struct {
 	ConnectionLoss examConnectionPolicyResponse `json:"connection_loss"`
 	FocusLoss      examFocusPolicyResponse      `json:"focus_loss"`
 	Execution      examExecutionPolicyDocument  `json:"execution"`
+	Assistant      model.AssistantPolicy        `json:"assistant"`
 }
 
 type examConnectionPolicyResponse struct {
@@ -134,6 +135,7 @@ func examResource(app *exam.Authoring) route.Resource {
 	draft := "/exams/{exam_id}/draft"
 	nativePolicy := "/exams/{exam_id}/draft/policies/native"
 	focusLossPolicy := "/exams/{exam_id}/draft/policies/focus-loss"
+	assistantPolicy := "/exams/{exam_id}/draft/assistant"
 	executionPolicy := "/exams/{exam_id}/draft/policies/execution"
 	browserPolicy := "/exams/{exam_id}/draft/browser-policy"
 	archive := "/exams/{exam_id}/archive"
@@ -262,6 +264,30 @@ func examResource(app *exam.Authoring) route.Resource {
 				"idempotency.in_progress",
 			},
 			Handle: h.configureDraftExecution,
+		},
+		route.Endpoint{
+			Method:      http.MethodPut,
+			Path:        assistantPolicy,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.draft.no_changes",
+				"exam.assistant.profile_unusable",
+				"exam.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Handle: h.configureDraftAssistant,
 		},
 		route.Endpoint{
 			Method:      http.MethodPut,
@@ -739,6 +765,7 @@ func examResponseFromView(view exam.View) examResponse {
 			InstructionsMarkdown: view.Draft.InstructionsMarkdown,
 			Policy: examPolicyResponse{
 				Native:         policy.Native.Clone(),
+				Assistant:      policy.Assistant.Clone(),
 				ConnectionLoss: examConnectionPolicyResponse{Outcome: string(policy.ConnectionLoss.Outcome)},
 				FocusLoss: examFocusPolicyResponse{
 					Enabled:                     policy.FocusLoss.Enabled,

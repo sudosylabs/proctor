@@ -27,6 +27,13 @@ var candidateWriteRate = workspaceWriteRate{
 	byteBurst:          128 << 20,
 }
 
+var assistantWriteRate = workspaceWriteRate{
+	mutationsPerSecond: 16,
+	mutationBurst:      256,
+	bytesPerSecond:     2 << 20,
+	byteBurst:          128 << 20,
+}
+
 // The environment's write rate per CPU core, and the core count's clamp.
 const (
 	environmentMutationsPerCore = 128
@@ -56,6 +63,8 @@ func workspaceWriteRateFor(kind model.AttemptWorkspaceAuthorKind, resources mode
 	switch kind {
 	case model.AttemptWorkspaceAuthorCandidate:
 		return candidateWriteRate, true
+	case model.AttemptWorkspaceAuthorAssistant:
+		return assistantWriteRate, true
 	case model.AttemptWorkspaceAuthorEnvironment:
 		if !resources.Valid() {
 			return workspaceWriteRate{}, false

@@ -91,26 +91,28 @@ type managerExamAttemptIntegrityFlaggedData struct {
 }
 
 type managerExamAttemptSubmittedData struct {
-	ExamSittingID   string `json:"exam_sitting_id"`
-	ExamAttemptID   string `json:"exam_attempt_id"`
-	CandidateID     string `json:"candidate_user_id"`
-	SubmissionID    string `json:"submission_id"`
-	State           string `json:"state"`
-	Provenance      string `json:"provenance"`
-	WorkspaceCursor int64  `json:"workspace_cursor"`
-	ManifestDigest  string `json:"manifest_digest"`
-	SubmittedAt     string `json:"submitted_at"`
+	ExamSittingID             string `json:"exam_sitting_id"`
+	ExamAttemptID             string `json:"exam_attempt_id"`
+	CandidateID               string `json:"candidate_user_id"`
+	SubmissionID              string `json:"submission_id"`
+	State                     string `json:"state"`
+	Provenance                string `json:"provenance"`
+	WorkspaceCursor           int64  `json:"workspace_cursor"`
+	ManifestDigest            string `json:"manifest_digest"`
+	AssistantTranscriptDigest string `json:"assistant_transcript_digest"`
+	SubmittedAt               string `json:"submitted_at"`
 }
 
 type candidateExamAttemptSubmittedData struct {
-	ExamSittingID   string `json:"exam_sitting_id"`
-	ExamAttemptID   string `json:"exam_attempt_id"`
-	SubmissionID    string `json:"submission_id"`
-	State           string `json:"state"`
-	Provenance      string `json:"provenance"`
-	WorkspaceCursor int64  `json:"workspace_cursor"`
-	ManifestDigest  string `json:"manifest_digest"`
-	SubmittedAt     string `json:"submitted_at"`
+	ExamSittingID             string `json:"exam_sitting_id"`
+	ExamAttemptID             string `json:"exam_attempt_id"`
+	SubmissionID              string `json:"submission_id"`
+	State                     string `json:"state"`
+	Provenance                string `json:"provenance"`
+	WorkspaceCursor           int64  `json:"workspace_cursor"`
+	ManifestDigest            string `json:"manifest_digest"`
+	AssistantTranscriptDigest string `json:"assistant_transcript_digest"`
+	SubmittedAt               string `json:"submitted_at"`
 }
 
 // NewExamAttemptSubmittedEvent tells sitting viewers that an attempt was
@@ -123,6 +125,7 @@ func NewExamAttemptSubmittedEvent(
 	submissionID model.SubmissionID,
 	workspaceCursor int64,
 	manifestDigest string,
+	assistantTranscriptDigest string,
 	provenance model.ExamSubmissionProvenance,
 	submittedAt time.Time,
 ) (Event, error) {
@@ -132,21 +135,23 @@ func NewExamAttemptSubmittedEvent(
 		!submissionID.IsValid() ||
 		workspaceCursor < 0 ||
 		!validEventSHA256(manifestDigest) ||
+		!model.IsValidSHA256Fingerprint(assistantTranscriptDigest) ||
 		!provenance.IsValid() ||
 		submittedAt.IsZero() {
 		return Event{}, errors.New("manager Exam Attempt submitted event requires valid bounded metadata")
 	}
 
 	data, err := json.Marshal(managerExamAttemptSubmittedData{
-		ExamSittingID:   sittingID.String(),
-		ExamAttemptID:   attemptID.String(),
-		CandidateID:     candidateID.String(),
-		SubmissionID:    submissionID.String(),
-		State:           string(model.ExamAttemptSubmitted),
-		Provenance:      string(provenance),
-		WorkspaceCursor: workspaceCursor,
-		ManifestDigest:  manifestDigest,
-		SubmittedAt:     model.FormatRFC3339(submittedAt),
+		ExamSittingID:             sittingID.String(),
+		ExamAttemptID:             attemptID.String(),
+		CandidateID:               candidateID.String(),
+		SubmissionID:              submissionID.String(),
+		State:                     string(model.ExamAttemptSubmitted),
+		Provenance:                string(provenance),
+		WorkspaceCursor:           workspaceCursor,
+		ManifestDigest:            manifestDigest,
+		AssistantTranscriptDigest: assistantTranscriptDigest,
+		SubmittedAt:               model.FormatRFC3339(submittedAt),
 	})
 	if err != nil {
 		return Event{}, err
@@ -170,6 +175,7 @@ func NewCandidateExamAttemptSubmittedEvent(
 	submissionID model.SubmissionID,
 	workspaceCursor int64,
 	manifestDigest string,
+	assistantTranscriptDigest string,
 	provenance model.ExamSubmissionProvenance,
 	submittedAt time.Time,
 ) (Event, error) {
@@ -179,20 +185,22 @@ func NewCandidateExamAttemptSubmittedEvent(
 		!submissionID.IsValid() ||
 		workspaceCursor < 0 ||
 		!validEventSHA256(manifestDigest) ||
+		!model.IsValidSHA256Fingerprint(assistantTranscriptDigest) ||
 		!provenance.IsValid() ||
 		submittedAt.IsZero() {
 		return Event{}, errors.New("candidate Exam Attempt submitted event requires valid bounded metadata")
 	}
 
 	data, err := json.Marshal(candidateExamAttemptSubmittedData{
-		ExamSittingID:   sittingID.String(),
-		ExamAttemptID:   attemptID.String(),
-		SubmissionID:    submissionID.String(),
-		State:           string(model.ExamAttemptSubmitted),
-		Provenance:      string(provenance),
-		WorkspaceCursor: workspaceCursor,
-		ManifestDigest:  manifestDigest,
-		SubmittedAt:     model.FormatRFC3339(submittedAt),
+		ExamSittingID:             sittingID.String(),
+		ExamAttemptID:             attemptID.String(),
+		SubmissionID:              submissionID.String(),
+		State:                     string(model.ExamAttemptSubmitted),
+		Provenance:                string(provenance),
+		WorkspaceCursor:           workspaceCursor,
+		ManifestDigest:            manifestDigest,
+		AssistantTranscriptDigest: assistantTranscriptDigest,
+		SubmittedAt:               model.FormatRFC3339(submittedAt),
 	})
 	if err != nil {
 		return Event{}, err

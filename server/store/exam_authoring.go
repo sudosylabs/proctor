@@ -259,6 +259,20 @@ type ExamDraftExecutionUpdate struct {
 	AuditAt          time.Time
 }
 
+// ExamDraftAssistantUpdate replaces only the assistant policy. An enabled
+// policy must name an unretired profile that allows its terminals, or the
+// update conflicts with assistant_profile_unusable.
+type ExamDraftAssistantUpdate struct {
+	ExamID           model.ExamID
+	ActorUserID      model.UserID
+	ManagerOverride  bool
+	ExpectedRevision int64
+	Assistant        model.AssistantPolicy
+	UpdatedAt        time.Time
+	AuditEventID     model.AuditEventID
+	AuditAt          time.Time
+}
+
 // ExamDraftNativePolicyUpdate replaces the native rules, keeping the focus
 // and connection loss rules.
 type ExamDraftNativePolicyUpdate struct {
@@ -298,6 +312,7 @@ type ExamAuthoringStore interface {
 	UpdateDraftText(context.Context, *ExamDraftTextUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftFocusLoss(context.Context, *ExamDraftFocusLossUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftExecution(context.Context, *ExamDraftExecutionUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
+	UpdateDraftAssistant(context.Context, *ExamDraftAssistantUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftNativePolicy(context.Context, *ExamDraftNativePolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftBrowserPolicy(context.Context, *ExamDraftBrowserPolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	// List orders by (UpdatedAt, ExamID) descending. Unit, archive state, role

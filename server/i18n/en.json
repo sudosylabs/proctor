@@ -464,6 +464,10 @@
     "translation": "{{.Actor}} viewed the access policy"
   },
   {
+    "id": "audit.action.assistant_profile.manage",
+    "translation": "{{.Actor}} changed an assistant profile"
+  },
+  {
     "id": "audit.action.audit.view",
     "translation": "{{.Actor}} viewed audit history"
   },

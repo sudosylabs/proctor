@@ -1,0 +1,74 @@
+---
+title: Read assistant use in review
+description: Follow the assistant conversation next to the candidate's own work, see which changes the assistant made, and read the usage summary as facts, not flags.
+audience: exam-manager
+maturity: preview
+---
+
+# Read assistant use in review
+
+When your Exam offers the assistant, every Submission carries the full
+record of how the candidate used it. You read it during review, next to the
+sealed work and the integrity record described in
+[look at a Submission and review integrity](./submission-and-integrity-review.mdx).
+
+## What is recorded
+
+The conversation is its own append-only record, owned by the Attempt:
+
+- every turn, from the candidate and from the assistant, with its text;
+- for each assistant turn, the model, the token counts and why it stopped;
+- every tool call: its name, its arguments, a shortened result, how long it
+  took and how it ended;
+- every approval request and the candidate's answer;
+- every output check, and whether a reply was rewritten or replaced;
+- every gap, such as a provider outage or a turn cancelled at the seal.
+
+Changes the assistant makes to files appear in the workspace journal under
+the assistant as their author, linked to the exact tool call. Commands it
+runs appear as processes under their own `assistant:N` tag, with their exit
+code and output.
+
+The record has its own limits, apart from the execution evidence, so a long
+conversation never pushes terminal evidence out, and the other way round. It
+is bound to the Submission when the Attempt is sealed. The Submission
+view and the submitted realtime event carry the same digest as the receipt.
+The Submission view omits the digest after transcript retirement.
+
+## Read it
+The transcript is read with
+`GET /api/v1/submissions/{submission_id}/assistant-transcript`, one page at a
+time, and only after the Attempt is sealed. It is authorized like the
+Submission's attempt evidence: you need to manage the Exam and hold review
+permission.
+Use these API records together when reviewing:
+
+- **The timeline:** compare transcript timestamps with the workspace journal
+  and execution evidence to see what the candidate did before and after
+  each answer.
+- **Per file:** which lines the assistant last wrote, from the manifest's
+  last author and the journal.
+- **Per command:** what the assistant ran, its exit code and its output.
+- **The usage summary:** turns, tokens, tools used, commands, edits proposed,
+  accepted and declined, and output checks.
+
+At Pair, a proposed diff the candidate applied is the candidate's own edit
+in the journal. The transcript records the proposal and whether it was
+applied.
+
+## Facts, not flags
+
+When your Exam allows the assistant, using it isn't misconduct. Proctor
+raises no Integrity Flags for assistant use, and the usage summary has no
+score, threshold or rating. A high or low figure means nothing on its own.
+
+Judge the record as you would any other evidence: what the Exam allowed,
+what the candidate asked, and what they did with the answers. Don't treat
+the transcript as proof of what the candidate understood.
+
+## Candidates see their own transcript
+
+The candidate can read their own conversation during the Attempt, and the
+receipt lists its digest. Nothing about their assistant use is hidden from
+them. Your instructions to the assistant are not part of what they see, but
+assume they may have learned them from the model.

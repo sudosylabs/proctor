@@ -408,3 +408,27 @@ func (r *configureExamDraftNativePolicyRequest) UnmarshalJSON(data []byte) error
 	*r = configureExamDraftNativePolicyRequest(decoded)
 	return nil
 }
+
+// The assistant policy is a model-owned canonical document.
+type configureExamDraftAssistantRequest struct {
+	ExpectedDraftRevision int64                 `json:"expected_revision"`
+	Assistant             model.AssistantPolicy `json:"assistant"`
+}
+
+func (h examHandlers) configureDraftAssistant(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	var body configureExamDraftAssistantRequest
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
+	}
+	view, err := h.app.ConfigureExamDraftAssistant(request.Context, request.Invocation(), exam.ConfigureDraftAssistantCommand{
+		ExamID: examID, ExpectedDraftRevision: body.ExpectedDraftRevision, Assistant: body.Assistant, IdempotencyKey: request.IdempotencyKey,
+	})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+}

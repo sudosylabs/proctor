@@ -1,0 +1,5 @@
+: synthetic provider fixture
+
+data: {"choices":[{"index":0,"delta":{"content":"A hint."},"finish_reason":"stop"}]}
+
+data: [DONE]

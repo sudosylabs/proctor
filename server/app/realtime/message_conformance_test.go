@@ -55,7 +55,27 @@ func conformanceConstructors() map[string]func() (Event, error) {
 	released := finalized
 	released.ReleaseState = model.SubmissionReviewReleased
 
+	assistantTarget := AssistantTarget{SittingID: sittingID, AttemptID: attemptID, CandidateID: candidateID,
+		SessionID: model.NewSessionID(), TurnID: model.NewAssistantTurnID()}
+
 	return map[string]func() (Event, error){
+		"exam_attempt_assistant_turn_started": func() (Event, error) {
+			return NewAssistantTurnStartedEvent(assistantTarget, model.NewAssistantConversationID(), at)
+		},
+		"exam_attempt_assistant_text_delta": func() (Event, error) { return NewAssistantTextDeltaEvent(assistantTarget, 0, "A hint.") },
+		"exam_attempt_assistant_turn_ended": func() (Event, error) {
+			return NewAssistantTurnEndedEvent(assistantTarget, "end_turn", model.AssistantUsage{}, at)
+		},
+		"exam_attempt_assistant_unavailable": func() (Event, error) {
+			return NewAssistantUnavailableEvent(assistantTarget, "unavailable", time.Second, at)
+		},
+		"exam_attempt_assistant_tool_call": func() (Event, error) {
+			return NewAssistantToolCallEvent(assistantTarget, model.NewAssistantCallID(), "read_file", "started", "")
+		},
+		"exam_attempt_assistant_approval_requested": func() (Event, error) {
+			return NewAssistantApprovalRequestedEvent(assistantTarget, model.NewAssistantCallID(), "run_command", "go test ./...", at.Add(5*time.Minute))
+		},
+
 		"access_policy_changed": func() (Event, error) {
 			return NewAccessPolicyChangedEvent(model.NewInstitutionID(), 7)
 		},
@@ -167,11 +187,11 @@ func conformanceConstructors() map[string]func() (Event, error) {
 				model.IntegrityOutcomeFlagAndSuspend, model.FocusLossMaximumEvidenceEpisodes, 3, at)
 		},
 		"exam_attempt_submitted": func() (Event, error) {
-			return NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 0, digest,
+			return NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 0, digest, model.NewAssistantInventory().Digest,
 				model.ExamSubmissionManagerEndedAttempt, at)
 		},
 		"exam_attempt_submitted_for_candidate": func() (Event, error) {
-			return NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest,
+			return NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
 				model.ExamSubmissionCandidateSubmitted, at)
 		},
 		"exam_integrity_discrepancy_recorded": func() (Event, error) {

@@ -1,0 +1,167 @@
+---
+title: Set up the in-exam assistant
+description: Choose how much an AI assistant may help candidates in your Exam, when it must ask first, and what it should keep back.
+audience: exam-manager
+maturity: preview
+---
+
+# Set up the in-exam assistant
+
+Your Exam can offer candidates an AI assistant in Proctor Desktop. You
+decide how much it may do, from explaining concepts to editing files and
+running commands, and every turn is recorded for review. The assistant is
+off for every Exam until you turn it on.
+
+<Maturity state="preview">
+  The server and the API cover the assistant policy, the conversation and the
+  transcript. The Desktop app's code isn't in this repository, so this page
+  doesn't name its buttons or show screenshots.
+</Maturity>
+
+You need three things first:
+
+- the operator has turned the assistant on for the installation;
+- a System Administrator has created an
+  [assistant profile](../institution-admin/assistant-profiles.mdx) you can
+  use;
+- for Pair with commands, and for Agent, your Exam has an execution
+  environment.
+
+## Help levels
+
+A level is a set of tools. The assistant can't do what its tools don't allow,
+however a candidate asks. The prompt sets the tone; the tools set the limit.
+
+| Level | The assistant can | It can't |
+| --- | --- | --- |
+| Off | Nothing. Candidates have no assistant. | Anything. |
+| Tutor | Explain concepts, the language and its libraries, and answer general questions. | See the workspace, the terminal or any file. |
+| Reviewer | Everything Tutor can, and read the candidate's files, search them, and read a candidate terminal's screen. It explains errors, points at problems and gives hints. | Write code into the workspace or run anything. |
+| Pair | Everything Reviewer can, and propose a change as a diff that the candidate applies themselves. With execution, it can also run commands in its own process to test. | Change a file itself. |
+| Agent | Everything Pair can, and change files and run commands itself, within the approval mode. | Act outside this one Attempt, or type into the candidate's terminal. |
+
+What depends on execution:
+
+- **Reviewer** reads terminal screens only when the Exam has execution.
+  Without it, it reads files only.
+- **Pair** works without execution: the assistant proposes diffs, and has no
+  command tool. With execution, it also gets `run_command`.
+- **Agent** needs execution. Publishing an Exam at the Agent level without
+  execution is refused.
+
+The levels map onto the AI Assessment Scale many universities already use:
+Tutor is roughly level 2, Reviewer and Pair level 3, and Agent level 4.
+
+Your level must be at or below the profile's `max_level`.
+
+### What the assistant can read
+
+It reads the Attempt Workspace as the server holds it, and Exam Resources
+only if candidates may read them. It never sees more than the candidate can.
+Each read is limited in size.
+
+### How commands run
+
+Commands run in the assistant's own processes, never in the candidate's
+terminal, so the record always shows who ran what. A command starts in the
+workspace root with no input and no terminal, so programs that wait for
+input time out. Each command has a time limit set by your budgets, and file
+changes it makes are marked as the assistant's.
+
+## Approvals
+
+`approvals` controls whether the candidate must agree before the assistant
+runs a command or changes a file.
+
+- **`always_ask`, the default:** the candidate sees the exact command, or
+  the diff, and accepts or declines it. The decision is recorded.
+  A request nobody answers within 5 minutes is declined.
+- **`auto_within_level`:** the assistant acts without asking, within its
+  level. Everything is still recorded.
+
+A proposed diff at Pair never needs approval, because the assistant writes
+nothing: applying it is the candidate's own edit.
+
+## Write instructions
+
+`instructions` is your guidance to the assistant, up to 4096 bytes. For
+example: "Don't explain recursion; it's what this Exam assesses. Point to
+the relevant lecture topic instead."
+
+Candidates don't see your instructions, but a determined candidate may get
+the model to reveal them. **Write what you'd be fine showing the
+candidate.** Never put answers, test data or marking notes in them.
+
+## Avoided concepts and the code budget
+
+Under Tutor and Reviewer, every reply is checked before the candidate sees
+it:
+
+- **`concepts_to_avoid`:** up to 16 phrases of at most 80 bytes each, such
+  as `dynamic programming`. A reply whose explanation uses one fails the
+  check. Matching ignores case and extra spaces.
+- **`code_line_budget`:** the most lines of new code a reply may contain,
+  from 0 to 100, and 10 by default. Lines already in the candidate's
+  workspace or the Starter Workspace don't count.
+
+A reply that fails is rewritten once as a hint. If the rewrite fails too,
+the candidate gets a fixed hint message instead. Both are recorded. This is
+a best-effort guard, not a proof: the real limits are the level's tools and
+the transcript.
+
+## Budgets
+
+`budgets` caps the assistant for each Attempt: `turns`, `input_tokens`,
+`output_tokens`, `tool_calls`, `commands`, `command_seconds` and
+`command_timeout_seconds`. Each must be at or below the profile's ceiling;
+the [assistant profiles](../institution-admin/assistant-profiles.mdx) page
+lists their bounds. When a budget runs out, the assistant says so and stops,
+and the candidate carries on with the Exam.
+
+For a level without commands, set `commands` and `command_seconds` to `0`.
+
+## Configure the policy
+
+The assistant policy is part of your Draft, and you change it with
+`PUT /api/v1/exams/{exam_id}/draft/assistant`, sending the Draft revision
+you expect and an idempotency key:
+
+```json
+{
+  "expected_revision": 7,
+  "assistant": {
+    "enabled": true,
+    "profile_id": "<an assistant profile ID>",
+    "level": "reviewer",
+    "approvals": "always_ask",
+    "instructions": "Don't explain recursion; it's what this Exam assesses.",
+    "concepts_to_avoid": ["recursion", "memoization"],
+    "budgets": {
+      "turns": 40,
+      "input_tokens": 1000000,
+      "output_tokens": 100000,
+      "tool_calls": 200,
+      "commands": 0,
+      "command_seconds": 0,
+      "command_timeout_seconds": 60
+    },
+    "code_line_budget": 10
+  }
+}
+```
+
+To turn the assistant off, keep every policy field in the request. Set
+`enabled` to false, `level` to `off`, `profile_id` and `instructions` to empty
+strings, `concepts_to_avoid` to an empty array, and every budget value to zero.
+Keep a valid approvals mode and `code_line_budget`.
+
+When you publish, Proctor checks the policy again. Publishing is refused with
+`exam.assistant.disabled` if the installation has the assistant off, and with
+`exam.assistant.profile_unusable` if the profile is retired, its provider is
+gone, or your level or budgets exceed it. The published Revision fixes the
+policy, and each Attempt keeps the copy it was admitted with.
+
+## Next
+
+[Read assistant use in review](./assistant-review.mdx) explains the
+transcript, the timeline and the usage summary.

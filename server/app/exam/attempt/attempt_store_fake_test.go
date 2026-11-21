@@ -450,3 +450,7 @@ func (f *attemptStoreFake) DeliveryBudget(context.Context, store.DeliveryBudgetA
 func (f *attemptStoreFake) StopDeliveryDetails(context.Context, *store.DeliveryDetailsStop, *store.CommandIdempotency) (*model.StopDeliveryDetailsResult, error) {
 	return nil, errors.New("unexpected StopDeliveryDetails")
 }
+
+func (f *attemptStoreFake) ListCandidateStarterWorkspace(context.Context, store.CandidateAttemptAccess, int) ([]store.CandidateStarterWorkspaceFile, error) {
+	return []store.CandidateStarterWorkspaceFile{}, nil
+}

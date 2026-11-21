@@ -23,6 +23,8 @@ type ExamRevisionPublication struct {
 	// enabled policy must also name a usable profile
 	// (environment_profile_unusable).
 	ExecutionEnabled      bool
+	AssistantEnabled      bool
+	AssistantProviders    []string
 	RevisionID            model.ExamRevisionID
 	ExamID                model.ExamID
 	ActorUserID           model.UserID

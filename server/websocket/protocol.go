@@ -37,13 +37,14 @@ const (
 // Event is a wire event. Each connection stamps its own Sequence, which never
 // crosses the cluster transport.
 type Event struct {
-	ID       string          `json:"id"`
-	Event    string          `json:"event"`
-	Sequence int64           `json:"sequence"`
-	UserID   string          `json:"user_id,omitempty"`
-	Action   model.Action    `json:"action,omitempty"`
-	Resource Resource        `json:"resource,omitempty"`
-	Data     json.RawMessage `json:"data,omitempty"`
+	ID        string          `json:"id"`
+	Event     string          `json:"event"`
+	Sequence  int64           `json:"sequence"`
+	UserID    string          `json:"user_id,omitempty"`
+	SessionID string          `json:"-"`
+	Action    model.Action    `json:"action,omitempty"`
+	Resource  Resource        `json:"resource,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
 }
 
 // Resource is the wire form of an authorization resource. It is a separate
@@ -88,6 +89,10 @@ func (e *Event) ValidateForPublish() error {
 	}
 	if e.UserID != "" && !model.UserID(e.UserID).IsValid() {
 		return errors.New("websocket event user ID is invalid")
+	}
+
+	if e.SessionID != "" && (!model.SessionID(e.SessionID).IsValid() || e.UserID == "") {
+		return errors.New("websocket session target requires valid user and session IDs")
 	}
 
 	if e.Action == "" && e.Resource == (Resource{}) {

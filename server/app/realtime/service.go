@@ -213,3 +213,13 @@ func invalidRealtimeRequest(field string) error {
 func internalRealtimeError(err error) error {
 	return apperror.New("websocket.internal").Wrap(err)
 }
+
+// AttachAssistantListener is wired once before the graph starts.
+func (s *Service) AttachAssistantListener(listener func(Event)) error {
+	return s.deps.Delivery.AttachAssistantListener(listener)
+}
+
+// NotifyAssistantChanged wakes the owner on this node and peers after commit.
+func (s *Service) NotifyAssistantChanged(ctx context.Context, id model.ExamAttemptID) error {
+	return s.deps.Delivery.NotifyAssistantChanged(ctx, id)
+}

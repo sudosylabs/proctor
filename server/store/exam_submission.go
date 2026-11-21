@@ -85,7 +85,11 @@ type ExamSubmissionReceipt struct {
 	State           model.ExamAttemptState
 	WorkspaceCursor int64
 	ManifestDigest  string
-	SubmittedAt     time.Time
+	// AssistantTranscriptDigest is the assistant transcript's inventory
+	// digest bound at the seal; an attempt with no conversation has the empty
+	// inventory's digest.
+	AssistantTranscriptDigest string
+	SubmittedAt               time.Time
 }
 
 // ExamSubmissionSealResult is the receipt plus the scope post-commit effects
@@ -122,6 +126,7 @@ func (r *ExamSubmissionSealResult) ConsistentWith(
 		r.Receipt.WorkspaceCursor < sealAccess.ExpectedWorkspaceCursor ||
 		r.Receipt.ExamRevisionID != sealAccess.ExpectedCurrentRevisionID ||
 		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		!model.IsValidSHA256Fingerprint(r.Receipt.AssistantTranscriptDigest) ||
 		r.Receipt.SubmittedAt.IsZero() ||
 		r.Receipt.BrowserActivity.Validate() != nil ||
 		r.ExamID != target.ExamID ||
@@ -208,6 +213,7 @@ func (r *ExamSubmissionAutomaticSealResult) ConsistentWith(
 		!r.Receipt.ReceiptCode.IsValid() ||
 		r.Receipt.WorkspaceCursor < 0 ||
 		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		!model.IsValidSHA256Fingerprint(r.Receipt.AssistantTranscriptDigest) ||
 		r.Receipt.SubmittedAt.IsZero() ||
 		r.ExamID != target.ExamID ||
 		r.SittingID != target.SittingID ||
@@ -287,6 +293,7 @@ func (r *ExamSubmissionManagerEndResult) ConsistentWith(
 		!r.Receipt.ReceiptCode.IsValid() ||
 		r.Receipt.WorkspaceCursor < 0 ||
 		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		!model.IsValidSHA256Fingerprint(r.Receipt.AssistantTranscriptDigest) ||
 		r.Receipt.SubmittedAt.IsZero() ||
 		r.ExamID != examID ||
 		r.SittingID != sittingID ||

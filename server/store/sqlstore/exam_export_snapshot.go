@@ -274,6 +274,12 @@ func captureExamExportIntegrity(
 		{"attempt_evidence_inventory", `SELECT records, bytes, gaps, overflow, digest
 			FROM exam_attempt_evidence_inventories
 			WHERE submission_id = ?`, a.SubmissionID.String()},
+		{"assistant_transcript", `SELECT convert_from(canonical,'UTF8')::jsonb AS record FROM (
+ SELECT exam_attempt_id,sequence,canonical FROM exam_attempt_assistant_turns
+ UNION ALL SELECT exam_attempt_id,sequence,canonical FROM exam_attempt_assistant_calls
+ ) history WHERE exam_attempt_id=? ORDER BY sequence`, a.AttemptID.String()},
+		{"assistant_inventory", `SELECT records,bytes,gaps,digest FROM exam_attempt_assistant_inventories WHERE submission_id=?`, a.SubmissionID.String()},
+
 		{"discrepancies", `SELECT id, generation, kind, focus_loss_signal_id, sequence,
 				duration_milliseconds, source, missing_before, correction_revision_id,
 				browser_activity_source_session_id, final_sequence, gap_reason, unresolved_count,

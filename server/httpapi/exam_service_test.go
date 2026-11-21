@@ -188,6 +188,7 @@ type examAuthoringRecords struct {
 	creations           []*store.ExamAuthoringCreation
 	textUpdates         []*store.ExamDraftTextUpdate
 	focusLossUpdates    []*store.ExamDraftFocusLossUpdate
+	assistantUpdates    []*store.ExamDraftAssistantUpdate
 	nativePolicyUpdates []*store.ExamDraftNativePolicyUpdate
 	lists               []store.ExamListOptions
 	archives            []*store.ExamArchive
@@ -303,6 +304,18 @@ func (s *examAuthoringRecords) UpdateDraftNativePolicy(_ context.Context, input 
 		return nil, err
 	}
 	if _, err = entry.draft.ApplyNativePolicy(input.NativePolicy, input.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &store.ExamAuthoringCommandResult{Value: entry.snapshot(input.ActorUserID)}, nil
+}
+
+func (s *examAuthoringRecords) UpdateDraftAssistant(_ context.Context, input *store.ExamDraftAssistantUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	s.assistantUpdates, s.commands = append(s.assistantUpdates, input), append(s.commands, command)
+	entry, err := s.editable(input.ExamID, input.ActorUserID, input.ManagerOverride, input.ExpectedRevision)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = entry.draft.ApplyAssistantPolicy(input.Assistant, input.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return &store.ExamAuthoringCommandResult{Value: entry.snapshot(input.ActorUserID)}, nil

@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
@@ -80,7 +81,13 @@ type Dependencies struct {
 	PublicURL string
 	// ExecutionEnabled is whether exams may publish with an execution
 	// environment.
-	ExecutionEnabled bool
+	ExecutionEnabled   bool
+	AssistantEnabled   bool
+	AssistantProviders []string
+	// AssistantGateway reaches the configured model providers. Nil, as when
+	// the assistant is off, builds no assistant.
+	AssistantGateway assistant.ModelGateway
+	AssistantLimits  assistant.Limits
 	// EnvironmentWaker wakes an attempt environment's owner after its facts
 	// or workspace change. Nil wakes nobody; the runtime's backstop still
 	// finds the change.

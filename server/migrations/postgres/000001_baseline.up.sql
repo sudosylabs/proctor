@@ -1979,7 +1979,7 @@ CREATE TABLE exam_attempt_workspace_entries (
     current_object_id varchar(26),
     -- The author of the entry's last change; both are null for an entry
     -- seeded from the Starter Workspace and never changed since.
-    last_author_kind varchar(16) CHECK (last_author_kind IN ('candidate', 'environment')),
+    last_author_kind varchar(16) CHECK (last_author_kind IN ('candidate', 'environment', 'assistant')),
     last_author_ref varchar(96) CHECK (octet_length(last_author_ref) BETWEEN 1 AND 96),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
@@ -2027,7 +2027,7 @@ CREATE TABLE exam_attempt_workspace_journal (
     -- Who made the change: the kind of author and a reference within it (the
     -- candidate's Attempt Connection, or the environment incarnation and the
     -- writing process's tag).
-    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment', 'assistant')),
     author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     CONSTRAINT exam_attempt_workspace_journal_recursive_check CHECK (
         NOT recursive OR (operation = 'delete_entry' AND entry_kind = 'directory')
@@ -2877,7 +2877,7 @@ CREATE TABLE exam_submission_manifest_entries (
     workspace_object_id varchar(26),
     -- The author of the entry's last change when it was sealed; both are null
     -- for an entry unchanged since the Starter Workspace.
-    author_kind varchar(16) CHECK (author_kind IN ('candidate', 'environment')),
+    author_kind varchar(16) CHECK (author_kind IN ('candidate', 'environment', 'assistant')),
     author_ref varchar(96) CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     PRIMARY KEY (submission_id, entry_id),
     UNIQUE (submission_id, path),
@@ -4078,10 +4078,40 @@ CREATE TABLE plugin_settings (
     updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
 );
 
--- The administrator-managed recipes Attempt Environments are created from.
+-- The administrator-managed recipes for assistant models and execution.
 -- A profile is never edited or deleted: a change is a new profile and the old
 -- one is retired, so a published Exam Revision always names a profile that
 -- still exists. The name is unique among the profiles that are not retired.
+CREATE TABLE assistant_profiles (
+ id varchar(26) PRIMARY KEY CONSTRAINT assistant_profiles_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ name varchar(63) NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,62}$'),
+ specification jsonb NOT NULL CHECK (jsonb_typeof(specification) = 'object' AND octet_length(specification::text) <= 16384),
+ created_by_user_id varchar(26) NOT NULL REFERENCES users(id)
+  CONSTRAINT assistant_profiles_created_by_user_id_canonical_check
+  CHECK (created_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ created_at timestamptz NOT NULL,
+ retired_at timestamptz CHECK (retired_at IS NULL OR retired_at >= created_at),
+ revision bigint NOT NULL CHECK (revision > 0)
+);
+CREATE UNIQUE INDEX assistant_profiles_live_name_key ON assistant_profiles(name) WHERE retired_at IS NULL;
+CREATE INDEX assistant_profiles_created_by_user_id_idx ON assistant_profiles(created_by_user_id);
+CREATE FUNCTION guard_assistant_profile_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP = 'DELETE' THEN
+  RAISE EXCEPTION 'assistant profiles are never deleted' USING ERRCODE = '55000';
+ END IF;
+ IF OLD.retired_at IS NOT NULL OR NEW.retired_at IS NULL OR NEW.revision <> OLD.revision + 1 OR
+  ROW(NEW.id, NEW.name, NEW.specification, NEW.created_by_user_id, NEW.created_at) IS DISTINCT FROM
+  ROW(OLD.id, OLD.name, OLD.specification, OLD.created_by_user_id, OLD.created_at) THEN
+  RAISE EXCEPTION 'an assistant profile only retires' USING ERRCODE = '55000';
+ END IF;
+ RETURN NEW;
+END;
+$$;
+CREATE TRIGGER assistant_profiles_guard BEFORE UPDATE OR DELETE ON assistant_profiles
+ FOR EACH ROW EXECUTE FUNCTION guard_assistant_profile_mutation();
+
 CREATE TABLE environment_profiles (
     id varchar(26) PRIMARY KEY CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     name varchar(63) NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,62}$'),
@@ -5659,7 +5689,7 @@ CREATE TABLE exam_attempt_evidence (
     kind varchar(32) NOT NULL CHECK (kind IN (
         'execution.process', 'execution.input', 'execution.gap', 'execution.overwritten', 'execution.refused'
     )),
-    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment', 'assistant')),
     author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     sequence bigint NOT NULL CHECK (sequence BETWEEN 1 AND 9007199254740991),
     canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 67584),
@@ -6129,3 +6159,132 @@ CREATE INDEX exam_revision_starter_workspace_entries_exam_id_fkey_idx
     ON exam_revision_starter_workspace_entries (exam_id);
 CREATE INDEX integrity_evidence_exam_attempt_id_fkey_idx
     ON integrity_evidence (exam_attempt_id);
+
+
+-- Immutable assistant settings admitted with the Attempt, independent of later drafts.
+CREATE TABLE exam_attempt_assistants (
+ id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id)
+ CONSTRAINT exam_attempt_assistants_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ policy jsonb NOT NULL CHECK (jsonb_typeof(policy)='object' AND octet_length(policy::text)<=65536),
+ provider varchar(63) NOT NULL,
+ model varchar(256) NOT NULL,
+ display_name varchar(160) NOT NULL,
+ pseudonymize boolean NOT NULL,
+ created_at timestamptz NOT NULL
+);
+CREATE INDEX exam_attempt_assistants_profile_idx ON exam_attempt_assistants((policy->>'profile_id'));
+CREATE FUNCTION guard_attempt_assistant_recipe() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ RAISE EXCEPTION 'admitted assistant recipes are immutable' USING ERRCODE='55000';
+END;
+$$;
+CREATE TRIGGER exam_attempt_assistants_guard BEFORE UPDATE OR DELETE ON exam_attempt_assistants
+ FOR EACH ROW EXECUTE FUNCTION guard_attempt_assistant_recipe();
+
+
+-- Assistant history has its own inventory; execution evidence has separate limits.
+CREATE TABLE exam_attempt_assistant_inventories (
+ id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id)
+ CONSTRAINT exam_attempt_assistant_inventories_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ records bigint NOT NULL DEFAULT 0 CHECK (records BETWEEN 0 AND 20000),
+ bytes bigint NOT NULL DEFAULT 0 CHECK (bytes BETWEEN 0 AND 33554432),
+ gaps bigint NOT NULL DEFAULT 0 CHECK (gaps BETWEEN 0 AND records),
+ digest varchar(71) NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
+ submission_id varchar(26) UNIQUE REFERENCES exam_submissions(id)
+ CONSTRAINT exam_attempt_assistant_inventories_sub_a98d035b_canonical_check CHECK (submission_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ turns bigint NOT NULL DEFAULT 0 CHECK (turns >= 0),
+ input_tokens bigint NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+ output_tokens bigint NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+ tool_calls bigint NOT NULL DEFAULT 0 CHECK (tool_calls >= 0),
+ commands bigint NOT NULL DEFAULT 0 CHECK (commands >= 0),
+ command_milliseconds bigint NOT NULL DEFAULT 0 CHECK (command_milliseconds >= 0)
+);
+CREATE TABLE exam_attempt_assistant_turns (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id)
+ CONSTRAINT exam_attempt_assistant_turns_exam_attempt_id_canonical_check CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ sequence bigint NOT NULL CHECK (sequence > 0),
+ turn_id varchar(26) NOT NULL
+ CONSTRAINT exam_attempt_assistant_turns_turn_id_canonical_check CHECK (turn_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 1048576),
+ created_at timestamptz NOT NULL,
+ UNIQUE(exam_attempt_id,sequence)
+);
+CREATE INDEX assistant_turns_turn_id_idx ON exam_attempt_assistant_turns(turn_id);
+CREATE TABLE exam_attempt_assistant_calls (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id)
+ CONSTRAINT exam_attempt_assistant_calls_exam_attempt_id_canonical_check CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ sequence bigint NOT NULL CHECK (sequence > 0),
+ turn_id varchar(26) NOT NULL
+ CONSTRAINT exam_attempt_assistant_calls_turn_id_canonical_check CHECK (turn_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ call_id varchar(26) NOT NULL
+ CONSTRAINT exam_attempt_assistant_calls_call_id_canonical_check CHECK (call_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ tool varchar(32) NOT NULL,
+ phase varchar(16) NOT NULL CHECK (phase IN ('requested','decision','reserved','completed','applied')),
+ canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 1048576),
+ created_at timestamptz NOT NULL,
+ UNIQUE(exam_attempt_id,sequence),UNIQUE(exam_attempt_id,call_id,phase)
+);
+CREATE INDEX assistant_calls_turn_id_idx ON exam_attempt_assistant_calls(turn_id);
+CREATE INDEX assistant_calls_tool_phase_idx ON exam_attempt_assistant_calls(exam_attempt_id,tool,phase,sequence);
+-- Mutable ownership and reservations are deliberately separate from immutable history.
+CREATE TABLE exam_attempt_assistant_runs (
+ id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id)
+ CONSTRAINT exam_attempt_assistant_runs_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ conversation_id varchar(26) NOT NULL
+ CONSTRAINT exam_attempt_assistant_runs_conversation_id_canonical_check CHECK (conversation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ turn_id varchar(26) NOT NULL
+ CONSTRAINT exam_attempt_assistant_runs_turn_id_canonical_check CHECK (turn_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ owner_hash varchar(64) NOT NULL,
+ active boolean NOT NULL,
+ lease_expires_at timestamptz NOT NULL,
+ reserved_input bigint NOT NULL DEFAULT 0 CHECK (reserved_input>=0),
+ reserved_output bigint NOT NULL DEFAULT 0 CHECK (reserved_output>=0),
+ usage_input bigint NOT NULL DEFAULT 0 CHECK (usage_input>=0),
+ usage_cache_read bigint NOT NULL DEFAULT 0 CHECK (usage_cache_read>=0),
+ usage_cache_write bigint NOT NULL DEFAULT 0 CHECK (usage_cache_write>=0),
+ usage_output bigint NOT NULL DEFAULT 0 CHECK (usage_output>=0),
+ usage_estimated boolean NOT NULL DEFAULT false,
+ reserved_command_milliseconds bigint NOT NULL DEFAULT 0 CHECK (reserved_command_milliseconds BETWEEN 0 AND 600000),
+ command_sequence bigint NOT NULL DEFAULT 0 CHECK (command_sequence>=0)
+);
+CREATE FUNCTION guard_assistant_history() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' AND NOT EXISTS(SELECT 1 FROM exam_submissions WHERE exam_attempt_id=NEW.exam_attempt_id) THEN
+  RETURN NEW;
+ END IF;
+ -- The transcript is integrity evidence, so it leaves with integrity retirement.
+ IF TG_OP='DELETE' AND attempt_evidence_retired(OLD.exam_attempt_id) THEN
+  RETURN OLD;
+ END IF;
+ RAISE EXCEPTION 'assistant history is immutable and sealed with the Submission' USING ERRCODE='55000';
+END;
+$$;
+CREATE TRIGGER assistant_turns_guard BEFORE INSERT OR UPDATE OR DELETE ON exam_attempt_assistant_turns
+ FOR EACH ROW EXECUTE FUNCTION guard_assistant_history();
+CREATE TRIGGER assistant_calls_guard BEFORE INSERT OR UPDATE OR DELETE ON exam_attempt_assistant_calls
+ FOR EACH ROW EXECUTE FUNCTION guard_assistant_history();
+CREATE FUNCTION guard_assistant_inventory() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' AND attempt_evidence_retired(OLD.id) THEN
+  RETURN OLD;
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.submission_id IS NULL AND
+  (NEW.submission_id IS NULL OR ROW(NEW.records,NEW.bytes,NEW.gaps,NEW.digest,NEW.turns,NEW.input_tokens,NEW.output_tokens,NEW.tool_calls,NEW.commands,NEW.command_milliseconds)
+  IS NOT DISTINCT FROM ROW(OLD.records,OLD.bytes,OLD.gaps,OLD.digest,OLD.turns,OLD.input_tokens,OLD.output_tokens,OLD.tool_calls,OLD.commands,OLD.command_milliseconds)) THEN RETURN NEW; END IF;
+ RAISE EXCEPTION 'sealed assistant inventory is immutable' USING ERRCODE='55000';
+END;
+$$;
+CREATE TRIGGER assistant_inventory_guard BEFORE UPDATE OR DELETE ON exam_attempt_assistant_inventories
+ FOR EACH ROW EXECUTE FUNCTION guard_assistant_inventory();
+CREATE FUNCTION seal_assistant_inventory() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ INSERT INTO exam_attempt_assistant_inventories(id,digest,submission_id)
+ VALUES(NEW.exam_attempt_id,'sha256:'||encode(sha256(convert_to('proctor.assistant_transcript','UTF8')),'hex'),NEW.id)
+ ON CONFLICT(id) DO UPDATE SET submission_id=EXCLUDED.submission_id;
+ RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_submissions_seal_assistant AFTER INSERT ON exam_submissions
+ FOR EACH ROW EXECUTE FUNCTION seal_assistant_inventory();

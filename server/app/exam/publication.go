@@ -24,14 +24,16 @@ type Publication struct {
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer        *access.Authorizer
-	auditor           access.MutationAuditAdapter
-	publisher         realtime.Publisher
-	now               func() time.Time
-	newID             func() model.ExamRevisionID
-	institutionOrigin string
-	executionEnabled  bool
-	operational       operational.Recorder
+	authorizer         *access.Authorizer
+	auditor            access.MutationAuditAdapter
+	publisher          realtime.Publisher
+	now                func() time.Time
+	newID              func() model.ExamRevisionID
+	institutionOrigin  string
+	executionEnabled   bool
+	assistantEnabled   bool
+	assistantProviders []string
+	operational        operational.Recorder
 }
 
 // PublicationDependencies are the collaborators of NewPublication.
@@ -47,8 +49,10 @@ type PublicationDependencies struct {
 	InstitutionOrigin string
 	// ExecutionEnabled is whether the installation allows publishing with an
 	// execution environment.
-	ExecutionEnabled bool
-	Operational      operational.Recorder
+	ExecutionEnabled   bool
+	AssistantEnabled   bool
+	AssistantProviders []string
+	Operational        operational.Recorder
 }
 
 // NewPublication returns a Publication service, or an error when a required
@@ -76,6 +80,8 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 		newID:               deps.NewID,
 		institutionOrigin:   deps.InstitutionOrigin,
 		executionEnabled:    deps.ExecutionEnabled,
+		assistantEnabled:    deps.AssistantEnabled,
+		assistantProviders:  append([]string(nil), deps.AssistantProviders...),
 		operational:         deps.Operational,
 	}, nil
 }

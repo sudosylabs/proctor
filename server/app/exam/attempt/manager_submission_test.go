@@ -35,7 +35,7 @@ func TestManagerEndSealsWithPrivateReasonOutsideCandidateReceipt(t *testing.T) {
 	f.submissions.managerPreparation = &store.ExamSubmissionManagerEndPreparation{Target: target,
 		ExpectedAttemptRevision: 4, SealAt: f.at}
 	f.submissions.managerResult = &store.ExamSubmissionManagerEndResult{ExamSubmissionSealResult: store.ExamSubmissionSealResult{
-		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: submissionID, ReceiptCode: receiptCode, AttemptID: target.AttemptID,
+		Receipt: store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: submissionID, ReceiptCode: receiptCode, AttemptID: target.AttemptID,
 			ExamRevisionID: target.CurrentRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 8,
 			ManifestDigest: strings.Repeat("f", 64), SubmittedAt: f.at}, ExamID: target.ExamID, SittingID: target.SittingID,
 		ClassID: target.ClassID, CandidateUserID: target.CandidateUserID, ParticipationID: target.ParticipationID,

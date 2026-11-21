@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/assistant"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
@@ -147,17 +148,19 @@ func newExamPublication(
 	authorizer *access.Authorizer,
 ) (*exam.Publication, error) {
 	return exam.NewPublication(exam.PublicationDependencies{
-		Persistence:       deps.Store.ExamRevision(),
-		Access:            deps.Store.ExamAuthoring(),
-		Memberships:       deps.Store.AcademicUnitMember(),
-		Authorizer:        authorizer,
-		Auditor:           shared.audit,
-		Publisher:         shared.realtime,
-		Now:               time.Now,
-		NewID:             model.NewExamRevisionID,
-		InstitutionOrigin: deps.PublicURL,
-		ExecutionEnabled:  deps.ExecutionEnabled,
-		Operational:       deps.OperationalRecorder,
+		Persistence:        deps.Store.ExamRevision(),
+		Access:             deps.Store.ExamAuthoring(),
+		Memberships:        deps.Store.AcademicUnitMember(),
+		Authorizer:         authorizer,
+		Auditor:            shared.audit,
+		Publisher:          shared.realtime,
+		Now:                time.Now,
+		NewID:              model.NewExamRevisionID,
+		InstitutionOrigin:  deps.PublicURL,
+		ExecutionEnabled:   deps.ExecutionEnabled,
+		AssistantEnabled:   deps.AssistantEnabled,
+		AssistantProviders: deps.AssistantProviders,
+		Operational:        deps.OperationalRecorder,
 	})
 }
 
@@ -258,6 +261,7 @@ func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Ser
 		Now:           time.Now,
 		NewReviewID:   model.NewSubmissionReviewID,
 		NewDecisionID: model.NewIntegrityReviewDecisionID,
+		Transcripts:   deps.Store.AssistantTranscript(),
 	})
 }
 
@@ -392,5 +396,29 @@ func newTerminals(deps Dependencies, attempts *attempt.Service) (*environment.Te
 		Hosts:        deps.EnvironmentHosts,
 		Candidates:   environment.AttemptCandidates(attempts),
 		Report:       deps.EnvironmentDiagnostics,
+	})
+}
+
+// newAssistant returns nil when the installation has the assistant off, so
+// every assistant route answers exam.attempt.assistant_unavailable.
+func newAssistant(deps Dependencies, shared sharedMechanics, attempts *attempt.Service,
+	terminals *environment.Terminals) (*assistant.Service, error) {
+	if !deps.AssistantEnabled || deps.AssistantGateway == nil || deps.Store.AssistantTranscript() == nil {
+		return nil, nil
+	}
+	return assistant.New(assistant.Dependencies{
+		Wake:              shared.realtime.NotifyAssistantChanged,
+		Transcripts:       deps.Store.AssistantTranscript(),
+		Attempts:          attempts,
+		Terminals:         terminals,
+		Gateway:           deps.AssistantGateway,
+		Limits:            deps.AssistantLimits,
+		Auditor:           shared.audit,
+		Publisher:         shared.realtime,
+		Now:               time.Now,
+		NewConversationID: model.NewAssistantConversationID,
+		NewTurnID:         model.NewAssistantTurnID,
+		NewCallID:         model.NewAssistantCallID,
+		NewOwnerToken:     model.NewCredentialToken,
 	})
 }

@@ -399,6 +399,9 @@ func (s *SQLExamAttemptStore) firstAdmission(
 	); err != nil {
 		return zero, fmt.Errorf("insert Exam Attempt: %w", translateError("exam_attempt", input.AttemptID.String(), err))
 	}
+	if err = freezeAttemptAssistant(ctx, tx, input.AttemptID, guard.RevisionID); err != nil {
+		return zero, err
+	}
 
 	if err = insertAttemptWorkspaceFromStarter(ctx, tx, input, guard, starter); err != nil {
 		return zero, err

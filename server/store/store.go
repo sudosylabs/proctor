@@ -73,6 +73,8 @@ type Catalog interface {
 	DesktopCompatibilityPolicy() DesktopCompatibilityPolicyStore
 	PluginSettings() PluginSettingsStore
 	EnvironmentProfile() EnvironmentProfileStore
+	AssistantProfile() AssistantProfileStore
+	AssistantTranscript() AssistantTranscriptStore
 	AttemptEnvironment() AttemptEnvironmentStore
 	AttemptRuntimeLease() AttemptRuntimeLeaseStore
 	RetentionPolicy() RetentionPolicyStore

@@ -95,7 +95,8 @@ func (s *Service) applyWorkspaceBatch(
 
 	if !result.Replayed {
 		// The environment's own writes need no wake; its owner made them.
-		if s.environments != nil && batch.Access.WorkspaceAuthor().Kind == model.AttemptWorkspaceAuthorCandidate {
+		kind := batch.Access.WorkspaceAuthor().Kind
+		if s.environments != nil && (kind == model.AttemptWorkspaceAuthorCandidate || kind == model.AttemptWorkspaceAuthorAssistant) {
 			s.environments.Wake(result.AttemptID)
 		}
 		if effectErr := s.publishWorkspaceChanged(ctx, result); effectErr != nil {

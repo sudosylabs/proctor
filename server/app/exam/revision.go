@@ -112,6 +112,8 @@ func (p *Publication) PublishExamRevision(
 		&store.ExamRevisionPublication{
 			InstitutionOrigin:     p.institutionOrigin,
 			ExecutionEnabled:      p.executionEnabled,
+			AssistantEnabled:      p.assistantEnabled,
+			AssistantProviders:    p.assistantProviders,
 			RevisionID:            revisionID,
 			ExamID:                command.ExamID,
 			ActorUserID:           principal.UserID,

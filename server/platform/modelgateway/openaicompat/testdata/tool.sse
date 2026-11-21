@@ -1,0 +1,9 @@
+: synthetic provider fixture
+
+data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"provider_call_a","type":"function","function":{"name":"list_files","arguments":"{\"path\":"}}]}}]}
+
+data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"src\"}"}}]},"finish_reason":"tool_calls"}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":8}}
+
+data: [DONE]

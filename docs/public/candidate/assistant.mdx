@@ -1,0 +1,77 @@
+---
+title: Use the assistant
+description: What the in-exam AI assistant can do for you, when it asks before acting, and why you can always read your own conversation.
+audience: candidate
+maturity: preview
+---
+
+# Use the assistant
+
+Some Exams offer an AI assistant in Proctor Desktop. If yours does, the
+assistant panel lets you ask it questions during your Attempt. Your Exam
+Manager decides how much it may help, and Desktop shows you which model you
+are talking to. If your Exam doesn't offer it, there is no panel.
+
+<Maturity state="preview">
+  The server and the API support the assistant. The Desktop app's code isn't
+  in this repository, so this page describes what the assistant does without
+  guessing at the exact labels on Desktop's screens.
+</Maturity>
+
+## What it can do
+
+Your Exam sets one help level:
+
+| Level | What the assistant does |
+| --- | --- |
+| Tutor | Explains concepts, the language and its libraries. It can't see your files. |
+| Reviewer | Also reads your files and, if your Exam has a terminal, its screen. It explains errors and gives hints, but doesn't write your code. |
+| Pair | Also suggests changes as a diff. Nothing changes until you apply it yourself. If your Exam has a terminal, it can run commands in its own process to test. |
+| Agent | Also changes your files and runs commands itself, as your Exam allows. |
+
+The assistant can only see what you can see in this Attempt. It never types
+into your terminal: its commands run separately, and their changes are
+marked as the assistant's.
+
+Some replies may be shortened to a hint. Your Exam Manager can ask the
+assistant to keep back certain topics or long pieces of code, and Proctor
+checks replies before you see them.
+
+## It asks before it acts
+
+Unless your Exam says otherwise, the assistant asks you before it runs a
+command or changes a file. You see the exact command, or the diff, and
+accept or decline it.
+If you don't answer within 5 minutes, the request is declined.
+
+You can stop a reply at any time. Stopping also stops any command the
+assistant is running.
+
+## Limits and outages
+
+Your Exam limits how much you can use the assistant, for example how many
+messages you can send. When a limit is reached, the assistant tells you and
+stops. If the assistant is unavailable, it says so. Either way, your Exam
+carries on: the assistant never stops you working or submitting. You can
+only have one reply in progress at a time.
+
+## You can read your whole conversation
+
+Everything you and the assistant say, and everything it reads, runs or
+changes, is recorded with your Attempt. You can read your own conversation
+during the Attempt. After submission, you can download the sealed transcript
+as JSON through `GET /api/v1/exam-attempts/{exam_attempt_id}/assistant/export`.
+The download contains the digest from your Submission receipt and remains
+available until the transcript is retired.
+
+Your Exam Managers read the same record when they review your Submission.
+Using the assistant in an Exam that offers it isn't misconduct, and Proctor
+raises no integrity flags for it.
+
+## What leaves Proctor
+
+The assistant sends your messages, and at Reviewer and above the files and
+output it reads, to the model provider your institution chose. By default,
+Proctor doesn't tell the model your name, email address or ID. It can't remove
+personal details you write yourself, so keep them out of your code and your
+messages.

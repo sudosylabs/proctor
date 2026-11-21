@@ -82,9 +82,10 @@ type DeliveryDependencies struct {
 type Delivery struct {
 	deps DeliveryDependencies
 
-	mu     sync.RWMutex
-	sink   Sink
-	fanout cluster.Transport
+	mu                sync.RWMutex
+	sink              Sink
+	fanout            cluster.Transport
+	assistantListener func(Event)
 }
 
 // NewDelivery returns an inert Delivery. The sink and fan-out are attached
@@ -133,6 +134,7 @@ func (s *Delivery) SetClusterFanout(fanout cluster.Transport) error {
 		handler func(context.Context, []byte) error
 	}{
 		{event: clusterEventPublication, handler: s.handlePeerPublication},
+		{event: "assistant.changed", handler: s.handleAssistantChanged},
 		{event: clusterEventExamAttemptUnbound, handler: s.handlePeerExamAttemptUnbound},
 		{event: clusterEventSessionRevoked, handler: s.handlePeerSessionRevocation},
 		{event: clusterEventAuthorizationInvalidated, handler: s.handlePeerAuthorizationInvalidation},
@@ -240,7 +242,15 @@ func (s *Delivery) Publish(ctx context.Context, event Event) error {
 func (s *Delivery) publishLocal(ctx context.Context, event Event) {
 	s.mu.RLock()
 	sink := s.sink
+	listener := s.assistantListener
 	s.mu.RUnlock()
+	if listener != nil {
+		switch event.Name {
+		case "exam_attempt_submitted", "exam_attempt_connection_closed", "exam_attempt_access_suspended", "exam_attempt_suspended",
+			"exam_sitting_lifecycle_changed", "exam_sitting_content_corrected":
+			listener(event)
+		}
+	}
 	if sink != nil {
 		sink.PublishLocal(ctx, event.Clone())
 	}
@@ -293,12 +303,13 @@ type realtimePublication struct {
 // realtimeEventMessage is a separate type so domain field renames cannot
 // change the snake_case cluster wire format.
 type realtimeEventMessage struct {
-	ID       string                  `json:"id"`
-	Name     string                  `json:"event"`
-	UserID   string                  `json:"user_id,omitempty"`
-	Action   model.Action            `json:"action,omitempty"`
-	Resource realtimeResourceMessage `json:"resource,omitempty"`
-	Data     json.RawMessage         `json:"data,omitempty"`
+	ID        string                  `json:"id"`
+	Name      string                  `json:"event"`
+	UserID    string                  `json:"user_id,omitempty"`
+	SessionID string                  `json:"session_id,omitempty"`
+	Action    model.Action            `json:"action,omitempty"`
+	Resource  realtimeResourceMessage `json:"resource,omitempty"`
+	Data      json.RawMessage         `json:"data,omitempty"`
 }
 
 type realtimeResourceMessage struct {
@@ -308,23 +319,25 @@ type realtimeResourceMessage struct {
 
 func realtimeEventMessageFromModel(event Event) realtimeEventMessage {
 	return realtimeEventMessage{
-		ID:       event.ID,
-		Name:     event.Name,
-		UserID:   event.UserID.String(),
-		Action:   event.Action,
-		Resource: realtimeResourceMessage{Type: event.Resource.Type, ID: event.Resource.ID},
-		Data:     append(json.RawMessage(nil), event.Data...),
+		ID:        event.ID,
+		Name:      event.Name,
+		UserID:    event.UserID.String(),
+		SessionID: event.SessionID.String(),
+		Action:    event.Action,
+		Resource:  realtimeResourceMessage{Type: event.Resource.Type, ID: event.Resource.ID},
+		Data:      append(json.RawMessage(nil), event.Data...),
 	}
 }
 
 func (m realtimeEventMessage) toModel() Event {
 	return Event{
-		ID:       m.ID,
-		Name:     m.Name,
-		UserID:   model.UserID(m.UserID),
-		Action:   m.Action,
-		Resource: model.Resource{Type: m.Resource.Type, ID: m.Resource.ID},
-		Data:     append(json.RawMessage(nil), m.Data...),
+		ID:        m.ID,
+		Name:      m.Name,
+		UserID:    model.UserID(m.UserID),
+		SessionID: model.SessionID(m.SessionID),
+		Action:    m.Action,
+		Resource:  model.Resource{Type: m.Resource.Type, ID: m.Resource.ID},
+		Data:      append(json.RawMessage(nil), m.Data...),
 	}
 }
 
@@ -346,3 +359,43 @@ const (
 	ConnectionCloseSessionRevoked       ConnectionCloseReason = "session_revoked"
 	ConnectionCloseAuthorizationChanged ConnectionCloseReason = "authorization_changed"
 )
+
+// AttachAssistantListener wakes local work after committed lifecycle changes.
+func (s *Delivery) AttachAssistantListener(listener func(Event)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if listener == nil || s.assistantListener != nil {
+		return errors.New("assistant listener is nil or already attached")
+	}
+	s.assistantListener = listener
+	return nil
+}
+
+// NotifyAssistantChanged is a best-effort hint; the owner reads durable state.
+func (s *Delivery) NotifyAssistantChanged(ctx context.Context, id model.ExamAttemptID) error {
+	if !id.IsValid() {
+		return errors.New("assistant wake attempt ID is invalid")
+	}
+	data, _ := json.Marshal(struct {
+		AttemptID string `json:"exam_attempt_id"`
+	}{id.String()})
+	if err := s.handleAssistantChanged(ctx, data); err != nil {
+		return err
+	}
+	return s.broadcast(ctx, "assistant.changed", data)
+}
+func (s *Delivery) handleAssistantChanged(_ context.Context, data []byte) error {
+	var input struct {
+		AttemptID string `json:"exam_attempt_id"`
+	}
+	if len(data) > 256 || json.Unmarshal(data, &input) != nil || !model.ExamAttemptID(input.AttemptID).IsValid() {
+		return errors.New("invalid assistant wake")
+	}
+	s.mu.RLock()
+	listener := s.assistantListener
+	s.mu.RUnlock()
+	if listener != nil {
+		listener(Event{Name: "assistant_changed", Data: append(json.RawMessage(nil), data...)})
+	}
+	return nil
+}

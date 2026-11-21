@@ -1,0 +1,9 @@
+: synthetic provider fixture
+
+data: {"choices":[{"index":0,"delta":{"content":"Use a "}}]}
+
+data: {"choices":[{"index":0,"delta":{"content":"loop."},"finish_reason":"stop"}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":8,"completion_tokens":3,"prompt_tokens_details":{"cached_tokens":2}}}
+
+data: [DONE]

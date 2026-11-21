@@ -742,3 +742,7 @@ func TestNewForTestingServesTheProvidedBuildInfo(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &served))
 	require.Equal(t, buildInfo, served, "served build info")
 }
+
+func (s *hookStore) AssistantProfile() store.AssistantProfileStore { return nil }
+
+func (s *hookStore) AssistantTranscript() store.AssistantTranscriptStore { return nil }

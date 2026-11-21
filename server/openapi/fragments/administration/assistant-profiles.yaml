@@ -1,0 +1,555 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/assistant-profiles:
+    get:
+      operationId: listAssistantProfiles
+      summary: List the assistant profiles
+      tags:
+        - Administration
+      description: >-
+        System administrators manage immutable assistant profiles. Creation requires a configured provider.
+        Retirement preserves the recipe used by published exams; transcripts are available only through exam
+        review.
+      parameters:
+        - name: include_retired
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Whether retired profiles are listed too.
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - assistant_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          $ref: '#/components/responses/AssistantProfileListOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      operationId: createAssistantProfile
+      summary: Create an assistant profile
+      tags:
+        - Administration
+      description: >-
+        System administrators manage immutable assistant profiles. Creation requires a configured provider.
+        Retirement preserves the recipe used by published exams; transcripts are available only through exam
+        review.
+      x-proctor-auth: strong_recent_session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - assistant_profile.invalid
+        - assistant_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - assistant_profile.name_in_use
+        - assistant_profile.limit_reached
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        description: The complete profile. Every member is required.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantProfileRequest'
+            example:
+              name: campus-tutor
+              display_name: Campus tutor
+              provider: campus
+              model: teaching-model
+              max_level: tutor
+              budgets:
+                turns: 100
+                input_tokens: 100000
+                output_tokens: 10000
+                tool_calls: 0
+                commands: 0
+                command_seconds: 0
+                command_timeout_seconds: 60
+              data_handling: self_hosted
+              pseudonymize: true
+      responses:
+        '201':
+          $ref: '#/components/responses/AssistantProfileOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/assistant-profiles/{assistant_profile_id}/retire:
+    parameters:
+      - name: assistant_profile_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/ID'
+        description: The assistant profile to retire.
+    post:
+      operationId: retireAssistantProfile
+      summary: Retire an assistant profile
+      tags:
+        - Administration
+      description: >-
+        System administrators manage immutable assistant profiles. Creation requires a configured provider.
+        Retirement preserves the recipe used by published exams; transcripts are available only through exam
+        review.
+      x-proctor-auth: strong_recent_session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - assistant_profile.invalid
+        - assistant_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - assistant_profile.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '200':
+          $ref: '#/components/responses/AssistantProfileOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request POST \
+              --url 'https://proctor.example.edu/api/v1/assistant-profiles/ybndrfg8ejkmcpqxot1uwisza3/retire' \
+              --header 'Authorization: Bearer <interactive-system-administrator-session>' \
+              --header 'Idempotency-Key: docs-assistant-profile-retire-001'
+  /api/v1/assistant-profiles/{assistant_profile_id}/usage:
+    get:
+      operationId: getAssistantProfileUsage
+      summary: Read aggregate assistant profile usage
+      tags:
+        - Administration
+      description: >-
+        System administrators read counters for retained attempts, including outstanding reservations. No candidate
+        identity or transcript is returned. Counters fall when histories are retired.
+      parameters:
+        - name: assistant_profile_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ID'
+          description: The assistant profile to retire.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - assistant_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - assistant_profile.invalid
+        - assistant_profile.not_found
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Retained aggregate usage, including reservations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProfileUsageResponse'
+              example:
+                attempts: 2
+                turns: 4
+                input_tokens: 1000
+                output_tokens: 200
+                tool_calls: 3
+                commands: 1
+                command_milliseconds: 1000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    AssistantProfileListOK:
+      description: The assistant profiles.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AssistantProfileListResponse'
+          example:
+            items:
+              - id: ybndrfg8ejkmcpqxot1uwisza3
+                name: campus-tutor
+                display_name: Campus tutor
+                provider: campus
+                model: teaching-model
+                max_level: tutor
+                budgets:
+                  turns: 100
+                  input_tokens: 100000
+                  output_tokens: 10000
+                  tool_calls: 0
+                  commands: 0
+                  command_seconds: 0
+                  command_timeout_seconds: 60
+                data_handling: self_hosted
+                pseudonymize: true
+                created_at: '2026-01-01T12:00:00Z'
+                revision: 1
+    AssistantProfileOK:
+      description: The assistant profile.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AssistantProfileResponse'
+          example:
+            id: ybndrfg8ejkmcpqxot1uwisza3
+            name: campus-tutor
+            display_name: Campus tutor
+            provider: campus
+            model: teaching-model
+            max_level: tutor
+            budgets:
+              turns: 100
+              input_tokens: 100000
+              output_tokens: 10000
+              tool_calls: 0
+              commands: 0
+              command_seconds: 0
+              command_timeout_seconds: 60
+            data_handling: self_hosted
+            pseudonymize: true
+            created_at: '2026-01-01T12:00:00Z'
+            revision: 1
+  schemas:
+    AssistantProfileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - display_name
+        - provider
+        - model
+        - max_level
+        - budgets
+        - data_handling
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        provider:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        model:
+          type: string
+          minLength: 1
+          maxLength: 256
+        max_level:
+          type: string
+          enum:
+            - tutor
+            - reviewer
+            - pair
+            - agent
+        budgets:
+          $ref: '#/components/schemas/AssistantBudgets'
+        data_handling:
+          type: string
+          enum:
+            - self_hosted
+            - zero_retention
+            - standard_30d
+            - other
+        pseudonymize:
+          type:
+            - boolean
+            - 'null'
+          default: true
+          description: Defaults to true when omitted or null. Candidate identity is never sent to a provider.
+    AssistantProfileResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - display_name
+        - provider
+        - model
+        - max_level
+        - budgets
+        - data_handling
+        - pseudonymize
+        - created_at
+        - revision
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        provider:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        model:
+          type: string
+          minLength: 1
+          maxLength: 256
+        max_level:
+          type: string
+          enum:
+            - tutor
+            - reviewer
+            - pair
+            - agent
+        budgets:
+          $ref: '#/components/schemas/AssistantBudgets'
+        data_handling:
+          type: string
+          enum:
+            - self_hosted
+            - zero_retention
+            - standard_30d
+            - other
+        pseudonymize:
+          type: boolean
+          default: true
+        created_at:
+          type: string
+          format: date-time
+        retired_at:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+    AssistantProfileListResponse:
+      description: One page of the collection in its stable order.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantProfileResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    AssistantBudgets:
+      type: object
+      additionalProperties: false
+      required:
+        - turns
+        - input_tokens
+        - output_tokens
+        - tool_calls
+        - commands
+        - command_seconds
+        - command_timeout_seconds
+      properties:
+        turns:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2000
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 100000000
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 10000000
+        tool_calls:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 20000
+        commands:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 2000
+        command_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 86400
+        command_timeout_seconds:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 600
+    AssistantProfileUsageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - attempts
+        - turns
+        - input_tokens
+        - output_tokens
+        - tool_calls
+        - commands
+        - command_milliseconds
+      properties:
+        attempts:
+          type: integer
+          format: int64
+          minimum: 0
+        turns:
+          type: integer
+          format: int64
+          minimum: 0
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        tool_calls:
+          type: integer
+          format: int64
+          minimum: 0
+        commands:
+          type: integer
+          format: int64
+          minimum: 0
+        command_milliseconds:
+          type: integer
+          format: int64
+          minimum: 0

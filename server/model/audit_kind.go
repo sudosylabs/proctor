@@ -95,6 +95,7 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionOnboardingBatchManage:     AuditKindChange,
 	ActionPluginManage:              AuditKindChange,
 	ActionEnvironmentProfileManage:  AuditKindChange,
+	ActionAssistantProfileManage:    AuditKindChange,
 	ActionProgrammeLevelManage:      AuditKindChange,
 	ActionProgrammeManage:           AuditKindChange,
 	ActionRetentionCleanupManage:    AuditKindChange,

@@ -89,6 +89,7 @@ func runLayerConformance(
 		run  func(*testing.T, store.Store)
 	}{
 		{"Institution", storetest.TestInstitutionStore},
+		{"AssistantProfile", storetest.TestAssistantProfileStore},
 		{"AcademicUnit", storetest.TestAcademicUnitStore},
 		{"Programme", storetest.TestProgrammeStore},
 		{"ProgrammeLevel", storetest.TestProgrammeLevelStore},
@@ -192,7 +193,7 @@ func runLayerConformance(
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			switch test.name {
-			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "EnvironmentProfile", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
+			case "AssistantProfile", "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "EnvironmentProfile", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
 				resetPristineTestStore(t, sqlStore)
 			case "PasswordCredential":
 				resetPristineTestStore(t, sqlStore)
@@ -1655,4 +1656,8 @@ func TestNativeMaximumRecordStore(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestNativeMaximumRecordStore(t, persistence)
+}
+
+func TestAssistantProfileStore(t *testing.T) {
+	PristineStoreTest(t, storetest.TestAssistantProfileStore)
 }

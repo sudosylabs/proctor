@@ -56,6 +56,7 @@ ExamAuthoringStore.Create                                  command
 ExamAuthoringStore.UpdateDraftText                         command
 ExamAuthoringStore.UpdateDraftFocusLoss                    command
 ExamAuthoringStore.UpdateDraftExecution                    command
+ExamAuthoringStore.UpdateDraftAssistant command
 ExamAuthoringStore.List                                    always
 ExamAuthoringStore.Archive                                 command
 ExamAuthoringStore.Access                                  always
@@ -224,3 +225,14 @@ AttemptEnvironmentStore.Get                                always
 # fence.
 AttemptRuntimeLeaseStore.Renew                             always
 AttemptRuntimeLeaseStore.Release                           always
+
+AssistantProfileStore.Get always
+AssistantProfileStore.List always
+
+AssistantTranscriptStore.ListForAttempt always
+AssistantTranscriptStore.Inventory always
+AssistantTranscriptStore.Decision always
+
+AssistantProfileStore.Usage always
+
+ExamAttemptStore.ListCandidateStarterWorkspace always

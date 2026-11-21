@@ -18,12 +18,13 @@ import (
 // Event is a past-tense fact published after commit. It has no sequence:
 // each connection stamps its own at the socket.
 type Event struct {
-	ID       string
-	Name     string
-	UserID   model.UserID
-	Action   model.Action
-	Resource model.Resource
-	Data     json.RawMessage
+	ID        string
+	Name      string
+	SessionID model.SessionID
+	UserID    model.UserID
+	Action    model.Action
+	Resource  model.Resource
+	Data      json.RawMessage
 }
 
 const (
@@ -54,6 +55,10 @@ func (e Event) ValidateForPublish() error {
 
 	if e.UserID != "" && !e.UserID.IsValid() {
 		return errors.New("realtime event user ID is invalid")
+	}
+
+	if !e.SessionID.IsZero() && (!e.SessionID.IsValid() || e.UserID.IsZero()) {
+		return errors.New("realtime session target requires valid user and session IDs")
 	}
 
 	if e.Action == "" && e.Resource == (model.Resource{}) {

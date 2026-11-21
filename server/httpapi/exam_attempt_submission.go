@@ -70,27 +70,30 @@ type examSubmissionReceiptResponse struct {
 	State           string                            `json:"state"`
 	WorkspaceCursor int64                             `json:"workspace_cursor"`
 	ManifestDigest  string                            `json:"manifest_digest"`
-	SubmittedAt     string                            `json:"submitted_at"`
+	// AssistantTranscriptDigest binds the candidate's assistant transcript.
+	AssistantTranscriptDigest string `json:"assistant_transcript_digest"`
+	SubmittedAt               string `json:"submitted_at"`
 }
 
 type examSubmissionManagerResponse struct {
-	BrowserActivity          model.BrowserSubmissionSettlement `json:"browser_activity"`
-	SubmissionID             string                            `json:"submission_id"`
-	ExamID                   string                            `json:"exam_id"`
-	ExamSittingID            string                            `json:"exam_sitting_id"`
-	ExamAttemptID            string                            `json:"exam_attempt_id"`
-	ExamRevisionID           string                            `json:"exam_revision_id"`
-	WorkspaceID              string                            `json:"workspace_id"`
-	ManifestSchemaVersion    int                               `json:"manifest_schema_version"`
-	WorkspaceCursor          int64                             `json:"workspace_cursor"`
-	ManifestDigest           string                            `json:"manifest_digest"`
-	ManifestEntryCount       int                               `json:"manifest_entry_count"`
-	ManifestTotalFileBytes   int64                             `json:"manifest_total_file_bytes"`
-	FinalFocusLossSequence   *int64                            `json:"final_focus_loss_sequence,omitempty"`
-	IntegrityState           string                            `json:"integrity_state"`
-	IntegrityRetiredAt       string                            `json:"integrity_retired_at,omitempty"`
-	UnresolvedIntegrityCount *int64                            `json:"unresolved_integrity_count,omitempty"`
-	SubmittedAt              string                            `json:"submitted_at"`
+	BrowserActivity           model.BrowserSubmissionSettlement `json:"browser_activity"`
+	SubmissionID              string                            `json:"submission_id"`
+	ExamID                    string                            `json:"exam_id"`
+	ExamSittingID             string                            `json:"exam_sitting_id"`
+	ExamAttemptID             string                            `json:"exam_attempt_id"`
+	ExamRevisionID            string                            `json:"exam_revision_id"`
+	WorkspaceID               string                            `json:"workspace_id"`
+	ManifestSchemaVersion     int                               `json:"manifest_schema_version"`
+	WorkspaceCursor           int64                             `json:"workspace_cursor"`
+	ManifestDigest            string                            `json:"manifest_digest"`
+	AssistantTranscriptDigest string                            `json:"assistant_transcript_digest,omitempty"`
+	ManifestEntryCount        int                               `json:"manifest_entry_count"`
+	ManifestTotalFileBytes    int64                             `json:"manifest_total_file_bytes"`
+	FinalFocusLossSequence    *int64                            `json:"final_focus_loss_sequence,omitempty"`
+	IntegrityState            string                            `json:"integrity_state"`
+	IntegrityRetiredAt        string                            `json:"integrity_retired_at,omitempty"`
+	UnresolvedIntegrityCount  *int64                            `json:"unresolved_integrity_count,omitempty"`
+	SubmittedAt               string                            `json:"submitted_at"`
 }
 
 type examSubmissionManifestItemResponse struct {
@@ -157,15 +160,16 @@ func (h examAttemptHandlers) submit(request route.Request) (route.Result, error)
 	}
 
 	response := examSubmissionReceiptResponse{
-		BrowserActivity: receipt.BrowserActivity,
-		SubmissionID:    receipt.SubmissionID.String(),
-		ReceiptCode:     receipt.ReceiptCode.Display(),
-		ExamAttemptID:   receipt.AttemptID.String(),
-		ExamRevisionID:  receipt.ExamRevisionID.String(),
-		State:           string(receipt.State),
-		WorkspaceCursor: receipt.WorkspaceCursor,
-		ManifestDigest:  receipt.ManifestDigest,
-		SubmittedAt:     model.FormatRFC3339(receipt.SubmittedAt),
+		BrowserActivity:           receipt.BrowserActivity,
+		SubmissionID:              receipt.SubmissionID.String(),
+		ReceiptCode:               receipt.ReceiptCode.Display(),
+		ExamAttemptID:             receipt.AttemptID.String(),
+		ExamRevisionID:            receipt.ExamRevisionID.String(),
+		State:                     string(receipt.State),
+		WorkspaceCursor:           receipt.WorkspaceCursor,
+		ManifestDigest:            receipt.ManifestDigest,
+		AssistantTranscriptDigest: receipt.AssistantTranscriptDigest,
+		SubmittedAt:               model.FormatRFC3339(receipt.SubmittedAt),
 	}
 	return route.JSON(http.StatusCreated, response).WithHeaders(noStoreHeaders()), nil
 }
@@ -183,20 +187,21 @@ func (h examAttemptHandlers) getSubmission(request route.Request) (route.Result,
 
 	submission := view.Submission
 	response := examSubmissionManagerResponse{
-		BrowserActivity:        submission.BrowserActivity,
-		SubmissionID:           submission.ID.String(),
-		ExamID:                 view.Authorization.ExamID.String(),
-		ExamSittingID:          view.Authorization.SittingID.String(),
-		ExamAttemptID:          submission.AttemptID.String(),
-		ExamRevisionID:         submission.ExamRevisionID.String(),
-		WorkspaceID:            submission.WorkspaceID.String(),
-		ManifestSchemaVersion:  submission.ManifestSchemaVersion,
-		WorkspaceCursor:        submission.WorkspaceCursor,
-		ManifestDigest:         submission.ManifestDigest,
-		ManifestEntryCount:     submission.ManifestEntryCount,
-		ManifestTotalFileBytes: submission.ManifestTotalFileBytes,
-		IntegrityState:         string(submission.IntegrityState),
-		SubmittedAt:            model.FormatRFC3339(submission.SubmittedAt),
+		BrowserActivity:           submission.BrowserActivity,
+		SubmissionID:              submission.ID.String(),
+		ExamID:                    view.Authorization.ExamID.String(),
+		ExamSittingID:             view.Authorization.SittingID.String(),
+		ExamAttemptID:             submission.AttemptID.String(),
+		ExamRevisionID:            submission.ExamRevisionID.String(),
+		WorkspaceID:               submission.WorkspaceID.String(),
+		ManifestSchemaVersion:     submission.ManifestSchemaVersion,
+		WorkspaceCursor:           submission.WorkspaceCursor,
+		ManifestDigest:            submission.ManifestDigest,
+		AssistantTranscriptDigest: submission.AssistantTranscriptDigest,
+		ManifestEntryCount:        submission.ManifestEntryCount,
+		ManifestTotalFileBytes:    submission.ManifestTotalFileBytes,
+		IntegrityState:            string(submission.IntegrityState),
+		SubmittedAt:               model.FormatRFC3339(submission.SubmittedAt),
 	}
 	if submission.IntegrityState == model.SubmissionIntegrityRetired {
 		response.IntegrityRetiredAt = model.FormatRFC3339(submission.IntegrityRetiredAt.Time)

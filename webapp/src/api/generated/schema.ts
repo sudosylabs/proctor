@@ -513,6 +513,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistant-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the assistant profiles
+         * @description System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.
+         */
+        get: operations["listAssistantProfiles"];
+        put?: never;
+        /**
+         * Create an assistant profile
+         * @description System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.
+         */
+        post: operations["createAssistantProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant-profiles/{assistant_profile_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The assistant profile to retire. */
+                assistant_profile_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire an assistant profile
+         * @description System administrators manage immutable assistant profiles. Creation requires a configured provider. Retirement preserves the recipe used by published exams; transcripts are available only through exam review.
+         */
+        post: operations["retireAssistantProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant-profiles/{assistant_profile_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read aggregate assistant profile usage
+         * @description System administrators read counters for retained attempts, including outstanding reservations. No candidate identity or transcript is returned. Counters fall when histories are retired.
+         */
+        get: operations["getAssistantProfileUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audits": {
         parameters: {
             query?: never;
@@ -1613,6 +1680,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/approvals/{call_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The tool call that waits for the candidate's approval. */
+                call_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or decline an assistant command or edit
+         * @description Answers an exam_attempt_assistant_approval_requested event. When the Exam asks for approvals, each command and each edit waits for the candidate; an unanswered request is declined after five minutes. The answer is recorded once: a second answer, or one after the expiry, fails with exam.attempt.assistant_approval_conflict.
+         */
+        post: operations["decideCandidateAssistantApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Download the sealed assistant transcript
+         * @description Downloads the candidate's own sealed assistant transcript and the inventory that verifies it as one JSON attachment. A current candidate Session is required. The download is unavailable before sealing or after retirement.
+         */
+        get: operations["exportCandidateAssistantTranscript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the assistant
+         * @description Records the candidate's message and starts the assistant's reply, which streams to the candidate's originating session as exam_attempt_assistant_* events and is recorded in the transcript. The answer is 202 with the turn the message started; a retry with the same Idempotency-Key and text returns the same turn without starting another. One turn runs at a time per Attempt: while one runs the request fails with exam.attempt.assistant_busy. The request also fails when the Exam Revision does not offer the assistant, when the installation has it off, and when the Attempt's allowance of turns or tokens is spent. The assistant acts only while the candidate's own access holds: a seal or the end of the participation ends a running turn, which the transcript records.
+         */
+        post: operations["sendCandidateAssistantMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the assistant transcript
+         * @description Pages the candidate's own assistant transcript in record order: each message, reply, tool call, approval and output check, as recorded. Realtime deltas are hints; this is what a client keeps, and it reloads from here after a dropped socket. It needs only the candidate's Session, so the transcript stays readable after submission. The inventory covers the whole transcript, and at the seal its digest is bound to the Submission.
+         */
+        get: operations["listCandidateAssistantTranscript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/turns/{turn_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The running turn to stop. */
+                turn_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop the assistant's turn
+         * @description Stops the running turn wherever it runs: the model call ends, any assistant command is killed, and the transcript records the turn as canceled. Tokens already spent stay spent.
+         */
+        post: operations["cancelCandidateAssistantTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-attempts/{exam_attempt_id}/browser-activity/sources": {
         parameters: {
             query?: never;
@@ -2602,6 +2788,29 @@ export interface paths {
          * @description Changes the Draft title, its Markdown instructions, or both. The change is made only if expected_revision still matches the Draft's current revision, so you never overwrite someone else's newer edit. A field you leave out or send as null stays as it is. Proctor stores the Markdown exactly as you wrote it and renders it safely when it is shown.
          */
         patch: operations["editExamDraftText"];
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/draft/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Configure the Draft assistant
+         * @description Replace the assistant policy behind the Draft revision fence. The profile must be active and permit the requested level and budgets. Publication checks installation availability.
+         */
+        put: operations["configureExamDraftAssistant"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/exams/{exam_id}/draft/browser-policy": {
@@ -5159,6 +5368,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/submissions/{submission_id}/assistant-transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the assistant transcript sealed with a Submission
+         * @description Requires the same Submission integrity-view authorization as Attempt evidence. Returns the candidate's assistant conversation in record order: messages, replies, tool calls with their arguments and results, approvals and output checks. A command's call names its assistant:N process, whose commands are in the Attempt evidence; an edit's call is the author of the Workspace changes it made. Read it as a timeline beside the candidate's own work. The inventory is the one the seal bound. Assistant use the Exam allows raises no Flag. No-store.
+         */
+        get: operations["listSubmissionAssistantTranscript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/submissions/{submission_id}/assistant-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Summarize how the candidate used the assistant
+         * @description Requires the same Submission integrity-view authorization as Attempt evidence. Counts the sealed transcript: messages and replies, tokens, the tools used, commands, edits proposed and applied, approvals and output checks. It is descriptive only and never a score or a Flag; estimated marks token figures the server estimated. No-store.
+         */
+        get: operations["getSubmissionAssistantUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/submissions/{submission_id}/attempt-evidence": {
         parameters: {
             query?: never;
@@ -7084,6 +7339,229 @@ export interface components {
              */
             expected_revision: number;
         };
+        AssistantBudgets: {
+            /** Format: int64 */
+            command_seconds: number;
+            /** Format: int64 */
+            command_timeout_seconds: number;
+            /** Format: int64 */
+            commands: number;
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: int64 */
+            tool_calls: number;
+            /** Format: int64 */
+            turns: number;
+        };
+        /** @description One phase of a tool call: requested, decision (an approval answer), reserved (a command slot), completed, or applied (a Pair proposal matched by a candidate batch). A command's reservation names its assistant:N process tag before the process starts. Its completion carries the exit code; the Workspace journal names the call in the author of every change an Agent edit made. */
+        AssistantCall: {
+            /** @enum {string} */
+            approval: "" | "pending" | "accept" | "decline" | "auto" | "expired";
+            /** @description The arguments as the model sent them, on the requested phase. */
+            arguments: {
+                [key: string]: unknown;
+            };
+            call_id: components["schemas"]["ID"];
+            conversation_id: components["schemas"]["ID"];
+            /** Format: int64 */
+            duration_milliseconds: number;
+            exit_code?: number;
+            /** @enum {string} */
+            outcome: "" | "ok" | "error" | "declined" | "canceled" | "proposed" | "applied" | "rewrite" | "replaced";
+            /** @enum {string} */
+            phase: "requested" | "reserved" | "decision" | "completed" | "applied";
+            process_tag: string;
+            /** @description Bounded tool result text. On a completed propose_edit call with outcome proposed, this is a JSON object serialized as text, with path (workspace path), base_content_version (the expected current file version, or an empty string for a new file), sha256 (lowercase hexadecimal SHA-256 of the full replacement), size_bytes (replacement UTF-8 byte count), and diff (a complete unified replacement diff). A matching ordinary candidate batch adds an applied phase to this call; the workspace write remains authored by the candidate. Other tools return text, and an applied phase contains a matching marker rather than the proposal object. */
+            result: string;
+            /** @enum {string} */
+            tool: "list_files" | "read_file" | "search" | "read_terminal" | "run_command" | "propose_edit" | "apply_edit" | "output_check";
+            truncated: boolean;
+            turn_id: components["schemas"]["ID"];
+        };
+        /** @description The transcript's record and byte counts, its gaps, and a SHA-256 digest chained over every record in order. */
+        AssistantInventory: {
+            /** Format: int64 */
+            bytes: number;
+            digest: string;
+            /** Format: int64 */
+            gaps: number;
+            /** Format: int64 */
+            records: number;
+        };
+        /** @description Frozen assistant allowances. Instructions and avoided concepts are visible to managers only. Only Tutor is currently available. */
+        AssistantPolicy: {
+            /** @enum {string} */
+            approvals: "always_ask" | "auto_within_level";
+            budgets: components["schemas"]["AssistantPolicyBudgets"];
+            code_line_budget: number;
+            concepts_to_avoid: string[];
+            enabled: boolean;
+            instructions: string;
+            /** @enum {string} */
+            level: "off" | "tutor" | "reviewer" | "pair" | "agent";
+            /** @description An assistant profile ID when enabled; empty when disabled. */
+            profile_id: string;
+        };
+        AssistantPolicyBudgets: {
+            /** Format: int64 */
+            command_seconds: number;
+            /** Format: int64 */
+            command_timeout_seconds: number;
+            /** Format: int64 */
+            commands: number;
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: int64 */
+            tool_calls: number;
+            /** Format: int64 */
+            turns: number;
+        };
+        /** @description One page of the collection in its stable order. */
+        AssistantProfileListResponse: {
+            items: components["schemas"]["AssistantProfileResponse"][];
+            next_cursor?: components["schemas"]["NextCursor"];
+        };
+        AssistantProfileRequest: {
+            budgets: components["schemas"]["AssistantBudgets"];
+            /** @enum {string} */
+            data_handling: "self_hosted" | "zero_retention" | "standard_30d" | "other";
+            display_name: string;
+            /** @enum {string} */
+            max_level: "tutor" | "reviewer" | "pair" | "agent";
+            model: string;
+            name: string;
+            provider: string;
+            /**
+             * @description Defaults to true when omitted or null. Candidate identity is never sent to a provider.
+             * @default true
+             */
+            pseudonymize: boolean | null;
+        };
+        AssistantProfileResponse: {
+            budgets: components["schemas"]["AssistantBudgets"];
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            data_handling: "self_hosted" | "zero_retention" | "standard_30d" | "other";
+            display_name: string;
+            id: components["schemas"]["ID"];
+            /** @enum {string} */
+            max_level: "tutor" | "reviewer" | "pair" | "agent";
+            model: string;
+            name: string;
+            provider: string;
+            /** @default true */
+            pseudonymize: boolean;
+            /** Format: date-time */
+            retired_at?: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        AssistantProfileUsageResponse: {
+            /** Format: int64 */
+            attempts: number;
+            /** Format: int64 */
+            command_milliseconds: number;
+            /** Format: int64 */
+            commands: number;
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: int64 */
+            tool_calls: number;
+            /** Format: int64 */
+            turns: number;
+        };
+        /** @description One transcript record, a turn or a tool call. Gap marks a record the server wrote for a turn that ended abnormally, such as at a seal or a provider failure. */
+        AssistantRecord: {
+            call?: components["schemas"]["AssistantCall"];
+            /** Format: date-time */
+            created_at: string;
+            gap: boolean;
+            /** Format: int64 */
+            sequence: number;
+            turn?: components["schemas"]["AssistantTurn"];
+        };
+        AssistantTranscriptExportResponse: {
+            exam_attempt_id: components["schemas"]["ID"];
+            inventory: components["schemas"]["AssistantInventory"];
+            records: components["schemas"]["AssistantRecord"][];
+        };
+        AssistantTranscriptResponse: {
+            inventory: components["schemas"]["AssistantInventory"];
+            items: components["schemas"]["AssistantRecord"][];
+            /** @description Token for the next page. Send it back unchanged as `cursor`, and do not parse it. Omitted on the last page. */
+            next_cursor?: string;
+        };
+        /** @description A candidate message, or part of a reply. A reply's text and its end are separate records; the final record carries the stop reason and the turn's usage, which includes any rewrite. */
+        AssistantTurn: {
+            conversation_id: components["schemas"]["ID"];
+            final: boolean;
+            model: string;
+            /** @enum {string} */
+            role: "candidate" | "assistant";
+            /** @enum {string} */
+            stop_reason: "" | "end_turn" | "tool_use" | "max_tokens" | "stop_sequence" | "refusal" | "canceled" | "sealed" | "access_lost" | "budget_exhausted" | "rate_limited" | "overloaded" | "invalid" | "context_too_long" | "unavailable" | "lease_expired";
+            text: string;
+            turn_id: components["schemas"]["ID"];
+            usage: components["schemas"]["AssistantUsage"];
+        };
+        AssistantTurnStartedResponse: {
+            conversation_id: components["schemas"]["ID"];
+            /** @description Whether this answers a retry of an earlier send. */
+            replayed: boolean;
+            turn_id: components["schemas"]["ID"];
+        };
+        /** @description Tokens a turn used. Estimated marks a figure the server estimated because the provider's count was lost. */
+        AssistantUsage: {
+            /** Format: int64 */
+            cache_read: number;
+            /** Format: int64 */
+            cache_write: number;
+            estimated: boolean;
+            /** Format: int64 */
+            input: number;
+            /** Format: int64 */
+            output: number;
+        };
+        AssistantUsageSummary: {
+            /** Format: int64 */
+            approved: number;
+            /** Format: int64 */
+            commands: number;
+            /** Format: int64 */
+            declined: number;
+            /** Format: int64 */
+            edits_applied: number;
+            /** Format: int64 */
+            edits_proposed: number;
+            estimated: boolean;
+            /** Format: int64 */
+            expired: number;
+            /** Format: int64 */
+            gaps: number;
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            messages: number;
+            /** Format: int64 */
+            output_replaced: number;
+            /** Format: int64 */
+            output_rewritten: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: int64 */
+            replies: number;
+            /** @description Calls by tool name. */
+            tools: {
+                [key: string]: number;
+            };
+        };
         /** @description Sent as `initial_configuration` when Proctor Desktop connects to an Exam Attempt over the WebSocket, so no HTTP operation uses it. A complete proposed Attempt Configuration, at most 16 KiB once encoded. At first admission the server checks the acknowledged User Settings revision, the exact Desktop build and target, the packaged settings registry and manifest, and that every item is safe for candidates. Values out of range are rejected, not adjusted. The digest of the fixed configuration covers this whole object, including where it came from. */
         AttemptConfigurationCandidate: {
             /** @description IDs of approved commands from the Desktop settings catalog, sorted and without duplicates. Raw key chords are rejected. */
@@ -7226,7 +7704,7 @@ export interface components {
          * @description Name of an audited action. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
          * @enum {string}
          */
-        AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.rename" | "desktop_registration.revoke" | "environment_profile.manage" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "plugin.manage" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
+        AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "assistant_profile.manage" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.rename" | "desktop_registration.revoke" | "environment_profile.manage" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "plugin.manage" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
         /** @description One audit record you can see, without sensitive detail. */
         AuditEventResponse: {
             /** @description The action that was attempted, named like a permission, such as `class.members.manage`. */
@@ -8700,6 +9178,11 @@ export interface components {
              */
             expected_revision: number;
         };
+        ConfigureExamDraftAssistantRequest: {
+            assistant: components["schemas"]["AssistantPolicy"];
+            /** Format: int64 */
+            expected_revision: number;
+        };
         ConfigureExamDraftBrowserPolicyRequest: {
             /** @description The new Browser Policy. It replaces the current one completely. */
             browser_policy: components["schemas"]["BrowserPolicy"];
@@ -9074,6 +9557,10 @@ export interface components {
             updated_at: string;
             /** @description The ID of the User the Session belongs to. */
             user_id: components["schemas"]["ID"];
+        };
+        DecideAssistantApprovalRequest: {
+            /** @enum {string} */
+            decision: "accept" | "decline";
         };
         DeclareDeliveryGaps: {
             /** Format: int64 */
@@ -9804,7 +10291,7 @@ export interface components {
          * @description Machine-readable error code. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
          * @enum {string}
          */
-        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "environment_profile.invalid" | "environment_profile.limit_reached" | "environment_profile.name_in_use" | "environment_profile.not_found" | "environment_profile.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.environment_changed" | "exam.attempt.environment_ended" | "exam.attempt.environment_not_found" | "exam.attempt.environment_not_running" | "exam.attempt.environment_unavailable" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.terminal_exited" | "exam.attempt.terminal_limit_reached" | "exam.attempt.terminal_not_found" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.rate_limited" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.execution.disabled" | "exam.execution.profile_unusable" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
+        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "assistant_profile.invalid" | "assistant_profile.limit_reached" | "assistant_profile.name_in_use" | "assistant_profile.not_found" | "assistant_profile.unavailable" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "environment_profile.invalid" | "environment_profile.limit_reached" | "environment_profile.name_in_use" | "environment_profile.not_found" | "environment_profile.unavailable" | "exam.archived" | "exam.assistant.disabled" | "exam.assistant.profile_unusable" | "exam.attempt.already_connected" | "exam.attempt.assistant_approval_conflict" | "exam.attempt.assistant_approval_not_found" | "exam.attempt.assistant_budget_exhausted" | "exam.attempt.assistant_busy" | "exam.attempt.assistant_disabled" | "exam.attempt.assistant_turn_not_found" | "exam.attempt.assistant_unavailable" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.environment_changed" | "exam.attempt.environment_ended" | "exam.attempt.environment_not_found" | "exam.attempt.environment_not_running" | "exam.attempt.environment_unavailable" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.terminal_exited" | "exam.attempt.terminal_limit_reached" | "exam.attempt.terminal_not_found" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.rate_limited" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.execution.disabled" | "exam.execution.profile_unusable" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
         /** @description An Attempt Connection. */
         ExamAttemptConnectionResponse: {
             /** @description Why the Connection closed. Present only when state is closed. */
@@ -10494,6 +10981,7 @@ export interface components {
         };
         /** @description The integrity rules for an Attempt. */
         ExamPolicySet: {
+            assistant: components["schemas"]["AssistantPolicy"];
             /** @description What happens when the server loses its connection to an Attempt. */
             connection_loss: components["schemas"]["ConnectionLossPolicy"];
             /** @description Whether the Attempts get an execution environment, from which profile, and how many terminals. */
@@ -10695,10 +11183,10 @@ export interface components {
             /** @description The SHA-256 digest of the Revision's integrity policy, as lowercase hex. Two Revisions with the same policy have the same digest. */
             policy_digest: components["schemas"]["SHA256"];
             /**
-             * @description The version of the policy format the Revision was saved in. Always 1 today.
+             * @description The version of the policy format the Revision was saved in. Always 2 today.
              * @constant
              */
-            policy_schema_version: 1;
+            policy_schema_version: 2;
             /**
              * @description standard means the Revision was published from the Draft. live_correction means it corrects a Revision during a running Sitting.
              * @enum {string}
@@ -11102,6 +11590,8 @@ export interface components {
         };
         /** @description A summary of one sealed Submission, without file contents or integrity evidence. When the Institution's retention policy has retired the integrity data, the summary gives the retirement time and leaves out the focus-loss and unresolved counts. The submitted work stays available. */
         ExamSubmissionManagerResponse: {
+            /** @description The digest on the sealed receipt. Omitted after transcript retirement. */
+            assistant_transcript_digest?: string;
             browser_activity: components["schemas"]["BrowserSubmissionSettlement"];
             /** @description The Attempt that was sealed. */
             exam_attempt_id: components["schemas"]["ID"];
@@ -11213,6 +11703,8 @@ export interface components {
         ExamSubmissionProvenance: "candidate_submitted" | "manager_ended_attempt" | "sitting_closed";
         /** @description The receipt for a sealed Submission. It is safe to show the candidate and is the same every time it is returned. */
         ExamSubmissionReceiptResponse: {
+            /** @description The digest of the assistant transcript inventory the seal bound, chained over every record in order. An Attempt that never used the assistant has the empty transcript's digest. */
+            assistant_transcript_digest: string;
             browser_activity: components["schemas"]["BrowserSubmissionSettlement"];
             /** @description The Attempt that was sealed. */
             exam_attempt_id: components["schemas"]["ID"];
@@ -14586,6 +15078,10 @@ export interface components {
             /** @description One plural sentence for the whole run in the negotiated language, counted by its items, such as "You changed 5 profile pictures". It names no person or resource, and a failed run says so. */
             summary: string;
         };
+        SendAssistantMessageRequest: {
+            /** @description The message; line breaks and tabs are its only control characters. */
+            text: string;
+        };
         SequenceRange: {
             /** Format: int64 */
             first: number;
@@ -15594,11 +16090,11 @@ export interface components {
         /** @description Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was. */
         WorkspaceAuthor: {
             /**
-             * @description `candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed.
+             * @description `candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed. `assistant` acts on the candidate's behalf through a recorded tool call.
              * @enum {string}
              */
-            kind: "candidate" | "environment";
-            /** @description The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known. */
+            kind: "candidate" | "environment" | "assistant";
+            /** @description The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known. For `assistant`, the compact conversation, turn and tool-call IDs, separated by slashes. */
             ref: string;
         };
         /** @description A token for one saved version of a Workspace file's content. Compare it or send it back unchanged. It is not an identifier, and you should not read meaning into its characters. */
@@ -16208,6 +16704,119 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["AffiliationListResponse"];
+            };
+        };
+        /** @description The assistant profiles. */
+        AssistantProfileListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": [
+                 *         {
+                 *           "budgets": {
+                 *             "command_seconds": 0,
+                 *             "command_timeout_seconds": 60,
+                 *             "commands": 0,
+                 *             "input_tokens": 100000,
+                 *             "output_tokens": 10000,
+                 *             "tool_calls": 0,
+                 *             "turns": 100
+                 *           },
+                 *           "created_at": "2026-01-01T12:00:00Z",
+                 *           "data_handling": "self_hosted",
+                 *           "display_name": "Campus tutor",
+                 *           "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                 *           "max_level": "tutor",
+                 *           "model": "teaching-model",
+                 *           "name": "campus-tutor",
+                 *           "provider": "campus",
+                 *           "pseudonymize": true,
+                 *           "revision": 1
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantProfileListResponse"];
+            };
+        };
+        /** @description The assistant profile. */
+        AssistantProfileOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "budgets": {
+                 *         "command_seconds": 0,
+                 *         "command_timeout_seconds": 60,
+                 *         "commands": 0,
+                 *         "input_tokens": 100000,
+                 *         "output_tokens": 10000,
+                 *         "tool_calls": 0,
+                 *         "turns": 100
+                 *       },
+                 *       "created_at": "2026-01-01T12:00:00Z",
+                 *       "data_handling": "self_hosted",
+                 *       "display_name": "Campus tutor",
+                 *       "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                 *       "max_level": "tutor",
+                 *       "model": "teaching-model",
+                 *       "name": "campus-tutor",
+                 *       "provider": "campus",
+                 *       "pseudonymize": true,
+                 *       "revision": 1
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantProfileResponse"];
+            };
+        };
+        /** @description One page of an assistant transcript and the inventory that binds all of it */
+        AssistantTranscript: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "inventory": {
+                 *         "bytes": 312,
+                 *         "digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                 *         "gaps": 0,
+                 *         "records": 1
+                 *       },
+                 *       "items": [
+                 *         {
+                 *           "created_at": "2026-08-01T09:30:00Z",
+                 *           "gap": false,
+                 *           "sequence": 1,
+                 *           "turn": {
+                 *             "conversation_id": "8kpous3h9nfemqtwz47ydgjcx1",
+                 *             "final": true,
+                 *             "model": "",
+                 *             "role": "candidate",
+                 *             "stop_reason": "",
+                 *             "text": "Why does my loop never end?",
+                 *             "turn_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                 *             "usage": {
+                 *               "cache_read": 0,
+                 *               "cache_write": 0,
+                 *               "estimated": false,
+                 *               "input": 0,
+                 *               "output": 0
+                 *             }
+                 *           }
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantTranscriptResponse"];
             };
         };
         /** @description Bounded private Attempt evidence, never a Flag or a guilt finding. */
@@ -18136,6 +18745,24 @@ export interface components {
                  *         "has_starter_workspace": false,
                  *         "instructions_markdown": "Read every question before you begin.",
                  *         "policy": {
+                 *           "assistant": {
+                 *             "approvals": "always_ask",
+                 *             "budgets": {
+                 *               "command_seconds": 0,
+                 *               "command_timeout_seconds": 0,
+                 *               "commands": 0,
+                 *               "input_tokens": 0,
+                 *               "output_tokens": 0,
+                 *               "tool_calls": 0,
+                 *               "turns": 0
+                 *             },
+                 *             "code_line_budget": 10,
+                 *             "concepts_to_avoid": [],
+                 *             "enabled": false,
+                 *             "instructions": "",
+                 *             "level": "off",
+                 *             "profile_id": ""
+                 *           },
                  *           "connection_loss": {
                  *             "outcome": "flag_and_suspend"
                  *           },
@@ -18738,6 +19365,24 @@ export interface components {
                  *         "has_starter_workspace": true,
                  *         "instructions_markdown": "Read every question before you begin.\n\nYou may use the formula sheet in Resources.",
                  *         "policy": {
+                 *           "assistant": {
+                 *             "approvals": "always_ask",
+                 *             "budgets": {
+                 *               "command_seconds": 0,
+                 *               "command_timeout_seconds": 0,
+                 *               "commands": 0,
+                 *               "input_tokens": 0,
+                 *               "output_tokens": 0,
+                 *               "tool_calls": 0,
+                 *               "turns": 0
+                 *             },
+                 *             "code_line_budget": 10,
+                 *             "concepts_to_avoid": [],
+                 *             "enabled": false,
+                 *             "instructions": "",
+                 *             "level": "off",
+                 *             "profile_id": ""
+                 *           },
                  *           "connection_loss": {
                  *             "outcome": "flag_and_suspend"
                  *           },
@@ -19038,7 +19683,7 @@ export interface components {
                  *       "id": "t1oekp5dqa7nwrzhcx3by9mug4",
                  *       "number": 2,
                  *       "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-                 *       "policy_schema_version": 1,
+                 *       "policy_schema_version": 2,
                  *       "publication_kind": "standard",
                  *       "published_at": "2026-08-01T16:45:00Z",
                  *       "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -19077,7 +19722,7 @@ export interface components {
                  *           "id": "t1oekp5dqa7nwrzhcx3by9mug4",
                  *           "number": 2,
                  *           "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-                 *           "policy_schema_version": 1,
+                 *           "policy_schema_version": 2,
                  *           "publication_kind": "standard",
                  *           "published_at": "2026-08-01T16:45:00Z",
                  *           "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -19117,7 +19762,7 @@ export interface components {
                  *       "id": "t1oekp5dqa7nwrzhcx3by9mug4",
                  *       "number": 2,
                  *       "policy_digest": "823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-                 *       "policy_schema_version": 1,
+                 *       "policy_schema_version": 2,
                  *       "publication_kind": "standard",
                  *       "published_at": "2026-08-01T16:45:00Z",
                  *       "published_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf",
@@ -19529,6 +20174,7 @@ export interface components {
             content: {
                 /**
                  * @example {
+                 *       "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                  *       "browser_activity": {
                  *         "incomplete_source_count": 0,
                  *         "inventory_revision": 1,
@@ -19607,6 +20253,7 @@ export interface components {
             content: {
                 /**
                  * @example {
+                 *       "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                  *       "browser_activity": {
                  *         "incomplete_source_count": 0,
                  *         "inventory_revision": 1,
@@ -19636,6 +20283,7 @@ export interface components {
             content: {
                 /**
                  * @example {
+                 *       "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                  *       "browser_activity": {
                  *         "incomplete_source_count": 0,
                  *         "inventory_revision": 1,
@@ -25436,6 +26084,143 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listAssistantProfiles: {
+        parameters: {
+            query?: {
+                /** @description Whether retired profiles are listed too. */
+                include_retired?: boolean;
+                /** @description Maximum number of items to return in this page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description The `next_cursor` from the previous page, sent back exactly as received. Omit it to get the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AssistantProfileListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createAssistantProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The complete profile. Every member is required. */
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "budgets": {
+                 *         "command_seconds": 0,
+                 *         "command_timeout_seconds": 60,
+                 *         "commands": 0,
+                 *         "input_tokens": 100000,
+                 *         "output_tokens": 10000,
+                 *         "tool_calls": 0,
+                 *         "turns": 100
+                 *       },
+                 *       "data_handling": "self_hosted",
+                 *       "display_name": "Campus tutor",
+                 *       "max_level": "tutor",
+                 *       "model": "teaching-model",
+                 *       "name": "campus-tutor",
+                 *       "provider": "campus",
+                 *       "pseudonymize": true
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantProfileRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["AssistantProfileOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    retireAssistantProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The assistant profile to retire. */
+                assistant_profile_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AssistantProfileOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getAssistantProfileUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The assistant profile to retire. */
+                assistant_profile_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retained aggregate usage, including reservations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "attempts": 2,
+                     *       "command_milliseconds": 1000,
+                     *       "commands": 1,
+                     *       "input_tokens": 1000,
+                     *       "output_tokens": 200,
+                     *       "tool_calls": 3,
+                     *       "turns": 4
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AssistantProfileUsageResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     listAuditEvents: {
         parameters: {
             query?: {
@@ -26651,6 +27436,201 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EnvironmentProfileOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    decideCandidateAssistantApproval: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The tool call that waits for the candidate's approval. */
+                call_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Accept or decline this pending command or edit. */
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "decision": "accept"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DecideAssistantApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description The answer was recorded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    exportCandidateAssistantTranscript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The candidate's complete sealed transcript */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    /** @description Instructs the client to download the JSON document. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantTranscriptExportResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    sendCandidateAssistantMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /** @description The candidate's message, 1 to 16 KiB of text. */
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "text": "Why does my loop never end?"
+                 *     }
+                 */
+                "application/json": components["schemas"]["SendAssistantMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description The message was recorded and the reply started */
+            202: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "conversation_id": "8kpous3h9nfemqtwz47ydgjcx1",
+                     *       "replayed": false,
+                     *       "turn_id": "h9nfemqtwz47ydgjcx1ia56br8"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AssistantTurnStartedResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listCandidateAssistantTranscript: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items to return in this page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description The `next_cursor` from the previous page, sent back exactly as received. Omit it to get the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AssistantTranscript"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    cancelCandidateAssistantTurn: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The running turn to stop. */
+                turn_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The turn was stopped */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -27963,6 +28943,59 @@ export interface operations {
             cookie?: never;
         };
         requestBody: components["requestBodies"]["EditExamDraftText"];
+        responses: {
+            200: components["responses"]["ExamOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    configureExamDraftAssistant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+            };
+            cookie?: never;
+        };
+        /** @description The complete replacement assistant policy. */
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "assistant": {
+                 *         "approvals": "always_ask",
+                 *         "budgets": {
+                 *           "command_seconds": 0,
+                 *           "command_timeout_seconds": 0,
+                 *           "commands": 0,
+                 *           "input_tokens": 0,
+                 *           "output_tokens": 0,
+                 *           "tool_calls": 0,
+                 *           "turns": 0
+                 *         },
+                 *         "code_line_budget": 10,
+                 *         "concepts_to_avoid": [],
+                 *         "enabled": false,
+                 *         "instructions": "",
+                 *         "level": "off",
+                 *         "profile_id": ""
+                 *       },
+                 *       "expected_revision": 4
+                 *     }
+                 */
+                "application/json": components["schemas"]["ConfigureExamDraftAssistantRequest"];
+            };
+        };
         responses: {
             200: components["responses"]["ExamOK"];
             400: components["responses"]["BadRequest"];
@@ -31522,6 +32555,84 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listSubmissionAssistantTranscript: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items to return in this page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description The `next_cursor` from the previous page, sent back exactly as received. Omit it to get the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AssistantTranscript"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getSubmissionAssistantUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How the assistant was used */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "approved": 2,
+                     *       "commands": 2,
+                     *       "declined": 0,
+                     *       "edits_applied": 0,
+                     *       "edits_proposed": 0,
+                     *       "estimated": false,
+                     *       "expired": 0,
+                     *       "gaps": 0,
+                     *       "input_tokens": 18240,
+                     *       "messages": 6,
+                     *       "output_replaced": 0,
+                     *       "output_rewritten": 1,
+                     *       "output_tokens": 2210,
+                     *       "replies": 6,
+                     *       "tools": {
+                     *         "read_file": 4,
+                     *         "run_command": 2
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AssistantUsageSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

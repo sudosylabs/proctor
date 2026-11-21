@@ -85,6 +85,16 @@ codes:
     description: "An Affiliation field or reference is invalid."
   - code: affiliation.student_has_active_enrollment
     description: "A student Affiliation cannot end while the student has an open Class enrollment."
+  - code: assistant_profile.invalid
+    description: "The assistant profile is outside its bounds; `fields.field` names the part."
+  - code: assistant_profile.limit_reached
+    description: "The installation already keeps the most assistant profiles that are not retired."
+  - code: assistant_profile.name_in_use
+    description: "Another assistant profile that is not retired has that name."
+  - code: assistant_profile.not_found
+    description: "No assistant profile has that ID."
+  - code: assistant_profile.unavailable
+    description: "Environment profiles cannot be read or changed now; retry later."
   - code: audit.internal
     description: "The server produced an audit event it cannot record; the operation is refused."
   - code: audit.query.invalid
@@ -311,9 +321,28 @@ codes:
     description: "Environment profiles cannot be read or changed now; retry later."
   - code: exam.archived
     description: "The Exam is archived and cannot change."
+  - code: exam.assistant.disabled
+    description: "The installation does not allow the assistant."
+  - code: exam.assistant.profile_unusable
+    description: "The assistant profile is absent, retired, exceeds its ceilings or names an unavailable provider."
   - code: exam.attempt.already_connected
     description: "The Attempt already has an open connection."
     websocket_fallback: true
+  - code: exam.attempt.assistant_approval_conflict
+    description: "The approval request was already answered or has expired."
+  - code: exam.attempt.assistant_approval_not_found
+    description: "No approval request with that call waits for an answer in the running assistant turn."
+  - code: exam.attempt.assistant_budget_exhausted
+    description: "The Attempt has used its assistant allowance of turns, tokens or tool calls; the exam goes on without the assistant."
+  - code: exam.attempt.assistant_busy
+    description: "The assistant is still answering the previous message; wait for its turn to end, or cancel it."
+    retry_after: 5
+  - code: exam.attempt.assistant_disabled
+    description: "The Attempt's Exam Revision does not offer the assistant."
+  - code: exam.attempt.assistant_turn_not_found
+    description: "No assistant turn with that ID is running for the Attempt."
+  - code: exam.attempt.assistant_unavailable
+    description: "The installation has the assistant off, or it cannot be reached now; retry later."
   - code: exam.attempt.browser_activity_conflict
     description: "The Browser Activity report conflicts with the recorded sequence or source."
   - code: exam.attempt.configuration_frozen

@@ -25,7 +25,7 @@ func TestCanonicalExamRevisionPolicyIgnoresAuthoredJSONFieldOrder(t *testing.T) 
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(ordered, &fields))
-	reordered := []byte(fmt.Sprintf(` { "native": %s, "focus_loss": {"outcome":"flag_and_warn","window_milliseconds":300000,"incident_count":3,"minimum_duration_milliseconds":2000,"enabled":true}, "connection_loss":{"outcome":"flag_and_suspend"}, "execution": {"terminals":0,"record_input":false,"profile_id":"","enabled":false} } `, fields["native"]))
+	reordered := []byte(fmt.Sprintf(` { "native": %s, "focus_loss": {"outcome":"flag_and_warn","window_milliseconds":300000,"incident_count":3,"minimum_duration_milliseconds":2000,"enabled":true}, "connection_loss":{"outcome":"flag_and_suspend"}, "execution": {"terminals":0,"record_input":false,"profile_id":"","enabled":false}, "assistant":%s } `, fields["native"], fields["assistant"]))
 
 	first, err := CanonicalizeExamRevisionPolicy(ordered)
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func TestCanonicalExamRevisionPolicyIgnoresAuthoredJSONFieldOrder(t *testing.T) 
 	require.True(t, bytes.Equal(first.Bytes, second.Bytes), "first=%#v second=%#v", first, second)
 	require.Equal(t, second.SHA256, first.SHA256, "first=%#v second=%#v", first, second)
 	want := fmt.Sprintf("%x", sha256.Sum256(ordered))
-	require.Equal(t, 1, first.SchemaVersion, "canonical policy=%#v want digest", first)
+	require.Equal(t, ExamPolicySchemaVersion, first.SchemaVersion, "canonical policy=%#v want digest", first)
 	require.Equal(t, want, first.SHA256, "canonical policy=%#v want digest", first)
 }
 

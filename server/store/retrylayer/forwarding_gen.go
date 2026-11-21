@@ -123,6 +123,10 @@ type retryStores struct {
 	pluginSettingsOnce             sync.Once
 	environmentProfile             store.EnvironmentProfileStore
 	environmentProfileOnce         sync.Once
+	assistantProfile               store.AssistantProfileStore
+	assistantProfileOnce           sync.Once
+	assistantTranscript            store.AssistantTranscriptStore
+	assistantTranscriptOnce        sync.Once
 	attemptEnvironment             store.AttemptEnvironmentStore
 	attemptEnvironmentOnce         sync.Once
 	attemptRuntimeLease            store.AttemptRuntimeLeaseStore
@@ -396,6 +400,16 @@ type pluginSettingsStore struct {
 
 type environmentProfileStore struct {
 	store.EnvironmentProfileStore
+	layer *Layer
+}
+
+type assistantProfileStore struct {
+	store.AssistantProfileStore
+	layer *Layer
+}
+
+type assistantTranscriptStore struct {
+	store.AssistantTranscriptStore
 	layer *Layer
 }
 
@@ -954,6 +968,26 @@ func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
 	return l.stores.environmentProfile
 }
 
+func (l *Layer) AssistantProfile() store.AssistantProfileStore {
+	l.stores.assistantProfileOnce.Do(func() {
+		next := l.Store.AssistantProfile()
+		if next != nil {
+			l.stores.assistantProfile = &assistantProfileStore{AssistantProfileStore: next, layer: l}
+		}
+	})
+	return l.stores.assistantProfile
+}
+
+func (l *Layer) AssistantTranscript() store.AssistantTranscriptStore {
+	l.stores.assistantTranscriptOnce.Do(func() {
+		next := l.Store.AssistantTranscript()
+		if next != nil {
+			l.stores.assistantTranscript = &assistantTranscriptStore{AssistantTranscriptStore: next, layer: l}
+		}
+	})
+	return l.stores.assistantTranscript
+}
+
 func (l *Layer) AttemptEnvironment() store.AttemptEnvironmentStore {
 	l.stores.attemptEnvironmentOnce.Do(func() {
 		next := l.Store.AttemptEnvironment()
@@ -1198,6 +1232,15 @@ func (s *examAuthoringStore) UpdateDraftExecution(ctx context.Context, arg1 *sto
 	})
 }
 
+func (s *examAuthoringStore) UpdateDraftAssistant(ctx context.Context, arg1 *store.ExamDraftAssistantUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	if command == nil {
+		return s.ExamAuthoringStore.UpdateDraftAssistant(ctx, arg1, command)
+	}
+	return retryCall1(ctx, s.layer, func() (*store.ExamAuthoringCommandResult, error) {
+		return s.ExamAuthoringStore.UpdateDraftAssistant(ctx, arg1, command)
+	})
+}
+
 func (s *examAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, arg1 *store.ExamDraftNativePolicyUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.UpdateDraftNativePolicy(ctx, arg1, command)
@@ -1342,6 +1385,12 @@ func (s *examSittingStore) EarlyClose(ctx context.Context, arg1 *store.ExamSitti
 	}
 	return retryCall1(ctx, s.layer, func() (*store.ExamSittingLifecycleResult, error) {
 		return s.ExamSittingStore.EarlyClose(ctx, arg1, command)
+	})
+}
+
+func (s *examAttemptStore) ListCandidateStarterWorkspace(ctx context.Context, arg1 store.CandidateAttemptAccess, arg2 int) ([]store.CandidateStarterWorkspaceFile, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.CandidateStarterWorkspaceFile, error) {
+		return s.ExamAttemptStore.ListCandidateStarterWorkspace(ctx, arg1, arg2)
 	})
 }
 
@@ -2053,6 +2102,42 @@ func (s *installationStore) Get(ctx context.Context) (*model.InstallationState, 
 	})
 }
 
+func (s *assistantProfileStore) Usage(ctx context.Context, arg1 model.AssistantProfileID) (model.AssistantProfileUsage, error) {
+	return retryCall1(ctx, s.layer, func() (model.AssistantProfileUsage, error) {
+		return s.AssistantProfileStore.Usage(ctx, arg1)
+	})
+}
+
+func (s *assistantProfileStore) Get(ctx context.Context, arg1 model.AssistantProfileID) (*model.AssistantProfile, error) {
+	return retryCall1(ctx, s.layer, func() (*model.AssistantProfile, error) {
+		return s.AssistantProfileStore.Get(ctx, arg1)
+	})
+}
+
+func (s *assistantProfileStore) List(ctx context.Context, includeRetired bool) ([]*model.AssistantProfile, error) {
+	return retryCall1(ctx, s.layer, func() ([]*model.AssistantProfile, error) {
+		return s.AssistantProfileStore.List(ctx, includeRetired)
+	})
+}
+
+func (s *assistantTranscriptStore) Decision(ctx context.Context, arg1 store.AssistantRunAccess, arg2 model.AssistantCallID) (string, error) {
+	return retryCall1(ctx, s.layer, func() (string, error) {
+		return s.AssistantTranscriptStore.Decision(ctx, arg1, arg2)
+	})
+}
+
+func (s *assistantTranscriptStore) ListForAttempt(ctx context.Context, arg1 store.AssistantTranscriptQuery) (*store.AssistantTranscriptPage, error) {
+	return retryCall1(ctx, s.layer, func() (*store.AssistantTranscriptPage, error) {
+		return s.AssistantTranscriptStore.ListForAttempt(ctx, arg1)
+	})
+}
+
+func (s *assistantTranscriptStore) Inventory(ctx context.Context, arg1 store.AssistantTranscriptQuery) (model.AssistantInventory, error) {
+	return retryCall1(ctx, s.layer, func() (model.AssistantInventory, error) {
+		return s.AssistantTranscriptStore.Inventory(ctx, arg1)
+	})
+}
+
 func (s *attemptEnvironmentStore) Get(ctx context.Context, arg1 model.ExamAttemptID) (*model.AttemptEnvironment, error) {
 	return retryCall1(ctx, s.layer, func() (*model.AttemptEnvironment, error) {
 		return s.AttemptEnvironmentStore.Get(ctx, arg1)
@@ -2143,6 +2228,8 @@ var (
 	_ store.DesktopCompatibilityPolicyStore = (*desktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
 	_ store.EnvironmentProfileStore         = (*environmentProfileStore)(nil)
+	_ store.AssistantProfileStore           = (*assistantProfileStore)(nil)
+	_ store.AssistantTranscriptStore        = (*assistantTranscriptStore)(nil)
 	_ store.AttemptEnvironmentStore         = (*attemptEnvironmentStore)(nil)
 	_ store.AttemptRuntimeLeaseStore        = (*attemptRuntimeLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)

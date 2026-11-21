@@ -10,6 +10,7 @@
 
 DROP TRIGGER IF EXISTS exam_submissions_seal_assistant ON exam_submissions;
 DROP FUNCTION IF EXISTS seal_assistant_inventory();
+DROP TABLE IF EXISTS exam_attempt_assistant_sessions;
 DROP TABLE IF EXISTS exam_attempt_assistant_runs;
 DROP TABLE IF EXISTS exam_attempt_assistant_calls;
 DROP TABLE IF EXISTS exam_attempt_assistant_turns;

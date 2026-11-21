@@ -87,6 +87,20 @@ func TestRetentionSubmissionPrivacy(t *testing.T) {
 			}
 			require.Equal(t, expectedInventories, assistantInventories, "assistant transcript retirement")
 			if !retired {
+				// Seed mutable session metadata to prove the retirement deletes it.
+				_, err := s.GetMaster().Exec(ctx, `INSERT INTO exam_attempt_assistant_sessions
+					(exam_attempt_id,tag,call_id,conversation_id,reserved_milliseconds,state,started_at,ended_at)
+					SELECT exam_attempt_id,'assistant:1',?,?,1000,'ended',statement_timestamp(),statement_timestamp()
+					FROM exam_submissions WHERE id=? ON CONFLICT DO NOTHING`,
+					model.NewAssistantCallID().String(), model.NewAssistantConversationID().String(), id.String())
+				require.NoError(t, err)
+			}
+			var assistantSessions int
+			require.NoError(t, s.GetMaster().Get(ctx, &assistantSessions, `SELECT count(*) FROM exam_attempt_assistant_sessions
+				WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`, id.String()))
+			require.Equal(t, expectedInventories, assistantSessions, "assistant session retirement")
+
+			if !retired {
 				require.Equal(t, 2, sources, "fixture lacks source chain or replay copies")
 				require.GreaterOrEqual(t, privateOutcomes, 1, "fixture lacks source chain or replay copies")
 				return

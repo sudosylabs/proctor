@@ -1,0 +1,264 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package sqlstore
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"math"
+	"strconv"
+	"time"
+
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+type assistantSessionRow struct {
+	Tag                  string     `db:"tag"`
+	CallID               string     `db:"call_id"`
+	ConversationID       string     `db:"conversation_id"`
+	ReservedMilliseconds int64      `db:"reserved_milliseconds"`
+	ReadOffset           uint64     `db:"read_offset"`
+	State                string     `db:"state"`
+	StartedAt            time.Time  `db:"started_at"`
+	EndedAt              *time.Time `db:"ended_at"`
+}
+
+const assistantSessionColumns = `tag,call_id,conversation_id,reserved_milliseconds,read_offset,state,started_at,ended_at`
+
+func (s *SQLAssistantTranscriptStore) ReserveSession(ctx context.Context,
+	input *store.AssistantSessionReservation) (*store.AssistantSessionSlot, error) {
+	if input == nil || !input.CallID.IsValid() || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 600 {
+		return nil, store.NewErrInvalidInput("assistant_session", "reservation", nil)
+	}
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "reserve assistant session", func(ctx context.Context,
+		tx *sqlxTxWrapper) (*store.AssistantSessionSlot, error) {
+		run, now, err := lockAssistantRun(ctx, tx, input.Access, true)
+		if err != nil {
+			return nil, err
+		}
+		id := input.Access.Editor.AttemptID
+		recipe, err := readAssistantRecipe(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
+		if !recipe.Execution || (recipe.Policy.Level != model.AssistantLevelPair && recipe.Policy.Level != model.AssistantLevelAgent) {
+			return nil, store.NewErrConflict("assistant_session", "assistant_tool_unavailable", nil)
+		}
+		request, err := readAssistantExecutionRequest(ctx, tx, id, run, input.CallID, "start_session", recipe.Policy.Approvals)
+		if err != nil {
+			return nil, err
+		}
+		inventory, err := lockAssistantInventory(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
+		var count int
+		if err = tx.Get(ctx, &count, `SELECT count(*) FROM exam_attempt_assistant_sessions WHERE exam_attempt_id=? AND state='running'`,
+			id.String()); err != nil {
+			return nil, err
+		}
+		if count >= model.MaxAssistantSessions {
+			return nil, store.NewErrConflict("assistant_session", "assistant_session_limit", nil)
+		}
+		budgets := recipe.Policy.Budgets
+		remaining := (budgets.CommandSeconds*1000 - inventory.CommandMilliseconds) / 1000
+		if inventory.Commands >= int64(budgets.Commands) || remaining < 1 {
+			return nil, store.NewErrConflict("assistant_session", "assistant_budget_exhausted", nil)
+		}
+		timeout := min(input.TimeoutSeconds, budgets.CommandTimeoutSeconds, remaining)
+		sequence := run.CommandSequence + 1
+		tag := "assistant:" + strconv.FormatInt(sequence, 10)
+		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_inventories SET commands=commands+1,sessions=sessions+1,
+			command_milliseconds=command_milliseconds+? WHERE id=?`, timeout*1000, id.String()); err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_runs SET command_sequence=? WHERE id=?`, sequence, id.String()); err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_assistant_sessions
+			(exam_attempt_id,tag,call_id,conversation_id,reserved_milliseconds,state,started_at) VALUES (?,?,?,?,?,'running',?)`,
+			id.String(), tag, input.CallID.String(), run.ConversationID, timeout*1000, now); err != nil {
+			return nil, translateError("assistant_session", tag, err)
+		}
+		reservation := *request
+		reservation.Phase, reservation.Approval, reservation.ProcessTag = "reserved", "", tag
+		reservation.Arguments = json.RawMessage(`{}`)
+		if _, err = appendAssistantRecord(ctx, tx, id, model.AssistantRecord{Call: &reservation}, false); err != nil {
+			return nil, err
+		}
+		return &store.AssistantSessionSlot{Tag: tag, StartedAt: now, TimeoutSeconds: timeout}, nil
+	})
+}
+
+func lockAssistantSession(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID, tag string) (assistantSessionRow, error) {
+	var row assistantSessionRow
+	err := tx.Get(ctx, &row, `SELECT `+assistantSessionColumns+` FROM exam_attempt_assistant_sessions
+		WHERE exam_attempt_id=? AND tag=? FOR UPDATE`, id.String(), tag)
+	return row, translateError("assistant_session", tag, err)
+}
+
+func (s *SQLAssistantTranscriptStore) AdvanceSessionRead(ctx context.Context, access store.AssistantSessionAccess, tag string,
+	offset uint64, wrote bool) error {
+	if !model.ValidAssistantProcessTag(tag) || offset > math.MaxInt64 {
+		return store.NewErrInvalidInput("assistant_session", "offset", nil)
+	}
+	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "advance assistant session read", func(ctx context.Context, tx *sqlxTxWrapper) (bool, error) {
+		if _, _, err := lockAssistantRun(ctx, tx, access, true); err != nil {
+			return false, err
+		}
+		id := access.Editor.AttemptID
+		if _, err := lockAssistantInventory(ctx, tx, id); err != nil {
+			return false, err
+		}
+		row, err := lockAssistantSession(ctx, tx, id, tag)
+		if err != nil {
+			return false, err
+		}
+		if row.State != "running" {
+			return false, store.NewErrNotFound("assistant_session", tag)
+		}
+		if offset < row.ReadOffset {
+			return false, store.NewErrConflict("assistant_session", "assistant_session_read_offset", nil)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_sessions SET read_offset=? WHERE exam_attempt_id=? AND tag=?`,
+			offset, id.String(), tag); err != nil {
+			return false, err
+		}
+		if wrote {
+			_, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_inventories SET session_inputs=session_inputs+1 WHERE id=?`, id.String())
+		}
+		return err == nil, err
+	})
+	return err
+}
+
+func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *store.AssistantSessionEnd) (*model.AssistantRecord, error) {
+	if input == nil || !model.ValidAssistantProcessTag(input.Tag) || !validAttemptWorkspaceWriteAccess(input.Editor) ||
+		!model.ValidAssistantSessionOutcome(input.Outcome) || input.Outcome == "sealed" || input.DurationMilliseconds < 0 {
+		return nil, store.NewErrInvalidInput("assistant_session", "end", nil)
+	}
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "end assistant session", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AssistantRecord, error) {
+		_, now, err := lockAttemptWorkspaceMutationTarget(ctx, tx, input.Editor)
+		if err != nil {
+			return nil, err
+		}
+		id := input.Editor.AttemptID
+		if _, err = lockAssistantInventory(ctx, tx, id); err != nil {
+			return nil, err
+		}
+		row, err := lockAssistantSession(ctx, tx, id, input.Tag)
+		if err != nil {
+			return nil, err
+		}
+		return endAssistantSession(ctx, tx, id, row, input, now)
+	})
+}
+
+func assistantSessionCall(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID, callID, phase string) (*model.AssistantRecord, error) {
+	var raw []byte
+	err := tx.Get(ctx, &raw, `SELECT canonical FROM exam_attempt_assistant_calls WHERE exam_attempt_id=? AND call_id=? AND phase=?`,
+		id.String(), callID, phase)
+	if err != nil {
+		return nil, translateError("assistant_call", callID, err)
+	}
+	record, err := model.DecodeAssistantRecord(raw)
+	if err != nil || record.Call == nil || record.Call.Tool != "start_session" {
+		return nil, invalidPersistedState("assistant_session", "canonical", err)
+	}
+	return &record, nil
+}
+
+func endAssistantSession(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID, row assistantSessionRow,
+	input *store.AssistantSessionEnd, now time.Time) (*model.AssistantRecord, error) {
+	if row.State == "ended" {
+		return assistantSessionCall(ctx, tx, id, row.CallID, "session_ended")
+	}
+	request, err := assistantSessionCall(ctx, tx, id, row.CallID, "requested")
+	if err != nil {
+		return nil, err
+	}
+	call := *request.Call
+	call.Phase, call.Approval, call.ProcessTag = "session_ended", "", row.Tag
+	call.Arguments = json.RawMessage(`{}`)
+	call.Outcome, call.ExitCode, call.Signal = input.Outcome, input.ExitCode, input.Signal
+	call.DurationMilliseconds = min(input.DurationMilliseconds, row.ReservedMilliseconds)
+	if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_sessions SET state='ended',ended_at=GREATEST(started_at,?)
+		WHERE exam_attempt_id=? AND tag=?`, now, id.String(), row.Tag); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_inventories SET command_milliseconds=command_milliseconds-? WHERE id=?`,
+		row.ReservedMilliseconds-call.DurationMilliseconds, id.String()); err != nil {
+		return nil, err
+	}
+	return appendAssistantRecord(ctx, tx, id, model.AssistantRecord{Call: &call}, true)
+}
+
+func sealAssistantSessions(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID) error {
+	// Sealing holds the Attempt exclusively, so no editor can add a row or
+	// race these updates. The terminal records must enter the sealed digest.
+	var rows []assistantSessionRow
+	if err := tx.Select(ctx, &rows, `SELECT `+assistantSessionColumns+` FROM exam_attempt_assistant_sessions
+		WHERE exam_attempt_id=? AND state='running' ORDER BY started_at,tag FOR UPDATE`, id.String()); err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	var now time.Time
+	if err := tx.Get(ctx, &now, `SELECT statement_timestamp()`); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		input := store.AssistantSessionEnd{Outcome: "sealed", DurationMilliseconds: max(0, now.Sub(row.StartedAt).Milliseconds())}
+		if _, err := endAssistantSession(ctx, tx, id, row, &input, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLAssistantTranscriptStore) ListSessions(ctx context.Context, query store.AssistantSessionQuery) ([]model.AssistantSession, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "list assistant sessions", func(ctx context.Context, tx *sqlxTxWrapper) ([]model.AssistantSession, error) {
+		id, err := assistantReadAttempt(ctx, tx, store.AssistantTranscriptQuery{AttemptID: query.Owner.AttemptID, Owner: &query.Owner})
+		if err != nil {
+			return nil, err
+		}
+		var rows []assistantSessionRow
+		if err = tx.Select(ctx, &rows, `SELECT `+assistantSessionColumns+` FROM exam_attempt_assistant_sessions
+			WHERE exam_attempt_id=? ORDER BY (state='running') DESC,started_at DESC,tag DESC LIMIT 52`, id.String()); err != nil {
+			return nil, fmt.Errorf("list assistant sessions: %w", err)
+		}
+		sessions := make([]model.AssistantSession, 0, len(rows))
+		for _, row := range rows {
+			request, readErr := assistantSessionCall(ctx, tx, id, row.CallID, "requested")
+			if readErr != nil {
+				return nil, readErr
+			}
+			var args struct {
+				Command string `json:"command"`
+			}
+			if err = json.Unmarshal(request.Call.Arguments, &args); err != nil {
+				return nil, invalidPersistedState("assistant_session", "command", err)
+			}
+			session := model.AssistantSession{Tag: row.Tag, CallID: request.Call.CallID, ConversationID: request.Call.ConversationID,
+				Command: args.Command, ReservedMilliseconds: row.ReservedMilliseconds, ReadOffset: row.ReadOffset, State: row.State,
+				StartedAt: model.TimeUTC(row.StartedAt)}
+			if row.EndedAt != nil {
+				end, endErr := assistantSessionCall(ctx, tx, id, row.CallID, "session_ended")
+				if endErr != nil {
+					return nil, endErr
+				}
+				session.EndedAt, session.Outcome = model.TimeUTC(*row.EndedAt), end.Call.Outcome
+			}
+			sessions = append(sessions, session)
+		}
+		return sessions, nil
+	})
+}

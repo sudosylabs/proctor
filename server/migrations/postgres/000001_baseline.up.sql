@@ -6197,6 +6197,8 @@ CREATE TABLE exam_attempt_assistant_inventories (
  output_tokens bigint NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
  tool_calls bigint NOT NULL DEFAULT 0 CHECK (tool_calls >= 0),
  commands bigint NOT NULL DEFAULT 0 CHECK (commands >= 0),
+ sessions bigint NOT NULL DEFAULT 0 CHECK (sessions >= 0),
+ session_inputs bigint NOT NULL DEFAULT 0 CHECK (session_inputs >= 0),
  command_milliseconds bigint NOT NULL DEFAULT 0 CHECK (command_milliseconds >= 0)
 );
 CREATE TABLE exam_attempt_assistant_turns (
@@ -6221,7 +6223,7 @@ CREATE TABLE exam_attempt_assistant_calls (
  call_id varchar(26) NOT NULL
  CONSTRAINT exam_attempt_assistant_calls_call_id_canonical_check CHECK (call_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
  tool varchar(32) NOT NULL,
- phase varchar(16) NOT NULL CHECK (phase IN ('requested','decision','reserved','completed','applied')),
+ phase varchar(16) NOT NULL CHECK (phase IN ('requested','decision','reserved','completed','applied','session_ended')),
  canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 1048576),
  created_at timestamptz NOT NULL,
  UNIQUE(exam_attempt_id,sequence),UNIQUE(exam_attempt_id,call_id,phase)
@@ -6249,6 +6251,23 @@ CREATE TABLE exam_attempt_assistant_runs (
  reserved_command_milliseconds bigint NOT NULL DEFAULT 0 CHECK (reserved_command_milliseconds BETWEEN 0 AND 600000),
  command_sequence bigint NOT NULL DEFAULT 0 CHECK (command_sequence>=0)
 );
+CREATE TABLE exam_attempt_assistant_sessions (
+ exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id)
+ CONSTRAINT exam_attempt_assistant_sessions_attempt_canonical_check CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ tag varchar(64) NOT NULL CHECK (tag LIKE 'assistant:%'),
+ call_id varchar(26) NOT NULL
+ CONSTRAINT exam_attempt_assistant_sessions_call_canonical_check CHECK (call_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ conversation_id varchar(26) NOT NULL
+ CONSTRAINT exam_attempt_assistant_sessions_conversation_canonical_check CHECK (conversation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+ reserved_milliseconds bigint NOT NULL CHECK (reserved_milliseconds >= 0),
+ read_offset bigint NOT NULL DEFAULT 0 CHECK (read_offset >= 0),
+ state varchar(8) NOT NULL CHECK (state IN ('running','ended')),
+ started_at timestamptz NOT NULL,
+ ended_at timestamptz,
+ PRIMARY KEY (exam_attempt_id,tag),
+ UNIQUE (exam_attempt_id,call_id),
+ CHECK ((state='running' AND ended_at IS NULL) OR (state='ended' AND ended_at>=started_at AND ended_at IS NOT NULL))
+);
 CREATE FUNCTION guard_assistant_history() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_OP='INSERT' AND NOT EXISTS(SELECT 1 FROM exam_submissions WHERE exam_attempt_id=NEW.exam_attempt_id) THEN
@@ -6271,8 +6290,8 @@ BEGIN
   RETURN OLD;
  END IF;
  IF TG_OP='UPDATE' AND OLD.submission_id IS NULL AND
-  (NEW.submission_id IS NULL OR ROW(NEW.records,NEW.bytes,NEW.gaps,NEW.digest,NEW.turns,NEW.input_tokens,NEW.output_tokens,NEW.tool_calls,NEW.commands,NEW.command_milliseconds)
-  IS NOT DISTINCT FROM ROW(OLD.records,OLD.bytes,OLD.gaps,OLD.digest,OLD.turns,OLD.input_tokens,OLD.output_tokens,OLD.tool_calls,OLD.commands,OLD.command_milliseconds)) THEN RETURN NEW; END IF;
+  (NEW.submission_id IS NULL OR ROW(NEW.records,NEW.bytes,NEW.gaps,NEW.digest,NEW.turns,NEW.input_tokens,NEW.output_tokens,NEW.tool_calls,NEW.commands,NEW.command_milliseconds,NEW.sessions,NEW.session_inputs)
+  IS NOT DISTINCT FROM ROW(OLD.records,OLD.bytes,OLD.gaps,OLD.digest,OLD.turns,OLD.input_tokens,OLD.output_tokens,OLD.tool_calls,OLD.commands,OLD.command_milliseconds,OLD.sessions,OLD.session_inputs)) THEN RETURN NEW; END IF;
  RAISE EXCEPTION 'sealed assistant inventory is immutable' USING ERRCODE='55000';
 END;
 $$;

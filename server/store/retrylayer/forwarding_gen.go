@@ -2120,6 +2120,12 @@ func (s *assistantProfileStore) List(ctx context.Context, includeRetired bool) (
 	})
 }
 
+func (s *assistantTranscriptStore) ListSessions(ctx context.Context, arg1 store.AssistantSessionQuery) ([]model.AssistantSession, error) {
+	return retryCall1(ctx, s.layer, func() ([]model.AssistantSession, error) {
+		return s.AssistantTranscriptStore.ListSessions(ctx, arg1)
+	})
+}
+
 func (s *assistantTranscriptStore) Decision(ctx context.Context, arg1 store.AssistantRunAccess, arg2 model.AssistantCallID) (string, error) {
 	return retryCall1(ctx, s.layer, func() (string, error) {
 		return s.AssistantTranscriptStore.Decision(ctx, arg1, arg2)

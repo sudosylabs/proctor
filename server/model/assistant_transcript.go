@@ -93,6 +93,7 @@ type AssistantCall struct {
 	Approval             string                  `json:"approval"`
 	ProcessTag           string                  `json:"process_tag"`
 	ExitCode             *int                    `json:"exit_code,omitempty"`
+	Signal               string                  `json:"signal,omitempty"`
 	Truncated            bool                    `json:"truncated"`
 }
 
@@ -105,12 +106,16 @@ func (c AssistantCall) Valid() bool {
 		return false
 	}
 	switch c.Tool {
-	case "list_files", "read_file", "search", "read_terminal", "run_command", "propose_edit", "apply_edit", "output_check":
+	case "list_files", "read_file", "search", "read_terminal", "run_command", "propose_edit", "apply_edit", "output_check",
+		"start_session", "send_input", "stop_session":
 	default:
 		return false
 	}
 	switch c.Phase {
 	case "requested", "decision", "reserved", "completed", "applied":
+	case "session_ended":
+		return c.Tool == "start_session" && ValidAssistantProcessTag(c.ProcessTag) && ValidAssistantSessionOutcome(c.Outcome) &&
+			c.Approval == "" && len(c.Signal) <= 16
 	default:
 		return false
 	}
@@ -124,9 +129,11 @@ func (c AssistantCall) Valid() bool {
 	default:
 		return false
 	}
-	return c.ProcessTag == "" || validAssistantProcessTag(c.ProcessTag)
+	return (c.ProcessTag == "" || ValidAssistantProcessTag(c.ProcessTag)) && len(c.Signal) <= 16
 }
-func validAssistantProcessTag(tag string) bool {
+
+// ValidAssistantProcessTag recognizes the tags reserved by the assistant Store.
+func ValidAssistantProcessTag(tag string) bool {
 	suffix, ok := strings.CutPrefix(tag, "assistant:")
 	if !ok || len(suffix) == 0 || len(suffix) > 10 || suffix[0] == '0' {
 		return false
@@ -137,6 +144,33 @@ func validAssistantProcessTag(tag string) bool {
 		}
 	}
 	return true
+}
+
+// MaxAssistantSessions is the cap backed by the attempt's reservation lock.
+const MaxAssistantSessions = 2
+
+// AssistantSession is the mutable position and lifetime of a process the assistant started.
+type AssistantSession struct {
+	Tag                  string
+	CallID               AssistantCallID
+	ConversationID       AssistantConversationID
+	Command              string
+	ReservedMilliseconds int64
+	ReadOffset           uint64
+	State                string
+	StartedAt            time.Time
+	EndedAt              time.Time
+	Outcome              string
+}
+
+// ValidAssistantSessionOutcome reports whether an outcome ends a session.
+func ValidAssistantSessionOutcome(outcome string) bool {
+	switch outcome {
+	case "exited", "stopped", "timed_out", "sealed", "ended":
+		return true
+	default:
+		return false
+	}
 }
 
 // AssistantRecord is the canonical ordered unit covered by the inventory digest.
@@ -168,10 +202,12 @@ func (r AssistantRecord) Canonical() ([]byte, error) {
 
 // AssistantInventory has independent limits from execution evidence.
 type AssistantInventory struct {
-	Records int64  `json:"records"`
-	Bytes   int64  `json:"bytes"`
-	Gaps    int64  `json:"gaps"`
-	Digest  string `json:"digest"`
+	Records       int64  `json:"records"`
+	Bytes         int64  `json:"bytes"`
+	Gaps          int64  `json:"gaps"`
+	Digest        string `json:"digest"`
+	Sessions      int64  `json:"-"`
+	SessionInputs int64  `json:"-" db:"session_inputs"`
 }
 
 const assistantInventorySeed = "proctor.assistant_transcript"
@@ -181,7 +217,7 @@ func NewAssistantInventory() AssistantInventory {
 }
 func (v AssistantInventory) Validate() error {
 	if v.Records < 0 || v.Records > AssistantTranscriptMaximumRecords || v.Bytes < 0 || v.Bytes > AssistantTranscriptMaximumBytes ||
-		v.Gaps < 0 || v.Gaps > v.Records ||
+		v.Gaps < 0 || v.Gaps > v.Records || v.Sessions < 0 || v.SessionInputs < 0 ||
 		!IsValidSHA256Fingerprint(v.Digest) || (v.Records == 0 && (v.Bytes != 0 || v.Gaps != 0 ||
 		v.Digest != NewAssistantInventory().Digest)) || (v.Records > 0 && v.Bytes == 0) {
 		return ErrAssistantTranscriptInvalid
@@ -206,7 +242,8 @@ func (v AssistantInventory) Append(record AssistantRecord) (AssistantInventory, 
 	raw := append([]byte(assistantInventorySeed+".append\x00"), []byte(v.Digest)...)
 	raw = binary.BigEndian.AppendUint64(raw, uint64(record.Sequence)) //nolint:gosec // G115: validated bounded sequence.
 	raw = append(raw, canonical...)
-	next := AssistantInventory{Records: v.Records + 1, Bytes: v.Bytes + int64(len(canonical)), Gaps: v.Gaps, Digest: SHA256Fingerprint(raw)}
+	next := v
+	next.Records, next.Bytes, next.Digest = v.Records+1, v.Bytes+int64(len(canonical)), SHA256Fingerprint(raw)
 	if record.Gap {
 		next.Gaps++
 	}

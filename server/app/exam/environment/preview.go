@@ -156,6 +156,7 @@ type PreviewConn struct {
 	bytesOut atomic.Int64
 }
 
+// Read transfers bytes out of the guest to the candidate.
 func (c *PreviewConn) Read(p []byte) (int, error) {
 	c.ioMu.RLock()
 	defer c.ioMu.RUnlock()
@@ -163,6 +164,8 @@ func (c *PreviewConn) Read(p []byte) (int, error) {
 	c.bytesOut.Add(int64(n))
 	return n, err
 }
+
+// Write transfers bytes in from the candidate to the guest.
 func (c *PreviewConn) Write(p []byte) (int, error) {
 	c.ioMu.RLock()
 	defer c.ioMu.RUnlock()

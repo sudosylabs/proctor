@@ -26,8 +26,8 @@ func (s SQLAttemptEnvironmentStore) AddPreviewUsage(ctx context.Context, attempt
 	at = model.TimeUTC(at)
 	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "record preview usage", func(ctx context.Context, tx *sqlxTxWrapper) (bool, error) {
 		var id string
-		// Seal takes the same lock. Read the Submission in a separate
-		// statement so a seal that committed while we waited is visible.
+		// Lock against the seal. Keep-alive limits this to a few closes per page load.
+		// Read the Submission separately to see a seal that committed while we waited.
 		if err := tx.Get(ctx, &id, `SELECT id FROM exam_attempts WHERE id = ? FOR UPDATE`, attemptID.String()); err != nil {
 			return false, translateError("exam_attempt", attemptID.String(), err)
 		}

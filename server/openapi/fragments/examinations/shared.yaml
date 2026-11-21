@@ -91,6 +91,9 @@ components:
                   enabled: false
                   record_input: false
                   terminals: 0
+                  preview:
+                    enabled: false
+                    ports: []
                 assistant:
                   enabled: false
                   profile_id: ""
@@ -477,6 +480,7 @@ components:
         - enabled
         - record_input
         - terminals
+        - preview
       properties:
         enabled:
           type: boolean
@@ -490,6 +494,46 @@ components:
           minimum: 0
           maximum: 8
           description: How many terminals a candidate may open, from 1 to the profile's maximum; 0 when disabled.
+        preview:
+          $ref: "#/components/schemas/ExecutionPreviewPolicy"
+    ExecutionPreviewPolicy:
+      type: object
+      additionalProperties: false
+      description: >-
+        Candidate previews require execution. When enabled, ranges are inclusive, sorted by the first
+        port and disjoint. When disabled, the list is empty.
+      required: [enabled, ports]
+      properties:
+        enabled:
+          type: boolean
+        ports:
+          type: array
+          maxItems: 16
+          items:
+            $ref: "#/components/schemas/ExecutionPreviewPortRange"
+      examples:
+        - enabled: false
+          ports: []
+        - enabled: true
+          ports:
+            - from: 3000
+              to: 3999
+            - from: 5173
+              to: 5173
+    ExecutionPreviewPortRange:
+      type: object
+      additionalProperties: false
+      description: An inclusive port range. The first port is at most the last port.
+      required: [from, to]
+      properties:
+        from:
+          type: integer
+          minimum: 1024
+          maximum: 65535
+        to:
+          type: integer
+          minimum: 1024
+          maximum: 65535
     ConnectionLossPolicy:
       type: object
       description: What happens when the server loses its connection to a candidate's Attempt. You can't change it.

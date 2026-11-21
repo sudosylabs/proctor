@@ -2922,7 +2922,7 @@ export interface paths {
         get?: never;
         /**
          * Replace the execution policy on the active Exam Draft
-         * @description Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.
+         * @description Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, how many terminals a candidate may open, and which ports a candidate may preview. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.
          */
         put: operations["configureExamDraftExecution"];
         post?: never;
@@ -11967,11 +11967,41 @@ export interface components {
         /** @description Whether the Exam's Attempts get an execution environment and which. A disabled policy names no profile, records nothing and opens no terminal. Terminal output is never recorded. */
         ExecutionPolicy: {
             enabled: boolean;
+            preview: components["schemas"]["ExecutionPreviewPolicy"];
             profile_id?: components["schemas"]["ID"];
             /** @description Whether terminal input is recorded as evidence. */
             record_input: boolean;
             /** @description How many terminals a candidate may open, from 1 to the profile's maximum; 0 when disabled. */
             terminals: number;
+        };
+        /**
+         * @description Candidate previews require execution. When enabled, ranges are inclusive, sorted by the first port and disjoint. When disabled, the list is empty.
+         * @example {
+         *       "enabled": false,
+         *       "ports": []
+         *     }
+         * @example {
+         *       "enabled": true,
+         *       "ports": [
+         *         {
+         *           "from": 3000,
+         *           "to": 3999
+         *         },
+         *         {
+         *           "from": 5173,
+         *           "to": 5173
+         *         }
+         *       ]
+         *     }
+         */
+        ExecutionPreviewPolicy: {
+            enabled: boolean;
+            ports: components["schemas"]["ExecutionPreviewPortRange"][];
+        };
+        /** @description An inclusive port range. The first port is at most the last port. */
+        ExecutionPreviewPortRange: {
+            from: number;
+            to: number;
         };
         /** @description A later deadline for an open or paused Sitting. */
         ExtendExamSittingRequest: {
@@ -18876,6 +18906,10 @@ export interface components {
                  *           },
                  *           "execution": {
                  *             "enabled": false,
+                 *             "preview": {
+                 *               "enabled": false,
+                 *               "ports": []
+                 *             },
                  *             "record_input": false,
                  *             "terminals": 0
                  *           },
@@ -19496,6 +19530,10 @@ export interface components {
                  *           },
                  *           "execution": {
                  *             "enabled": false,
+                 *             "preview": {
+                 *               "enabled": false,
+                 *               "ports": []
+                 *             },
                  *             "record_input": false,
                  *             "terminals": 0
                  *           },
@@ -29304,6 +29342,15 @@ export interface operations {
                  * @example {
                  *       "execution": {
                  *         "enabled": true,
+                 *         "preview": {
+                 *           "enabled": true,
+                 *           "ports": [
+                 *             {
+                 *               "from": 5173,
+                 *               "to": 5173
+                 *             }
+                 *           ]
+                 *         },
                  *         "profile_id": "ybndrfg8ejkmcpqxot1uwisza3",
                  *         "record_input": false,
                  *         "terminals": 2

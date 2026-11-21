@@ -779,6 +779,7 @@ func examResponseFromView(view exam.View) examResponse {
 					ProfileID:   policy.Execution.Profile.String(),
 					RecordInput: policy.Execution.RecordInput,
 					Terminals:   policy.Execution.Terminals,
+					Preview:     policy.Execution.Preview.Clone(),
 				},
 			},
 			BrowserPolicy:       browserPolicyDocumentFromModel(browserPolicy),

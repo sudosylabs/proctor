@@ -346,6 +346,9 @@ components:
                   enabled: false
                   record_input: false
                   terminals: 0
+                  preview:
+                    enabled: false
+                    ports: []
                 assistant:
                   enabled: false
                   profile_id: ""

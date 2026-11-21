@@ -10,6 +10,7 @@ package model
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -306,11 +307,12 @@ func (d *ExamDraft) ApplyExecutionPolicy(policy ExecutionPolicy, at time.Time) (
 	if d == nil {
 		return false, invalidModelError("ExamDraft.ApplyExecutionPolicy", "exam_draft", "value", "is required", "")
 	}
-	if policy == d.Policy.Execution {
+	if policy.Equal(d.Policy.Execution) {
 		return false, nil
 	}
 	candidate := *d
 	candidate.Policy = d.Policy.Clone()
+	policy.Preview.Ports = slices.Clone(policy.Preview.Ports)
 	candidate.Policy.Execution = policy
 	candidate.Revision++
 	candidate.UpdatedAt = TimeUTC(at)

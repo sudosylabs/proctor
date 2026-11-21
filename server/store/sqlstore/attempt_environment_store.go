@@ -31,7 +31,7 @@ func newSQLAttemptEnvironmentStore(sqlStore *SQLStore) store.AttemptEnvironmentS
 }
 
 const attemptEnvironmentColumns = `exam_attempt_id, exam_sitting_id, environment_profile_id, image, cpu_millis,
-	memory_bytes, disk_bytes, network, idle_window_seconds, terminals, record_input, desired, state, generation,
+	memory_bytes, disk_bytes, network, idle_window_seconds, terminals, record_input, preview_policy, desired, state, generation,
 	incarnation, host, grant_id, epoch, control_fence, projection_cursor, observation_cursor, process_cursor,
 	projected_versions, evidence_sequence, waiting_since, settle_requested, settle_completed, settle_requested_at,
 	sync_paths, replace_before, revision, created_at, updated_at`
@@ -48,6 +48,7 @@ type attemptEnvironmentRow struct {
 	IdleWindowSeconds int64          `db:"idle_window_seconds"`
 	Terminals         int            `db:"terminals"`
 	RecordInput       bool           `db:"record_input"`
+	PreviewPolicy     []byte         `db:"preview_policy"`
 	Desired           string         `db:"desired"`
 	State             string         `db:"state"`
 	Generation        int64          `db:"generation"`
@@ -86,6 +87,9 @@ func (r attemptEnvironmentRow) model() (*model.AttemptEnvironment, error) {
 		ProcessCursor: r.ProcessCursor, EvidenceSequence: r.EvidenceSequence, Revision: r.Revision,
 		SettleRequested: r.SettleRequested, SettleCompleted: r.SettleCompleted, ReplaceBefore: r.ReplaceBefore,
 		CreatedAt: model.TimeUTC(r.CreatedAt), UpdatedAt: model.TimeUTC(r.UpdatedAt),
+	}
+	if err := json.Unmarshal(r.PreviewPolicy, &environment.Preview); err != nil {
+		return nil, invalidPersistedState("attempt_environment", "preview_policy", err)
 	}
 	if err := json.Unmarshal(r.ProjectedVersions, &environment.ProjectedVersions); err != nil {
 		return nil, invalidPersistedState("attempt_environment", "projected_versions", err)
@@ -248,19 +252,23 @@ func createAttemptEnvironment(
 	environment := &model.AttemptEnvironment{
 		AttemptID: fact.AttemptID, SittingID: fact.SittingID, ProfileID: profile.ID, Image: profile.Image,
 		Resources: profile.Resources, Network: profile.Network, IdleWindow: profile.IdleWindow,
-		Terminals: policy.Execution.Terminals, RecordInput: policy.Execution.RecordInput,
+		Terminals: policy.Execution.Terminals, RecordInput: policy.Execution.RecordInput, Preview: policy.Execution.Preview,
 		Desired: desired, State: model.AttemptEnvironmentPending, Generation: fact.Generation,
 		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	if err = environment.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("attempt_environment", "creation", nil).Wrap(err)
 	}
+	preview, err := json.Marshal(environment.Preview.Clone())
+	if err != nil {
+		return nil, fmt.Errorf("encode attempt preview policy: %w", err)
+	}
 	if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_environments (`+attemptEnvironmentColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, 0, 0, 0, '{}', 0, NULL, 0, 0, NULL, '[]', 0, 1,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, 0, 0, 0, '{}', 0, NULL, 0, 0, NULL, '[]', 0, 1,
 			?, ?)`,
 		environment.AttemptID.String(), environment.SittingID.String(), environment.ProfileID.String(), environment.Image,
 		environment.Resources.CPUMillis, environment.Resources.MemoryBytes, environment.Resources.DiskBytes,
-		string(environment.Network), int64(environment.IdleWindow/time.Second), environment.Terminals, environment.RecordInput,
+		string(environment.Network), int64(environment.IdleWindow/time.Second), environment.Terminals, environment.RecordInput, preview,
 		string(environment.Desired), string(environment.State), environment.Generation, now, now); err != nil {
 		return nil, fmt.Errorf("create attempt environment: %w", translateError("attempt_environment", environment.AttemptID.String(), err))
 	}

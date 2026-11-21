@@ -163,6 +163,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ConfigureExamDraftBrowserPolicyRequest":         reflect.TypeOf(configureExamDraftBrowserPolicyRequest{}),
 	"ConfigureExamDraftFocusLossRequest":             reflect.TypeOf(configureExamDraftFocusLossRequest{}),
 	"ConfigureExamDraftExecutionRequest":             reflect.TypeOf(configureExamDraftExecutionRequest{}),
+	"ExecutionPreviewPolicy":                         reflect.TypeOf(model.PreviewPolicy{}),
+	"ExecutionPreviewPortRange":                      reflect.TypeOf(model.PortRange{}),
 	"ExecutionPolicy":                                reflect.TypeOf(examExecutionPolicyDocument{}),
 	"ConfigureExamDraftNativePolicyRequest":          reflect.TypeOf(configureExamDraftNativePolicyRequest{}),
 	"ConnectionLossPolicy":                           reflect.TypeOf(examConnectionPolicyResponse{}),

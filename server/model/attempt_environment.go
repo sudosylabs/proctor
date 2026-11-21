@@ -84,6 +84,7 @@ type AttemptEnvironment struct {
 	// Terminals is the most terminals the candidate may open at once.
 	Terminals   int
 	RecordInput bool
+	Preview     PreviewPolicy
 
 	Desired AttemptEnvironmentDesired
 	State   AttemptEnvironmentState
@@ -173,7 +174,7 @@ func (e *AttemptEnvironment) Validate() error {
 	case e.CreatedAt.IsZero() || e.UpdatedAt.Before(e.CreatedAt):
 		return invalidModelError(where, "attempt_environment", "times", "are out of order", "")
 	}
-	return nil
+	return e.Preview.Validate()
 }
 
 func validProjectedVersions(versions map[AttemptWorkspaceEntryID]WorkspaceContentVersion) bool {

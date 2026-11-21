@@ -42,16 +42,17 @@ func (a *Authoring) ConfigureExamDraftExecution(
 		return View{}, apperror.Invalid("exam.invalid", "draft_revision")
 	}
 	if err := command.Execution.Validate(); err != nil {
-		return View{}, apperror.Invalid("exam.invalid", "execution").Wrap(err)
+		return View{}, apperror.DomainInvalid("exam.invalid", err)
 	}
 
 	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationConfigureDraftExecution, command.IdempotencyKey, struct {
-		ExamID                string `json:"exam_id"`
-		ExpectedDraftRevision int64  `json:"expected_draft_revision"`
-		Enabled               bool   `json:"enabled"`
-		ProfileID             string `json:"profile_id"`
-		RecordInput           bool   `json:"record_input"`
-		Terminals             int    `json:"terminals"`
+		ExamID                string              `json:"exam_id"`
+		ExpectedDraftRevision int64               `json:"expected_draft_revision"`
+		Enabled               bool                `json:"enabled"`
+		ProfileID             string              `json:"profile_id"`
+		RecordInput           bool                `json:"record_input"`
+		Terminals             int                 `json:"terminals"`
+		Preview               model.PreviewPolicy `json:"preview"`
 	}{
 		ExamID:                command.ExamID.String(),
 		ExpectedDraftRevision: command.ExpectedDraftRevision,
@@ -59,6 +60,7 @@ func (a *Authoring) ConfigureExamDraftExecution(
 		ProfileID:             command.Execution.Profile.String(),
 		RecordInput:           command.Execution.RecordInput,
 		Terminals:             command.Execution.Terminals,
+		Preview:               command.Execution.Preview.Clone(),
 	})
 	if err != nil {
 		return View{}, err

@@ -5512,6 +5512,10 @@
                   },
                   "execution": {
                     "enabled": false,
+                    "preview": {
+                      "enabled": false,
+                      "ports": []
+                    },
                     "record_input": false,
                     "terminals": 0
                   },
@@ -6201,6 +6205,10 @@
                   },
                   "execution": {
                     "enabled": false,
+                    "preview": {
+                      "enabled": false,
+                      "ports": []
+                    },
                     "record_input": false,
                     "terminals": 0
                   },
@@ -24773,6 +24781,9 @@
           "enabled": {
             "type": "boolean"
           },
+          "preview": {
+            "$ref": "#/components/schemas/ExecutionPreviewPolicy"
+          },
           "profile_id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -24790,7 +24801,69 @@
         "required": [
           "enabled",
           "record_input",
-          "terminals"
+          "terminals",
+          "preview"
+        ],
+        "type": "object"
+      },
+      "ExecutionPreviewPolicy": {
+        "additionalProperties": false,
+        "description": "Candidate previews require execution. When enabled, ranges are inclusive, sorted by the first port and disjoint. When disabled, the list is empty.",
+        "examples": [
+          {
+            "enabled": false,
+            "ports": []
+          },
+          {
+            "enabled": true,
+            "ports": [
+              {
+                "from": 3000,
+                "to": 3999
+              },
+              {
+                "from": 5173,
+                "to": 5173
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionPreviewPortRange"
+            },
+            "maxItems": 16,
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "ports"
+        ],
+        "type": "object"
+      },
+      "ExecutionPreviewPortRange": {
+        "additionalProperties": false,
+        "description": "An inclusive port range. The first port is at most the last port.",
+        "properties": {
+          "from": {
+            "maximum": 65535,
+            "minimum": 1024,
+            "type": "integer"
+          },
+          "to": {
+            "maximum": 65535,
+            "minimum": 1024,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "from",
+          "to"
         ],
         "type": "object"
       },
@@ -48013,7 +48086,7 @@
         }
       ],
       "put": {
-        "description": "Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.",
+        "description": "Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, how many terminals a candidate may open, and which ports a candidate may preview. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.",
         "operationId": "configureExamDraftExecution",
         "parameters": [
           {
@@ -48026,6 +48099,15 @@
               "example": {
                 "execution": {
                   "enabled": true,
+                  "preview": {
+                    "enabled": true,
+                    "ports": [
+                      {
+                        "from": 5173,
+                        "to": 5173
+                      }
+                    ]
+                  },
                   "profile_id": "ybndrfg8ejkmcpqxot1uwisza3",
                   "record_input": false,
                   "terminals": 2

@@ -5799,6 +5799,7 @@ CREATE TABLE exam_attempt_environments (
     idle_window_seconds integer NOT NULL CHECK (idle_window_seconds BETWEEN 60 AND 86400),
     terminals smallint NOT NULL CHECK (terminals BETWEEN 1 AND 8),
     record_input boolean NOT NULL,
+    preview_policy jsonb NOT NULL CHECK (jsonb_typeof(preview_policy) = 'object'),
     desired varchar(16) NOT NULL CHECK (desired IN ('running', 'frozen', 'ended')),
     state varchar(24) NOT NULL CHECK (state IN (
         'pending', 'creating', 'running', 'frozen', 'suspended', 'waiting_capacity', 'lost', 'ended'

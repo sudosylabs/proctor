@@ -25,7 +25,7 @@ func TestConfigureDraftExecutionOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 	fixture.persistence.actorIsManager = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	profile := model.NewEnvironmentProfileID()
-	execution := model.ExecutionPolicy{Enabled: true, Profile: profile, RecordInput: true, Terminals: 2}
+	execution := model.ExecutionPolicy{Enabled: true, Profile: profile, RecordInput: true, Terminals: 2, Preview: model.PreviewPolicy{Enabled: true, Ports: []model.PortRange{{From: 3000, To: 3000}}}}
 	view, err := fixture.service.ConfigureExamDraftExecution(context.Background(), fixture.inv, ConfigureDraftExecutionCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Execution: execution, IdempotencyKey: "test-key",
 	})
@@ -39,7 +39,7 @@ func TestConfigureDraftExecutionOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 	require.NotContains(t, string(fixture.onlyAttempt(t).Parameters), profile.String(), "the audit value names no profile")
 	require.Equal(t, []realtimetest.Call{draftUpdated(t, fixture.examID, 2)}, fixture.publisher.Calls())
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationConfigureDraftExecution, "test-key",
-		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"enabled":true,"profile_id":%q,"record_input":true,"terminals":2}`,
+		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"enabled":true,"profile_id":%q,"record_input":true,"terminals":2,"preview":{"enabled":true,"ports":[{"from":3000,"to":3000}]}}`,
 			fixture.examID, profile))
 	require.Equal(t, []string{"store.access", "membership", "grants", "decision:exam.manage:success", "store.get", "audit-begin:exam.manage", "store.update_execution",
 		"effect.updated"}, *fixture.order)

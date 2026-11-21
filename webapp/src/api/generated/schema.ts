@@ -7650,6 +7650,21 @@ export interface components {
             output_tokens: number;
             /** Format: int64 */
             replies: number;
+            /**
+             * Format: int64
+             * @description Writes into assistant sessions. A poll does not count.
+             */
+            session_inputs: number;
+            /**
+             * Format: int64
+             * @description Total settled duration from the session-ended records, in whole seconds.
+             */
+            session_seconds: number;
+            /**
+             * Format: int64
+             * @description Assistant session reservations, also counted in commands.
+             */
+            sessions: number;
             /** @description Calls by tool name. */
             tools: {
                 [key: string]: number;
@@ -32843,7 +32858,7 @@ export interface operations {
                 content: {
                     /**
                      * @example {
-                     *       "approved": 2,
+                     *       "approved": 3,
                      *       "commands": 2,
                      *       "declined": 0,
                      *       "edits_applied": 0,
@@ -32857,9 +32872,14 @@ export interface operations {
                      *       "output_rewritten": 1,
                      *       "output_tokens": 2210,
                      *       "replies": 6,
+                     *       "session_inputs": 1,
+                     *       "session_seconds": 12,
+                     *       "sessions": 1,
                      *       "tools": {
                      *         "read_file": 4,
-                     *         "run_command": 2
+                     *         "run_command": 1,
+                     *         "send_input": 1,
+                     *         "start_session": 1
                      *       }
                      *     }
                      */

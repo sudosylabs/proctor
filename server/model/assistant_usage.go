@@ -7,6 +7,8 @@
 
 package model
 
+import "encoding/json"
+
 // AssistantUsageSummary describes how a candidate used the assistant. It is
 // descriptive only: assistant use the Exam allows is not misconduct, so no
 // figure here raises an Integrity Flag or scores anything.
@@ -18,6 +20,9 @@ type AssistantUsageSummary struct {
 	Estimated       bool             `json:"estimated"`
 	Tools           map[string]int64 `json:"tools"`
 	Commands        int64            `json:"commands"`
+	Sessions        int64            `json:"sessions"`
+	SessionInputs   int64            `json:"session_inputs"`
+	SessionSeconds  int64            `json:"session_seconds"`
 	EditsProposed   int64            `json:"edits_proposed"`
 	EditsApplied    int64            `json:"edits_applied"`
 	Approved        int64            `json:"approved"`
@@ -33,6 +38,7 @@ type AssistantUsageSummary struct {
 // final record, which carries the turn's whole usage.
 func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSummary {
 	summary := AssistantUsageSummary{Tools: map[string]int64{}}
+	var sessionMilliseconds int64
 	for _, record := range records {
 		if record.Gap {
 			summary.Gaps++
@@ -73,10 +79,25 @@ func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSumma
 				summary.Expired++
 			}
 		case "reserved":
-			if call.Tool == "run_command" {
+			switch call.Tool {
+			case "run_command":
 				summary.Commands++
+			case "start_session":
+				summary.Commands++
+				summary.Sessions++
 			}
+		case "session_ended":
+			sessionMilliseconds += call.DurationMilliseconds
 		case "completed", "applied":
+			if call.Tool == "send_input" && call.Outcome == "ok" {
+				var input struct {
+					Text string   `json:"text"`
+					Keys []string `json:"keys"`
+				}
+				if json.Unmarshal([]byte(call.Result), &input) == nil && (input.Text != "" || len(input.Keys) != 0) {
+					summary.SessionInputs++
+				}
+			}
 			switch call.Outcome {
 			case "applied":
 				summary.EditsApplied++
@@ -87,6 +108,7 @@ func SummarizeAssistantTranscript(records []AssistantRecord) AssistantUsageSumma
 			}
 		}
 	}
+	summary.SessionSeconds = sessionMilliseconds / 1000
 	return summary
 }
 

@@ -26,11 +26,13 @@ type sealedTranscript struct {
 	store.AssistantTranscriptStore
 	records []model.AssistantRecord
 	queries []store.AssistantTranscriptQuery
+	inputs  int64
 }
 
 func (s *sealedTranscript) ListForAttempt(_ context.Context, query store.AssistantTranscriptQuery) (*store.AssistantTranscriptPage, error) {
 	s.queries = append(s.queries, query)
 	page := &store.AssistantTranscriptPage{Inventory: model.NewAssistantInventory()}
+	page.Inventory.SessionInputs = s.inputs
 	for _, record := range s.records {
 		if record.Sequence <= query.AfterSequence {
 			continue
@@ -48,12 +50,16 @@ func TestAssistantTranscriptRequiresCurrentReviewAuthorityAndPagesWholeForTheSum
 	f := newReviewFixture(t)
 	conversation, turn := model.NewAssistantConversationID(), model.NewAssistantTurnID()
 	at := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
-	transcript := &sealedTranscript{}
+	transcript := &sealedTranscript{inputs: 2}
 	for index := range 250 {
 		record := model.AssistantRecord{Sequence: int64(index + 1), CreatedAt: at, Call: &model.AssistantCall{ConversationID: conversation,
 			TurnID: turn, CallID: model.NewAssistantCallID(), Tool: "read_file", Phase: "requested", Arguments: json.RawMessage(`{}`)}}
 		transcript.records = append(transcript.records, record)
 	}
+	transcript.records = append(transcript.records,
+		model.AssistantRecord{Sequence: 251, CreatedAt: at, Call: &model.AssistantCall{ConversationID: conversation,
+			TurnID: turn, CallID: model.NewAssistantCallID(), Tool: "start_session", Phase: "session_ended",
+			ProcessTag: "assistant:1", Outcome: "sealed", DurationMilliseconds: 1750}})
 	f.service.transcripts = transcript
 
 	_, err := f.service.ListAssistantTranscript(context.Background(), outsiderInvocation(f),
@@ -69,10 +75,18 @@ func TestAssistantTranscriptRequiresCurrentReviewAuthorityAndPagesWholeForTheSum
 	require.NoError(t, err)
 	require.Len(t, f.decisions(model.ActionSubmissionView), decisionsBefore+1)
 	require.Equal(t, int64(250), summary.Tools["read_file"])
+	require.EqualValues(t, 2, summary.SessionInputs)
+	require.EqualValues(t, 1, summary.SessionSeconds)
 	require.Len(t, transcript.queries, 2, "the summary pages the whole transcript")
 	require.Equal(t, int64(200), transcript.queries[1].AfterSequence)
 	for _, query := range transcript.queries {
 		require.Equal(t, f.submissionID, query.ReviewSubmissionID)
 		require.Nil(t, query.Owner)
 	}
+	page, err := f.service.ListAssistantTranscript(t.Context(), f.inv,
+		AssistantTranscriptQuery{SubmissionID: f.submissionID, AfterSequence: 250, Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, page.Records, 1)
+	require.Equal(t, "session_ended", page.Records[0].Call.Phase)
+	require.Equal(t, "sealed", page.Records[0].Call.Outcome)
 }

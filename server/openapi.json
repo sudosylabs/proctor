@@ -13491,6 +13491,24 @@
             "minimum": 0,
             "type": "integer"
           },
+          "session_inputs": {
+            "description": "Writes into assistant sessions. A poll does not count.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "session_seconds": {
+            "description": "Total settled duration from the session-ended records, in whole seconds.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessions": {
+            "description": "Assistant session reservations, also counted in commands.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "tools": {
             "additionalProperties": {
               "format": "int64",
@@ -13509,6 +13527,9 @@
           "estimated",
           "tools",
           "commands",
+          "sessions",
+          "session_inputs",
+          "session_seconds",
           "edits_proposed",
           "edits_applied",
           "approved",
@@ -59755,7 +59776,7 @@
             "content": {
               "application/json": {
                 "example": {
-                  "approved": 2,
+                  "approved": 3,
                   "commands": 2,
                   "declined": 0,
                   "edits_applied": 0,
@@ -59769,9 +59790,14 @@
                   "output_rewritten": 1,
                   "output_tokens": 2210,
                   "replies": 6,
+                  "session_inputs": 1,
+                  "session_seconds": 12,
+                  "sessions": 1,
                   "tools": {
                     "read_file": 4,
-                    "run_command": 2
+                    "run_command": 1,
+                    "send_input": 1,
+                    "start_session": 1
                   }
                 },
                 "schema": {

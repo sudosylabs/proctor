@@ -72,6 +72,7 @@ func (s *Service) SummarizeAssistantUsage(ctx context.Context, inv invocation.In
 		return model.AssistantUsageSummary{}, err
 	}
 	var records []model.AssistantRecord
+	var inputCount int64
 	query := AssistantTranscriptQuery{SubmissionID: submissionID, Limit: 200}
 	for {
 		page, err := s.readAssistantTranscriptPage(ctx, query)
@@ -80,9 +81,13 @@ func (s *Service) SummarizeAssistantUsage(ctx context.Context, inv invocation.In
 		}
 		records = append(records, page.Records...)
 		if page.NextSequence == 0 {
+			inputCount = page.Inventory.SessionInputs
 			break
 		}
 		query.AfterSequence = page.NextSequence
 	}
-	return model.SummarizeAssistantTranscript(records), nil
+	summary := model.SummarizeAssistantTranscript(records)
+	// A host write may have succeeded even if its output could not be read.
+	summary.SessionInputs = inputCount
+	return summary, nil
 }

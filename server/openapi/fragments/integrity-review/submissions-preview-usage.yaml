@@ -1,0 +1,97 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/submissions/{submission_id}/preview-usage:
+    parameters:
+      - $ref: '#/components/parameters/SubmissionID'
+    get:
+      operationId: getSubmissionPreviewUsage
+      summary: Read sealed preview usage
+      tags:
+        - Integrity review
+      description: >-
+        Requires the same Submission view authorization as Attempt evidence. Reports one row per guest port
+        used before the seal, including completed connections, byte counts and times. Preview content is
+        never recorded. The summary raises no Integrity Flags.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Preview usage bound to the sealed Submission
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewUsageSummary'
+              example:
+                submission_id: ybndrfg8ejkmcpqxot1uwisza3
+                ports:
+                  - port: 5173
+                    connections: 2
+                    bytes_in: 512
+                    bytes_out: 10240
+                    first_used_at: '2026-01-15T08:55:00Z'
+                    last_used_at: '2026-01-15T09:12:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    PreviewUsageSummary:
+      type: object
+      additionalProperties: false
+      required: [submission_id, ports]
+      properties:
+        submission_id:
+          $ref: '#/components/schemas/ID'
+        ports:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreviewPortUsage'
+    PreviewPortUsage:
+      type: object
+      additionalProperties: false
+      required: [port, connections, bytes_in, bytes_out, first_used_at, last_used_at]
+      properties:
+        port: {type: integer, minimum: 1024, maximum: 65535}
+        connections: {type: integer, format: int64, minimum: 1}
+        bytes_in: {type: integer, format: int64, minimum: 0, description: Bytes written to the guest.}
+        bytes_out: {type: integer, format: int64, minimum: 0, description: Bytes read from the guest.}
+        first_used_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}

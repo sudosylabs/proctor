@@ -5799,6 +5799,7 @@ CREATE TABLE exam_attempt_environments (
     idle_window_seconds integer NOT NULL CHECK (idle_window_seconds BETWEEN 60 AND 86400),
     terminals smallint NOT NULL CHECK (terminals BETWEEN 1 AND 8),
     record_input boolean NOT NULL,
+    preview_policy jsonb NOT NULL CHECK (jsonb_typeof(preview_policy) = 'object'),
     desired varchar(16) NOT NULL CHECK (desired IN ('running', 'frozen', 'ended')),
     state varchar(24) NOT NULL CHECK (state IN (
         'pending', 'creating', 'running', 'frozen', 'suspended', 'waiting_capacity', 'lost', 'ended'
@@ -6310,3 +6311,65 @@ END;
 $$;
 CREATE TRIGGER exam_submissions_seal_assistant AFTER INSERT ON exam_submissions
  FOR EACH ROW EXECUTE FUNCTION seal_assistant_inventory();
+
+-- Usage holds only byte counts and timestamps. The Submission binds these
+-- rows in its own transaction so a review sees a fixed inventory.
+CREATE TABLE exam_attempt_preview_usage (
+    exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id)
+        CONSTRAINT exam_attempt_preview_usage_exam_attempt_id_canonical_check
+        CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    port integer NOT NULL CHECK (port BETWEEN 1024 AND 65535),
+    connections bigint NOT NULL CHECK (connections > 0),
+    bytes_in bigint NOT NULL CHECK (bytes_in >= 0),
+    bytes_out bigint NOT NULL CHECK (bytes_out >= 0),
+    first_used_at timestamptz NOT NULL,
+    last_used_at timestamptz NOT NULL CHECK (last_used_at >= first_used_at),
+    submission_id varchar(26) REFERENCES exam_submissions(id)
+        CONSTRAINT exam_attempt_preview_usage_submission_id_canonical_check
+        CHECK (submission_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    PRIMARY KEY (exam_attempt_id, port)
+);
+CREATE INDEX exam_attempt_preview_usage_submission_idx ON exam_attempt_preview_usage (submission_id, port);
+
+CREATE FUNCTION guard_preview_usage() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.submission_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM exam_submissions WHERE exam_attempt_id = NEW.exam_attempt_id
+        ) THEN
+            RETURN NEW;
+        END IF;
+    ELSIF TG_OP = 'DELETE' THEN
+        IF OLD.submission_id IS NULL OR attempt_evidence_retired(OLD.exam_attempt_id) THEN
+            RETURN OLD;
+        END IF;
+    ELSIF OLD.submission_id IS NULL AND
+          ROW(NEW.exam_attempt_id, NEW.port) IS NOT DISTINCT FROM ROW(OLD.exam_attempt_id, OLD.port) THEN
+        IF NEW.submission_id IS NULL OR (
+            ROW(NEW.connections, NEW.bytes_in, NEW.bytes_out, NEW.first_used_at, NEW.last_used_at)
+                IS NOT DISTINCT FROM
+            ROW(OLD.connections, OLD.bytes_in, OLD.bytes_out, OLD.first_used_at, OLD.last_used_at)
+            AND EXISTS (
+                SELECT 1 FROM exam_submissions
+                WHERE id = NEW.submission_id AND exam_attempt_id = NEW.exam_attempt_id
+            )
+        ) THEN
+            RETURN NEW;
+        END IF;
+    END IF;
+    RAISE EXCEPTION 'sealed preview usage is immutable' USING ERRCODE = '55000';
+END;
+$$;
+CREATE TRIGGER exam_attempt_preview_usage_guard BEFORE INSERT OR UPDATE OR DELETE ON exam_attempt_preview_usage
+    FOR EACH ROW EXECUTE FUNCTION guard_preview_usage();
+
+CREATE FUNCTION seal_preview_usage() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE exam_attempt_preview_usage
+    SET submission_id = NEW.id
+    WHERE exam_attempt_id = NEW.exam_attempt_id;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_submissions_seal_preview_usage AFTER INSERT ON exam_submissions
+    FOR EACH ROW EXECUTE FUNCTION seal_preview_usage();

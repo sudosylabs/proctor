@@ -4286,6 +4286,18 @@ func (s *timedAssistantTranscriptStore) Inventory(arg0 context.Context, arg1 sto
 	})
 }
 
+func (s *timedAttemptEnvironmentStore) AddPreviewUsage(ctx context.Context, attemptID model.ExamAttemptID, port int, bytesIn int64, bytesOut int64, at time.Time) error {
+	return timeStoreCall0(ctx, s.layer, storeOperation(aggregateAttemptEnvironment, methodAddPreviewUsage), func(callCtx context.Context) error {
+		return s.next.AddPreviewUsage(callCtx, attemptID, port, bytesIn, bytesOut, at)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) ListPreviewUsage(ctx context.Context, submissionID model.SubmissionID) ([]model.PreviewUsage, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateAttemptEnvironment, methodListPreviewUsage), func(callCtx context.Context) ([]model.PreviewUsage, error) {
+		return s.next.ListPreviewUsage(callCtx, submissionID)
+	})
+}
+
 func (s *timedAttemptEnvironmentStore) ApplyFact(arg0 context.Context, arg1 model.AttemptEnvironmentFact) (*store.AttemptEnvironmentFactResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodApplyFact), func(callCtx context.Context) (*store.AttemptEnvironmentFactResult, error) {
 		return s.next.ApplyFact(callCtx, arg1)

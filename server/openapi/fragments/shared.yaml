@@ -1249,6 +1249,10 @@ components:
         - exam.attempt.invalid
         - exam.attempt.management_authority_conflict
         - exam.attempt.not_found
+        - exam.attempt.preview_connection_ended
+        - exam.attempt.preview_limit_reached
+        - exam.attempt.preview_not_allowed
+        - exam.attempt.preview_port_closed
         - exam.attempt.registered_desktop_required
         - exam.attempt.renewal_conflict
         - exam.attempt.revision_conflict

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/internal/canonicaljson"
@@ -55,11 +56,81 @@ type ExecutionPolicy struct {
 	Profile     EnvironmentProfileID
 	RecordInput bool
 	Terminals   int
+	Preview     PreviewPolicy
+}
+
+// PortRange includes both endpoints.
+type PortRange struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
+// PreviewPolicy restricts access to the guest's listening ports.
+type PreviewPolicy struct {
+	Enabled bool        `json:"enabled"`
+	Ports   []PortRange `json:"ports"`
+}
+
+func (p PreviewPolicy) Validate() error {
+	invalid := func(reason string) error {
+		return invalidModelError("PreviewPolicy.Validate", "exam_policy_set", "execution.preview", reason, "")
+	}
+	if !p.Enabled {
+		if len(p.Ports) != 0 {
+			return invalid("a disabled preview policy lists no ports")
+		}
+		return nil
+	}
+	if len(p.Ports) < 1 || len(p.Ports) > 16 {
+		return invalid("an enabled preview policy requires 1 to 16 port ranges")
+	}
+	previous := 0
+	for _, ports := range p.Ports {
+		if ports.From < 1024 || ports.To > 65535 || ports.From > ports.To {
+			return invalid("port ranges must be within 1024 to 65535 with from at most to")
+		}
+		if ports.From <= previous {
+			return invalid("port ranges must be sorted and disjoint")
+		}
+		previous = ports.To
+	}
+	return nil
+}
+
+func (p PreviewPolicy) Allows(port int) bool {
+	if !p.Enabled || port < 1024 || port > 65535 {
+		return false
+	}
+	for _, ports := range p.Ports {
+		if port >= ports.From && port <= ports.To {
+			return true
+		}
+	}
+	return false
+}
+
+// Clone returns an independent policy with a canonical empty port list.
+func (p PreviewPolicy) Clone() PreviewPolicy {
+	p.Ports = append(make([]PortRange, 0, len(p.Ports)), p.Ports...)
+	return p
+}
+
+func (p ExecutionPolicy) Equal(other ExecutionPolicy) bool {
+	return p.Enabled == other.Enabled && p.Profile == other.Profile && p.RecordInput == other.RecordInput &&
+		p.Terminals == other.Terminals && p.Preview.Enabled == other.Preview.Enabled &&
+		slices.Equal(p.Preview.Ports, other.Preview.Ports)
 }
 
 // Validate checks the policy on its own; the profile's own limits are
 // checked at publication.
 func (p ExecutionPolicy) Validate() error {
+	if err := p.Preview.Validate(); err != nil {
+		return err
+	}
+	if !p.Enabled && p.Preview.Enabled {
+		return invalidModelError("ExecutionPolicy.Validate", "exam_policy_set", "execution.preview",
+			"previews require execution", "")
+	}
 	if !p.Enabled {
 		if !p.Profile.IsZero() || p.RecordInput || p.Terminals != 0 {
 			return invalidModelError("ExecutionPolicy.Validate", "exam_policy_set", "execution",
@@ -148,10 +219,11 @@ type examPolicyWire struct {
 }
 
 type examExecutionPolicyWire struct {
-	Enabled     bool   `json:"enabled"`
-	ProfileID   string `json:"profile_id"`
-	RecordInput bool   `json:"record_input"`
-	Terminals   int    `json:"terminals"`
+	Enabled     bool          `json:"enabled"`
+	ProfileID   string        `json:"profile_id"`
+	RecordInput bool          `json:"record_input"`
+	Terminals   int           `json:"terminals"`
+	Preview     PreviewPolicy `json:"preview"`
 }
 
 type examConnectionPolicyWire struct {
@@ -190,6 +262,7 @@ func EncodeExamPolicySet(policy ExamPolicySet) ([]byte, error) {
 			ProfileID:   policy.Execution.Profile.String(),
 			RecordInput: policy.Execution.RecordInput,
 			Terminals:   policy.Execution.Terminals,
+			Preview:     policy.Execution.Preview.Clone(),
 		},
 	})
 	if err != nil {
@@ -229,6 +302,13 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 			ProfileID   *string `json:"profile_id"`
 			RecordInput *bool   `json:"record_input"`
 			Terminals   *int    `json:"terminals"`
+			Preview     *struct {
+				Enabled *bool `json:"enabled"`
+				Ports   *[]struct {
+					From *int `json:"from"`
+					To   *int `json:"to"`
+				} `json:"ports"`
+			} `json:"preview"`
 		} `json:"execution"`
 	}
 	if err := decoder.Decode(&wire); err != nil {
@@ -251,7 +331,8 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 		wire.Execution.Enabled == nil ||
 		wire.Execution.ProfileID == nil ||
 		wire.Execution.RecordInput == nil ||
-		wire.Execution.Terminals == nil {
+		wire.Execution.Terminals == nil ||
+		wire.Execution.Preview == nil || wire.Execution.Preview.Enabled == nil || wire.Execution.Preview.Ports == nil {
 		return ExamPolicySet{}, invalidModelError("DecodeExamPolicySet", "exam_policy", "", "exam policy document is incomplete", "")
 	}
 
@@ -265,6 +346,13 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 	assistantPolicy, err := DecodeAssistantPolicy(*wire.Assistant)
 	if err != nil {
 		return ExamPolicySet{}, err
+	}
+	preview := PreviewPolicy{Enabled: *wire.Execution.Preview.Enabled}
+	for _, ports := range *wire.Execution.Preview.Ports {
+		if ports.From == nil || ports.To == nil {
+			return ExamPolicySet{}, invalidModelError("DecodeExamPolicySet", "exam_policy", "", "preview port range is incomplete", "")
+		}
+		preview.Ports = append(preview.Ports, PortRange{From: *ports.From, To: *ports.To})
 	}
 	policy := ExamPolicySet{
 		SchemaVersion:  ExamPolicySchemaVersion,
@@ -283,6 +371,7 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 			Profile:     EnvironmentProfileID(*wire.Execution.ProfileID),
 			RecordInput: *wire.Execution.RecordInput,
 			Terminals:   *wire.Execution.Terminals,
+			Preview:     preview,
 		},
 	}
 	if err := policy.Validate(); err != nil {
@@ -323,6 +412,7 @@ func encodeCanonicalExamDocument(value any) ([]byte, error) {
 func (p ExamPolicySet) Clone() ExamPolicySet {
 	p.Native = p.Native.Clone()
 	p.Assistant = p.Assistant.Clone()
+	p.Execution.Preview.Ports = slices.Clone(p.Execution.Preview.Ports)
 	return p
 }
 

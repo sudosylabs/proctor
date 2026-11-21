@@ -129,6 +129,9 @@ type AttemptEnvironmentOwnerSave struct {
 // the settle complete, so the seal goes ahead. It changes nothing when that
 // settle is already complete or the attempt has its submission.
 type AttemptEnvironmentStore interface {
+	// AddPreviewUsage accumulates one closed connection, or conflicts if sealed.
+	AddPreviewUsage(ctx context.Context, attemptID model.ExamAttemptID, port int, bytesIn, bytesOut int64, at time.Time) error
+	ListPreviewUsage(ctx context.Context, submissionID model.SubmissionID) ([]model.PreviewUsage, error)
 	ApplyFact(context.Context, model.AttemptEnvironmentFact) (*AttemptEnvironmentFactResult, error)
 	Get(context.Context, model.ExamAttemptID) (*model.AttemptEnvironment, error)
 	SaveOwner(context.Context, *AttemptEnvironmentOwnerSave) (*model.AttemptEnvironment, error)

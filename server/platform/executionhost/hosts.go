@@ -256,6 +256,13 @@ func toReport(name string, report execenv.Report) environment.HostReport {
 	return result
 }
 
+// A shared limit lets a page load a burst of assets without letting preview
+// connections consume the host's bandwidth unchecked.
+const (
+	portBytesPerSecond = 8 << 20
+	portBytesBurst     = 32 << 20
+)
+
 // Ensure places the machine under the grant on its host.
 func (h *Hosts) Ensure(ctx context.Context, grant environment.GrantRef, spec environment.MachineSpec) (environment.Machine, error) {
 	client, err := h.client(ctx, grant.Host)
@@ -266,6 +273,7 @@ func (h *Hosts) Ensure(ctx context.Context, grant environment.GrantRef, spec env
 		ID: execenv.ID(grant.GrantID), Image: execenv.Image(spec.Image), Network: toNetwork(spec.Network),
 		Resources: execenv.Resources{CPUMillis: spec.Resources.CPUMillis, MemoryBytes: spec.Resources.MemoryBytes,
 			DiskBytes: spec.Resources.DiskBytes},
+		Limits: execenv.Limits{PortBytes: execenv.TokenBucket{Rate: portBytesPerSecond, Burst: portBytesBurst}},
 	}
 	if spec.IdleSuspend > 0 {
 		executionSpec.IdleTimeout, executionSpec.IdleAction = spec.IdleSuspend, execenv.IdleSuspend
@@ -383,6 +391,7 @@ func translate(operation string, err error) error {
 		{execenv.ErrQuota, environment.ErrMachineTooLarge},
 		{execenv.ErrMissingContent, environment.ErrMachineConflict},
 		{execenv.ErrBusy, environment.ErrMachineBusy},
+		{execenv.ErrRefused, environment.ErrPortRefused},
 		{execenv.ErrClosed, environment.ErrProcessExited},
 		{execenv.ErrDraining, environment.ErrHostUnavailable},
 		{execenv.ErrUnavailable, environment.ErrHostUnavailable},

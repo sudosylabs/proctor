@@ -117,6 +117,17 @@
           "type": "string"
         }
       },
+      "CandidatePreviewPortNumber": {
+        "description": "The guest port. The Exam's allowed ranges can include ports from 1024 to 65535.",
+        "in": "path",
+        "name": "port",
+        "required": true,
+        "schema": {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
       "CandidateTerminalNumber": {
         "description": "The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1.",
         "in": "path",
@@ -5512,6 +5523,10 @@
                   },
                   "execution": {
                     "enabled": false,
+                    "preview": {
+                      "enabled": false,
+                      "ports": []
+                    },
                     "record_input": false,
                     "terminals": 0
                   },
@@ -6201,6 +6216,10 @@
                   },
                   "execution": {
                     "enabled": false,
+                    "preview": {
+                      "enabled": false,
+                      "ports": []
+                    },
                     "record_input": false,
                     "terminals": 0
                   },
@@ -16850,6 +16869,59 @@
         ],
         "type": "object"
       },
+      "CandidatePreviewPort": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "examples": [
+              "127.0.0.1",
+              "::1"
+            ],
+            "type": "string"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "port": {
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "process_tag": {
+            "examples": [
+              "terminal:1"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "port",
+          "address",
+          "allowed"
+        ],
+        "type": "object"
+      },
+      "CandidatePreviewPorts": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_limit": {
+            "const": 32,
+            "description": "The maximum concurrent connections for this Attempt on one node.",
+            "type": "integer"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/CandidatePreviewPort"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "connection_limit",
+          "ports"
+        ],
+        "type": "object"
+      },
       "CandidateRuntimeCapabilities": {
         "additionalProperties": false,
         "description": "What the candidate may do in the Attempt at the moment the server answered.",
@@ -21266,6 +21338,10 @@
           "exam.attempt.invalid",
           "exam.attempt.management_authority_conflict",
           "exam.attempt.not_found",
+          "exam.attempt.preview_connection_ended",
+          "exam.attempt.preview_limit_reached",
+          "exam.attempt.preview_not_allowed",
+          "exam.attempt.preview_port_closed",
           "exam.attempt.registered_desktop_required",
           "exam.attempt.renewal_conflict",
           "exam.attempt.revision_conflict",
@@ -24773,6 +24849,9 @@
           "enabled": {
             "type": "boolean"
           },
+          "preview": {
+            "$ref": "#/components/schemas/ExecutionPreviewPolicy"
+          },
           "profile_id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -24790,7 +24869,69 @@
         "required": [
           "enabled",
           "record_input",
-          "terminals"
+          "terminals",
+          "preview"
+        ],
+        "type": "object"
+      },
+      "ExecutionPreviewPolicy": {
+        "additionalProperties": false,
+        "description": "Candidate previews require execution. When enabled, ranges are inclusive, sorted by the first port and disjoint. When disabled, the list is empty.",
+        "examples": [
+          {
+            "enabled": false,
+            "ports": []
+          },
+          {
+            "enabled": true,
+            "ports": [
+              {
+                "from": 3000,
+                "to": 3999
+              },
+              {
+                "from": 5173,
+                "to": 5173
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionPreviewPortRange"
+            },
+            "maxItems": 16,
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "ports"
+        ],
+        "type": "object"
+      },
+      "ExecutionPreviewPortRange": {
+        "additionalProperties": false,
+        "description": "An inclusive port range. The first port is at most the last port.",
+        "properties": {
+          "from": {
+            "maximum": 65535,
+            "minimum": 1024,
+            "type": "integer"
+          },
+          "to": {
+            "maximum": 65535,
+            "minimum": 1024,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "from",
+          "to"
         ],
         "type": "object"
       },
@@ -30653,6 +30794,69 @@
         "required": [
           "native_registry_digest",
           "configuration_manifest_fingerprint"
+        ],
+        "type": "object"
+      },
+      "PreviewPortUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes_in": {
+            "description": "Bytes written to the guest.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "bytes_out": {
+            "description": "Bytes read from the guest.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "connections": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "first_used_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "port": {
+            "maximum": 65535,
+            "minimum": 1024,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "port",
+          "connections",
+          "bytes_in",
+          "bytes_out",
+          "first_used_at",
+          "last_used_at"
+        ],
+        "type": "object"
+      },
+      "PreviewUsageSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewPortUsage"
+            },
+            "type": "array"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "submission_id",
+          "ports"
         ],
         "type": "object"
       },
@@ -44732,6 +44936,208 @@
         }
       ]
     },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/ports": {
+      "get": {
+        "description": "Lists TCP listeners bound to loopback or a wildcard address in the candidate's running Attempt environment. Each entry shows whether the published Exam policy permits opening a preview.",
+        "operationId": "listCandidatePreviewPorts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "connection_limit": 32,
+                  "ports": [
+                    {
+                      "address": "127.0.0.1",
+                      "allowed": true,
+                      "port": 5173,
+                      "process_tag": "terminal:1"
+                    },
+                    {
+                      "address": "::1",
+                      "allowed": false,
+                      "port": 9090
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/CandidatePreviewPorts"
+                }
+              }
+            },
+            "description": "Listening ports reported by the execution host",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the listening ports in the Attempt environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/ports/{port}/socket": {
+      "get": {
+        "description": "Upgrades to a binary WebSocket carrying one TCP connection to a guest listener. Proctor checks live\ncandidate access and the frozen policy and dials the guest before it upgrades. Each connection goes\nto the execution host from the node handling the request.\n\nThe first byte of each binary message is its type. Clients send `0x01` followed by 1 to 32,768 bytes\nof data, or `0x02` with no payload to close their write side. The server sends `0x81` followed by\nup to 32,768 bytes, `0x82` with no payload for EOF from the guest, or `0x86` followed by a public\nUTF-8 error code. Each direction can close independently. When the guest resets a connection,\nProctor sends `exam.attempt.preview_connection_ended` and closes that WebSocket normally.\n\nProctor rechecks access every 15 seconds. Close code 4003 indicates lost access, a freeze or a seal.\nA connection closes after 10 minutes without bytes in either direction. The local limit is 32\nconnections per Attempt. Candidate content travels only in binary frames.",
+        "operationId": "connectCandidatePreview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols to the preview socket"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Upgrade to a preview port socket",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.preview_not_allowed",
+          "exam.attempt.preview_limit_reached",
+          "exam.attempt.preview_port_closed",
+          "websocket.origin.invalid",
+          "websocket.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/CandidatePreviewPortNumber"
+        }
+      ]
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals": {
       "get": {
         "description": "Lists the candidate's terminals on the Attempt's current machine, running or exited, in number order, with where each one's output and input stand. A client reconnecting after a restart reads it to reattach. A new machine, after the old one was lost or replaced, starts with no terminals.",
@@ -48013,7 +48419,7 @@
         }
       ],
       "put": {
-        "description": "Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.",
+        "description": "Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, how many terminals a candidate may open, and which ports a candidate may preview. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.",
         "operationId": "configureExamDraftExecution",
         "parameters": [
           {
@@ -48026,6 +48432,15 @@
               "example": {
                 "execution": {
                   "enabled": true,
+                  "preview": {
+                    "enabled": true,
+                    "ports": [
+                      {
+                        "from": 5173,
+                        "to": 5173
+                      }
+                    ]
+                  },
                   "profile_id": "ybndrfg8ejkmcpqxot1uwisza3",
                   "record_input": false,
                   "terminals": 2
@@ -60302,6 +60717,99 @@
           }
         ],
         "summary": "Inspect the native rule status changes of a Submission",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubmissionID"
+        }
+      ]
+    },
+    "/api/v1/submissions/{submission_id}/preview-usage": {
+      "get": {
+        "description": "Requires the same Submission view authorization as Attempt evidence. Reports one row per guest port used before the seal, including completed connections, byte counts and times. Preview content is never recorded. The summary raises no Integrity Flags.",
+        "operationId": "getSubmissionPreviewUsage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ports": [
+                    {
+                      "bytes_in": 512,
+                      "bytes_out": 10240,
+                      "connections": 2,
+                      "first_used_at": "2026-01-15T08:55:00Z",
+                      "last_used_at": "2026-01-15T09:12:00Z",
+                      "port": 5173
+                    }
+                  ],
+                  "submission_id": "ybndrfg8ejkmcpqxot1uwisza3"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewUsageSummary"
+                }
+              }
+            },
+            "description": "Preview usage bound to the sealed Submission",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read sealed preview usage",
         "tags": [
           "Integrity review"
         ],

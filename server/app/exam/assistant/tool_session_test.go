@@ -111,7 +111,11 @@ func (s *sessionToolStore) AdvanceSessionRead(_ context.Context, _ store.Assista
 func (s *sessionToolStore) EndSession(_ context.Context, end *store.AssistantSessionEnd) (*store.AssistantSessionEndResult, error) {
 	s.ends = append(s.ends, *end)
 	original := s.ends[0]
-	return &store.AssistantSessionEndResult{Changed: len(s.ends) == 1,
+	endedAt := original.EndedAt
+	if endedAt.IsZero() {
+		endedAt = time.Now()
+	}
+	return &store.AssistantSessionEndResult{Changed: len(s.ends) == 1, EndedAt: endedAt,
 		Record: &model.AssistantRecord{CreatedAt: time.Now(), Call: &model.AssistantCall{ProcessTag: original.Tag, Outcome: original.Outcome}}}, nil
 }
 
@@ -252,7 +256,7 @@ func TestAssistantToolKillsExpiredSessionBeforeItWrites(t *testing.T) {
 	require.Equal(t, "timed_out", transcript.ends[0].Outcome)
 	require.Nil(t, transcript.ends[0].ExitCode)
 	// The second caller observes the first terminal record and has nothing to publish.
-	_, err := r.service.endSession(t.Context(), r.target.SittingID, r.key.Editor, transcript.sessions[0], "stopped", nil)
+	_, err := r.service.endSession(t.Context(), r.target.SittingID, r.key.Editor, transcript.sessions[0], environment.AssistantSessionStatus{Outcome: "stopped"})
 	require.NoError(t, err)
 	require.Len(t, publisher.Calls(), 1)
 	require.Equal(t, "exam_attempt_assistant_session_ended", publisher.Calls()[0].Event.Name)

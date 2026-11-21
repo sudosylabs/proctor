@@ -515,8 +515,9 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 
 // PublishAssistantSessionEnded delivers a session closure the environment owner committed.
 func (s *Service) PublishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidate model.UserID, record *model.AssistantRecord) error {
-	return s.publishAssistantSessionEnded(ctx, sittingID, attemptID, candidate, record.Call.ProcessTag, record.Call.Outcome, record.CreatedAt)
+	candidate model.UserID, result *store.AssistantSessionEndResult) error {
+	call := result.Record.Call
+	return s.publishAssistantSessionEnded(ctx, sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
 }
 
 func (s *Service) publishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,

@@ -392,6 +392,21 @@ codes:
     description: "The manager lost authority over the Attempt."
   - code: exam.attempt.not_found
     description: "The Attempt does not exist or is not visible to the caller."
+  - code: exam.attempt.preview_connection_ended
+    transport: true
+    description: "The guest closed one preview connection unexpectedly. This code is sent in a binary WebSocket error frame before a normal close."
+  - code: exam.attempt.preview_limit_reached
+    status: 429
+    reason: An open preview connection counts against the candidate's concurrent connection limit.
+    description: "The Attempt has reached its preview connection limit. Close a preview connection and retry."
+  - code: exam.attempt.preview_not_allowed
+    status: 403
+    reason: The Exam policy denies opening the preview port.
+    description: "The Exam does not allow a preview on this port."
+  - code: exam.attempt.preview_port_closed
+    status: 404
+    reason: The requested listener does not exist in the candidate's environment.
+    description: "No service is listening on this port in the Attempt environment."
   - code: exam.attempt.registered_desktop_required
     status: 403
     reason: "The authenticated caller lacks the assurance or prerequisite the operation requires."
@@ -529,7 +544,7 @@ codes:
   - code: exam.integrity_review.unavailable
     description: "The Integrity Review operation failed; retry later."
   - code: exam.invalid
-    description: "An Exam field is invalid; `fields` names the rejected input when known."
+    description: "An Exam field is invalid. For previews, enable execution first and supply 1 to 16 sorted, disjoint ranges from 1024 to 65535, with each start at most its end. If previews are disabled, leave the list empty. `fields` names the rejected input when known."
   - code: exam.manager.candidate_conflict
     description: "The Exam Manager candidate changed concurrently."
   - code: exam.manager.exists

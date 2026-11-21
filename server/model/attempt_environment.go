@@ -13,6 +13,16 @@ import (
 	"unicode/utf8"
 )
 
+// PreviewUsage is the sealed, descriptive usage of one guest port.
+type PreviewUsage struct {
+	Port        int
+	Connections int64
+	BytesIn     int64
+	BytesOut    int64
+	FirstUsedAt time.Time
+	LastUsedAt  time.Time
+}
+
 // AttemptEnvironmentDesired is what the attempt's facts ask of its environment.
 type AttemptEnvironmentDesired string
 
@@ -84,6 +94,7 @@ type AttemptEnvironment struct {
 	// Terminals is the most terminals the candidate may open at once.
 	Terminals   int
 	RecordInput bool
+	Preview     PreviewPolicy
 
 	Desired AttemptEnvironmentDesired
 	State   AttemptEnvironmentState
@@ -173,7 +184,7 @@ func (e *AttemptEnvironment) Validate() error {
 	case e.CreatedAt.IsZero() || e.UpdatedAt.Before(e.CreatedAt):
 		return invalidModelError(where, "attempt_environment", "times", "are out of order", "")
 	}
-	return nil
+	return e.Preview.Validate()
 }
 
 func validProjectedVersions(versions map[AttemptWorkspaceEntryID]WorkspaceContentVersion) bool {

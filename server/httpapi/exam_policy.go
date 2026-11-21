@@ -235,10 +235,11 @@ func rejectDuplicateJSONObjectMembers(data []byte, label string) error {
 // examExecutionPolicyDocument is the execution policy, as requested and as
 // returned.
 type examExecutionPolicyDocument struct {
-	Enabled     bool   `json:"enabled"`
-	ProfileID   string `json:"profile_id,omitempty"`
-	RecordInput bool   `json:"record_input"`
-	Terminals   int    `json:"terminals"`
+	Enabled     bool                `json:"enabled"`
+	ProfileID   string              `json:"profile_id,omitempty"`
+	RecordInput bool                `json:"record_input"`
+	Terminals   int                 `json:"terminals"`
+	Preview     model.PreviewPolicy `json:"preview"`
 }
 
 func (h examHandlers) configureDraftFocusLoss(request route.Request) (route.Result, error) {
@@ -310,7 +311,7 @@ func (h examHandlers) configureDraftExecution(request route.Request) (route.Resu
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Execution: model.ExecutionPolicy{Enabled: body.Execution.Enabled, Profile: profile,
-			RecordInput: body.Execution.RecordInput, Terminals: body.Execution.Terminals},
+			RecordInput: body.Execution.RecordInput, Terminals: body.Execution.Terminals, Preview: body.Execution.Preview},
 		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {

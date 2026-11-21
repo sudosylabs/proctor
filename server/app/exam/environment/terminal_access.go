@@ -30,6 +30,7 @@ type CandidateAccess struct {
 type CandidateAttempt struct {
 	AttemptID       model.ExamAttemptID
 	CandidateUserID model.UserID
+	Generation      int64
 }
 
 // CandidateVerifier proves a candidate's live access to an attempt and

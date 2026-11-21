@@ -95,9 +95,10 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 		attemptEvidence: &store.AttemptEvidencePage{Items: []model.AttemptEvidence{}}}
 
 	f.service, err = review.New(review.Dependencies{
-		Persistence: f.reviewStore,
-		Authorizer:  review.SittingManagerAuthorizer{Reviews: f.reviewStore, Sittings: f.sittingService, Audit: f.access.Auditor},
-		Auditor:     f.access.Auditor, Publisher: f.publisher,
+		Persistence:  f.reviewStore,
+		Environments: &reviewPreviewLedger{review: f.reviewStore},
+		Authorizer:   review.SittingManagerAuthorizer{Reviews: f.reviewStore, Sittings: f.sittingService, Audit: f.access.Auditor},
+		Auditor:      f.access.Auditor, Publisher: f.publisher,
 		Mail: review.ResultReleaseMail{Composer: administrationComposer(t, &identityMailSender{}), Users: f.users,
 			Sittings: f.sittingStore, Revisions: sittingMailRevisions{}},
 		Now: time.Now, NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID,
@@ -159,6 +160,8 @@ type reviewLedger struct {
 	decisions        []*store.ExamIntegrityReviewDecisionMutation
 	commands         []*store.CommandIdempotency
 	resultReads      []model.ExamAttemptID
+	previewReads     []model.SubmissionID
+	previewUsage     []model.PreviewUsage
 }
 
 func (s *reviewLedger) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamIntegrityReviewAuthorization, error) {
@@ -229,4 +232,14 @@ func (s *reviewLedger) GetReleasedStudentResult(_ context.Context, attemptID mod
 	}
 	return &model.StudentResult{ReviewID: s.f.review.ID, SubmissionID: s.f.submission.ID, AttemptID: s.f.attemptID,
 		CandidateUserID: s.f.candidate.UserID, StudentRemarksMarkdown: "Approved **remarks**", ReleasedAt: s.f.review.UpdatedAt}, nil
+}
+
+type reviewPreviewLedger struct {
+	store.AttemptEnvironmentStore
+	review *reviewLedger
+}
+
+func (s *reviewPreviewLedger) ListPreviewUsage(_ context.Context, id model.SubmissionID) ([]model.PreviewUsage, error) {
+	s.review.previewReads = append(s.review.previewReads, id)
+	return s.review.previewUsage, nil
 }

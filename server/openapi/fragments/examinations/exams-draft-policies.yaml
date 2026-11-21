@@ -141,7 +141,7 @@ paths:
       description: >-
         Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an
         execution environment, the environment profile they are created from, whether terminal input is recorded,
-        and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not
+        how many terminals a candidate may open, and which ports a candidate may preview. An enabled policy must name a profile that exists, is not
         retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A
         disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile
         again and requires the installation to allow execution.
@@ -194,6 +194,11 @@ paths:
                 profile_id: ybndrfg8ejkmcpqxot1uwisza3
                 record_input: false
                 terminals: 2
+                preview:
+                  enabled: true
+                  ports:
+                    - from: 5173
+                      to: 5173
       responses:
         "200":
           $ref: "#/components/responses/ExamOK"

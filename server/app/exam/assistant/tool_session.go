@@ -121,7 +121,7 @@ func (r *turnRun) startSession(arguments json.RawMessage, call model.AssistantCa
 	session := model.AssistantSession{Tag: slot.Tag, CallID: call, ConversationID: r.conversation, TurnID: r.key.TurnID,
 		CandidateUserID: r.target.CandidateID, State: "running", StartedAt: slot.StartedAt, ReservedMilliseconds: slot.TimeoutSeconds * 1000}
 	if sessionExpired(session, r.service.now()) {
-		if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, "timed_out", nil); err != nil {
+		if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, environment.AssistantSessionStatus{Outcome: "timed_out"}); err != nil {
 			return taggedSessionError(slot.Tag, "The session cannot be settled now.")
 		}
 		return taggedSessionError(slot.Tag, "The session timed out before it started.")
@@ -187,22 +187,23 @@ func (r *turnRun) readSession(session model.AssistantSession, input sessionInput
 	if err != nil {
 		return taggedSessionError(session.Tag, "The session output could not be read.")
 	}
-	outcome := ""
+	status := environment.AssistantSessionStatus{Exit: output.Exit, Ended: output.Ended}
 	if output.Exit != nil {
-		outcome = "exited"
+		status.Outcome = "exited"
 	} else if sessionExpired(session, r.service.now()) {
-		status, checkErr := r.service.terminals.CheckAssistantSession(r.ctx, r.inv, r.environmentAccess(), session)
+		var checkErr error
+		status, checkErr = r.service.terminals.CheckAssistantSession(r.ctx, r.inv, r.environmentAccess(), session)
 		if checkErr != nil {
 			return taggedSessionError(session.Tag, "The session deadline could not be enforced.")
 		}
-		outcome, output.Exit = status.Outcome, status.Exit
+		output.Exit = status.Exit
 	}
-	if outcome != "" {
-		if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, outcome, output.Exit); err != nil {
+	if status.Outcome != "" {
+		if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, status); err != nil {
 			return taggedSessionError(session.Tag, "The session could not be settled.")
 		}
 	}
-	return sessionResult(session, input, output, outcome)
+	return sessionResult(session, input, output, status.Outcome)
 }
 
 func (r *turnRun) stopSession(arguments json.RawMessage) toolResult {
@@ -224,7 +225,8 @@ func (r *turnRun) stopSession(arguments json.RawMessage) toolResult {
 	if err != nil {
 		return taggedSessionError(session.Tag, "The session could not be stopped.")
 	}
-	if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, "stopped", output.Exit); err != nil {
+	status := environment.AssistantSessionStatus{Outcome: "stopped", Exit: output.Exit}
+	if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, status); err != nil {
 		return taggedSessionError(session.Tag, "The session could not be settled.")
 	}
 	return sessionResult(session, sessionInputArgs{}, output, "stopped")
@@ -256,23 +258,28 @@ func (s *Service) reconcileSessions(ctx context.Context, inv invocation.Invocati
 			continue
 		}
 		if status.Outcome != "" {
-			record, endErr := s.endSession(ctx, sittingID, editor, *session, status.Outcome, status.Exit)
+			result, endErr := s.endSession(ctx, sittingID, editor, *session, status)
 			if endErr != nil {
 				joined = errors.Join(joined, endErr)
 				continue
 			}
-			session.State, session.Outcome, session.EndedAt, session.Starting = "ended", record.Call.Outcome, record.CreatedAt, false
+			session.State, session.Outcome, session.EndedAt, session.Starting = "ended", result.Record.Call.Outcome, result.EndedAt, false
 		}
 	}
 	return rows, joined
 }
 
 func (s *Service) endSession(ctx context.Context, sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess,
-	session model.AssistantSession,
-	outcome string, exit *environment.ProcessExit) (*model.AssistantRecord, error) {
-	end := store.AssistantSessionEnd{Editor: editor, Tag: session.Tag, Outcome: outcome,
-		DurationMilliseconds: max(0, s.now().Sub(session.StartedAt).Milliseconds())}
-	if exit != nil {
+	session model.AssistantSession, status environment.AssistantSessionStatus) (*store.AssistantSessionEndResult, error) {
+	now := s.now()
+	endedAt := status.EndTime(session.StartedAt, now)
+	observedAt := now
+	if !endedAt.IsZero() {
+		observedAt = endedAt
+	}
+	end := store.AssistantSessionEnd{Editor: editor, Tag: session.Tag, Outcome: status.Outcome, EndedAt: endedAt,
+		DurationMilliseconds: max(0, observedAt.Sub(session.StartedAt).Milliseconds())}
+	if exit := status.Exit; exit != nil {
 		end.Signal = exit.Signal
 		if exit.Signal == "" {
 			end.ExitCode = &exit.Code
@@ -283,14 +290,15 @@ func (s *Service) endSession(ctx context.Context, sittingID model.ExamSittingID,
 		return nil, err
 	}
 	if result.Changed {
-		s.publishSessionEnded(ctx, sittingID, editor.AttemptID, editor.CandidateUserID, result.Record)
+		s.publishSessionEnded(ctx, sittingID, editor.AttemptID, editor.CandidateUserID, result)
 	}
-	return result.Record, nil
+	return result, nil
 }
 
 func (s *Service) publishSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidate model.UserID, record *model.AssistantRecord) {
-	event, err := realtime.NewAssistantSessionEndedEvent(sittingID, attemptID, candidate, record.Call.ProcessTag, record.Call.Outcome, record.CreatedAt)
+	candidate model.UserID, result *store.AssistantSessionEndResult) {
+	call := result.Record.Call
+	event, err := realtime.NewAssistantSessionEndedEvent(sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
 	s.publish(ctx, "assistant_session_ended", event, err)
 }
 

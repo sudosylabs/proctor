@@ -65,3 +65,17 @@ Suspension, only an authorized Manager can allow you back in for that exact
 episode. Entering again creates a new Participation generation. Old
 credentials, sequence numbers and Connections stay shut off. You keep the
 same Attempt, Workspace, configuration, Flags and evidence.
+
+## Preview a service running in your environment
+
+{/* <!-- verify against Desktop --> */}
+If your Exam enables previews, start your development server in an Attempt
+terminal. For example, run `npm run dev` for a project that has a `dev`
+script. The server can listen on `localhost` or on a wildcard address such as
+`0.0.0.0` inside the environment.
+
+Open the Ports panel and choose **Open preview** for the listening port.
+Desktop opens the page in its integrated browser at the same address your
+server uses in the environment, such as `http://localhost:5173/`. The
+preview works with the development server's usual host and hot-reload
+settings. Only ports allowed by the Exam can be opened.

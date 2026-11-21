@@ -10,6 +10,7 @@
 package integration_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -23,6 +24,9 @@ import (
 	"encoding/pem"
 	"io"
 	"math/big"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -190,7 +194,7 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 		Permissions: []string{
 			string(model.ActionExamCreate), string(model.ActionExamView), string(model.ActionExamManage),
 			string(model.ActionExamPublish), string(model.ActionExamSittingCreate),
-			string(model.ActionExamSittingView), string(model.ActionExamSittingManage),
+			string(model.ActionExamSittingView), string(model.ActionExamSittingManage), string(model.ActionSubmissionView),
 		},
 	})
 	require.NoError(t, err)
@@ -212,9 +216,19 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 		IdempotencyKey: "execution-flow-starter",
 	})
 	require.NoError(t, err)
+	previewServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "execution preview")
+	}))
+	t.Cleanup(previewServer.Close)
+	listener, ok := previewServer.Listener.(*net.TCPListener)
+	require.True(t, ok)
+	address, ok := listener.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+	previewPort := address.Port
 	configured, err := helper.App.ExamAuthoring.ConfigureExamDraftExecution(ctx, managerInv, exam.ConfigureDraftExecutionCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: file.DraftRevision,
-		Execution:      model.ExecutionPolicy{Enabled: true, Profile: profile, Terminals: 1, RecordInput: true},
+		Execution: model.ExecutionPolicy{Enabled: true, Profile: profile, Terminals: 1, RecordInput: true,
+			Preview: model.PreviewPolicy{Enabled: true, Ports: []model.PortRange{{From: previewPort, To: previewPort}}}},
 		IdempotencyKey: "execution-flow-policy",
 	})
 	require.NoError(t, err)
@@ -355,6 +369,32 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 	// whichever node serves the request.
 	terminalAccess := environment.CandidateAccess{AttemptID: access.AttemptID, ConnectionID: access.ConnectionID,
 		ContinuityCredential: access.ContinuityCredential}
+	const previewRequest = "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n"
+	t.Run("preview relays a candidate request through the execution host", func(t *testing.T) {
+		guest, previewErr := guests.Ensure(ctx, execenv.Spec{ID: grantID, Image: "python-3.12", Network: execenv.NetworkNone,
+			Resources:   execenv.Resources{CPUMillis: 1000, MemoryBytes: 512 << 20, DiskBytes: 1 << 30},
+			IdleTimeout: 10 * time.Minute, IdleAction: execenv.IdleSuspend})
+		require.NoError(t, previewErr)
+		require.NoError(t, guests.RegisterPortListener(guest, listener))
+		ports, previewErr := helper.App.Previews.ListPreviewPorts(ctx, desktop.inv, terminalAccess)
+		require.NoError(t, previewErr)
+		require.Equal(t, []environment.PreviewPort{{ListeningPort: environment.ListeningPort{Port: previewPort,
+			Address: address.IP.String()}, Allowed: true}}, ports)
+		previewCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		conn, previewErr := helper.App.Previews.OpenPreview(previewCtx, desktop.inv, terminalAccess, previewPort)
+		require.NoError(t, previewErr)
+		defer func() { _ = conn.Close() }()
+		_, previewErr = io.WriteString(conn, previewRequest)
+		require.NoError(t, previewErr)
+		response, previewErr := http.ReadResponse(bufio.NewReader(conn), nil)
+		require.NoError(t, previewErr)
+		defer func() { _ = response.Body.Close() }()
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		body, previewErr := io.ReadAll(response.Body)
+		require.NoError(t, previewErr)
+		require.Equal(t, "execution preview", string(body))
+	})
 	opened, err := helper.App.Terminals.OpenTerminal(ctx, desktop.inv, terminalAccess, environment.Window{})
 	require.NoError(t, err)
 	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:1"), opened.Tag)
@@ -467,6 +507,15 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 	require.Equal(t, submitted.AssistantTranscriptDigest, recomputed.Digest)
 	require.NotNil(t, sealedSession)
 	require.Equal(t, "sealed", sealedSession.Outcome)
+
+	usage, err := helper.App.Reviews.ListPreviewUsage(ctx, managerInv, submitted.SubmissionID)
+	require.NoError(t, err)
+	require.Len(t, usage, 1)
+	require.Equal(t, previewPort, usage[0].Port)
+	require.EqualValues(t, 1, usage[0].Connections)
+	require.EqualValues(t, len(previewRequest), usage[0].BytesIn)
+	require.Greater(t, usage[0].BytesOut, int64(len("execution preview")))
+	require.Equal(t, usage[0].FirstUsedAt, usage[0].LastUsedAt)
 
 	evidence, err := persistence.ExamIntegrityReview().ListAttemptEvidence(ctx, store.AttemptEvidenceListOptions{
 		SubmissionID: submitted.SubmissionID, Limit: 100,

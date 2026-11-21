@@ -86,6 +86,18 @@ func TestRetentionSubmissionPrivacy(t *testing.T) {
 				expectedInventories = 0
 			}
 			require.Equal(t, expectedInventories, assistantInventories, "assistant transcript retirement")
+			var previewPorts int
+			require.NoError(t, s.GetMaster().Get(ctx, &previewPorts, `SELECT count(*) FROM exam_attempt_preview_usage
+				WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`, id.String()))
+			if retired {
+				require.Zero(t, previewPorts, "retirement removes the underlying preview rows")
+			} else {
+				require.Equal(t, 2, previewPorts)
+				_, err := s.GetMaster().Exec(ctx, `UPDATE exam_attempt_preview_usage SET bytes_in = bytes_in + 1 WHERE submission_id = ?`, id.String())
+				require.Error(t, err, "the guard refuses updates after the seal")
+				_, err = s.GetMaster().Exec(ctx, `DELETE FROM exam_attempt_preview_usage WHERE submission_id = ?`, id.String())
+				require.Error(t, err, "the guard refuses deletes before retirement")
+			}
 			if !retired {
 				// Seed mutable session metadata to prove the retirement deletes it.
 				_, err := s.GetMaster().Exec(ctx, `INSERT INTO exam_attempt_assistant_sessions

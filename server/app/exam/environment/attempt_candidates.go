@@ -36,5 +36,5 @@ func (c attemptCandidates) VerifyCandidate(
 	if err != nil {
 		return CandidateAttempt{}, err
 	}
-	return CandidateAttempt{AttemptID: verified.AttemptID, CandidateUserID: verified.CandidateUserID}, nil
+	return CandidateAttempt{AttemptID: verified.AttemptID, CandidateUserID: verified.CandidateUserID, Generation: verified.Generation}, nil
 }

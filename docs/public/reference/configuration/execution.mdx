@@ -49,3 +49,20 @@ Exam's execution policy names one profile.
   }
 }
 ```
+
+## Preview ports
+
+A preview connects to a listener inside the guest through the execution
+host's existing guest link. It works with the `none` network policy and
+requires no guest network device or inbound networking.
+
+Each Proctor node allows up to 32 simultaneous preview connections per
+Attempt. Each execution grant allows up to 64 connections across all nodes.
+All preview connections on a grant share an 8 MiB per second limit and a
+32 MiB burst in each direction. A connection expires after 10 minutes
+without bytes in either direction.
+
+Use execenv v0.6.0 or later on the execution hosts. Rebuild the guest images
+with the matching helper before upgrading a host. With execenv v0.6.0 the
+guest helper must speak protocol 3. The host refuses images with an
+incompatible helper.

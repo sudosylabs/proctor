@@ -49,6 +49,10 @@ var (
 	ErrMachineTooLarge = errors.New("execution machine too large")
 	// ErrMachineBusy means the machine runs as many processes as it may.
 	ErrMachineBusy = errors.New("execution machine busy")
+	// ErrPortRefused means no listener accepted the guest connection.
+	ErrPortRefused = errors.New("execution port refused")
+	// ErrPortConnection means one guest connection ended unexpectedly.
+	ErrPortConnection = errors.New("execution port connection ended")
 	// ErrProcessExited means the process has exited and takes no more input,
 	// size or signal.
 	ErrProcessExited = errors.New("execution process exited")
@@ -376,7 +380,22 @@ type Machine interface {
 	ObserveProcesses(ctx context.Context, fence Fence, after uint64, limit int) (ProcessPage, error)
 	AcknowledgeProcesses(ctx context.Context, fence Fence, through uint64) error
 	Processes
+	ConnectPort(ctx context.Context, fence Fence, port int) (PortConn, error)
+	ListPorts(ctx context.Context) ([]ListeningPort, error)
 	Revoke(ctx context.Context) error
+}
+
+// PortConn permits a concurrent reader and writer. Closing it unblocks both.
+type PortConn interface {
+	io.ReadWriteCloser
+	CloseWrite() error
+}
+
+// ListeningPort describes a port bound to loopback or a wildcard address.
+type ListeningPort struct {
+	Port    int
+	Address string
+	Tag     model.AttemptEnvironmentProcessTag
 }
 
 // Window is a terminal's size in character cells.
@@ -495,11 +514,12 @@ func (e ProcessExit) SignalNumber() int {
 
 // ProcessInfo describes one process a Start created, running or exited.
 // Output is the end offset of each of its streams and Input how many bytes
-// of input it took. Exit is nil while it runs.
+// of input it took. Ended is zero and Exit is nil while it runs.
 type ProcessInfo struct {
 	Tag     model.AttemptEnvironmentProcessTag
 	Streams ProcessStreams
 	Started time.Time
+	Ended   time.Time
 	Running bool
 	Exit    *ProcessExit
 	Output  map[ProcessStream]uint64

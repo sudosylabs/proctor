@@ -265,6 +265,7 @@ func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Ser
 		NewReviewID:   model.NewSubmissionReviewID,
 		NewDecisionID: model.NewIntegrityReviewDecisionID,
 		Transcripts:   deps.Store.AssistantTranscript(),
+		Environments:  deps.Store.AttemptEnvironment(),
 	})
 }
 

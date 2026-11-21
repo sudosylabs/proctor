@@ -64,7 +64,8 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	defer cancel()
 	environments, leases := ss.AttemptEnvironment(), ss.AttemptRuntimeLease()
 
-	fixture := newExamAttemptFixtureWithExecution(t, ctx, ss, model.ExecutionPolicy{Enabled: true, RecordInput: true, Terminals: 2})
+	preview := model.PreviewPolicy{Enabled: true, Ports: []model.PortRange{{From: 3000, To: 3999}, {From: 5173, To: 5173}}}
+	fixture := newExamAttemptFixtureWithExecution(t, ctx, ss, model.ExecutionPolicy{Enabled: true, RecordInput: true, Terminals: 2, Preview: preview})
 	connected, _ := connectEnvironmentFixture(t, ctx, ss, fixture, "attempt-environment-connect")
 	attemptID, sittingID := connected.Attempt.ID, fixture.sitting.ID
 	fact := func(kind model.AttemptEnvironmentFactKind, generation int64, reason model.AttemptParticipationEndReason) model.AttemptEnvironmentFact {
@@ -89,6 +90,7 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	require.Equal(t, model.AttemptEnvironmentPending, environment.State)
 	require.Equal(t, 2, environment.Terminals)
 	require.True(t, environment.RecordInput)
+	require.Equal(t, preview, environment.Preview)
 	require.Equal(t, "python-3.12", environment.Image, "the profile is copied")
 	repeated, err := environments.ApplyFact(ctx, fact(model.AttemptEnvironmentFactParticipationStarted, 1, ""))
 	require.NoError(t, err)

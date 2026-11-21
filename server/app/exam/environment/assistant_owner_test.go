@@ -12,6 +12,7 @@ import (
 	"errors"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -228,4 +229,54 @@ func TestOwnerThawKillsAnExpiredSessionThatSurvivedFreeze(t *testing.T) {
 	require.Equal(t, "timed_out", ends[0].Outcome)
 	require.Equal(t, "KILL", ends[0].Signal)
 	require.Nil(t, ends[0].ExitCode)
+}
+
+func TestOwnerRecordsTheHostExitTimeWhenPollingLater(t *testing.T) {
+	t.Parallel()
+	sessions := &ownerSessions{}
+	var advanced atomic.Bool
+	r := newPreparedRig(t, environment.OwnerTiming{}, func(r *rig) {
+		r.sessions = sessions
+		r.now = func() time.Time {
+			now := time.Now()
+			if advanced.Load() {
+				return now.Add(30 * time.Second)
+			}
+			return now
+		}
+	})
+	r.running()
+	machine, fence := r.assistantMachine()
+	window := environment.AssistantSessionWindow
+	const tag = "assistant:1"
+	started := model.NowUTC()
+	_, err := machine.StartProcess(t.Context(), fence, environment.ProcessSpec{Tag: tag,
+		Argv: []string{"/bin/sh", "-c", "exit 0"}, Streams: environment.ProcessStreamsPTY, PTY: &window, Timeout: time.Minute})
+	require.NoError(t, err)
+	var exited time.Time
+	require.Eventually(t, func() bool {
+		processes, listErr := machine.ListProcesses(t.Context())
+		if listErr != nil {
+			return false
+		}
+		for _, process := range processes {
+			if process.Tag == tag && !process.Running && !process.Ended.IsZero() {
+				exited = model.TimeUTC(process.Ended)
+				return true
+			}
+		}
+		return false
+	}, eventually, tick)
+
+	advanced.Store(true)
+	sessions.mu.Lock()
+	sessions.rows = append(sessions.rows, model.AssistantSession{Tag: tag, State: "running",
+		StartedAt: started, ReservedMilliseconds: 60000})
+	sessions.mu.Unlock()
+	r.poke()
+	require.Eventually(t, func() bool { return len(sessions.finished()) == 1 }, eventually, tick)
+	end := sessions.finished()[0]
+	require.Equal(t, "exited", end.Outcome)
+	require.Equal(t, exited, end.EndedAt)
+	require.Equal(t, exited.Sub(started).Milliseconds(), end.DurationMilliseconds)
 }

@@ -104,7 +104,7 @@ func (t OwnerTiming) withDefaults() OwnerTiming {
 // OwnerDependencies configures NewOwners; Environments, Evidence, Workspace
 // and Hosts are required.
 type OwnerDependencies struct {
-	AssistantSessionEnded func(context.Context, model.ExamSittingID, model.ExamAttemptID, model.UserID, *model.AssistantRecord) error
+	AssistantSessionEnded func(context.Context, model.ExamSittingID, model.ExamAttemptID, model.UserID, *store.AssistantSessionEndResult) error
 	AssistantSessions     store.AssistantTranscriptStore
 	Environments          store.AttemptEnvironmentStore
 	// Evidence stores attempt evidence through the owner's access.

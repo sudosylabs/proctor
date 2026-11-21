@@ -50,6 +50,7 @@ type rig struct {
 	cancel       context.CancelFunc
 	newOwner     environment.OwnerFactory
 	sessions     store.AssistantTranscriptStore
+	now          func() time.Time
 
 	mu      sync.Mutex
 	reports []error
@@ -113,7 +114,7 @@ func newPreparedRig(t *testing.T, timing environment.OwnerTiming, prepare func(*
 	}
 	factory, err := environment.NewOwners(environment.OwnerDependencies{
 		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: ported, Timing: timing, Settled: settles,
-		AssistantSessions: r.sessions,
+		AssistantSessions: r.sessions, Now: r.now,
 		Report: func(_ model.ExamAttemptID, err error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()

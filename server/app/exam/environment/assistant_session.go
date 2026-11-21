@@ -46,6 +46,7 @@ type AssistantSessionOutput struct {
 	Next      uint64
 	Dropped   bool
 	Exit      *ProcessExit
+	Ended     time.Time
 	Screen    []string
 	AltScreen bool
 }
@@ -105,6 +106,22 @@ func assistantSessionProcess(ctx context.Context, at reached, tag model.AttemptE
 type AssistantSessionStatus struct {
 	Outcome string
 	Exit    *ProcessExit
+	Ended   time.Time
+}
+
+// EndTime clamps a known host exit to this session's lifetime.
+func (s AssistantSessionStatus) EndTime(started, now time.Time) time.Time {
+	if s.Ended.IsZero() {
+		return time.Time{}
+	}
+	ended := s.Ended
+	if ended.After(now) {
+		ended = now
+	}
+	if ended.Before(started) {
+		ended = started
+	}
+	return model.TimeUTC(ended)
 }
 
 // CheckAssistantSession enforces the durable deadline before the candidate
@@ -135,7 +152,7 @@ func checkAssistantSession(ctx context.Context, at reached, session model.Assist
 		return AssistantSessionStatus{}, err
 	}
 	if !info.Running {
-		return AssistantSessionStatus{Outcome: "exited", Exit: info.Exit}, nil
+		return AssistantSessionStatus{Outcome: "exited", Exit: info.Exit, Ended: info.Ended}, nil
 	}
 	if !now.Before(deadline) {
 		if err = kill(); errors.Is(err, ErrProcessExited) {
@@ -143,7 +160,7 @@ func checkAssistantSession(ctx context.Context, at reached, session model.Assist
 			if readErr != nil {
 				return AssistantSessionStatus{}, readErr
 			}
-			return AssistantSessionStatus{Outcome: "exited", Exit: finished.Exit}, nil
+			return AssistantSessionStatus{Outcome: "exited", Exit: finished.Exit, Ended: finished.Ended}, nil
 		}
 		if err != nil {
 			return AssistantSessionStatus{}, terminalFailure(terminalError(err))
@@ -185,10 +202,16 @@ func (t *Terminals) ReadAssistantSession(ctx context.Context, inv invocation.Inv
 		return AssistantSessionOutput{}, err
 	}
 	out, err := t.collectAssistantSession(ctx, at, tag, from, min(MaxAssistantWait, max(MinAssistantWait, wait)), AssistantSessionSettle)
-	if err != nil || out.Exit != nil {
+	if err != nil {
 		return out, err
 	}
 	info, err := assistantSessionProcess(ctx, at, tag)
+	if out.Exit != nil {
+		if err == nil {
+			out.Ended = info.Ended
+		}
+		return out, nil
+	}
 	if err != nil || !info.Running {
 		return out, err
 	}
@@ -369,8 +392,13 @@ func (o *owner) reconcileAssistantSession(ctx context.Context, at reached, acces
 	if status.Outcome == "" {
 		return nil
 	}
-	end := store.AssistantSessionEnd{EnvironmentOwner: &access, Tag: session.Tag, Outcome: status.Outcome,
-		DurationMilliseconds: max(0, now.Sub(session.StartedAt).Milliseconds())}
+	endedAt := status.EndTime(session.StartedAt, o.deps.Now())
+	observedAt := now
+	if !endedAt.IsZero() {
+		observedAt = endedAt
+	}
+	end := store.AssistantSessionEnd{EnvironmentOwner: &access, Tag: session.Tag, Outcome: status.Outcome, EndedAt: endedAt,
+		DurationMilliseconds: max(0, observedAt.Sub(session.StartedAt).Milliseconds())}
 	if status.Exit != nil {
 		end.Signal = status.Exit.Signal
 		if end.Signal == "" {
@@ -385,7 +413,7 @@ func (o *owner) reconcileAssistantSession(ctx context.Context, at reached, acces
 		return err
 	}
 	if result.Changed && o.deps.AssistantSessionEnded != nil {
-		return o.deps.AssistantSessionEnded(ctx, o.row.SittingID, o.attemptID, session.CandidateUserID, result.Record)
+		return o.deps.AssistantSessionEnded(ctx, o.row.SittingID, o.attemptID, session.CandidateUserID, result)
 	}
 	return nil
 }

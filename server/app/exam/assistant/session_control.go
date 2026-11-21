@@ -93,7 +93,7 @@ func (s *Service) StopSession(ctx context.Context, inv invocation.Invocation, co
 		return model.AssistantSession{}, s.failAudit(ctx, auditID, err)
 	}
 	if ended.Changed {
-		s.publishSessionEnded(ctx, candidate.SittingID, candidate.Editor.AttemptID, session.CandidateUserID, ended.Record)
+		s.publishSessionEnded(ctx, candidate.SittingID, candidate.Editor.AttemptID, session.CandidateUserID, ended)
 	}
 	rows, err := s.transcripts.ListSessions(ctx, store.AssistantSessionQuery{Tag: command.Tag, Owner: sessionOwner(candidate.Editor)})
 	if err != nil {

@@ -177,11 +177,22 @@ func (s *SQLAssistantTranscriptStore) EndSession(ctx context.Context, input *sto
 		if err != nil {
 			return nil, err
 		}
-		record, err := endAssistantSession(ctx, tx, id, row, input, now)
+		endedAt := now
+		if !input.EndedAt.IsZero() && input.EndedAt.Before(endedAt) {
+			endedAt = input.EndedAt
+		}
+		if endedAt.Before(row.StartedAt) {
+			endedAt = row.StartedAt
+		}
+		endedAt = model.TimeUTC(endedAt)
+		if row.EndedAt != nil {
+			endedAt = model.TimeUTC(*row.EndedAt)
+		}
+		record, err := endAssistantSession(ctx, tx, id, row, input, endedAt)
 		if err != nil {
 			return nil, err
 		}
-		result := &store.AssistantSessionEndResult{Record: record, Changed: row.State == "running"}
+		result := &store.AssistantSessionEndResult{Record: record, EndedAt: endedAt, Changed: row.State == "running"}
 		if input.AuditEventID.IsZero() {
 			return result, nil
 		}
@@ -209,7 +220,7 @@ func assistantSessionCall(ctx context.Context, tx *sqlxTxWrapper, id model.ExamA
 }
 
 func endAssistantSession(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAttemptID, row assistantSessionRow,
-	input *store.AssistantSessionEnd, now time.Time) (*model.AssistantRecord, error) {
+	input *store.AssistantSessionEnd, endedAt time.Time) (*model.AssistantRecord, error) {
 	if row.State == "ended" {
 		return assistantSessionCall(ctx, tx, id, row.CallID, "session_ended")
 	}
@@ -221,13 +232,19 @@ func endAssistantSession(ctx context.Context, tx *sqlxTxWrapper, id model.ExamAt
 	call.Phase, call.Approval, call.ProcessTag = "session_ended", "", row.Tag
 	call.Arguments = json.RawMessage(`{}`)
 	call.Outcome, call.ExitCode, call.Signal = input.Outcome, input.ExitCode, input.Signal
-	call.DurationMilliseconds = min(input.DurationMilliseconds, row.ReservedMilliseconds)
+	duration := min(input.DurationMilliseconds, row.ReservedMilliseconds)
+	if !input.EndedAt.IsZero() {
+		duration = max(0, endedAt.Sub(row.StartedAt).Milliseconds())
+	}
+	call.DurationMilliseconds = duration
 	if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_sessions SET state='ended',ended_at=GREATEST(started_at,?)
-		WHERE exam_attempt_id=? AND tag=?`, now, id.String(), row.Tag); err != nil {
+		WHERE exam_attempt_id=? AND tag=?`, endedAt, id.String(), row.Tag); err != nil {
 		return nil, err
 	}
+	// A late host exit can extend the recorded duration, while the budget
+	// settlement only releases the unused part of the original reservation.
 	if _, err = tx.Exec(ctx, `UPDATE exam_attempt_assistant_inventories SET command_milliseconds=command_milliseconds-? WHERE id=?`,
-		row.ReservedMilliseconds-call.DurationMilliseconds, id.String()); err != nil {
+		max(0, row.ReservedMilliseconds-duration), id.String()); err != nil {
 		return nil, err
 	}
 	return appendAssistantRecord(ctx, tx, id, model.AssistantRecord{Call: &call}, true)

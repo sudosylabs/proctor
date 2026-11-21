@@ -107,6 +107,8 @@ type AssistantSessionSlot struct {
 type AssistantSessionAccess = AssistantRunAccess
 
 type AssistantSessionEnd struct {
+	// EndedAt is the host exit time when known. A zero value uses database time.
+	EndedAt              time.Time
 	AuditEventID         model.AuditEventID
 	AuditAt              time.Time
 	EnvironmentOwner     *ExamAttemptWorkspaceEnvironmentAccess
@@ -120,6 +122,7 @@ type AssistantSessionEnd struct {
 
 // AssistantSessionEndResult identifies the caller that committed the end.
 type AssistantSessionEndResult struct {
+	EndedAt time.Time
 	Record  *model.AssistantRecord
 	Changed bool
 }

@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/sudosylabs/proctor/server/model"
@@ -295,8 +296,11 @@ func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*
 			replacement, err := reserve(third)
 			require.NoError(t, err, "ending a dead session makes its slot available")
 			require.Equal(t, "assistant:4", replacement.Tag)
-			_, err = transcript.EndSession(ctx, &store.AssistantSessionEnd{Editor: input.Access, Tag: replacement.Tag, Outcome: "ended"})
+			finished, err := transcript.EndSession(ctx, &store.AssistantSessionEnd{Editor: input.Access, Tag: replacement.Tag,
+				Outcome: "exited", EndedAt: replacement.StartedAt.Add(-time.Second), DurationMilliseconds: 999})
 			require.NoError(t, err)
+			require.Equal(t, replacement.StartedAt, finished.EndedAt)
+			require.Zero(t, finished.Record.Call.DurationMilliseconds)
 
 			seal()
 			sessions, err = transcript.ListSessions(ctx, query)
@@ -307,6 +311,7 @@ func TestAssistantSessionStore(t *testing.T, ss store.Store, verifyBudget func(*
 				require.False(t, session.EndedAt.IsZero())
 			}
 			require.Equal(t, replacement.Tag, sessions[0].Tag)
+			require.Equal(t, finished.EndedAt, sessions[0].EndedAt)
 			require.Equal(t, other.Tag, sessions[1].Tag)
 			require.Equal(t, "sealed", sessions[1].Outcome)
 			require.True(t, sessions[1].AccessEnded)

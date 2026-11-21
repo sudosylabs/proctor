@@ -43,14 +43,23 @@ const previewTestOrigin = "https://proctor.example.test"
 
 type previewEnvironmentStore struct {
 	store.AttemptEnvironmentStore
-	row model.AttemptEnvironment
+	row   model.AttemptEnvironment
+	usage chan previewUsageCall
 }
 
 func (s *previewEnvironmentStore) Get(context.Context, model.ExamAttemptID) (*model.AttemptEnvironment, error) {
 	return &s.row, nil
 }
 
-func (*previewEnvironmentStore) AddPreviewUsage(context.Context, model.ExamAttemptID, int, int64, int64, time.Time) error {
+type previewUsageCall struct {
+	attemptID model.ExamAttemptID
+	port      int
+	bytesIn   int64
+	bytesOut  int64
+}
+
+func (s *previewEnvironmentStore) AddPreviewUsage(_ context.Context, id model.ExamAttemptID, port int, bytesIn, bytesOut int64, _ time.Time) error {
+	s.usage <- previewUsageCall{attemptID: id, port: port, bytesIn: bytesIn, bytesOut: bytesOut}
 	return nil
 }
 
@@ -77,6 +86,9 @@ type previewFixture struct {
 	port           int
 	closedPort     int
 	disallowedPort int
+	grant          execenv.Env
+	fence          execenv.ProjectionFence
+	usage          <-chan previewUsageCall
 }
 
 func newPreviewFixture(t *testing.T, halfClose bool) previewFixture {
@@ -107,7 +119,7 @@ func newPreviewFixture(t *testing.T, halfClose bool) previewFixture {
 	return newPreviewFixtureWithListener(t, listener)
 }
 
-func newPreviewFixtureWithListener(t *testing.T, listener *net.TCPListener) previewFixture {
+func newPreviewFixtureWithListener(t *testing.T, listener *net.TCPListener, configure ...func(*examAttemptPreviewHandlers)) previewFixture {
 	t.Helper()
 	addr, ok := listener.Addr().(*net.TCPAddr)
 	require.True(t, ok)
@@ -130,7 +142,7 @@ func newPreviewFixtureWithListener(t *testing.T, listener *net.TCPListener) prev
 	_, err = env.Control(t.Context(), execenv.ControlRequest{Fence: fence, State: execenv.ControlRunning})
 	require.NoError(t, err)
 	require.NoError(t, host.RegisterPortListener(env, listener, "terminal:1"))
-	environments := &previewEnvironmentStore{row: model.AttemptEnvironment{
+	environments := &previewEnvironmentStore{usage: make(chan previewUsageCall, environment.MaxPreviewConnections+1), row: model.AttemptEnvironment{
 		AttemptID: candidate.access.AttemptID, Host: "alpha", GrantID: string(env.ID()), Epoch: env.Epoch(), Image: string(spec.Image),
 		Network: model.EnvironmentNetworkNone, ControlFence: 1, Generation: 1,
 		Desired: model.AttemptEnvironmentDesiredRunning, State: model.AttemptEnvironmentRunning,
@@ -144,7 +156,10 @@ func newPreviewFixtureWithListener(t *testing.T, listener *net.TCPListener) prev
 	require.NoError(t, err)
 	require.NoError(t, hub.Start(t.Context()))
 	t.Cleanup(func() { _ = hub.Close(context.Background()) })
-	handlers := examAttemptPreviewHandlers{app: environment.NewPreviews(terminals), sockets: hub, recheck: 25 * time.Millisecond}
+	handlers := examAttemptPreviewHandlers{app: environment.NewPreviews(terminals), sockets: hub, recheck: 25 * time.Millisecond, idle: defaultPreviewIdle}
+	for _, apply := range configure {
+		apply(&handlers)
+	}
 	headers := http.Header{
 		"Origin": {previewTestOrigin}, candidateAttemptCredentialHeader: {candidate.access.ContinuityCredential},
 		candidateAttemptConnectionHeader: {candidate.access.ConnectionID.String()},
@@ -159,7 +174,7 @@ func newPreviewFixtureWithListener(t *testing.T, listener *net.TCPListener) prev
 	}))
 	t.Cleanup(server.Close)
 	return previewFixture{base: "ws" + strings.TrimPrefix(server.URL, "http") + "/", headers: headers,
-		candidate: candidate, port: port, closedPort: closedPort, disallowedPort: disallowedPort}
+		candidate: candidate, port: port, closedPort: closedPort, disallowedPort: disallowedPort, grant: env, fence: fence, usage: environments.usage}
 }
 
 func (f previewFixture) dial(t *testing.T) *gorilla.Conn {
@@ -245,6 +260,16 @@ func TestCandidatePreviewPropagatesHalfClose(t *testing.T) {
 	require.NoError(t, conn.WriteMessage(gorilla.BinaryMessage, append([]byte{previewClientData}, "ping"...)))
 	require.NoError(t, conn.WriteMessage(gorilla.BinaryMessage, []byte{previewClientHalfClose}))
 	require.Equal(t, "pong", string(readPreviewResponse(t, conn)))
+	_, _, err := conn.ReadMessage()
+	require.True(t, gorilla.IsCloseError(err, gorilla.CloseNormalClosure), "%v", err)
+	select {
+	case usage := <-fixture.usage:
+		require.Equal(t, previewUsageCall{attemptID: fixture.candidate.access.AttemptID,
+			port: fixture.port, bytesIn: 4, bytesOut: 4}, usage)
+	case <-time.After(time.Second):
+		t.Fatal("closed preview did not store its usage")
+	}
+	require.Empty(t, fixture.usage)
 }
 
 func TestCandidatePreviewGuestResetOnlyEndsThatConnection(t *testing.T) {
@@ -279,4 +304,74 @@ func TestCandidatePreviewGuestResetOnlyEndsThatConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, gorilla.BinaryMessage, kind)
 	require.Equal(t, append([]byte{previewServerData}, "still running"...), frame)
+}
+
+func TestCandidatePreviewFreezeEndsTheStreamBeforeTheAccessRecheck(t *testing.T) {
+	t.Parallel()
+	listener := listenPreviewGuest(t)
+	fixture := newPreviewFixtureWithListener(t, listener, func(h *examAttemptPreviewHandlers) {
+		h.recheck = terminalRecheck
+	})
+	conn := fixture.dial(t)
+	fence := fixture.fence
+	fence.FenceRevision++
+	_, err := fixture.grant.Control(t.Context(), execenv.ControlRequest{Fence: fence, State: execenv.ControlFrozen})
+	require.NoError(t, err)
+	// dial set a deadline shorter than the access recheck; the host must
+	// interrupt the stream itself to deliver this close.
+	_, _, err = conn.ReadMessage()
+	require.True(t, gorilla.IsCloseError(err, websocket.CloseBinaryAccessEnded), "%v", err)
+}
+
+func TestCandidatePreviewIdleTimeoutFollowsTrafficInEitherDirection(t *testing.T) {
+	t.Parallel()
+	const idle = 750 * time.Millisecond
+	for _, direction := range []string{"no traffic", "candidate to guest", "guest to candidate"} {
+		t.Run(direction, func(t *testing.T) {
+			t.Parallel()
+			listener := listenPreviewGuest(t)
+			fixture := newPreviewFixtureWithListener(t, listener, func(h *examAttemptPreviewHandlers) { h.idle = idle })
+			conn := fixture.dial(t)
+			guest, err := listener.AcceptTCP()
+			require.NoError(t, err)
+			defer func() { _ = guest.Close() }()
+			require.NoError(t, guest.SetDeadline(time.Now().Add(5*time.Second)))
+
+			if direction != "no traffic" {
+				// Traffic runs for longer than one idle period but flows only
+				// in the direction named by this subtest.
+				ticker := time.NewTicker(idle / 8)
+				defer ticker.Stop()
+				for range 10 {
+					<-ticker.C
+					switch direction {
+					case "candidate to guest":
+						require.NoError(t, conn.WriteMessage(gorilla.BinaryMessage, []byte{previewClientData, 'x'}))
+						var received [1]byte
+						_, err = io.ReadFull(guest, received[:])
+						require.NoError(t, err)
+						require.Equal(t, byte('x'), received[0])
+					case "guest to candidate":
+						_, err = io.WriteString(guest, "x")
+						require.NoError(t, err)
+						kind, frame, readErr := conn.ReadMessage()
+						require.NoError(t, readErr)
+						require.Equal(t, gorilla.BinaryMessage, kind)
+						require.Equal(t, []byte{previewServerData, 'x'}, frame)
+					}
+				}
+			}
+			_, _, err = conn.ReadMessage()
+			require.True(t, gorilla.IsCloseError(err, gorilla.CloseNormalClosure), "%v", err)
+		})
+	}
+}
+
+func listenPreviewGuest(t *testing.T) *net.TCPListener {
+	t.Helper()
+	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	require.NoError(t, listener.SetDeadline(time.Now().Add(5*time.Second)))
+	return listener
 }

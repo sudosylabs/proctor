@@ -27,10 +27,10 @@ const (
 	previewServerHalfClose byte = 0x82
 	previewServerError     byte = 0x86
 	maxPreviewData              = 32 << 10
-	previewIdle                 = 10 * time.Minute
+	defaultPreviewIdle          = 10 * time.Minute
 )
 
-func servePreview(ctx context.Context, socket BinarySocket, conn *environment.PreviewConn, recheck time.Duration) websocket.BinarySocketOutcome {
+func servePreview(ctx context.Context, socket BinarySocket, conn *environment.PreviewConn, recheck, idleTimeout time.Duration) websocket.BinarySocketOutcome {
 	ctx, cancel := context.WithCancel(ctx)
 	var group sync.WaitGroup
 	defer func() {
@@ -56,7 +56,7 @@ func servePreview(ctx context.Context, socket BinarySocket, conn *environment.Pr
 
 	check := time.NewTicker(recheck)
 	defer check.Stop()
-	idle := time.NewTimer(previewIdle)
+	idle := time.NewTimer(idleTimeout)
 	defer idle.Stop()
 	clientEOF, serverEOF := clientClosed, serverClosed
 	for clientEOF != nil || serverEOF != nil {
@@ -74,7 +74,7 @@ func servePreview(ctx context.Context, socket BinarySocket, conn *environment.Pr
 				return websocket.BinarySocketAccessEnded
 			}
 		case <-idle.C:
-			remaining := previewIdle - (time.Since(start) - time.Duration(activity.Load()))
+			remaining := idleTimeout - (time.Since(start) - time.Duration(activity.Load()))
 			if remaining <= 0 {
 				return websocket.BinarySocketDone
 			}

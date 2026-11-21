@@ -28,10 +28,11 @@ type examAttemptPreviewHandlers struct {
 	app     *environment.Previews
 	sockets *websocket.Hub
 	recheck time.Duration
+	idle    time.Duration
 }
 
 func examAttemptPreviewResource(application *environment.Previews, sockets *websocket.Hub) route.Resource {
-	h := examAttemptPreviewHandlers{app: application, sockets: sockets, recheck: terminalRecheck}
+	h := examAttemptPreviewHandlers{app: application, sockets: sockets, recheck: terminalRecheck, idle: defaultPreviewIdle}
 	return route.NewResource("exam_attempt_previews",
 		route.Endpoint{
 			Method: http.MethodGet,
@@ -106,6 +107,6 @@ func (h examAttemptPreviewHandlers) socket(writer http.ResponseWriter, request r
 	defer func() { _ = conn.Close() }()
 	return h.sockets.ServeBinary(writer, request.HTTP, allowMissingOrigin, maxPreviewData+1,
 		func(ctx context.Context, socket *websocket.BinarySocket) websocket.BinarySocketOutcome {
-			return servePreview(ctx, socket, conn, h.recheck)
+			return servePreview(ctx, socket, conn, h.recheck, h.idle)
 		})
 }

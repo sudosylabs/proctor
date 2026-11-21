@@ -283,23 +283,24 @@ type ExamSubmissionSpecification struct {
 // Retiring integrity keeps the retirement time and removes the original
 // collection state and counters.
 type ExamSubmission struct {
-	ID                       SubmissionID
-	ReceiptCode              SubmissionReceiptCode
-	AttemptID                ExamAttemptID
-	ExamRevisionID           ExamRevisionID
-	WorkspaceID              ExamAttemptWorkspaceID
-	ManifestSchemaVersion    int
-	WorkspaceCursor          int64
-	ManifestDigest           string
-	ManifestEntryCount       int
-	ManifestTotalFileBytes   int64
-	FinalFocusLossSequence   int64
-	BrowserActivity          BrowserSubmissionSettlement
-	IntegrityState           SubmissionIntegrityState
-	IntegrityRetiredAt       OptionalTime
-	UnresolvedIntegrityCount int64
-	Provenance               ExamSubmissionProvenance
-	SubmittedAt              time.Time
+	ID                        SubmissionID
+	ReceiptCode               SubmissionReceiptCode
+	AttemptID                 ExamAttemptID
+	ExamRevisionID            ExamRevisionID
+	WorkspaceID               ExamAttemptWorkspaceID
+	ManifestSchemaVersion     int
+	WorkspaceCursor           int64
+	ManifestDigest            string
+	AssistantTranscriptDigest string
+	ManifestEntryCount        int
+	ManifestTotalFileBytes    int64
+	FinalFocusLossSequence    int64
+	BrowserActivity           BrowserSubmissionSettlement
+	IntegrityState            SubmissionIntegrityState
+	IntegrityRetiredAt        OptionalTime
+	UnresolvedIntegrityCount  int64
+	Provenance                ExamSubmissionProvenance
+	SubmittedAt               time.Time
 }
 
 func NewExamSubmission(spec ExamSubmissionSpecification) (*ExamSubmission, error) {

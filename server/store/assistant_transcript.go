@@ -119,6 +119,7 @@ type AssistantTranscriptOwnerAccess struct {
 	AttemptID       model.ExamAttemptID
 	CandidateUserID model.UserID
 	SessionID       model.SessionID
+	SealedOnly      bool
 }
 
 type AssistantTranscriptPage struct {

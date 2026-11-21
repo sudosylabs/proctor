@@ -64,8 +64,10 @@ func TestAssistantTranscriptRequiresCurrentReviewAuthorityAndPagesWholeForTheSum
 	_, err = f.service.ListAssistantTranscript(context.Background(), f.inv, AssistantTranscriptQuery{SubmissionID: f.submissionID, Limit: 201})
 	require.True(t, apperror.Is(err, "exam.integrity_review.invalid"))
 
+	decisionsBefore := len(f.decisions(model.ActionSubmissionView))
 	summary, err := f.service.SummarizeAssistantUsage(context.Background(), f.inv, f.submissionID)
 	require.NoError(t, err)
+	require.Len(t, f.decisions(model.ActionSubmissionView), decisionsBefore+1)
 	require.Equal(t, int64(250), summary.Tools["read_file"])
 	require.Len(t, transcript.queries, 2, "the summary pages the whole transcript")
 	require.Equal(t, int64(200), transcript.queries[1].AfterSequence)

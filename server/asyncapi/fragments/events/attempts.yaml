@@ -750,6 +750,7 @@ components:
               provenance: candidate_submitted
               workspace_cursor: 9
               manifest_digest: 3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f
+              assistant_transcript_digest: sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
               submitted_at: '2026-08-01T09:30:00Z'
     exam_attempt_submitted_for_candidate:
       name: exam_attempt_submitted
@@ -798,4 +799,5 @@ components:
               provenance: candidate_submitted
               workspace_cursor: 9
               manifest_digest: 3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f
+              assistant_transcript_digest: sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
               submitted_at: '2026-08-01T09:30:00Z'

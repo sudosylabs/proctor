@@ -34,6 +34,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"SendAssistantMessageRequest":                    reflect.TypeOf(sendAssistantMessageRequest{}),
 	"AssistantTurnStartedResponse":                   reflect.TypeOf(assistantTurnStartedResponse{}),
 	"DecideAssistantApprovalRequest":                 reflect.TypeOf(decideAssistantApprovalRequest{}),
+	"AssistantTranscriptExportResponse":              reflect.TypeOf(assistantTranscriptExportResponse{}),
 	"AssistantTranscriptResponse":                    reflect.TypeOf(assistantTranscriptResponse{}),
 	"AssistantRecord":                                reflect.TypeOf(assistantRecordResponse{}),
 	"AssistantTurn":                                  reflect.TypeOf(model.AssistantTurn{}),

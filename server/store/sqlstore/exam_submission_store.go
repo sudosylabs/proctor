@@ -1395,34 +1395,36 @@ func examSubmissionSealResult(outcome examSubmissionSealOutcome) (*store.ExamSub
 }
 
 type examSubmissionHeaderRow struct {
-	ID                       string         `db:"id"`
-	ReceiptCode              string         `db:"receipt_code"`
-	AttemptID                string         `db:"exam_attempt_id"`
-	ExamRevisionID           string         `db:"exam_revision_id"`
-	WorkspaceID              string         `db:"workspace_id"`
-	ManifestSchemaVersion    int            `db:"manifest_schema_version"`
-	WorkspaceCursor          sql.NullInt64  `db:"workspace_cursor"`
-	ManifestDigest           sql.NullString `db:"manifest_digest"`
-	ManifestEntryCount       sql.NullInt64  `db:"manifest_entry_count"`
-	ManifestTotalFileBytes   sql.NullInt64  `db:"manifest_total_file_bytes"`
-	FinalFocusLossSequence   sql.NullInt64  `db:"final_focus_loss_sequence"`
-	BrowserState             string         `db:"browser_state"`
-	BrowserInventoryRevision int64          `db:"browser_inventory_revision"`
-	BrowserSourceCount       int64          `db:"browser_source_count"`
-	BrowserPendingCount      int64          `db:"browser_pending_count"`
-	BrowserIncompleteCount   int64          `db:"browser_incomplete_count"`
-	IntegrityState           string         `db:"integrity_state"`
-	UnresolvedIntegrityCount sql.NullInt64  `db:"unresolved_integrity_count"`
-	WorkRetiredAt            sql.NullTime   `db:"work_retired_at"`
-	IntegrityRetiredAt       sql.NullTime   `db:"integrity_retired_at"`
-	Provenance               string         `db:"provenance"`
-	SubmittedAt              time.Time      `db:"submitted_at"`
+	ID                        string         `db:"id"`
+	ReceiptCode               string         `db:"receipt_code"`
+	AttemptID                 string         `db:"exam_attempt_id"`
+	ExamRevisionID            string         `db:"exam_revision_id"`
+	WorkspaceID               string         `db:"workspace_id"`
+	ManifestSchemaVersion     int            `db:"manifest_schema_version"`
+	WorkspaceCursor           sql.NullInt64  `db:"workspace_cursor"`
+	AssistantTranscriptDigest sql.NullString `db:"assistant_transcript_digest"`
+	ManifestDigest            sql.NullString `db:"manifest_digest"`
+	ManifestEntryCount        sql.NullInt64  `db:"manifest_entry_count"`
+	ManifestTotalFileBytes    sql.NullInt64  `db:"manifest_total_file_bytes"`
+	FinalFocusLossSequence    sql.NullInt64  `db:"final_focus_loss_sequence"`
+	BrowserState              string         `db:"browser_state"`
+	BrowserInventoryRevision  int64          `db:"browser_inventory_revision"`
+	BrowserSourceCount        int64          `db:"browser_source_count"`
+	BrowserPendingCount       int64          `db:"browser_pending_count"`
+	BrowserIncompleteCount    int64          `db:"browser_incomplete_count"`
+	IntegrityState            string         `db:"integrity_state"`
+	UnresolvedIntegrityCount  sql.NullInt64  `db:"unresolved_integrity_count"`
+	WorkRetiredAt             sql.NullTime   `db:"work_retired_at"`
+	IntegrityRetiredAt        sql.NullTime   `db:"integrity_retired_at"`
+	Provenance                string         `db:"provenance"`
+	SubmittedAt               time.Time      `db:"submitted_at"`
 }
 
 const examSubmissionHeaderSelect = `SELECT id, receipt_code, exam_attempt_id, exam_revision_id,
 		workspace_id, manifest_schema_version, workspace_cursor, manifest_digest,
 		manifest_entry_count, manifest_total_file_bytes, final_focus_loss_sequence, integrity_state,
 		unresolved_integrity_count, work_retired_at, integrity_retired_at, provenance, submitted_at,
+		(SELECT digest FROM exam_attempt_assistant_inventories WHERE submission_id=exam_submissions.id) AS assistant_transcript_digest,
 		(
 			SELECT browser_state
 			FROM exam_attempt_delivery_budgets
@@ -1497,17 +1499,18 @@ func (row examSubmissionHeaderRow) model() (*model.ExamSubmission, error) {
 	}
 
 	submission := &model.ExamSubmission{
-		ID:                     id,
-		ReceiptCode:            model.SubmissionReceiptCode(row.ReceiptCode),
-		AttemptID:              attemptID,
-		ExamRevisionID:         revisionID,
-		WorkspaceID:            workspaceID,
-		ManifestSchemaVersion:  row.ManifestSchemaVersion,
-		WorkspaceCursor:        row.WorkspaceCursor.Int64,
-		ManifestDigest:         row.ManifestDigest.String,
-		ManifestEntryCount:     int(row.ManifestEntryCount.Int64),
-		ManifestTotalFileBytes: row.ManifestTotalFileBytes.Int64,
-		FinalFocusLossSequence: row.FinalFocusLossSequence.Int64,
+		ID:                        id,
+		ReceiptCode:               model.SubmissionReceiptCode(row.ReceiptCode),
+		AttemptID:                 attemptID,
+		ExamRevisionID:            revisionID,
+		WorkspaceID:               workspaceID,
+		ManifestSchemaVersion:     row.ManifestSchemaVersion,
+		WorkspaceCursor:           row.WorkspaceCursor.Int64,
+		ManifestDigest:            row.ManifestDigest.String,
+		AssistantTranscriptDigest: row.AssistantTranscriptDigest.String,
+		ManifestEntryCount:        int(row.ManifestEntryCount.Int64),
+		ManifestTotalFileBytes:    row.ManifestTotalFileBytes.Int64,
+		FinalFocusLossSequence:    row.FinalFocusLossSequence.Int64,
 		BrowserActivity: model.BrowserSubmissionSettlement{
 			State:                 row.BrowserState,
 			InventoryRevision:     row.BrowserInventoryRevision,
@@ -1522,6 +1525,9 @@ func (row examSubmissionHeaderRow) model() (*model.ExamSubmission, error) {
 	}
 	if row.IntegrityRetiredAt.Valid {
 		submission.IntegrityRetiredAt = model.OptionalTimeFrom(row.IntegrityRetiredAt.Time)
+	}
+	if row.AssistantTranscriptDigest.Valid && !model.IsValidSHA256Fingerprint(submission.AssistantTranscriptDigest) {
+		return nil, invalidPersistedState("exam_submission", "assistant_transcript_digest", nil)
 	}
 	if err = submission.Validate(); err != nil {
 		return nil, invalidPersistedState("exam_submission", "value", err)

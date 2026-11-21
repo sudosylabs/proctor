@@ -7129,6 +7129,7 @@
         "content": {
           "application/json": {
             "example": {
+              "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
               "browser_activity": {
                 "incomplete_source_count": 0,
                 "inventory_revision": 1,
@@ -13158,6 +13159,30 @@
           "sequence",
           "created_at",
           "gap"
+        ],
+        "type": "object"
+      },
+      "AssistantTranscriptExportResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/AssistantInventory"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantRecord"
+            },
+            "maxItems": 20000,
+            "type": "array"
+          }
+        },
+        "required": [
+          "exam_attempt_id",
+          "records",
+          "inventory"
         ],
         "type": "object"
       },
@@ -24057,6 +24082,11 @@
         "additionalProperties": false,
         "description": "A summary of one sealed Submission, without file contents or integrity evidence. When the Institution's retention policy has retired the integrity data, the summary gives the retirement time and leaves out the focus-loss and unresolved counts. The submitted work stays available.",
         "properties": {
+          "assistant_transcript_digest": {
+            "description": "The digest on the sealed receipt. Omitted after transcript retirement.",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "type": "string"
+          },
           "browser_activity": {
             "$ref": "#/components/schemas/BrowserSubmissionSettlement"
           },
@@ -42703,6 +42733,93 @@
         ],
         "x-proctor-idempotency": "none"
       }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/export": {
+      "get": {
+        "description": "Downloads the candidate's own sealed assistant transcript and the inventory that verifies it as one JSON attachment. A current candidate Session is required. The download is unavailable before sealing or after retirement.",
+        "operationId": "exportCandidateAssistantTranscript",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTranscriptExportResponse"
+                }
+              }
+            },
+            "description": "The candidate's complete sealed transcript",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              },
+              "Content-Disposition": {
+                "description": "Instructs the client to download the JSON document.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Download the sealed assistant transcript",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.assistant_unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "exam.delivery.metadata_capacity"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
     },
     "/api/v1/exam-attempts/{exam_attempt_id}/assistant/messages": {
       "parameters": [

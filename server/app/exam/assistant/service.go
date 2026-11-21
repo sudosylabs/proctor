@@ -200,6 +200,11 @@ func (s *Service) NotifyEvent(event realtime.Event) {
 	defer s.mu.Unlock()
 	for id, run := range s.runs {
 		if data.AttemptID == id.String() || (data.AttemptID == "" && data.SittingID == run.candidate.SittingID.String()) {
+			// A submitted event follows the durable seal, which already closed the run.
+			if event.Name == "exam_attempt_submitted" && data.AttemptID == id.String() {
+				run.stop(errFenceLost)
+				continue
+			}
 			select {
 			case run.wake <- struct{}{}:
 			default:

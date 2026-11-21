@@ -11,6 +11,7 @@
     "provenance",
     "workspace_cursor",
     "manifest_digest",
+    "assistant_transcript_digest",
     "submitted_at"
   ],
   "properties": {
@@ -41,6 +42,10 @@
     },
     "manifest_digest": {
       "$ref": "sha256.json"
+    },
+    "assistant_transcript_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
     },
     "submitted_at": {
       "$ref": "instant.json"

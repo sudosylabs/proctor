@@ -152,6 +152,63 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/assistant/export:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: exportCandidateAssistantTranscript
+      summary: Download the sealed assistant transcript
+      tags:
+        - Attempts and workspaces
+      description: Downloads the candidate's own sealed assistant transcript and the inventory that verifies it as one JSON attachment. A current candidate Session is required. The download is unavailable before sealing or after retirement.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.assistant_unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - exam.delivery.metadata_capacity
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The candidate's complete sealed transcript
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Content-Disposition:
+              description: Instructs the client to download the JSON document.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantTranscriptExportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/exam-attempts/{exam_attempt_id}/assistant/turns/{turn_id}/cancel:
     parameters:
       - $ref: '#/components/parameters/ExamAttemptID'
@@ -377,6 +434,23 @@ components:
           enum:
             - accept
             - decline
+    AssistantTranscriptExportResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - exam_attempt_id
+        - records
+        - inventory
+      properties:
+        exam_attempt_id:
+          $ref: '#/components/schemas/ID'
+        records:
+          type: array
+          maxItems: 20000
+          items:
+            $ref: '#/components/schemas/AssistantRecord'
+        inventory:
+          $ref: '#/components/schemas/AssistantInventory'
     AssistantTranscriptResponse:
       type: object
       additionalProperties: false

@@ -31,8 +31,9 @@ code and output.
 
 The record has its own limits, apart from the execution evidence, so a long
 conversation never pushes terminal evidence out, and the other way round. It
-is bound to the Submission when the Attempt is sealed, and the receipt lists
-its digest.
+is bound to the Submission when the Attempt is sealed. The Submission
+view and the submitted realtime event carry the same digest as the receipt.
+The Submission view omits the digest after transcript retirement.
 
 ## Read it
 The transcript is read with

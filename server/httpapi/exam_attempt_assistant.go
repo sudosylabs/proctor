@@ -23,6 +23,7 @@ const (
 	assistantMessagesPath  = assistantPath + "/messages"
 	assistantTurnsPath     = assistantPath + "/turns"
 	assistantCancelPath    = assistantTurnsPath + "/{turn_id}/cancel"
+	assistantExportPath    = assistantPath + "/export"
 	assistantApprovalPath  = assistantPath + "/approvals/{call_id}"
 	assistantRequestBytes  = 32 << 10
 	assistantDecisionBytes = 1 << 10
@@ -82,6 +83,16 @@ func examAttemptAssistantResource(application *assistant.Service) route.Resource
 				"exam.attempt.assistant_unavailable",
 			},
 			Handle: h.transcript,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   assistantExportPath,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.delivery.metadata_capacity",
+				"exam.attempt.unavailable", "exam.attempt.assistant_unavailable",
+			},
+			Handle: h.exportTranscript,
 		},
 		route.Endpoint{
 			Method:       http.MethodPost,
@@ -160,6 +171,31 @@ func (h examAttemptAssistantHandlers) transcript(request route.Request) (route.R
 		return route.Result{}, err
 	}
 	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+type assistantTranscriptExportResponse struct {
+	ExamAttemptID string                    `json:"exam_attempt_id"`
+	Records       []assistantRecordResponse `json:"records"`
+	Inventory     model.AssistantInventory  `json:"inventory"`
+}
+
+func (h examAttemptAssistantHandlers) exportTranscript(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	export, err := h.app.ExportTranscript(request.Context, request.Invocation(), id)
+	if err != nil {
+		return route.Result{}, err
+	}
+	page, err := assistantTranscriptResponseFrom(export, model.AssistantTranscriptMaximumRecords)
+	if err != nil {
+		return route.Result{}, err
+	}
+	headers := privateNoStoreHeaders()
+	headers.Set("Content-Disposition", `attachment; filename="assistant-transcript-`+id.String()+`.json"`)
+	return route.JSON(http.StatusOK, assistantTranscriptExportResponse{ExamAttemptID: id.String(), Records: page.Items, Inventory: page.Inventory}).
+		WithHeaders(headers), nil
 }
 
 func (h examAttemptAssistantHandlers) cancel(request route.Request) (route.Result, error) {

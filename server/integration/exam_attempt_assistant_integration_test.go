@@ -99,6 +99,7 @@ func TestAssistantTutorEndToEnd(t *testing.T) {
 	gateway := &integrationModel{held: make(chan context.Context, 1)}
 	helper := testlib.Setup(t, testlib.WithStore(persistence), testlib.WithDesktopBuildCatalog(build),
 		testlib.WithAssistantGateway(gateway),
+		testlib.WithAssistantLimits(assistant.Limits{RenewEvery: 15 * time.Second}),
 		testlib.WithConfig(func(cfg *config.Config) {
 			cfg.Server.PublicURL = origin
 			cfg.Server.ListenAddress = "127.0.0.1:0"
@@ -278,6 +279,9 @@ func TestAssistantTutorEndToEnd(t *testing.T) {
 		}
 	}
 
+	_, err = helper.App.Assistant.ExportTranscript(ctx, desktop.inv, connected.Attempt.ID)
+	require.Error(t, err, "the portable transcript is available after sealing")
+
 	// A second turn holds its model call open; the seal does not wait for it.
 	_, err = helper.App.Assistant.SendMessage(ctx, desktop.inv, assistant.SendMessageCommand{Access: access,
 		Text: "And now?", IdempotencyKey: "assistant-flow-second"})
@@ -304,8 +308,16 @@ func TestAssistantTutorEndToEnd(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Equal(t, sealed.Inventory, recomputed)
-	require.Eventually(t, func() bool { return held.Err() != nil }, 30*time.Second, 50*time.Millisecond,
-		"the sealed turn's model call is canceled")
+	require.Eventually(t, func() bool { return held.Err() != nil }, 2*time.Second, 20*time.Millisecond,
+		"the seal notification cancels the model before its next scheduled renewal")
+	submission, err := persistence.ExamSubmission().Get(ctx, receipt.SubmissionID)
+	require.NoError(t, err)
+	require.Equal(t, receipt.AssistantTranscriptDigest, submission.AssistantTranscriptDigest)
+	download, err := helper.App.Assistant.ExportTranscript(ctx, desktop.inv, connected.Attempt.ID)
+	require.NoError(t, err)
+	require.Equal(t, sealed, download)
+	_, err = helper.App.Assistant.ExportTranscript(ctx, managerInv, connected.Attempt.ID)
+	require.Error(t, err, "a different user cannot download the candidate's transcript")
 	require.Equal(t, sealed.Inventory, transcript().Inventory, "nothing is appended after the seal")
 }
 

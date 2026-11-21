@@ -1705,6 +1705,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exam-attempts/{exam_attempt_id}/assistant/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Download the sealed assistant transcript
+         * @description Downloads the candidate's own sealed assistant transcript and the inventory that verifies it as one JSON attachment. A current candidate Session is required. The download is unavailable before sealing or after retirement.
+         */
+        get: operations["exportCandidateAssistantTranscript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-attempts/{exam_attempt_id}/assistant/messages": {
         parameters: {
             query?: never;
@@ -7464,6 +7487,11 @@ export interface components {
             sequence: number;
             turn?: components["schemas"]["AssistantTurn"];
         };
+        AssistantTranscriptExportResponse: {
+            exam_attempt_id: components["schemas"]["ID"];
+            inventory: components["schemas"]["AssistantInventory"];
+            records: components["schemas"]["AssistantRecord"][];
+        };
         AssistantTranscriptResponse: {
             inventory: components["schemas"]["AssistantInventory"];
             items: components["schemas"]["AssistantRecord"][];
@@ -11562,6 +11590,8 @@ export interface components {
         };
         /** @description A summary of one sealed Submission, without file contents or integrity evidence. When the Institution's retention policy has retired the integrity data, the summary gives the retirement time and leaves out the focus-loss and unresolved counts. The submitted work stays available. */
         ExamSubmissionManagerResponse: {
+            /** @description The digest on the sealed receipt. Omitted after transcript retirement. */
+            assistant_transcript_digest?: string;
             browser_activity: components["schemas"]["BrowserSubmissionSettlement"];
             /** @description The Attempt that was sealed. */
             exam_attempt_id: components["schemas"]["ID"];
@@ -20144,6 +20174,7 @@ export interface components {
             content: {
                 /**
                  * @example {
+                 *       "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                  *       "browser_activity": {
                  *         "incomplete_source_count": 0,
                  *         "inventory_revision": 1,
@@ -27449,6 +27480,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    exportCandidateAssistantTranscript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The candidate's complete sealed transcript */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    /** @description Instructs the client to download the JSON document. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantTranscriptExportResponse"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

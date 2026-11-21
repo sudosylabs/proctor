@@ -397,6 +397,9 @@ func TestManagerSubmissionIntegrityRetirementOmitsFormerCounters(t *testing.T) {
 			submission.FinalFocusLossSequence = 0
 			submission.UnresolvedIntegrityCount = 0
 			submission.IntegrityState = model.SubmissionIntegritySettled
+			if !retired {
+				submission.AssistantTranscriptDigest = model.NewAssistantInventory().Digest
+			}
 			if retired {
 				submission.IntegrityState = model.SubmissionIntegrityRetired
 				submission.IntegrityRetiredAt = model.OptionalTimeFrom(submission.SubmittedAt.Add(time.Hour))
@@ -416,6 +419,11 @@ func TestManagerSubmissionIntegrityRetirementOmitsFormerCounters(t *testing.T) {
 			}
 			_, hasRetirement := fields["integrity_retired_at"]
 			require.Equal(t, retired, hasRetirement)
+			if retired {
+				require.NotContains(t, fields, "assistant_transcript_digest")
+			} else {
+				require.Equal(t, `"`+submission.AssistantTranscriptDigest+`"`, string(fields["assistant_transcript_digest"]))
+			}
 			require.Equal(t, `"`+string(submission.IntegrityState)+`"`, string(fields["integrity_state"]))
 			require.Equal(t, `"`+submission.ManifestDigest+`"`, string(fields["manifest_digest"]))
 			require.NotEmpty(t, fields["workspace_cursor"])

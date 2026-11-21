@@ -2059,6 +2059,7 @@
             "payload": {
               "action": "exam.sitting.view",
               "data": {
+                "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
@@ -2127,6 +2128,7 @@
             "payload": {
               "action": "exam.sitting.participate",
               "data": {
+                "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "manifest_digest": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
@@ -5406,6 +5408,10 @@
         "additionalProperties": false,
         "description": "A submitted Attempt for Sitting viewers, with who or what submitted it.",
         "properties": {
+          "assistant_transcript_digest": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "type": "string"
+          },
           "candidate_user_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5450,6 +5456,7 @@
           "provenance",
           "workspace_cursor",
           "manifest_digest",
+          "assistant_transcript_digest",
           "submitted_at"
         ],
         "title": "Attempt submitted",
@@ -5459,6 +5466,10 @@
         "additionalProperties": false,
         "description": "The candidate's own copy of the submission. It leaves out the candidate identity.",
         "properties": {
+          "assistant_transcript_digest": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "type": "string"
+          },
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5499,6 +5510,7 @@
           "provenance",
           "workspace_cursor",
           "manifest_digest",
+          "assistant_transcript_digest",
           "submitted_at"
         ],
         "title": "Attempt submitted, candidate copy",

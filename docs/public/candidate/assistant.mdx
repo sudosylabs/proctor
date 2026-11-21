@@ -59,8 +59,10 @@ only have one reply in progress at a time.
 
 Everything you and the assistant say, and everything it reads, runs or
 changes, is recorded with your Attempt. You can read your own conversation
-during the Attempt, and your Submission receipt lists it, so nothing about
-your assistant use is hidden from you.
+during the Attempt. After submission, you can download the sealed transcript
+as JSON through `GET /api/v1/exam-attempts/{exam_attempt_id}/assistant/export`.
+The download contains the digest from your Submission receipt and remains
+available until the transcript is retired.
 
 Your Exam Managers read the same record when they review your Submission.
 Using the assistant in an Exam that offers it isn't misconduct, and Proctor

@@ -82,6 +82,7 @@ type transcriptLedger struct {
 	turn   model.AssistantTurnID
 	token  string
 	active bool
+	sealed bool
 	keys   map[string]*store.AssistantRunStart
 	record []model.AssistantRecord
 	cancel []store.AssistantRunCancel
@@ -191,7 +192,8 @@ func (l *transcriptLedger) Cancel(_ context.Context, input store.AssistantRunCan
 func (l *transcriptLedger) ListForAttempt(_ context.Context, query store.AssistantTranscriptQuery) (*store.AssistantTranscriptPage, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if query.Owner == nil || query.Owner.CandidateUserID != l.f.candidate.UserID || query.AttemptID != l.f.attempt.ID {
+	if query.Owner == nil || query.Owner.CandidateUserID != l.f.candidate.UserID || query.AttemptID != l.f.attempt.ID ||
+		(query.Owner.SealedOnly && !l.sealed) {
 		return nil, store.NewErrNotFound("assistant_transcript", query.AttemptID.String())
 	}
 	inventory := model.NewAssistantInventory()
@@ -313,6 +315,25 @@ func TestCandidateAssistantTutorTurnStreamsAndRecordsAReply(t *testing.T) {
 	require.Equal(t, "Check the loop's exit condition.", page.Items[1].Turn.Text)
 	require.NotEmpty(t, page.NextCursor)
 	require.Equal(t, int64(3), page.Inventory.Records)
+
+	export := func() *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, f.candidateRequest(t, http.MethodGet, f.candidatePath("/assistant/export")))
+		return response
+	}
+	require.Equal(t, http.StatusNotFound, export().Code)
+	transcripts.mu.Lock()
+	transcripts.sealed = true
+	transcripts.mu.Unlock()
+	download := export()
+	require.Equal(t, http.StatusOK, download.Code, download.Body.String())
+	require.Contains(t, download.Header().Get("Content-Disposition"), "attachment;")
+	require.Contains(t, download.Header().Get("Cache-Control"), "no-store")
+	var document assistantTranscriptExportResponse
+	require.NoError(t, json.Unmarshal(download.Body.Bytes(), &document))
+	require.Equal(t, f.attempt.ID.String(), document.ExamAttemptID)
+	require.Len(t, document.Records, 3)
+	require.Equal(t, page.Inventory.Digest, document.Inventory.Digest)
 }
 
 func TestCandidateAssistantRefusesASecondTurnWhileOneRuns(t *testing.T) {

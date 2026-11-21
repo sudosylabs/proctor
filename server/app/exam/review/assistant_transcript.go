@@ -31,21 +31,33 @@ type AssistantTranscriptQuery struct {
 func (s *Service) ListAssistantTranscript(ctx context.Context, inv invocation.Invocation,
 	query AssistantTranscriptQuery) (_ *store.AssistantTranscriptPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.SubmissionID.IsValid() || query.Limit < 1 || query.Limit > 200 || query.AfterSequence < 0 {
+	if query.Limit < 1 || query.Limit > 200 || query.AfterSequence < 0 {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "assistant_transcript_list")
 	}
-	if s.transcripts == nil {
-		return nil, apperror.New("exam.integrity_review.unavailable")
-	}
-	if err := s.authorizer.AuthorizeSubmissionView(ctx, inv, query.SubmissionID); err != nil {
+	if err := s.authorizeAssistantTranscript(ctx, inv, query.SubmissionID); err != nil {
 		return nil, err
 	}
+	return s.readAssistantTranscriptPage(ctx, query)
+}
+
+func (s *Service) authorizeAssistantTranscript(ctx context.Context, inv invocation.Invocation, id model.SubmissionID) error {
+	if !id.IsValid() {
+		return apperror.Invalid("exam.integrity_review.invalid", "assistant_transcript_list")
+	}
+	if s.transcripts == nil {
+		return apperror.New("exam.integrity_review.unavailable")
+	}
+	return s.authorizer.AuthorizeSubmissionView(ctx, inv, id)
+}
+
+func (s *Service) readAssistantTranscriptPage(ctx context.Context, query AssistantTranscriptQuery) (*store.AssistantTranscriptPage, error) {
 	page, err := s.transcripts.ListForAttempt(ctx, store.AssistantTranscriptQuery{ReviewSubmissionID: query.SubmissionID,
 		AfterSequence: query.AfterSequence, Limit: query.Limit})
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
-	if page == nil || len(page.Records) > query.Limit {
+	if page == nil || len(page.Records) > query.Limit ||
+		(page.NextSequence != 0 && (page.NextSequence <= query.AfterSequence || page.NextSequence > model.AssistantTranscriptMaximumRecords)) {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid assistant transcript page"))
 	}
 	return page, nil
@@ -54,11 +66,15 @@ func (s *Service) ListAssistantTranscript(ctx context.Context, inv invocation.In
 // SummarizeAssistantUsage reads a sealed transcript whole and describes how
 // the assistant was used. The summary is descriptive: a person judges it.
 func (s *Service) SummarizeAssistantUsage(ctx context.Context, inv invocation.Invocation,
-	submissionID model.SubmissionID) (model.AssistantUsageSummary, error) {
+	submissionID model.SubmissionID) (_ model.AssistantUsageSummary, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	if err := s.authorizeAssistantTranscript(ctx, inv, submissionID); err != nil {
+		return model.AssistantUsageSummary{}, err
+	}
 	var records []model.AssistantRecord
 	query := AssistantTranscriptQuery{SubmissionID: submissionID, Limit: 200}
 	for {
-		page, err := s.ListAssistantTranscript(ctx, inv, query)
+		page, err := s.readAssistantTranscriptPage(ctx, query)
 		if err != nil {
 			return model.AssistantUsageSummary{}, err
 		}

@@ -187,11 +187,11 @@ func conformanceConstructors() map[string]func() (Event, error) {
 				model.IntegrityOutcomeFlagAndSuspend, model.FocusLossMaximumEvidenceEpisodes, 3, at)
 		},
 		"exam_attempt_submitted": func() (Event, error) {
-			return NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 0, digest,
+			return NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 0, digest, model.NewAssistantInventory().Digest,
 				model.ExamSubmissionManagerEndedAttempt, at)
 		},
 		"exam_attempt_submitted_for_candidate": func() (Event, error) {
-			return NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest,
+			return NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
 				model.ExamSubmissionCandidateSubmitted, at)
 		},
 		"exam_integrity_discrepancy_recorded": func() (Event, error) {

@@ -144,10 +144,10 @@ func TestExamAttemptSubmittedEventsSeparateManagerAndCandidateTargetsWithSafeRec
 	candidateID, submissionID := model.NewUserID(), model.NewSubmissionID()
 	digest := strings.Repeat("d", 64)
 	submittedAt := time.Date(2026, time.August, 21, 10, 15, 0, 123, time.UTC)
-	manager, err := NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest,
+	manager, err := NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
 		model.ExamSubmissionManagerEndedAttempt, submittedAt)
 	require.NoError(t, err)
-	candidate, err := NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest,
+	candidate, err := NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
 		model.ExamSubmissionManagerEndedAttempt, submittedAt)
 	require.NoError(t, err)
 	require.Equal(t, "exam_attempt_submitted", manager.Name)
@@ -163,10 +163,12 @@ func TestExamAttemptSubmittedEventsSeparateManagerAndCandidateTargetsWithSafeRec
 	require.NoError(t, err)
 	err = json.Unmarshal(candidate.Data, &candidateData)
 	require.NoError(t, err)
-	require.Len(t, managerData, 9, "manager")
+	require.Len(t, managerData, 10, "manager")
 	require.Equal(t, candidateID.String(), managerData["candidate_user_id"], "manager")
 	require.Equal(t, string(model.ExamSubmissionManagerEndedAttempt), managerData["provenance"], "manager")
-	require.Len(t, candidateData, 8, "manager")
+	require.Len(t, candidateData, 9, "candidate")
+	require.Equal(t, model.NewAssistantInventory().Digest, managerData["assistant_transcript_digest"])
+	require.Equal(t, managerData["assistant_transcript_digest"], candidateData["assistant_transcript_digest"])
 	require.Equal(t, string(model.ExamSubmissionManagerEndedAttempt), candidateData["provenance"], "manager")
 	// Field names, not values: the event's random identifiers can spell short words.
 	for _, data := range []map[string]any{managerData, candidateData} {

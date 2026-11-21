@@ -29,7 +29,8 @@ func assistantReadAttempt(ctx context.Context, tx *sqlxTxWrapper, query store.As
  WHERE a.id=? AND a.candidate_user_id=? AND NOT EXISTS(SELECT 1 FROM exam_submissions retired WHERE retired.exam_attempt_id=a.id AND
  (retired.work_retired_at IS NOT NULL OR retired.integrity_retired_at IS NOT NULL)) AND s.archived_at IS NULL AND s.revoked_at IS NULL
  AND s.expires_at>statement_timestamp() AND s.idle_expires_at>statement_timestamp() AND u.archived_at IS NULL AND u.disabled_at IS NULL
- FOR SHARE OF a`, owner.SessionID.String(), owner.AttemptID.String(), owner.CandidateUserID.String())
+ AND (NOT ? OR EXISTS(SELECT 1 FROM exam_submissions sealed WHERE sealed.exam_attempt_id=a.id AND sealed.sealed=true))
+ FOR SHARE OF a`, owner.SessionID.String(), owner.AttemptID.String(), owner.CandidateUserID.String(), owner.SealedOnly)
 		if err != nil {
 			return "", translateError("assistant_transcript", owner.AttemptID.String(), err)
 		}

@@ -151,9 +151,9 @@ func submittedCalls(t *testing.T, result SubmissionResult, sittingClosedConnecti
 	pub := published(t)
 	calls := []realtimetest.Call{
 		pub(realtime.NewExamAttemptSubmittedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID, result.Receipt.SubmissionID,
-			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Provenance, result.Receipt.SubmittedAt)),
+			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Receipt.AssistantTranscriptDigest, result.Provenance, result.Receipt.SubmittedAt)),
 		pub(realtime.NewCandidateExamAttemptSubmittedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID, result.Receipt.SubmissionID,
-			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Provenance, result.Receipt.SubmittedAt)),
+			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Receipt.AssistantTranscriptDigest, result.Provenance, result.Receipt.SubmittedAt)),
 	}
 	if sittingClosedConnection {
 		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID,

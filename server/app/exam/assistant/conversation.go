@@ -147,6 +147,12 @@ type TranscriptQuery struct {
 // inventory it is bound by.
 func (s *Service) ListTranscript(ctx context.Context, inv invocation.Invocation, query TranscriptQuery) (_ *store.AssistantTranscriptPage,
 	resultErr error) {
+	return s.listTranscript(ctx, inv, query, false)
+}
+
+func (s *Service) listTranscript(ctx context.Context, inv invocation.Invocation, query TranscriptQuery, sealedOnly bool) (
+	_ *store.AssistantTranscriptPage, resultErr error,
+) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if s == nil {
 		return nil, unavailable()
@@ -160,11 +166,43 @@ func (s *Service) ListTranscript(ctx context.Context, inv invocation.Invocation,
 	}
 	page, err := s.transcripts.ListForAttempt(ctx, store.AssistantTranscriptQuery{AttemptID: query.AttemptID,
 		AfterSequence: query.AfterSequence, Limit: query.Limit, Owner: &store.AssistantTranscriptOwnerAccess{
-			AttemptID: query.AttemptID, CandidateUserID: principal.UserID, SessionID: principal.SessionID}})
+			AttemptID: query.AttemptID, CandidateUserID: principal.UserID, SessionID: principal.SessionID, SealedOnly: sealedOnly}})
 	if err != nil {
 		return nil, storeFailure(err)
 	}
 	return page, nil
+}
+
+// ExportTranscript bundles the candidate's sealed transcript with its digest.
+// Each read rechecks ownership, session validity and retention.
+func (s *Service) ExportTranscript(ctx context.Context, inv invocation.Invocation, id model.ExamAttemptID) (*store.AssistantTranscriptPage, error) {
+	result := &store.AssistantTranscriptPage{}
+	query := TranscriptQuery{AttemptID: id, Limit: 200}
+	for {
+		page, err := s.listTranscript(ctx, inv, query, true)
+		if err != nil {
+			return nil, err
+		}
+		if page == nil || len(page.Records) > query.Limit || len(result.Records)+len(page.Records) > model.AssistantTranscriptMaximumRecords {
+			return nil, unavailable()
+		}
+		if query.AfterSequence == 0 {
+			result.Inventory = page.Inventory
+		} else if page.Inventory != result.Inventory {
+			return nil, unavailable()
+		}
+		result.Records = append(result.Records, page.Records...)
+		if page.NextSequence == 0 {
+			if int64(len(result.Records)) != result.Inventory.Records {
+				return nil, unavailable()
+			}
+			return result, nil
+		}
+		if page.NextSequence <= query.AfterSequence || page.NextSequence > result.Inventory.Records {
+			return nil, unavailable()
+		}
+		query.AfterSequence = page.NextSequence
+	}
 }
 
 // CancelTurnCommand stops the candidate's running turn.

@@ -93,3 +93,14 @@ their Attempt environment. Enable execution before enabling previews. Choose
 up to 16 inclusive, disjoint port ranges from 1024 to 65535 and list them in
 ascending order. Use the same start and end to allow one port, such as 5173.
 Publication fixes the preview policy in the Exam Revision.
+
+{/* <!-- verify against Desktop --> */}
+While an Attempt is active, candidates can open a preview of a listening
+service on an allowed port in Desktop's integrated browser. For example, an
+Exam with port 5173 enabled can support a project that runs a development
+server on that port.
+
+After submission, reviewers can see one usage entry per port. It shows the
+number of completed connections recorded before the seal, bytes sent to and
+from the service, and the first and last recorded use. Preview page content
+is never stored. Preview usage raises no Integrity Flags.

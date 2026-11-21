@@ -194,7 +194,7 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 		Permissions: []string{
 			string(model.ActionExamCreate), string(model.ActionExamView), string(model.ActionExamManage),
 			string(model.ActionExamPublish), string(model.ActionExamSittingCreate),
-			string(model.ActionExamSittingView), string(model.ActionExamSittingManage),
+			string(model.ActionExamSittingView), string(model.ActionExamSittingManage), string(model.ActionSubmissionView),
 		},
 	})
 	require.NoError(t, err)
@@ -369,6 +369,7 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 	// whichever node serves the request.
 	terminalAccess := environment.CandidateAccess{AttemptID: access.AttemptID, ConnectionID: access.ConnectionID,
 		ContinuityCredential: access.ContinuityCredential}
+	const previewRequest = "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n"
 	t.Run("preview relays a candidate request through the execution host", func(t *testing.T) {
 		guest, previewErr := guests.Ensure(ctx, execenv.Spec{ID: grantID, Image: "python-3.12", Network: execenv.NetworkNone,
 			Resources:   execenv.Resources{CPUMillis: 1000, MemoryBytes: 512 << 20, DiskBytes: 1 << 30},
@@ -384,7 +385,7 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 		conn, previewErr := helper.App.Previews.OpenPreview(previewCtx, desktop.inv, terminalAccess, previewPort)
 		require.NoError(t, previewErr)
 		defer func() { _ = conn.Close() }()
-		_, previewErr = io.WriteString(conn, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+		_, previewErr = io.WriteString(conn, previewRequest)
 		require.NoError(t, previewErr)
 		response, previewErr := http.ReadResponse(bufio.NewReader(conn), nil)
 		require.NoError(t, previewErr)
@@ -506,6 +507,15 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 	require.Equal(t, submitted.AssistantTranscriptDigest, recomputed.Digest)
 	require.NotNil(t, sealedSession)
 	require.Equal(t, "sealed", sealedSession.Outcome)
+
+	usage, err := helper.App.Reviews.ListPreviewUsage(ctx, managerInv, submitted.SubmissionID)
+	require.NoError(t, err)
+	require.Len(t, usage, 1)
+	require.Equal(t, previewPort, usage[0].Port)
+	require.EqualValues(t, 1, usage[0].Connections)
+	require.EqualValues(t, len(previewRequest), usage[0].BytesIn)
+	require.Greater(t, usage[0].BytesOut, int64(len("execution preview")))
+	require.Equal(t, usage[0].FirstUsedAt, usage[0].LastUsedAt)
 
 	evidence, err := persistence.ExamIntegrityReview().ListAttemptEvidence(ctx, store.AttemptEvidenceListOptions{
 		SubmissionID: submitted.SubmissionID, Limit: 100,

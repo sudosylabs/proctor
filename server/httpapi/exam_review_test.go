@@ -241,3 +241,29 @@ func TestExamIntegrityReviewOpenAPIDocument(t *testing.T) {
 		assertProtectedExamCacheControl(t, response, "no-store")
 	}
 }
+
+func TestIntegrityReviewHTTPReadsSealedPreviewUsage(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	f.reviewStore.previewUsage = []model.PreviewUsage{{Port: 5173, Connections: 2, BytesIn: 42, BytesOut: 314,
+		FirstUsedAt: reviewFixtureTime, LastUsedAt: reviewFixtureTime.Add(time.Second)}}
+	api := f.api(t)
+	path := "/api/v1/submissions/" + f.submission.ID.String() + "/preview-usage"
+
+	denied := httptest.NewRecorder()
+	api.ServeHTTP(denied, f.request(t, http.MethodGet, path, "candidate"))
+	require.Equal(t, http.StatusNotFound, denied.Code, denied.Body.String())
+	require.Empty(t, f.reviewStore.previewReads)
+
+	response := httptest.NewRecorder()
+	api.ServeHTTP(response, f.request(t, http.MethodGet, path, "credential"))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, []model.SubmissionID{f.submission.ID}, f.reviewStore.previewReads)
+	var usage previewUsageResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &usage))
+	require.Equal(t, previewUsageResponse{SubmissionID: f.submission.ID.String(), Ports: []previewPortUsageResponse{{
+		Port: 5173, Connections: 2, BytesIn: 42, BytesOut: 314,
+		FirstUsedAt: model.FormatRFC3339(reviewFixtureTime), LastUsedAt: model.FormatRFC3339(reviewFixtureTime.Add(time.Second)),
+	}}}, usage)
+}

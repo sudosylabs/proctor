@@ -109,10 +109,28 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		ContinuityCredentialHash: access.ContinuityCredentialHash, ExpectedCurrentRevisionID: f.revisionID,
 		ExpectedWorkspaceCursor: connected.Workspace.Cursor, FinalFocusLossSequence: 2},
 		AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: model.NowUTC()}
+	usageStore := ss.AttemptEnvironment()
+	firstUse := model.NowUTC().Add(-2 * time.Second)
+	lastUse := firstUse.Add(time.Second)
+	require.NoError(t, usageStore.AddPreviewUsage(ctx, connected.Attempt.ID, 5173, 8, 20, lastUse))
+	require.NoError(t, usageStore.AddPreviewUsage(ctx, connected.Attempt.ID, 5173, 1, 3, firstUse))
+	require.NoError(t, usageStore.AddPreviewUsage(ctx, connected.Attempt.ID, 3000, 0, 0, lastUse))
+	_, err = usageStore.ListPreviewUsage(ctx, seal.SubmissionID)
+	require.True(t, store.IsNotFound(err), "usage is unavailable before the seal: %v", err)
 	attachSubmissionReceipt(t, ctx, ss, f.candidate, seal)
 	sealed, err := ss.ExamSubmission().Seal(ctx, seal, examCommand(f.candidate.ID, store.ExamSubmissionSealOperation, "privacy-seal", "privacy-seal"))
 	require.NoError(t, err)
 	subID := sealed.Receipt.SubmissionID
+	usage, err := usageStore.ListPreviewUsage(ctx, subID)
+	require.NoError(t, err)
+	require.Equal(t, []model.PreviewUsage{
+		{Port: 3000, Connections: 1, FirstUsedAt: lastUse, LastUsedAt: lastUse},
+		{Port: 5173, Connections: 2, BytesIn: 9, BytesOut: 23, FirstUsedAt: firstUse, LastUsedAt: lastUse},
+	}, usage)
+	err = usageStore.AddPreviewUsage(ctx, connected.Attempt.ID, 5173, 1, 1, model.NowUTC())
+	require.True(t, store.IsConflict(err), "usage on an existing port is frozen: %v", err)
+	err = usageStore.AddPreviewUsage(ctx, connected.Attempt.ID, 8080, 1, 1, model.NowUTC())
+	require.True(t, store.IsConflict(err), "a new port cannot appear after seal: %v", err)
 	before, err := ss.ExamSubmission().Get(ctx, subID)
 	require.NoError(t, err)
 	require.Equal(t, model.SubmissionIntegrityGapped, before.IntegrityState)
@@ -262,6 +280,8 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		return
 	}
 	probe.Inspect(t, ctx, subID, true)
+	_, err = usageStore.ListPreviewUsage(ctx, subID)
+	require.True(t, store.IsNotFound(err), "retired usage is no longer visible: %v", err)
 	nativePage, err := ss.ExamIntegrityReview().ListNativeConditions(ctx, store.NativeConditionListOptions{SubmissionID: subID, Limit: 100})
 	require.NoError(t, err)
 	require.Empty(t, nativePage.Items, "retired native conditions remained readable")

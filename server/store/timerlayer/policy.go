@@ -315,6 +315,8 @@ const (
 	methodRetire                                    methodName = "retire"
 	methodApplyFact                                 methodName = "apply_fact"
 	methodSaveOwner                                 methodName = "save_owner"
+	methodAddPreviewUsage                           methodName = "add_preview_usage"
+	methodListPreviewUsage                          methodName = "list_preview_usage"
 	methodRequestSettle                             methodName = "request_settle"
 	methodRecordSettleIncomplete                    methodName = "record_settle_incomplete"
 	methodReleaseObjectCleanup                      methodName = "release_object_cleanup"

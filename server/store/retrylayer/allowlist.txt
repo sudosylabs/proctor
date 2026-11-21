@@ -219,6 +219,7 @@ ServingNodeLeaseStore.Upsert                               always
 ServingNodeLeaseStore.Delete                               always
 
 AttemptEnvironmentStore.Get                                always
+AttemptEnvironmentStore.ListPreviewUsage                   always
 
 # Renew extends only the caller's exact fence, so a replay after a lost commit
 # extends the same lease again or reports it lost. Release deletes only that

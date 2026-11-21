@@ -165,6 +165,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ConfigureExamDraftExecutionRequest":             reflect.TypeOf(configureExamDraftExecutionRequest{}),
 	"ExecutionPreviewPolicy":                         reflect.TypeOf(model.PreviewPolicy{}),
 	"ExecutionPreviewPortRange":                      reflect.TypeOf(model.PortRange{}),
+	"PreviewUsageSummary":                            reflect.TypeOf(previewUsageResponse{}),
+	"PreviewPortUsage":                               reflect.TypeOf(previewPortUsageResponse{}),
 	"CandidatePreviewPort":                           reflect.TypeOf(previewPortResponse{}),
 	"CandidatePreviewPorts":                          reflect.TypeOf(previewPortsResponse{}),
 	"ExecutionPolicy":                                reflect.TypeOf(examExecutionPolicyDocument{}),

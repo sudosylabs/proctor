@@ -2144,6 +2144,12 @@ func (s *assistantTranscriptStore) Inventory(ctx context.Context, arg1 store.Ass
 	})
 }
 
+func (s *attemptEnvironmentStore) ListPreviewUsage(ctx context.Context, submissionID model.SubmissionID) ([]model.PreviewUsage, error) {
+	return retryCall1(ctx, s.layer, func() ([]model.PreviewUsage, error) {
+		return s.AttemptEnvironmentStore.ListPreviewUsage(ctx, submissionID)
+	})
+}
+
 func (s *attemptEnvironmentStore) Get(ctx context.Context, arg1 model.ExamAttemptID) (*model.AttemptEnvironment, error) {
 	return retryCall1(ctx, s.layer, func() (*model.AttemptEnvironment, error) {
 		return s.AttemptEnvironmentStore.Get(ctx, arg1)

@@ -5663,6 +5663,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/submissions/{submission_id}/preview-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read sealed preview usage
+         * @description Requires the same Submission view authorization as Attempt evidence. Reports one row per guest port used before the seal, including completed connections, byte counts and times. Preview content is never recorded. The summary raises no Integrity Flags.
+         */
+        get: operations["getSubmissionPreviewUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/submissions/{submission_id}/review": {
         parameters: {
             query?: never;
@@ -13962,6 +13985,29 @@ export interface components {
             attempt_id?: string;
             configuration_manifest_fingerprint: string;
             native_registry_digest: string;
+        };
+        PreviewPortUsage: {
+            /**
+             * Format: int64
+             * @description Bytes written to the guest.
+             */
+            bytes_in: number;
+            /**
+             * Format: int64
+             * @description Bytes read from the guest.
+             */
+            bytes_out: number;
+            /** Format: int64 */
+            connections: number;
+            /** Format: date-time */
+            first_used_at: string;
+            /** Format: date-time */
+            last_used_at: string;
+            port: number;
+        };
+        PreviewUsageSummary: {
+            ports: components["schemas"]["PreviewPortUsage"][];
+            submission_id: components["schemas"]["ID"];
         };
         /** @description The RFC 9457 error body returned by every failed request. Use `code` to decide what to do. `title` and `detail` are text for people, in the request's language. */
         ProblemDetails: {
@@ -33235,6 +33281,51 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["NativeConditionListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getSubmissionPreviewUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview usage bound to the sealed Submission */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "ports": [
+                     *         {
+                     *           "bytes_in": 512,
+                     *           "bytes_out": 10240,
+                     *           "connections": 2,
+                     *           "first_used_at": "2026-01-15T08:55:00Z",
+                     *           "last_used_at": "2026-01-15T09:12:00Z",
+                     *           "port": 5173
+                     *         }
+                     *       ],
+                     *       "submission_id": "ybndrfg8ejkmcpqxot1uwisza3"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PreviewUsageSummary"];
+                };
+            };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

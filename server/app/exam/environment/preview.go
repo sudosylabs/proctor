@@ -11,10 +11,13 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // MaxPreviewConnections bounds a single node's open connections per attempt.
@@ -107,7 +110,7 @@ func (p *Previews) OpenPreview(ctx context.Context, inv invocation.Invocation, a
 		p.release(attemptID)
 		return nil, previewFailure(err)
 	}
-	return &PreviewConn{conn: conn, previews: p, at: at, inv: inv, access: access}, nil
+	return &PreviewConn{conn: conn, previews: p, at: at, inv: inv, access: access, port: port}, nil
 }
 
 func (p *Previews) verify(ctx context.Context, inv invocation.Invocation, access CandidateAccess) (CandidateAttempt, error) {
@@ -145,10 +148,28 @@ type PreviewConn struct {
 	access   CandidateAccess
 	once     sync.Once
 	closeErr error
+	port     int
+	// Close first interrupts the connection, then waits for in-flight
+	// reads and writes to count the bytes they transferred.
+	ioMu     sync.RWMutex
+	bytesIn  atomic.Int64
+	bytesOut atomic.Int64
 }
 
-func (c *PreviewConn) Read(p []byte) (int, error)  { return c.conn.Read(p) }
-func (c *PreviewConn) Write(p []byte) (int, error) { return c.conn.Write(p) }
+func (c *PreviewConn) Read(p []byte) (int, error) {
+	c.ioMu.RLock()
+	defer c.ioMu.RUnlock()
+	n, err := c.conn.Read(p)
+	c.bytesOut.Add(int64(n))
+	return n, err
+}
+func (c *PreviewConn) Write(p []byte) (int, error) {
+	c.ioMu.RLock()
+	defer c.ioMu.RUnlock()
+	n, err := c.conn.Write(p)
+	c.bytesIn.Add(int64(n))
+	return n, err
+}
 
 // CloseWrite forwards EOF to the guest while leaving its response readable.
 func (c *PreviewConn) CloseWrite() error { return c.conn.CloseWrite() }
@@ -157,7 +178,18 @@ func (c *PreviewConn) CloseWrite() error { return c.conn.CloseWrite() }
 func (c *PreviewConn) Close() error {
 	c.once.Do(func() {
 		c.closeErr = c.conn.Close()
-		c.previews.release(c.at.row.AttemptID)
+		attemptID := c.at.row.AttemptID
+		c.previews.release(attemptID)
+		c.ioMu.Lock()
+		bytesIn, bytesOut := c.bytesIn.Load(), c.bytesOut.Load()
+		c.ioMu.Unlock()
+		deps := c.previews.terminals.deps
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err := deps.Environments.AddPreviewUsage(ctx, attemptID, c.port, bytesIn, bytesOut, deps.Now())
+		if err != nil && !store.IsConflict(err) && deps.Report != nil {
+			deps.Report(attemptID, err)
+		}
 	})
 	return c.closeErr
 }
@@ -187,7 +219,7 @@ func previewFailure(err error) error {
 	case errors.Is(err, ErrPreviewNotAllowed):
 		return apperror.New("exam.attempt.preview_not_allowed").Wrap(err)
 	case errors.Is(err, ErrPreviewLimit), errors.Is(err, ErrMachineBusy):
-		return apperror.New("exam.attempt.preview_limit_reached").Wrap(err)
+		return apperror.New("exam.attempt.preview_limit_reached").Wrap(ErrPreviewLimit)
 	case errors.Is(err, ErrPortRefused):
 		return apperror.New("exam.attempt.preview_port_closed").Wrap(err)
 	default:

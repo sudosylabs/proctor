@@ -48,7 +48,8 @@ type Dependencies struct {
 	NewDecisionID func() model.IntegrityReviewDecisionID
 	// Transcripts is optional: without it, assistant transcripts are
 	// unavailable to review.
-	Transcripts store.AssistantTranscriptStore
+	Transcripts  store.AssistantTranscriptStore
+	Environments store.AttemptEnvironmentStore
 }
 
 // Service holds the integrity review use cases and their manager and
@@ -66,6 +67,7 @@ type Service struct {
 	newReviewID   func() model.SubmissionReviewID
 	newDecisionID func() model.IntegrityReviewDecisionID
 	transcripts   store.AssistantTranscriptStore
+	environments  store.AttemptEnvironmentStore
 }
 
 // New fails when a required dependency is missing.
@@ -94,5 +96,6 @@ func New(deps Dependencies) (*Service, error) {
 		newReviewID:   deps.NewReviewID,
 		newDecisionID: deps.NewDecisionID,
 		transcripts:   deps.Transcripts,
+		environments:  deps.Environments,
 	}, nil
 }

@@ -30796,6 +30796,69 @@
         ],
         "type": "object"
       },
+      "PreviewPortUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes_in": {
+            "description": "Bytes written to the guest.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "bytes_out": {
+            "description": "Bytes read from the guest.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "connections": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "first_used_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "port": {
+            "maximum": 65535,
+            "minimum": 1024,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "port",
+          "connections",
+          "bytes_in",
+          "bytes_out",
+          "first_used_at",
+          "last_used_at"
+        ],
+        "type": "object"
+      },
+      "PreviewUsageSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewPortUsage"
+            },
+            "type": "array"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "submission_id",
+          "ports"
+        ],
+        "type": "object"
+      },
       "ProblemDetails": {
         "additionalProperties": false,
         "description": "The RFC 9457 error body returned by every failed request. Use `code` to decide what to do. `title` and `detail` are text for people, in the request's language.",
@@ -60653,6 +60716,99 @@
           }
         ],
         "summary": "Inspect the native rule status changes of a Submission",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubmissionID"
+        }
+      ]
+    },
+    "/api/v1/submissions/{submission_id}/preview-usage": {
+      "get": {
+        "description": "Requires the same Submission view authorization as Attempt evidence. Reports one row per guest port used before the seal, including completed connections, byte counts and times. Preview content is never recorded. The summary raises no Integrity Flags.",
+        "operationId": "getSubmissionPreviewUsage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ports": [
+                    {
+                      "bytes_in": 512,
+                      "bytes_out": 10240,
+                      "connections": 2,
+                      "first_used_at": "2026-01-15T08:55:00Z",
+                      "last_used_at": "2026-01-15T09:12:00Z",
+                      "port": 5173
+                    }
+                  ],
+                  "submission_id": "ybndrfg8ejkmcpqxot1uwisza3"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewUsageSummary"
+                }
+              }
+            },
+            "description": "Preview usage bound to the sealed Submission",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read sealed preview usage",
         "tags": [
           "Integrity review"
         ],

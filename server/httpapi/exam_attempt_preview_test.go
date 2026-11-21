@@ -50,6 +50,10 @@ func (s *previewEnvironmentStore) Get(context.Context, model.ExamAttemptID) (*mo
 	return &s.row, nil
 }
 
+func (*previewEnvironmentStore) AddPreviewUsage(context.Context, model.ExamAttemptID, int, int64, int64, time.Time) error {
+	return nil
+}
+
 type previewWorkspaceStore struct {
 	store.ExamAttemptWorkspaceStore
 }

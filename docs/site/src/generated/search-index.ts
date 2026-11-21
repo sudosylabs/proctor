@@ -4583,6 +4583,17 @@ export const searchEntries = [
     "searchText": "listnativeconditions inspect the native rule status changes of a submission requires the same current submission integrity-view authorization as detailed evidence. returns every change of a native rule's status as the server evaluated it on the facts desktop reported, with the delivery position that caused it (batch 0 is the state reported at start), original receipt and interpretation times, and immutable stream and policy provenance. an occurrence opens when a rule becomes not met and closes when it is met again; an enforce occurrence that opens also raises its capability's native flag. the facts themselves are not returned. pages contain at most 100 records. integrity retirement removes this material independently of native operational retention. no-store; cursors are purpose-specific opaque keysets. integrity review get /api/v1/submissions/{submission_id}/native-conditions principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:getSubmissionPreviewUsage",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "Read sealed preview usage",
+    "description": "Requires the same Submission view authorization as Attempt evidence. Reports one row per guest port used before the seal, including completed connections, byte counts and times. Preview content is never recorded. The summary raises no Integrity Flags.",
+    "href": "/api/reference/get-submission-preview-usage",
+    "method": "GET",
+    "path": "/api/v1/submissions/{submission_id}/preview-usage",
+    "searchText": "getsubmissionpreviewusage read sealed preview usage requires the same submission view authorization as attempt evidence. reports one row per guest port used before the seal, including completed connections, byte counts and times. preview content is never recorded. the summary raises no integrity flags. integrity review get /api/v1/submissions/{submission_id}/preview-usage principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:getExamIntegrityReview",
     "kind": "endpoint",
     "group": "Integrity review",

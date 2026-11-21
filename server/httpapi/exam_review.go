@@ -445,6 +445,22 @@ func examIntegrityReviewResource(app *review.Service) route.Resource {
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
+			Path:   "/submissions/{submission_id}/preview-usage",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.unavailable",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.previewUsage,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
 			Path:   discrepancies,
 			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
@@ -1203,4 +1219,36 @@ func (h examIntegrityReviewHandlers) assistantUsage(request route.Request) (rout
 		return route.Result{}, err
 	}
 	return route.JSON(http.StatusOK, summary).WithHeaders(noStoreHeaders()), nil
+}
+
+type previewUsageResponse struct {
+	SubmissionID string                     `json:"submission_id"`
+	Ports        []previewPortUsageResponse `json:"ports"`
+}
+
+type previewPortUsageResponse struct {
+	Port        int    `json:"port"`
+	Connections int64  `json:"connections"`
+	BytesIn     int64  `json:"bytes_in"`
+	BytesOut    int64  `json:"bytes_out"`
+	FirstUsedAt string `json:"first_used_at"`
+	LastUsedAt  string `json:"last_used_at"`
+}
+
+func (h examIntegrityReviewHandlers) previewUsage(request route.Request) (route.Result, error) {
+	submissionID, err := reviewSubmissionID(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	usage, err := h.app.ListPreviewUsage(request.Context, request.Invocation(), submissionID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := previewUsageResponse{SubmissionID: submissionID.String(), Ports: make([]previewPortUsageResponse, len(usage))}
+	for i, entry := range usage {
+		response.Ports[i] = previewPortUsageResponse{Port: entry.Port, Connections: entry.Connections,
+			BytesIn: entry.BytesIn, BytesOut: entry.BytesOut, FirstUsedAt: model.FormatRFC3339(entry.FirstUsedAt),
+			LastUsedAt: model.FormatRFC3339(entry.LastUsedAt)}
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }

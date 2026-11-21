@@ -13,6 +13,16 @@ import (
 	"unicode/utf8"
 )
 
+// PreviewUsage is the sealed, descriptive usage of one guest port.
+type PreviewUsage struct {
+	Port        int
+	Connections int64
+	BytesIn     int64
+	BytesOut    int64
+	FirstUsedAt time.Time
+	LastUsedAt  time.Time
+}
+
 // AttemptEnvironmentDesired is what the attempt's facts ask of its environment.
 type AttemptEnvironmentDesired string
 

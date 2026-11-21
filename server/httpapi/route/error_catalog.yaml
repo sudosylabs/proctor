@@ -392,6 +392,9 @@ codes:
     description: "The manager lost authority over the Attempt."
   - code: exam.attempt.not_found
     description: "The Attempt does not exist or is not visible to the caller."
+  - code: exam.attempt.preview_connection_ended
+    transport: true
+    description: "The guest closed one preview connection unexpectedly. This code is sent in a binary WebSocket error frame before a normal close."
   - code: exam.attempt.preview_limit_reached
     status: 429
     reason: An open preview connection counts against the candidate's concurrent connection limit.

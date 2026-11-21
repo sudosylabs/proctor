@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/websocket"
 )
@@ -140,6 +141,10 @@ func previewSocketFailure(ctx context.Context, socket BinarySocket, err error) w
 		return websocket.BinarySocketDone
 	case environment.PreviewAccessEnded(err):
 		return websocket.BinarySocketAccessEnded
+	case errors.Is(err, environment.ErrPortConnection):
+		code := apperror.New("exam.attempt.preview_connection_ended").Code()
+		_ = socket.Write(ctx, append([]byte{previewServerError}, code...))
+		return websocket.BinarySocketDone
 	default:
 		_ = socket.Write(ctx, append([]byte{previewServerError}, "exam.attempt.environment_unavailable"...))
 		return websocket.BinarySocketFailed

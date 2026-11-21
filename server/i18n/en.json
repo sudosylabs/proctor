@@ -6602,6 +6602,10 @@
     "translation": "Invalid Focus Loss signal."
   },
   {
+    "id": "websocket.error.exam_attempt.preview_connection_ended",
+    "translation": "This preview connection ended unexpectedly."
+  },
+  {
     "id": "websocket.error.exam_attempt.renewal.denied",
     "translation": "Exam Attempt renewal denied."
   },

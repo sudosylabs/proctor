@@ -51,6 +51,8 @@ var (
 	ErrMachineBusy = errors.New("execution machine busy")
 	// ErrPortRefused means no listener accepted the guest connection.
 	ErrPortRefused = errors.New("execution port refused")
+	// ErrPortConnection means one guest connection ended unexpectedly.
+	ErrPortConnection = errors.New("execution port connection ended")
 	// ErrProcessExited means the process has exited and takes no more input,
 	// size or signal.
 	ErrProcessExited = errors.New("execution process exited")

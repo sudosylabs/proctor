@@ -21338,6 +21338,7 @@
           "exam.attempt.invalid",
           "exam.attempt.management_authority_conflict",
           "exam.attempt.not_found",
+          "exam.attempt.preview_connection_ended",
           "exam.attempt.preview_limit_reached",
           "exam.attempt.preview_not_allowed",
           "exam.attempt.preview_port_closed",
@@ -45048,7 +45049,7 @@
     },
     "/api/v1/exam-attempts/{exam_attempt_id}/environment/ports/{port}/socket": {
       "get": {
-        "description": "Upgrades to a binary WebSocket carrying one TCP connection to a guest listener. Proctor checks live\ncandidate access and the frozen policy and dials the guest before it upgrades. Each connection goes\nto the execution host from the node handling the request.\n\nThe first byte of each binary message is its type. Clients send `0x01` followed by 1 to 32,768 bytes\nof data, or `0x02` with no payload to close their write side. The server sends `0x81` followed by\nup to 32,768 bytes, `0x82` with no payload for EOF from the guest, or `0x86` followed by a public\nUTF-8 error code. Each direction can close independently.\n\nProctor rechecks access every 15 seconds. Close code 4003 indicates lost access, a freeze or a seal.\nA connection closes after 10 minutes without bytes in either direction. The local limit is 32\nconnections per Attempt. Candidate content travels only in binary frames.",
+        "description": "Upgrades to a binary WebSocket carrying one TCP connection to a guest listener. Proctor checks live\ncandidate access and the frozen policy and dials the guest before it upgrades. Each connection goes\nto the execution host from the node handling the request.\n\nThe first byte of each binary message is its type. Clients send `0x01` followed by 1 to 32,768 bytes\nof data, or `0x02` with no payload to close their write side. The server sends `0x81` followed by\nup to 32,768 bytes, `0x82` with no payload for EOF from the guest, or `0x86` followed by a public\nUTF-8 error code. Each direction can close independently. When the guest resets a connection,\nProctor sends `exam.attempt.preview_connection_ended` and closes that WebSocket normally.\n\nProctor rechecks access every 15 seconds. Close code 4003 indicates lost access, a freeze or a seal.\nA connection closes after 10 minutes without bytes in either direction. The local limit is 32\nconnections per Attempt. Candidate content travels only in binary frames.",
         "operationId": "connectCandidatePreview",
         "parameters": [
           {

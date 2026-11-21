@@ -46,6 +46,9 @@ func portError(operation string, err error) error {
 	if err == nil || errors.Is(err, io.EOF) {
 		return err
 	}
+	if errors.Is(err, execenv.ErrConnection) {
+		return hostError(operation, environment.ErrPortConnection)
+	}
 	return translate(operation, err)
 }
 

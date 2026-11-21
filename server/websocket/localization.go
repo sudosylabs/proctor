@@ -28,6 +28,7 @@ const (
 	websocketErrorAttemptConnectionInactive    websocketErrorPresentation = "attempt_connection_inactive"
 	websocketErrorAttemptConnectionLost        websocketErrorPresentation = "attempt_connection_lost"
 	websocketErrorAttemptConnectRequestInvalid websocketErrorPresentation = "attempt_connect_request_invalid"
+	websocketErrorPreviewConnectionEnded       websocketErrorPresentation = "preview_connection_ended"
 	websocketErrorAttemptRenewalDenied         websocketErrorPresentation = "attempt_renewal_denied"
 	websocketErrorAttemptRenewalFailed         websocketErrorPresentation = "attempt_renewal_failed"
 	websocketErrorAttemptRenewalRequestInvalid websocketErrorPresentation = "attempt_renewal_request_invalid"
@@ -100,6 +101,12 @@ var websocketErrorMessages = map[websocketErrorPresentation]localizedMessage{
 	websocketErrorBrowserActivityFailed: {
 		id:       "websocket.error.exam_attempt.browser_activity.failed",
 		fallback: "Browser activity could not be accepted.",
+	},
+	// Binary preview frames carry only the stable code. Keep its prose in the
+	// locale catalogue for clients presenting that code.
+	websocketErrorPreviewConnectionEnded: {
+		id:       "websocket.error.exam_attempt.preview_connection_ended",
+		fallback: "This preview connection ended unexpectedly.",
 	},
 	websocketErrorRequestInvalid:      {id: "websocket.error.request.invalid", fallback: "Invalid WebSocket request."},
 	websocketErrorRateLimited:         {id: "websocket.error.rate_limited", fallback: "Too many WebSocket requests. Retry shortly."},

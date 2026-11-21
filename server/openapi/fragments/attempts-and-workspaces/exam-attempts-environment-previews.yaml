@@ -88,7 +88,8 @@ paths:
         The first byte of each binary message is its type. Clients send `0x01` followed by 1 to 32,768 bytes
         of data, or `0x02` with no payload to close their write side. The server sends `0x81` followed by
         up to 32,768 bytes, `0x82` with no payload for EOF from the guest, or `0x86` followed by a public
-        UTF-8 error code. Each direction can close independently.
+        UTF-8 error code. Each direction can close independently. When the guest resets a connection,
+        Proctor sends `exam.attempt.preview_connection_ended` and closes that WebSocket normally.
 
         Proctor rechecks access every 15 seconds. Close code 4003 indicates lost access, a freeze or a seal.
         A connection closes after 10 minutes without bytes in either direction. The local limit is 32

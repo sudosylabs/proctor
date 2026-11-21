@@ -104,6 +104,11 @@ func newPreviewFixture(t *testing.T, halfClose bool) previewFixture {
 		}()
 		listener = raw
 	}
+	return newPreviewFixtureWithListener(t, listener)
+}
+
+func newPreviewFixtureWithListener(t *testing.T, listener *net.TCPListener) previewFixture {
+	t.Helper()
 	addr, ok := listener.Addr().(*net.TCPAddr)
 	require.True(t, ok)
 	port := addr.Port
@@ -240,4 +245,38 @@ func TestCandidatePreviewPropagatesHalfClose(t *testing.T) {
 	require.NoError(t, conn.WriteMessage(gorilla.BinaryMessage, append([]byte{previewClientData}, "ping"...)))
 	require.NoError(t, conn.WriteMessage(gorilla.BinaryMessage, []byte{previewClientHalfClose}))
 	require.Equal(t, "pong", string(readPreviewResponse(t, conn)))
+}
+
+func TestCandidatePreviewGuestResetOnlyEndsThatConnection(t *testing.T) {
+	t.Parallel()
+	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	require.NoError(t, listener.SetDeadline(time.Now().Add(5*time.Second)))
+	fixture := newPreviewFixtureWithListener(t, listener)
+
+	reset := fixture.dial(t)
+	resetGuest, err := listener.AcceptTCP()
+	require.NoError(t, err)
+	defer func() { _ = resetGuest.Close() }()
+	healthy := fixture.dial(t)
+	healthyGuest, err := listener.AcceptTCP()
+	require.NoError(t, err)
+	defer func() { _ = healthyGuest.Close() }()
+
+	require.NoError(t, resetGuest.SetLinger(0))
+	require.NoError(t, resetGuest.Close())
+	kind, frame, err := reset.ReadMessage()
+	require.NoError(t, err)
+	require.Equal(t, gorilla.BinaryMessage, kind)
+	require.Equal(t, append([]byte{previewServerError}, "exam.attempt.preview_connection_ended"...), frame)
+	_, _, err = reset.ReadMessage()
+	require.True(t, gorilla.IsCloseError(err, gorilla.CloseNormalClosure), "%v", err)
+
+	_, err = io.WriteString(healthyGuest, "still running")
+	require.NoError(t, err)
+	kind, frame, err = healthy.ReadMessage()
+	require.NoError(t, err)
+	require.Equal(t, gorilla.BinaryMessage, kind)
+	require.Equal(t, append([]byte{previewServerData}, "still running"...), frame)
 }

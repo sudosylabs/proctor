@@ -158,6 +158,7 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"exam.attempt.invalid":                                        {status: http.StatusBadRequest},
 	"exam.attempt.management_authority_conflict":                  {status: http.StatusConflict},
 	"exam.attempt.not_found":                                      {status: http.StatusNotFound},
+	"exam.attempt.preview_connection_ended":                       {status: http.StatusConflict},
 	"exam.attempt.preview_limit_reached":                          {status: http.StatusTooManyRequests},
 	"exam.attempt.preview_not_allowed":                            {status: http.StatusForbidden},
 	"exam.attempt.preview_port_closed":                            {status: http.StatusNotFound},

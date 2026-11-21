@@ -81,6 +81,10 @@ jobs:
     name: Hermetic and independent modules
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      # The standard suites check the route error tables. Race instrumentation
+      # puts the whole-module analysis over the hosted runner's memory budget.
+      GO_TEST_RACE_FLAGS: -p 2 -skip '^TestRouteErrorTablesMatchReachableCodes$$'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,8 +139,6 @@ jobs:
         run: make -C server test
       - name: Run server race tests
         if: ${{ !cancelled() }}
-        env:
-          GO_TEST_RACE_FLAGS: -p 2
         run: make -C server test-race
       - name: Report runner resources and kernel kills
         if: ${{ always() }}
@@ -150,8 +152,6 @@ jobs:
           sudo dmesg -T | grep -iE 'out of memory|oom-kill|killed process' || echo none
       - name: Verify independent modules
         if: ${{ !cancelled() }}
-        env:
-          GO_TEST_RACE_FLAGS: -p 2
         run: make independent-modules
       - name: Verify internal module pins
         if: ${{ !cancelled() }}

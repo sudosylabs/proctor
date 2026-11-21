@@ -32,7 +32,7 @@ func TestProviderHTTPHasBoundedBodiesAndProtocolSpecificCredentials(t *testing.T
 	defer server.Close()
 	client, err := NewClient(Config{BaseURL: server.URL + "/v1/", APIKey: "synthetic-key", Timeout: time.Second, MaxResponseBytes: 1024})
 	require.NoError(t, err)
-	response, err := client.Send(t.Context(), true, struct{}{})
+	response, err := client.Send(t.Context(), Messages, struct{}{})
 	require.NoError(t, err)
 	defer func() { require.NoError(t, response.Body.Close()) }()
 	data, err := io.ReadAll(response.Body)
@@ -129,7 +129,7 @@ func TestOverloadCarriesRetryAfter(t *testing.T) {
 	defer server.Close()
 	client, err := NewClient(Config{BaseURL: server.URL, Timeout: time.Second, MaxResponseBytes: 1024})
 	require.NoError(t, err)
-	response, err := client.Send(t.Context(), false, struct{}{})
+	response, err := client.Send(t.Context(), ChatCompletions, struct{}{})
 	if response != nil {
 		require.NoError(t, response.Body.Close())
 	}

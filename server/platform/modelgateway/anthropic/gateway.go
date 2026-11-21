@@ -116,7 +116,7 @@ func (g *Gateway) Stream(ctx context.Context, request assistant.ModelRequest) (a
 	if err != nil {
 		return nil, &assistant.ModelError{Class: assistant.ModelInvalid}
 	}
-	response, err := g.client.Send(ctx, true, wire)
+	response, err := g.client.Send(ctx, modelgateway.Messages, wire)
 	if err != nil {
 		return nil, err
 	}

@@ -53,8 +53,8 @@ func validateAssistant(assistant Assistant, add func(string, string)) {
 			add(field+".name", "must be a unique lowercase name of at most 63 bytes")
 		}
 		seen[provider.Name] = true
-		if provider.Kind != "openai_compatible" && provider.Kind != "anthropic" {
-			add(field+".kind", "must be openai_compatible or anthropic")
+		if provider.Kind != "openai_compatible" && provider.Kind != "openai_responses" && provider.Kind != "anthropic" {
+			add(field+".kind", "must be openai_compatible, openai_responses or anthropic")
 		}
 		base, err := url.Parse(provider.BaseURL)
 		if err != nil || base.Hostname() == "" || (base.Scheme != "https" && base.Scheme != "http") ||

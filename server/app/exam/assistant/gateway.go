@@ -35,8 +35,13 @@ type ModelRequest struct {
 	MaxOutputTokens int64
 }
 
+// MaximumModelReplayBytes bounds provider-specific state kept for a tool round.
+const MaximumModelReplayBytes = 256 << 10
+
 // ModelMessage keeps user, assistant and tool data separate from the trusted system prompt.
 type ModelMessage struct {
+	// Replay is opaque to the application and stays in the active model loop.
+	Replay  []json.RawMessage
 	Role    string
 	Text    string
 	Calls   []ModelToolCall
@@ -68,6 +73,7 @@ const (
 	ModelToolCallArgsDelta ModelEventKind = "tool_call_args_delta"
 	ModelToolCallEnd       ModelEventKind = "tool_call_end"
 	ModelUsageEvent        ModelEventKind = "usage"
+	ModelReplayEvent       ModelEventKind = "replay"
 	ModelStop              ModelEventKind = "stop"
 	ModelErrorEvent        ModelEventKind = "error"
 )
@@ -94,6 +100,7 @@ func (u ModelUsage) Valid() bool {
 // ModelEvent text remains private until the application has applied the help-level checks.
 type ModelEvent struct {
 	Kind    ModelEventKind
+	Replay  []json.RawMessage
 	Text    string
 	ID      string
 	Name    string

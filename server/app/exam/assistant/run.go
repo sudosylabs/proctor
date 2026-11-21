@@ -170,7 +170,7 @@ func (r *turnRun) reply() turnEnd {
 			if r.calls >= r.service.limits.MaxCallsPerTurn {
 				return turnEnd{reason: "budget_exhausted"}
 			}
-			messages = append(messages, ModelMessage{Role: "assistant", Text: response.text, Calls: response.calls})
+			messages = append(messages, ModelMessage{Role: "assistant", Text: response.text, Calls: response.calls, Replay: response.replay})
 			for _, call := range response.calls {
 				if r.calls >= r.service.limits.MaxCallsPerTurn {
 					return turnEnd{reason: "budget_exhausted"}
@@ -213,9 +213,10 @@ func (r *turnRun) stopped(err error) turnEnd {
 }
 
 type modelResponse struct {
-	text  string
-	calls []ModelToolCall
-	stop  string
+	replay []json.RawMessage
+	text   string
+	calls  []ModelToolCall
+	stop   string
 }
 
 // call makes one model call. The budget is reserved first, so a turn never
@@ -332,6 +333,8 @@ func (r *turnRun) stream(request ModelRequest) (modelResponse, *ModelUsage, *Mod
 				value := event.Usage
 				usage = &value
 			}
+		case ModelReplayEvent:
+			response.replay = event.Replay
 		case ModelStop:
 			response.stop = event.Reason
 		case ModelErrorEvent:

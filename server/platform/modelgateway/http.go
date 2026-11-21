@@ -68,18 +68,34 @@ func NewClient(config Config) (*Client, error) {
 		base: *base, key: config.APIKey, maximum: config.MaxResponseBytes}, nil
 }
 
+// Endpoint identifies the provider protocol selected by composition.
+type Endpoint uint8
+
+const (
+	ChatCompletions Endpoint = iota + 1
+	Messages
+	Responses
+)
+
 // Send has a closed endpoint vocabulary; a request can never select its own URL.
-func (c *Client) Send(ctx context.Context, anthropic bool, body any) (*http.Response, error) {
+func (c *Client) Send(ctx context.Context, endpoint Endpoint, body any) (*http.Response, error) {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return nil, &assistant.ModelError{Class: assistant.ModelInvalid}
 	}
 	target := c.base
-	endpoint := "chat/completions"
-	if anthropic {
-		endpoint = "messages"
+	var path string
+	switch endpoint {
+	case ChatCompletions:
+		path = "chat/completions"
+	case Messages:
+		path = "messages"
+	case Responses:
+		path = "responses"
+	default:
+		return nil, &assistant.ModelError{Class: assistant.ModelInvalid}
 	}
-	target.Path = strings.TrimRight(target.Path, "/") + "/" + endpoint
+	target.Path = strings.TrimRight(target.Path, "/") + "/" + path
 	target.RawPath = ""
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(encoded))
 	if err != nil {
@@ -87,7 +103,7 @@ func (c *Client) Send(ctx context.Context, anthropic bool, body any) (*http.Resp
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "text/event-stream, application/json")
-	if anthropic {
+	if endpoint == Messages {
 		request.Header.Set("anthropic-version", "2023-06-01")
 		if c.key != "" {
 			request.Header.Set("x-api-key", c.key)

@@ -24,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/platform/modelgateway"
 	"github.com/sudosylabs/proctor/server/platform/modelgateway/anthropic"
 	"github.com/sudosylabs/proctor/server/platform/modelgateway/openaicompat"
+	"github.com/sudosylabs/proctor/server/platform/modelgateway/openairesponses"
 	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/secretseal"
 )
@@ -211,6 +212,8 @@ func assistantGateway(cfg config.Assistant) (assistant.ModelGateway, error) {
 		switch provider.Kind {
 		case "openai_compatible":
 			gateway, err = openaicompat.New(transport)
+		case "openai_responses":
+			gateway, err = openairesponses.New(transport)
 		case "anthropic":
 			gateway, err = anthropic.New(transport)
 		default:

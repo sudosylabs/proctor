@@ -62,6 +62,11 @@ Use `Kind: "openai_compatible"` for vLLM, Ollama and LiteLLM.
 
 ### Hosted vendors
 
+Use `Kind: "openai_responses"` for OpenAI with the versioned API base URL.
+Proctor sends `store: false` and keeps the conversation history itself.
+It returns encrypted reasoning items with tool results during the active
+turn. These items stay out of the transcript.
+
 Use `Kind: "anthropic"` for the Anthropic Messages API. Use
 `Kind: "openai_compatible"` for a vendor that offers the OpenAI chat
 completions API. Take the base URL, including its version path, from the

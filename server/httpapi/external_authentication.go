@@ -154,7 +154,7 @@ func externalAuthenticationResource(
 				"authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"authentication.external.invalid", "authentication.external.second_factor_expired", "authentication.external.unavailable",
 				"authentication.internal", "authentication.sessions.maximum_reached", "audit.unavailable",
-				"authentication.desktop_authorization.invalid", "authentication.desktop_authorization.rejected",
+				"authentication.desktop_authorization.rejected",
 				"authentication.desktop_authorization.unavailable", "authentication.desktop_authorization.account_session_locked",
 			},
 			Handle: h.completeSecondFactor,

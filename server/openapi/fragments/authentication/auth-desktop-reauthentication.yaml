@@ -86,7 +86,7 @@ paths:
       description: Uses the Desktop reauthentication cookie and verifies an authenticator code or one unused recovery code. The authenticated browser context can then be approved to finish confirming the Desktop Session.
       tags: [Authentication]
       x-proctor-auth: public
-      x-proctor-error-codes: [request.invalid, authentication.credential_ambiguous, authentication.desktop_reauthentication.invalid, authentication.desktop_reauthentication.denied, authentication.reauthentication_method_required, authentication.credentials_invalid, authentication.internal, audit.unavailable, authentication.external.invalid, authentication.external.second_factor_expired, authentication.external.unavailable, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable]
+      x-proctor-error-codes: [request.invalid, authentication.credential_ambiguous, authentication.desktop_reauthentication.invalid, authentication.desktop_reauthentication.denied, authentication.credentials_invalid, authentication.internal, audit.unavailable, authentication.external.invalid, authentication.external.second_factor_expired, authentication.external.unavailable, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable]
       x-proctor-idempotency: none
       security: []
       requestBody: {$ref: '#/components/requestBodies/MFACode'}

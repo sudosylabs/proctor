@@ -40378,7 +40378,6 @@
           "authentication.credential_ambiguous",
           "authentication.desktop_reauthentication.invalid",
           "authentication.desktop_reauthentication.denied",
-          "authentication.reauthentication_method_required",
           "authentication.credentials_invalid",
           "authentication.internal",
           "audit.unavailable",
@@ -40924,7 +40923,6 @@
           "authentication.internal",
           "authentication.sessions.maximum_reached",
           "audit.unavailable",
-          "authentication.desktop_authorization.invalid",
           "authentication.desktop_authorization.rejected",
           "authentication.desktop_authorization.unavailable",
           "authentication.desktop_authorization.account_session_locked"

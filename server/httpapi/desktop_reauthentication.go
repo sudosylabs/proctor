@@ -108,7 +108,7 @@ func desktopReauthenticationResource(app *identity.Service, cookies route.Cookie
 			MaxBodyBytes: 1024,
 			Errors: []string{
 				"request.invalid", "authentication.credential_ambiguous", "authentication.desktop_reauthentication.invalid",
-				"authentication.desktop_reauthentication.denied", "authentication.reauthentication_method_required",
+				"authentication.desktop_reauthentication.denied",
 				"authentication.credentials_invalid", "authentication.internal", "audit.unavailable",
 				"authentication.external.invalid", "authentication.external.second_factor_expired",
 				"authentication.external.unavailable", "authentication.mfa.code_invalid", "authentication.mfa.unavailable",

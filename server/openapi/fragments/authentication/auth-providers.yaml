@@ -197,7 +197,7 @@ paths:
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-idempotency: none
-      x-proctor-error-codes: [request.invalid, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.external.invalid, authentication.external.second_factor_expired, authentication.external.unavailable, authentication.internal, authentication.sessions.maximum_reached, audit.unavailable, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked]
+      x-proctor-error-codes: [request.invalid, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.external.invalid, authentication.external.second_factor_expired, authentication.external.unavailable, authentication.internal, authentication.sessions.maximum_reached, audit.unavailable, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked]
       security: []
       requestBody: {$ref: '#/components/requestBodies/MFACode'}
       responses:

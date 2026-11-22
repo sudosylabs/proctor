@@ -18,7 +18,6 @@ import (
 	"image"
 	"io"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -43,8 +42,6 @@ const (
 	maximumExamResourcePixels = 25_000_000
 	examResourceCopyBuffer    = 32 << 10
 )
-
-var disablePDFCPUConfigDir sync.Once
 
 // StoreExamResource validates body and stores the authored bytes unchanged
 // under a new rendition ID. The VFS key never leaves this package.
@@ -246,7 +243,7 @@ func validateExamResource(ctx context.Context, source io.ReadSeeker, mediaType m
 	var err error
 	switch mediaType {
 	case model.ExamResourceMediaPDF:
-		err = validateExamResourcePDF(file)
+		err = validateExamResourcePDF(ctx, file)
 	case model.ExamResourceMediaPNG, model.ExamResourceMediaJPEG, model.ExamResourceMediaWebP:
 		err = validateExamResourceImage(file, mediaType, size)
 	case model.ExamResourceMediaJSON:
@@ -268,8 +265,7 @@ func validateExamResource(ctx context.Context, source io.ReadSeeker, mediaType m
 }
 
 func examResourcePDFConfiguration() *pdfmodel.Configuration {
-	disablePDFCPUConfigDir.Do(pdfapi.DisableConfigDir)
-	configuration := pdfmodel.NewDefaultConfiguration()
+	configuration := pdfmodel.NewStatelessConfiguration()
 	configuration.CheckFileNameExt = false
 	configuration.DecodeAllStreams = false
 	configuration.ValidationMode = pdfmodel.ValidationStrict
@@ -284,17 +280,17 @@ func examResourcePDFConfiguration() *pdfmodel.Configuration {
 	return configuration
 }
 
-func validateExamResourcePDF(file io.ReadSeeker) error {
-	ctx, err := pdfapi.ReadAndValidate(file, examResourcePDFConfiguration())
-	if err != nil || ctx.Encrypt != nil {
+func validateExamResourcePDF(ctx context.Context, file io.ReadSeeker) error {
+	document, err := pdfapi.ReadAndValidate(ctx, file, examResourcePDFConfiguration())
+	if err != nil || document.Encrypt != nil {
 		return ErrInvalidExamResourceContent
 	}
-	for objectNumber, entry := range ctx.Table {
+	for objectNumber, entry := range document.Table {
 		if entry == nil || entry.Free || entry.Generation == nil {
 			continue
 		}
 		ref := types.NewIndirectRef(objectNumber, *entry.Generation)
-		object, err := ctx.Dereference(*ref)
+		object, err := document.Dereference(*ref)
 		if err != nil || examResourcePDFObjectIsUnsafe(object) {
 			return ErrInvalidExamResourceContent
 		}

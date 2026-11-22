@@ -455,14 +455,11 @@ func (r *boundedExamResourceReader) Read(buffer []byte) (int, error) {
 
 func testExamResourcePDF(t *testing.T, mutate func(*pdfmodel.XRefTable, types.Dict)) []byte {
 	t.Helper()
-	xRefTable, err := pdfcpu.CreateDemoXRef()
+	xRefTable, err := pdfcpu.CreateXRefTableWithRootDict()
 	require.NoError(t, err)
 	root, err := xRefTable.Catalog()
 	require.NoError(t, err)
-	page := pdfmodel.Page{MediaBox: types.RectForFormat("A4"), Fm: pdfmodel.FontMap{}, Buf: new(bytes.Buffer)}
-	pdfcpu.CreateTestPageContent(page)
-	err = pdfcpu.AddPageTreeWithSamplePage(xRefTable, root, page)
-	require.NoError(t, err)
+	addExamResourceTestPage(t, xRefTable, root)
 	if mutate != nil {
 		mutate(xRefTable, root)
 	}
@@ -470,11 +467,32 @@ func testExamResourcePDF(t *testing.T, mutate func(*pdfmodel.XRefTable, types.Di
 	conf.WriteObjectStream = true
 	conf.WriteXRefStream = true
 	path := filepath.Join(t.TempDir(), "resource.pdf")
-	err = pdfapi.CreatePDFFile(xRefTable, path, conf)
+	err = pdfapi.CreatePDFFile(t.Context(), xRefTable, path, conf)
 	require.NoError(t, err)
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return raw
+}
+
+// addExamResourceTestPage gives the catalog a page tree holding one A4 page
+// that draws a rectangle, so the document is a real, valid PDF.
+func addExamResourceTestPage(t *testing.T, xRefTable *pdfmodel.XRefTable, root types.Dict) {
+	t.Helper()
+	mediaBox := types.RectForFormat("A4").Array()
+	pages := types.Dict(map[string]types.Object{"Type": types.Name("Pages"), "Count": types.Integer(1), "MediaBox": mediaBox})
+	pagesRef, err := xRefTable.IndRefForNewObject(pages)
+	require.NoError(t, err)
+	content, err := xRefTable.NewStreamDictForBuf([]byte("72 72 144 144 re S\n"))
+	require.NoError(t, err)
+	require.NoError(t, content.Encode())
+	contentRef, err := xRefTable.IndRefForNewObject(*content)
+	require.NoError(t, err)
+	pageRef, err := xRefTable.IndRefForNewObject(types.Dict(map[string]types.Object{
+		"Type": types.Name("Page"), "Parent": *pagesRef, "Contents": *contentRef, "Resources": types.NewDict(),
+	}))
+	require.NoError(t, err)
+	pages.Insert("Kids", types.Array{*pageRef})
+	root.Insert("Pages", *pagesRef)
 }
 
 func testExamResourceAttachmentPDF(t *testing.T) []byte {
@@ -485,7 +503,7 @@ func testExamResourceAttachmentPDF(t *testing.T) []byte {
 	attachment := filepath.Join(directory, "answers.txt")
 	require.NoError(t, os.WriteFile(input, testExamResourcePDF(t, nil), 0o600))
 	require.NoError(t, os.WriteFile(attachment, []byte("hidden"), 0o600))
-	require.NoError(t, pdfapi.AddAttachmentsFile(input, output, []string{attachment}, false, nil))
+	require.NoError(t, pdfapi.AddAttachmentsFile(t.Context(), input, output, []string{attachment}, false, nil))
 	raw, err := os.ReadFile(output)
 	require.NoError(t, err)
 	return raw

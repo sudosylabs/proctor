@@ -9,7 +9,8 @@ export type DesktopReauthenticationProvider = components["schemas"]["ExternalAut
 
 /** The safe projection of one bound Desktop reauthentication. */
 export interface DesktopReauthenticationContext {
-  state: "bound" | "authenticated";
+  /** `second_factor_required`: the primary proof succeeded and a Proctor code is needed. */
+  state: "bound" | "second_factor_required" | "authenticated";
   /** The Desktop Session account's display name. */
   name: string;
   /** Present only when the Desktop Session signed in through a provider. */
@@ -31,8 +32,17 @@ export type DesktopReauthenticationContextResult =
 
 export type DesktopReauthenticationPasswordResult =
   | { kind: "authenticated"; context: DesktopReauthenticationContext }
+  | { kind: "second_factor_required"; context: DesktopReauthenticationContext }
   | { kind: "invalid_password" }
   | { kind: "rate_limited" }
+  | DesktopReauthenticationFailure;
+
+export type DesktopReauthenticationCodeResult =
+  | { kind: "authenticated"; context: DesktopReauthenticationContext }
+  | { kind: "code_invalid" }
+  | { kind: "rate_limited" }
+  /** The paused proof ran out before its code. */
+  | { kind: "expired" }
   | DesktopReauthenticationFailure;
 
 export type DesktopReauthenticationApprovalResult =
@@ -72,13 +82,35 @@ export async function proveDesktopReauthenticationPassword(password: string): Pr
     const { data, error, response } = await apiClient.POST("/api/v1/auth/desktop/reauthentications/authenticate/password", {
       body: { password },
     });
-    if (response.status === 200 && validServerContext(data) && data.state === "authenticated") {
-      return { kind: "authenticated", context: projectContext(data) };
+    if (response.status === 200 && validServerContext(data) && data.state !== "bound") {
+      return { kind: data.state, context: projectContext(data) };
     }
     const code = readProblemValue(error)?.code;
     if (code === "authentication.credentials_invalid") return { kind: "invalid_password" };
     if (code === "authentication.rate_limited") return { kind: "rate_limited" };
     return failureFromCode(code);
+  } catch {
+    return { kind: "unavailable" };
+  }
+}
+
+// Finishes a paused proof with the account's Proctor code or a recovery code.
+// The binding cookie names the request; the code is sent once and not kept.
+export async function proveDesktopReauthenticationCode(code: string): Promise<DesktopReauthenticationCodeResult> {
+  try {
+    const { data, error, response } = await apiClient.POST("/api/v1/auth/desktop/reauthentications/authenticate/second-factor", {
+      body: { code },
+    });
+    if (response.status === 200 && validServerContext(data) && data.state === "authenticated") {
+      return { kind: "authenticated", context: projectContext(data) };
+    }
+    const problem = readProblemValue(error)?.code;
+    if (problem === "authentication.mfa.code_invalid") return { kind: "code_invalid" };
+    if (problem === "authentication.rate_limited") return { kind: "rate_limited" };
+    if (problem === "authentication.external.second_factor_expired" || problem === "authentication.external.invalid") {
+      return { kind: "expired" };
+    }
+    return failureFromCode(problem);
   } catch {
     return { kind: "unavailable" };
   }
@@ -123,7 +155,8 @@ function projectContext(value: ServerContext): DesktopReauthenticationContext {
 }
 
 function validServerContext(value: unknown): value is ServerContext {
-  if (!isRecord(value) || (value.state !== "bound" && value.state !== "authenticated") ||
+  if (!isRecord(value) ||
+    (value.state !== "bound" && value.state !== "second_factor_required" && value.state !== "authenticated") ||
     !boundedString(value.display_name, 256) || !isWireTimestamp(value.expires_at)) {
     return false;
   }

@@ -1,0 +1,9 @@
+@layer components {
+  .page {
+    display: flex;
+    flex-direction: column;
+    inline-size: 100%;
+    min-inline-size: 0;
+    gap: var(--proctor-space-6);
+  }
+}

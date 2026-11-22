@@ -20,7 +20,8 @@ export interface DesktopAuthorizationContext {
   externalProviders: DesktopAuthorizationProvider[];
   installation: string;
   localLoginEnabled: boolean;
-  state: "bound" | "authenticated";
+  /** `second_factor_required`: a provider proved the account and Proctor still needs its code. */
+  state: "bound" | "second_factor_required" | "authenticated";
 }
 
 export type DesktopAuthorizationAccount = NonNullable<DesktopAuthorizationContext["account"]>;
@@ -262,7 +263,7 @@ function projectContext(
 function validServerContext(value: unknown): value is ServerContext {
   if (
     !isRecord(value) ||
-    (value.state !== "bound" && value.state !== "authenticated")
+    (value.state !== "bound" && value.state !== "second_factor_required" && value.state !== "authenticated")
   ) {
     return false;
   }

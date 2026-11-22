@@ -5,21 +5,23 @@ import {
   bindDesktopReauthentication,
   cancelDesktopReauthentication,
   desktopReauthenticationProviderURL,
+  proveDesktopReauthenticationCode,
   proveDesktopReauthenticationPassword,
   requestDesktopReauthenticationContext,
   type DesktopReauthenticationContext,
   type DesktopReauthenticationProof,
 } from "./DesktopReauthenticationApi";
 
+/** `code`: the primary proof succeeded and the account's Proctor code finishes it. */
 export type DesktopReauthenticationView =
-  | { kind: "checking" | "returning" | "approved" | "canceled" | "invalid" | "unavailable" }
-  | { kind: "proof"; context: DesktopReauthenticationContext };
+  | { kind: "checking" | "returning" | "approved" | "canceled" | "invalid" | "unavailable" | "expired" }
+  | { kind: "proof" | "code"; context: DesktopReauthenticationContext };
 
-export type DesktopReauthenticationFeedback = "invalid_password" | "rate_limited" | "unavailable";
+export type DesktopReauthenticationFeedback = "invalid_password" | "code_invalid" | "rate_limited" | "unavailable";
 
 export interface DesktopReauthenticationSnapshot {
   view: DesktopReauthenticationView;
-  pending?: "password" | "provider" | "cancel";
+  pending?: "password" | "provider" | "code" | "cancel";
   feedback?: DesktopReauthenticationFeedback;
   /** The provider returned without counting as proof for this Desktop. */
   providerFailed: boolean;
@@ -28,6 +30,7 @@ export interface DesktopReauthenticationSnapshot {
 
 export interface DesktopReauthenticationActions {
   provePassword(password: string): Promise<void>;
+  proveCode(code: string): Promise<void>;
   chooseProvider(): void;
   cancel(): Promise<void>;
   retry(): void;
@@ -50,6 +53,7 @@ export const desktopReauthenticationAPI = {
   approve: approveDesktopReauthentication,
   bind: bindDesktopReauthentication,
   cancel: cancelDesktopReauthentication,
+  code: proveDesktopReauthenticationCode,
   context: requestDesktopReauthenticationContext,
   password: proveDesktopReauthenticationPassword,
   providerURL: desktopReauthenticationProviderURL,
@@ -82,7 +86,7 @@ export function createDesktopReauthenticationJourney(
     for (const listener of listeners) listener();
   }
 
-  function terminal(kind: "invalid" | "unavailable" | "canceled") {
+  function terminal(kind: "invalid" | "unavailable" | "canceled" | "expired") {
     update({ view: { kind }, pending: undefined, feedback: undefined, focusHeading: true });
   }
 
@@ -119,14 +123,14 @@ export function createDesktopReauthenticationJourney(
         await handBack(attempt);
         return;
       }
-      update({ view: { kind: "proof", context: loaded.context } });
+      update({ view: { kind: loaded.context.state === "second_factor_required" ? "code" : "proof", context: loaded.context } });
     } catch {
       if (active && attempt === generation) terminal("unavailable");
     }
   }
 
-  function idleProof(): DesktopReauthenticationContext | undefined {
-    return active && snapshot.pending === undefined && snapshot.view.kind === "proof" ? snapshot.view.context : undefined;
+  function idleProof(kind: "proof" | "code" = "proof"): DesktopReauthenticationContext | undefined {
+    return active && snapshot.pending === undefined && snapshot.view.kind === kind ? snapshot.view.context : undefined;
   }
 
   return {
@@ -162,6 +166,9 @@ export function createDesktopReauthenticationJourney(
         case "authenticated":
           await handBack(attempt);
           return;
+        case "second_factor_required":
+          update({ view: { kind: "code", context: result.context }, pending: undefined, focusHeading: true });
+          return;
         case "invalid_password":
         case "rate_limited":
         case "unavailable":
@@ -169,6 +176,26 @@ export function createDesktopReauthenticationJourney(
           return;
         case "invalid":
           terminal("invalid");
+      }
+    },
+    async proveCode(code) {
+      if (idleProof("code") === undefined) return;
+      const attempt = ++generation;
+      update({ pending: "code", feedback: undefined });
+      const result = await api.code(code);
+      if (!active || attempt !== generation) return;
+      switch (result.kind) {
+        case "authenticated":
+          await handBack(attempt);
+          return;
+        case "code_invalid":
+        case "rate_limited":
+        case "unavailable":
+          update({ pending: undefined, feedback: result.kind });
+          return;
+        case "expired":
+        case "invalid":
+          terminal(result.kind);
       }
     },
     chooseProvider() {
@@ -182,7 +209,7 @@ export function createDesktopReauthenticationJourney(
       }
     },
     async cancel() {
-      if (idleProof() === undefined) return;
+      if (idleProof() === undefined && idleProof("code") === undefined) return;
       const attempt = ++generation;
       update({ pending: "cancel", feedback: undefined });
       const result = await api.cancel(input.state!);

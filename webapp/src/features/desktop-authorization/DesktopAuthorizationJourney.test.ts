@@ -23,6 +23,10 @@ function setup(currentSession = true) {
     context: vi.fn<typeof desktopJourneyAPI.context>().mockResolvedValue({ kind: "ready", context: bound }),
     providerURL: vi.fn<typeof desktopJourneyAPI.providerURL>().mockReturnValue("/api/v1/auth/desktop/authorizations/authenticate/providers/campus/login?state=state"),
     reset: vi.fn<typeof desktopJourneyAPI.reset>().mockResolvedValue({ kind: "reset" }),
+    secondFactor: vi.fn<typeof desktopJourneyAPI.secondFactor>().mockResolvedValue({
+      kind: "ready", context: { purpose: "desktop_authorization", name: "Student", provider: "Campus", expiresAt: "1970-01-01T00:10:00Z" },
+    }),
+    completeSecondFactor: vi.fn<typeof desktopJourneyAPI.completeSecondFactor>().mockResolvedValue({ kind: "desktop_authenticated" }),
   };
   const navigate = vi.fn();
   const journey = createDesktopAuthorizationJourney(input, api, navigate);
@@ -169,5 +173,63 @@ describe("Desktop Authorization journey", () => {
     expect(api.providerURL).toHaveBeenCalledExactlyOnceWith("campus", "state");
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(journey.getSnapshot().pending).toBe("provider");
+  });
+  describe("after a provider that proved one factor", () => {
+    const paused: DesktopAuthorizationContext = { ...bound, state: "second_factor_required", localLoginEnabled: false, externalProviders: [] };
+
+    it("asks for the Proctor code before Allow, then offers Allow", async () => {
+      const { journey, api } = setup(false);
+      api.context.mockResolvedValueOnce({ kind: "ready", context: paused });
+      await journey.start();
+      const view = journey.getSnapshot().view;
+      expect(view.kind).toBe("second_factor");
+      if (view.kind === "second_factor") expect(view.secondFactor.provider).toBe("Campus");
+      expect(api.authenticateSession).not.toHaveBeenCalled();
+      api.context.mockResolvedValueOnce({ kind: "ready", context: authenticated });
+      await journey.verifyCode("123456");
+      expect(api.completeSecondFactor).toHaveBeenCalledWith("desktop_authorization", "123456");
+      expect(journey.getSnapshot().view.kind).toBe("confirmation");
+      expect(journey.getSnapshot().focusHeading).toBe(true);
+    });
+
+    it("keeps the code step after a wrong code and reports too many attempts", async () => {
+      const { journey, api } = setup(false);
+      api.context.mockResolvedValue({ kind: "ready", context: paused });
+      await journey.start();
+      api.completeSecondFactor.mockResolvedValueOnce({ kind: "code_invalid" });
+      await journey.verifyCode("000000");
+      expect(journey.getSnapshot().view.kind).toBe("second_factor");
+      expect(journey.getSnapshot().codeFeedback).toBe("code_invalid");
+      api.completeSecondFactor.mockResolvedValueOnce({ kind: "rate_limited" });
+      await journey.verifyCode("111111");
+      expect(journey.getSnapshot().codeFeedback).toBe("rate_limited");
+    });
+
+    it("ends the request when the pause ran out", async () => {
+      const { journey, api } = setup(false);
+      api.context.mockResolvedValue({ kind: "ready", context: paused });
+      await journey.start();
+      api.completeSecondFactor.mockResolvedValueOnce({ kind: "expired" });
+      await journey.verifyCode("123456");
+      expect(journey.getSnapshot().view.kind).toBe("second_factor_expired");
+    });
+
+    it("reads an already expired pause as timed out", async () => {
+      const { journey, api } = setup(false);
+      api.context.mockResolvedValue({ kind: "ready", context: paused });
+      api.secondFactor.mockResolvedValueOnce({ kind: "expired" });
+      await journey.start();
+      expect(journey.getSnapshot().view.kind).toBe("second_factor_expired");
+    });
+
+    it("never offers Allow while the pause can't be read", async () => {
+      const { journey, api } = setup(false);
+      api.context.mockResolvedValue({ kind: "ready", context: paused });
+      api.secondFactor.mockResolvedValueOnce({ kind: "unavailable" });
+      await journey.start();
+      expect(journey.getSnapshot().view.kind).toBe("unavailable");
+      await journey.approve();
+      expect(api.approve).not.toHaveBeenCalled();
+    });
   });
 });

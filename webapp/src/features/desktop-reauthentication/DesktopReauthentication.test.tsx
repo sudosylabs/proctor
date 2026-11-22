@@ -21,6 +21,9 @@ function setup(context: DesktopReauthenticationContext = passwordContext) {
     approve: vi.fn<typeof desktopReauthenticationAPI.approve>().mockResolvedValue({ kind: "approved", redirectURL: redirect }),
     bind: vi.fn<typeof desktopReauthenticationAPI.bind>().mockResolvedValue({ kind: "bound" }),
     cancel: vi.fn<typeof desktopReauthenticationAPI.cancel>().mockResolvedValue({ kind: "canceled" }),
+    code: vi.fn<typeof desktopReauthenticationAPI.code>().mockResolvedValue({
+      kind: "authenticated", context: { ...context, state: "authenticated" },
+    }),
     context: vi.fn<typeof desktopReauthenticationAPI.context>().mockResolvedValue({ kind: "ready", context }),
     password: vi.fn<typeof desktopReauthenticationAPI.password>().mockResolvedValue({
       kind: "authenticated", context: { ...context, state: "authenticated" },
@@ -33,7 +36,7 @@ function setup(context: DesktopReauthenticationContext = passwordContext) {
 }
 
 function render(snapshot: DesktopReauthenticationSnapshot) {
-  const actions = { provePassword: vi.fn(), chooseProvider: vi.fn(), cancel: vi.fn(), retry: vi.fn() };
+  const actions = { provePassword: vi.fn(), proveCode: vi.fn(), chooseProvider: vi.fn(), cancel: vi.fn(), retry: vi.fn() };
   return renderToStaticMarkup(<DesktopReauthenticationContent snapshot={snapshot} actions={actions} />);
 }
 
@@ -119,5 +122,58 @@ describe("Desktop reauthentication journey", () => {
     await journey.start();
     expect(render(journey.getSnapshot())).toContain("Campus sign-in couldn’t confirm it’s you.");
     expect(api.bind).not.toHaveBeenCalled();
+  });
+  it("asks a single-factor password Session for its Proctor code, then hands back", async () => {
+    const { api, journey, navigate } = setup();
+    api.password.mockResolvedValue({ kind: "second_factor_required", context: { ...passwordContext, state: "second_factor_required" } });
+    await journey.start();
+    await journey.provePassword("correct horse");
+    expect(journey.getSnapshot().view.kind).toBe("code");
+    const markup = render(journey.getSnapshot());
+    expect(markup).toContain("Password confirmed");
+    expect(markup).toContain("Enter a code from your authenticator app or one of your recovery codes to finish confirming it’s you.");
+    expect(markup).toContain(">Confirm<");
+    expect(markup).not.toContain('type="password"');
+    await journey.proveCode("123456");
+    expect(api.code).toHaveBeenCalledWith("123456");
+    expect(navigate).toHaveBeenCalledWith(redirect, true);
+  });
+
+  it("names the provider when a provider proof waits for the code", async () => {
+    const { journey } = setup({ ...providerContext, state: "second_factor_required" });
+    await journey.start();
+    expect(journey.getSnapshot().view.kind).toBe("code");
+    expect(render(journey.getSnapshot())).toContain("Campus sign-in confirmed");
+  });
+
+  it("keeps the code step after a wrong code or too many attempts", async () => {
+    const { api, journey } = setup({ ...passwordContext, state: "second_factor_required" });
+    await journey.start();
+    api.code.mockResolvedValueOnce({ kind: "code_invalid" });
+    await journey.proveCode("000000");
+    expect(journey.getSnapshot().view.kind).toBe("code");
+    expect(render(journey.getSnapshot())).toContain("That code isn’t right. Check your authenticator app and try again.");
+    api.code.mockResolvedValueOnce({ kind: "rate_limited" });
+    await journey.proveCode("111111");
+    expect(render(journey.getSnapshot())).toContain("Too many attempts. Wait a moment, then try again.");
+  });
+
+  it("ends a paused proof that ran out", async () => {
+    const { api, journey, navigate } = setup({ ...passwordContext, state: "second_factor_required" });
+    await journey.start();
+    api.code.mockResolvedValueOnce({ kind: "expired" });
+    await journey.proveCode("123456");
+    const markup = render(journey.getSnapshot());
+    expect(markup).toContain("This took too long");
+    expect(markup).toContain("Not confirmed");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("lets the person cancel from the code step", async () => {
+    const { api, journey } = setup({ ...passwordContext, state: "second_factor_required" });
+    await journey.start();
+    await journey.cancel();
+    expect(api.cancel).toHaveBeenCalledWith("state");
+    expect(journey.getSnapshot().view.kind).toBe("canceled");
   });
 });

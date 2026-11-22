@@ -47,8 +47,10 @@ describe("hosted route descriptors", () => {
     ).toEqual({
       "/setup": "webapp.setup.document_title",
       "/login": "webapp.login.document_title",
+      "/login/verify": "webapp.login_verify.document_title",
       "/register": "webapp.register.document_title",
       "/authorize/desktop": "webapp.desktop_authorization.document_title",
+      "/authorize/desktop/verify": "webapp.desktop_authorization.verify.document_title",
       "/reauthenticate/desktop": "webapp.desktop_reauthentication.document_title",
       "/join": "webapp.join.document_title",
       "/account/forgot-password": "webapp.forgot_password.document_title",
@@ -181,6 +183,16 @@ describe("hosted route bootstrap", () => {
       replacements: ["https://proctor.example/authorize/desktop"],
       value: { route: "/authorize/desktop" },
     });
+  });
+
+  it("keeps only the request state on the Desktop code step", () => {
+    // The provider callback has already bound this browser by cookie; a
+    // handle or proof here is never a credential and leaves history at once.
+    expect(bootstrap("/authorize/desktop/verify?state=state&request=handle", "#proof=secret")).toEqual({
+      replacements: ["https://proctor.example/authorize/desktop/verify?state=state"],
+      value: { route: "/authorize/desktop/verify", state: "state" },
+    });
+    expect(bootstrap("/authorize/desktop/verify", "").value).toEqual({ route: "/authorize/desktop/verify" });
   });
 
   it("captures the Desktop reauthentication proof and the provider failure notice", () => {

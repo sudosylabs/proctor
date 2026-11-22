@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { desktopAccountName, type DesktopAuthorizationAccount, type DesktopAuthorizationContext, type DesktopAuthorizationProvider, type DesktopLocalAuthenticationSubmission } from "../../features/desktop-authorization/DesktopAuthorizationApi";
-import type { DesktopAuthorizationJourney, DesktopJourneySnapshot, DesktopLocalFeedback, DesktopTerminalState } from "../../features/desktop-authorization/DesktopAuthorizationJourney";
+import type { DesktopAuthorizationJourney, DesktopJourneySnapshot, DesktopLocalFeedback, DesktopSecondFactorFeedback, DesktopTerminalState } from "../../features/desktop-authorization/DesktopAuthorizationJourney";
+import { SecurityCodeForm } from "../AccountSecurity/SecurityCodeForm";
 import { formatDateTime } from "../../i18n/dateTime";
 import { message } from "../../i18n/messages";
 import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
@@ -30,7 +31,7 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
   const feedback = journey.snapshot.feedback === "unavailable"
     ? message("webapp.desktop_authorization.error.unavailable") : undefined;
   const effectiveTerminal = view.kind === "approved" || view.kind === "canceled" ||
-    view.kind === "invalid" || view.kind === "locked" ? view.kind : undefined;
+    view.kind === "invalid" || view.kind === "locked" || view.kind === "second_factor_expired" ? view.kind : undefined;
   if (effectiveTerminal !== undefined) {
     const heading = terminalCopy(effectiveTerminal).heading;
     return (
@@ -93,6 +94,21 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
         pending={pending}
         feedback={feedback}
         focusHeading={focusHeading}
+      />
+    );
+  }
+  if (view.kind === "second_factor") {
+    return (
+      <SecondFactorContent
+        cancel={journey.cancel}
+        codeFeedback={journey.snapshot.codeFeedback}
+        context={view.context}
+        feedback={feedback}
+        focusHeading={focusHeading}
+        pending={pending}
+        provider={view.secondFactor.provider}
+        expiresAt={view.secondFactor.expiresAt}
+        verify={journey.verifyCode}
       />
     );
   }
@@ -236,6 +252,76 @@ function AuthenticationContent({
           {message("webapp.desktop_authorization.cancel")}
         </Button>
         <FormFeedback message={feedback} />
+      </section>
+    </>
+  );
+}
+
+// After a provider that proved one factor, the person's own Proctor code
+// finishes the sign-in before Proctor Desktop's request can be allowed.
+function SecondFactorContent({
+  cancel, codeFeedback, context, expiresAt, feedback, focusHeading, pending, provider, verify,
+}: {
+  cancel(): void;
+  codeFeedback?: DesktopSecondFactorFeedback;
+  context: DesktopAuthorizationContext;
+  expiresAt: string;
+  feedback?: string;
+  focusHeading: boolean;
+  pending: DesktopJourneySnapshot["pending"];
+  provider: string;
+  verify(code: string): Promise<void>;
+}) {
+  const formMessage = codeFeedback === "rate_limited"
+    ? message("webapp.desktop_reauthentication.rate_limited") : feedback;
+  return (
+    <>
+      <TaskStateAnnouncement
+        message={pending === "verify" ? message("webapp.second_factor.verifying") : message("webapp.login.mfa.heading")}
+      />
+      <section className={styles.page} aria-labelledby="desktop-heading">
+        <AccessTaskIntro
+          focusHeading={focusHeading}
+          heading={message("webapp.login.mfa.heading")}
+          body={message("webapp.desktop_authorization.second_factor.lede", { Provider: provider })}
+          headingID="desktop-heading"
+        />
+        <SecurityCodeForm
+          pending={pending === "verify"}
+          onSubmit={verify}
+          errorMessage={codeFeedback === "code_invalid" ? message("webapp.second_factor.code_invalid") : undefined}
+          cancel={
+            <Button
+              disabled={pending !== undefined && pending !== "cancel"}
+              isLoading={pending === "cancel"}
+              loadingLabel={message("webapp.desktop_authorization.canceling")}
+              variant="text"
+              onClick={cancel}
+            >
+              {message("webapp.desktop_authorization.cancel")}
+            </Button>
+          }
+        />
+        <FormFeedback message={formMessage} />
+        <TaskRail>
+          <RailItem heading={message("webapp.desktop_authorization.second_factor.rail.next.heading")}>
+            <p>{message("webapp.desktop_authorization.second_factor.rail.next.body")}</p>
+          </RailItem>
+          <RailItem>
+            <FactList>
+              <Fact label={message("webapp.login_verify.rail.signed_in_with")}>{provider}</Fact>
+              <Fact label={message("webapp.desktop_authorization.device")}>
+                {context.deviceName || message("webapp.desktop_authorization.device_fallback")}
+              </Fact>
+              <Fact label={message("webapp.desktop_authorization.second_factor.rail.finish_by")}>
+                <time dateTime={expiresAt}>{formatDateTime(expiresAt)}</time>
+              </Fact>
+            </FactList>
+          </RailItem>
+          <RailItem heading={message("webapp.desktop_authorization.note.lead")}>
+            <p>{message("webapp.desktop_authorization.note.body")}</p>
+          </RailItem>
+        </TaskRail>
       </section>
     </>
   );
@@ -463,6 +549,12 @@ function terminalCopy(state: DesktopTerminalState): {
         status: { label: message("webapp.desktop_authorization.status.invalid"), tone: "danger" },
         heading: message("webapp.desktop_authorization.invalid.heading"),
         body: message("webapp.desktop_authorization.invalid.body"),
+      };
+    case "second_factor_expired":
+      return {
+        status: { label: message("webapp.desktop_authorization.second_factor.expired.status"), tone: "danger" },
+        heading: message("webapp.desktop_authorization.second_factor.expired.heading"),
+        body: message("webapp.desktop_authorization.second_factor.expired.body"),
       };
   }
 }

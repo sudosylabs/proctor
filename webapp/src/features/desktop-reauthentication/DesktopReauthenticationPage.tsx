@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { AccessPageShell, RailItem, TaskRail } from "../../components/AccessPageShell/AccessPageShell";
+import { SecurityCodeForm } from "../../components/AccountSecurity/SecurityCodeForm";
 import { AccessTaskIntro } from "../../components/AccessTaskIntro/AccessTaskIntro";
 import { Button } from "../../components/Button/Button";
 import { Fact, FactList } from "../../components/FactList/FactList";
@@ -73,9 +74,65 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
           <Button onClick={actions.retry}>{message("webapp.desktop_reauthentication.unavailable.retry")}</Button>
         </TaskStateActions>
       </Terminal>;
+    case "expired":
+      return <Terminal focusHeading={focusHeading} tone="danger"
+        statusLabel="webapp.desktop_reauthentication.second_factor.expired.status"
+        heading={message("webapp.desktop_reauthentication.second_factor.expired.heading")}
+        body={message("webapp.desktop_reauthentication.second_factor.expired.body")} />;
     case "proof":
       return <Proof actions={actions} context={view.context} snapshot={snapshot} />;
+    case "code":
+      return <CodeStep actions={actions} context={view.context} snapshot={snapshot} />;
   }
+}
+
+// A single-factor Desktop Session finishes confirming with the account's
+// Proctor code, which also raises that Session to two-step verification.
+function CodeStep({ actions, context, snapshot }: {
+  actions: DesktopReauthenticationActions;
+  context: DesktopReauthenticationContext;
+  snapshot: DesktopReauthenticationSnapshot;
+}) {
+  const { feedback, pending } = snapshot;
+  const provider = context.provider;
+  return (
+    <section className={styles.page} aria-labelledby={headingID}>
+      <TaskStateAnnouncement message={pending === "code" ? message("webapp.second_factor.verifying") : ""} />
+      <AccessTaskIntro headingID={headingID} focusHeading={snapshot.focusHeading}
+        status={{
+          label: provider === undefined
+            ? message("webapp.desktop_reauthentication.second_factor.status.password")
+            : message("webapp.desktop_reauthentication.second_factor.status.provider", { Provider: provider.display_name }),
+          tone: "success",
+        }}
+        heading={message("webapp.desktop_reauthentication.heading")}
+        body={message("webapp.reauthenticate.lede.strong")} />
+      <SecurityCodeForm pending={pending === "code"} onSubmit={actions.proveCode}
+        submitLabel={message("webapp.desktop_reauthentication.password.action")}
+        errorMessage={feedback === "code_invalid" ? message("webapp.second_factor.code_invalid") : undefined}
+        cancel={<Button variant="text" disabled={pending !== undefined && pending !== "cancel"}
+          isLoading={pending === "cancel"} loadingLabel={message("webapp.desktop_reauthentication.working")}
+          onClick={() => { void actions.cancel(); }}>
+          {message("webapp.desktop_reauthentication.cancel")}
+        </Button>} />
+      <FormFeedback message={feedbackMessage(feedback)} />
+      <TaskRail>
+        <RailItem>
+          <p>{message("webapp.desktop_reauthentication.note")}</p>
+        </RailItem>
+        <RailItem heading={message("webapp.desktop_reauthentication.second_factor.rail.why.heading")}>
+          <p>{message("webapp.desktop_reauthentication.second_factor.rail.why.body")}</p>
+        </RailItem>
+        <RailItem>
+          <FactList>
+            <Fact label={message("webapp.desktop_reauthentication.rail.expires")}>
+              <time dateTime={context.expiresAt}>{formatDateTime(context.expiresAt)}</time>
+            </Fact>
+          </FactList>
+        </RailItem>
+      </TaskRail>
+    </section>
+  );
 }
 
 function Terminal({ body, children, focusHeading, heading, statusLabel, tone }: {
@@ -185,6 +242,8 @@ function PasswordForm({ cancel, feedback, onSubmit, pending }: {
 function feedbackMessage(feedback: DesktopReauthenticationFeedback | undefined): string | undefined {
   switch (feedback) {
     case "invalid_password": return message("webapp.desktop_reauthentication.password.invalid");
+    // A wrong code is shown on the code field itself.
+    case "code_invalid": return undefined;
     case "rate_limited": return message("webapp.desktop_reauthentication.rate_limited");
     case "unavailable": return message("webapp.desktop_reauthentication.error.unavailable");
     default: return undefined;

@@ -48,6 +48,11 @@ updates:
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
     groups:
+      # vitest and its plugins must share a version, so every update to
+      # them, majors included, comes as one pull request. A group listed
+      # first takes its dependencies before the catch-all below.
+      vitest:
+        patterns: ['vitest', '@vitest/*']
       javascript-dependencies:
         patterns: ['*']
         update-types: [minor, patch]

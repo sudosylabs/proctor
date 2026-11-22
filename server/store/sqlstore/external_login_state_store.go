@@ -341,7 +341,11 @@ func (s SQLExternalLoginStateStore) Maintain(ctx context.Context, limit int) (*s
 			return nil, fmt.Errorf("inspect external login state maintenance: %w", err)
 		}
 
-		return &store.ExternalLoginStateMaintenanceResult{Terminalized: terminalized + pausesTerminalized, Purged: purged + pausesPurged, More: more || pausesPurged == limit}, nil
+		return &store.ExternalLoginStateMaintenanceResult{
+			Terminalized: terminalized + pausesTerminalized,
+			Purged:       purged + pausesPurged,
+			More:         more || pausesPurged == limit,
+		}, nil
 	})
 }
 

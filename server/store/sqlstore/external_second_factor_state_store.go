@@ -123,7 +123,9 @@ func requireSecondFactorPrimaryState(ctx context.Context, tx *sqlxTxWrapper, sta
 	if state.Purpose == model.ExternalAuthenticationPurposeLogin {
 		var id string
 		err := tx.Get(ctx, &id, `SELECT id FROM external_login_states
-            WHERE id = ? AND provider = ? AND (purpose = 'login' OR (purpose = 'mfa_recovery' AND target_user_id = ?)) AND consumed_at IS NOT NULL FOR KEY SHARE`,
+            WHERE id = ? AND provider = ? AND consumed_at IS NOT NULL
+                AND (purpose = 'login' OR (purpose = 'mfa_recovery' AND target_user_id = ?))
+            FOR KEY SHARE`,
 			state.ExternalLoginStateID.String(), state.Provider, state.UserID.String())
 		return translateError("external_login_state", state.ExternalLoginStateID.String(), err)
 	}

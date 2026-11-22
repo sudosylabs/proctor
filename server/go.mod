@@ -29,7 +29,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	github.com/sudosylabs/execenv v0.6.0
+	github.com/sudosylabs/execenv v0.6.1
 	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4
 	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4
@@ -125,7 +125,6 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	google.golang.org/genproto v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/grpc v1.83.2 // indirect

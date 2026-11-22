@@ -133,8 +133,31 @@ func externalAuthenticationResource(
 				"authentication.desktop_authorization.account_session_locked",
 				"authentication.credentials_invalid",
 				"authentication.mfa.enrollment_required",
+				"authentication.mfa.unavailable",
 			},
 			Protocol: h.complete,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/auth/external/second-factor",
+			Auth:   route.AuthPublic,
+			Errors: []string{"authentication.external.invalid", "authentication.external.second_factor_expired", "authentication.external.unavailable"},
+			Handle: h.secondFactorContext,
+		},
+		route.Endpoint{
+			Method:       http.MethodPost,
+			Path:         "/auth/external/second-factor",
+			Auth:         route.AuthPublic,
+			MaxBodyBytes: 1024,
+			Errors: []string{
+				"request.invalid", "authentication.mfa.code_invalid", "authentication.mfa.unavailable",
+				"authentication.rate_limited", "authentication.rate_limit_unavailable",
+				"authentication.external.invalid", "authentication.external.second_factor_expired", "authentication.external.unavailable",
+				"authentication.internal", "authentication.sessions.maximum_reached", "audit.unavailable",
+				"authentication.desktop_authorization.invalid", "authentication.desktop_authorization.rejected",
+				"authentication.desktop_authorization.unavailable", "authentication.desktop_authorization.account_session_locked",
+			},
+			Handle: h.completeSecondFactor,
 		},
 	)
 }
@@ -285,7 +308,11 @@ func (h externalAuthenticationHandlers) complete(
 	}
 
 	headers := route.CombineHeaders(clearBinding, route.CaptureHeaders(func(writer http.ResponseWriter) {
-		h.cookies.Attach(writer, completion.Tokens)
+		if completion.SecondFactor != nil {
+			h.cookies.AttachExternalSecondFactorBinding(writer, completion.SecondFactor.Binding, completion.SecondFactor.ExpiresAt)
+		} else {
+			h.cookies.Attach(writer, completion.Tokens)
+		}
 	}))
 	headers.Set("Cache-Control", "no-store")
 	return route.Redirect(completion.ReturnTo).WithHeaders(headers), nil

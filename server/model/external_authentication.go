@@ -73,12 +73,20 @@ type ExternalAuthenticationStart struct {
 
 // ExternalAuthenticationCompletion is the internal result of a successful
 // provider callback; its tokens follow the usual one-time session rules.
+// ExternalSecondFactorBinding is the raw browser binding returned only to the
+// HTTP cookie writer.
+type ExternalSecondFactorBinding struct {
+	Binding   string `json:"-"`
+	ExpiresAt int64
+}
+
 type ExternalAuthenticationCompletion struct {
-	Restart  *ExternalAuthenticationStart
-	User     *User
-	Session  *Session
-	Tokens   *AuthenticationTokens
-	ReturnTo string
+	SecondFactor *ExternalSecondFactorBinding
+	Restart      *ExternalAuthenticationStart
+	User         *User
+	Session      *Session
+	Tokens       *AuthenticationTokens
+	ReturnTo     string
 }
 
 // ExternalAuthenticationAssertion is the protocol-neutral result of a trusted

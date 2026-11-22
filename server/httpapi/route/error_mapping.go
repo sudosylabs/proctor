@@ -68,6 +68,7 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"authentication.external.provider_not_found":                  {status: http.StatusNotFound},
 	"authentication.external.rejected":                            {status: http.StatusUnauthorized},
 	"authentication.external.request.invalid":                     {status: http.StatusBadRequest},
+	"authentication.external.second_factor_expired":               {status: http.StatusGone},
 	"authentication.external.unavailable":                         {status: http.StatusBadGateway},
 	"authentication.internal":                                     {status: http.StatusInternalServerError},
 	"authentication.method.conflict":                              {status: http.StatusConflict},

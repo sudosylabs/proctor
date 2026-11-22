@@ -180,6 +180,8 @@ codes:
     description: "The identity provider rejected the sign-in."
   - code: authentication.external.request.invalid
     description: "The external authentication request is malformed."
+  - code: authentication.external.second_factor_expired
+    description: "The external sign-in second factor expired. Sign in again."
   - code: authentication.external.unavailable
     status: 502
     reason: "The upstream identity provider failed while the server acted as its gateway."

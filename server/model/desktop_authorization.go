@@ -39,15 +39,17 @@ const BrowserAuthenticationPurposeInvitationAcceptance BrowserAuthenticationPurp
 type BrowserAuthenticationState string
 
 const (
-	BrowserAuthenticationStatePending       BrowserAuthenticationState = "pending"
-	BrowserAuthenticationStateBound         BrowserAuthenticationState = "bound"
-	BrowserAuthenticationStateAuthenticated BrowserAuthenticationState = "authenticated"
-	BrowserAuthenticationStateCodeIssued    BrowserAuthenticationState = "code_issued"
-	BrowserAuthenticationStateExchanged     BrowserAuthenticationState = "exchanged"
-	BrowserAuthenticationStateCompleted     BrowserAuthenticationState = "completed"
-	BrowserAuthenticationStateCanceled      BrowserAuthenticationState = "canceled"
-	BrowserAuthenticationStateDenied        BrowserAuthenticationState = "denied"
-	BrowserAuthenticationStateExpired       BrowserAuthenticationState = "expired"
+	BrowserAuthenticationStatePending BrowserAuthenticationState = "pending"
+	BrowserAuthenticationStateBound   BrowserAuthenticationState = "bound"
+	// SecondFactorRequired is projected to the browser while a pause exists.
+	BrowserAuthenticationStateSecondFactorRequired BrowserAuthenticationState = "second_factor_required"
+	BrowserAuthenticationStateAuthenticated        BrowserAuthenticationState = "authenticated"
+	BrowserAuthenticationStateCodeIssued           BrowserAuthenticationState = "code_issued"
+	BrowserAuthenticationStateExchanged            BrowserAuthenticationState = "exchanged"
+	BrowserAuthenticationStateCompleted            BrowserAuthenticationState = "completed"
+	BrowserAuthenticationStateCanceled             BrowserAuthenticationState = "canceled"
+	BrowserAuthenticationStateDenied               BrowserAuthenticationState = "denied"
+	BrowserAuthenticationStateExpired              BrowserAuthenticationState = "expired"
 )
 
 // DesktopAuthorizationDenialReason is a closed, safe final denial. It is kept

@@ -93,10 +93,12 @@ type DesktopAuthorizationAuthentication struct {
 	AuthenticatedAt          time.Time
 	MFACompletedAt           model.OptionalTime
 	Capabilities             AccessDeploymentCapabilities
+	AuditEventID             model.AuditEventID
 }
 
 type DesktopAuthorizationAuthenticationResult struct {
-	Denied bool
+	Denied  bool
+	Context *DesktopAuthorizationContext
 }
 
 type DesktopAuthorizationAccountReset struct{ BindingHash string }

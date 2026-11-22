@@ -181,6 +181,16 @@ func (s *Service) completeExternalCallback(
 		return &model.ExternalAuthenticationCompletion{Restart: start}, nil
 	}
 
+	if assertion.AuthenticationStrength == model.AuthenticationSingleFactor {
+		required, factorErr := s.requiresLocalSecondFactor(ctx, resolution.User.ID)
+		if factorErr != nil {
+			return nil, factorErr
+		}
+		if required {
+			return s.pauseExternalSignIn(ctx, attempt, resolution, assertion, recovery.Generation)
+		}
+	}
+
 	if state.Purpose == model.ExternalAuthenticationPurposeDesktopAuthorization {
 		if !state.BrowserAuthenticationTransactionID.IsValid() {
 			return nil, authenticationUnavailable(errors.New("desktop authorization completion is unavailable"))

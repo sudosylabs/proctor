@@ -93,10 +93,12 @@ type DesktopAuthorizationAuthentication struct {
 	AuthenticatedAt          time.Time
 	MFACompletedAt           model.OptionalTime
 	Capabilities             AccessDeploymentCapabilities
+	AuditEventID             model.AuditEventID
 }
 
 type DesktopAuthorizationAuthenticationResult struct {
-	Denied bool
+	Denied  bool
+	Context *DesktopAuthorizationContext
 }
 
 type DesktopAuthorizationAccountReset struct{ BindingHash string }
@@ -161,6 +163,7 @@ type BrowserAuthenticationStore interface {
 	CreateDesktopReauthentication(context.Context, *DesktopReauthenticationCreation) (*DesktopAuthorizationCreated, error)
 	BindDesktopReauthentication(context.Context, *DesktopAuthorizationBinding) (*DesktopAuthorizationBound, error)
 	GetDesktopReauthenticationContext(context.Context, string) (*DesktopReauthenticationContext, error)
+	GetDesktopReauthenticationContextByID(context.Context, model.BrowserAuthenticationTransactionID) (*DesktopReauthenticationContext, error)
 	AuthenticateDesktopReauthentication(
 		context.Context,
 		*DesktopReauthenticationAuthentication,

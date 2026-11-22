@@ -2960,6 +2960,30 @@ func (s *timedExternalLoginStateStore) Maintain(arg0 context.Context, arg1 int) 
 	})
 }
 
+func (s *timedExternalLoginStateStore) CreateExternalSecondFactorState(arg0 context.Context, arg1 *store.ExternalSecondFactorStateCreation) (*model.ExternalSecondFactorState, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExternalLoginState, methodCreateExternalSecondFactorState), func(callCtx context.Context) (*model.ExternalSecondFactorState, error) {
+		return s.next.CreateExternalSecondFactorState(callCtx, arg1)
+	})
+}
+
+func (s *timedExternalLoginStateStore) GetExternalSecondFactorStateByBinding(arg0 context.Context, arg1 string, arg2 time.Time) (*model.ExternalSecondFactorState, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExternalLoginState, methodGetExternalSecondFactorStateByBinding), func(callCtx context.Context) (*model.ExternalSecondFactorState, error) {
+		return s.next.GetExternalSecondFactorStateByBinding(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExternalLoginStateStore) ExpireExternalSecondFactorState(arg0 context.Context, arg1 string) (bool, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExternalLoginState, methodExpireExternalSecondFactorState), func(callCtx context.Context) (bool, error) {
+		return s.next.ExpireExternalSecondFactorState(callCtx, arg1)
+	})
+}
+
+func (s *timedExternalLoginStateStore) ConsumeExternalSecondFactorState(arg0 context.Context, arg1 *store.ExternalSecondFactorStateConsumption) (*model.ExternalSecondFactorState, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExternalLoginState, methodConsumeExternalSecondFactorState), func(callCtx context.Context) (*model.ExternalSecondFactorState, error) {
+		return s.next.ConsumeExternalSecondFactorState(callCtx, arg1)
+	})
+}
+
 func (s *timedBrowserAuthenticationStore) CreateDesktopAuthorization(arg0 context.Context, arg1 *store.DesktopAuthorizationCreation) (*store.DesktopAuthorizationCreated, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodCreateDesktopAuthorization), func(callCtx context.Context) (*store.DesktopAuthorizationCreated, error) {
 		return s.next.CreateDesktopAuthorization(callCtx, arg1)
@@ -3047,6 +3071,12 @@ func (s *timedBrowserAuthenticationStore) BindDesktopReauthentication(arg0 conte
 func (s *timedBrowserAuthenticationStore) GetDesktopReauthenticationContext(arg0 context.Context, arg1 string) (*store.DesktopReauthenticationContext, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodGetDesktopReauthenticationContext), func(callCtx context.Context) (*store.DesktopReauthenticationContext, error) {
 		return s.next.GetDesktopReauthenticationContext(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) GetDesktopReauthenticationContextByID(arg0 context.Context, arg1 model.BrowserAuthenticationTransactionID) (*store.DesktopReauthenticationContext, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodGetDesktopReauthenticationContextByID), func(callCtx context.Context) (*store.DesktopReauthenticationContext, error) {
+		return s.next.GetDesktopReauthenticationContextByID(callCtx, arg1)
 	})
 }
 

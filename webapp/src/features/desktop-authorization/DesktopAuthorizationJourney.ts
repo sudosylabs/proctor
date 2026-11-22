@@ -15,9 +15,16 @@ import {
   type DesktopContextResult,
   type DesktopLocalAuthenticationSubmission,
 } from "./DesktopAuthorizationApi";
+import {
+  completeExternalSecondFactor,
+  requestExternalSecondFactorContext,
+  type ExternalSecondFactorContext,
+} from "../external-second-factor/ExternalSecondFactorApi";
 
-export type DesktopTerminalState = "approved" | "canceled" | "invalid" | "locked";
-type PendingAction = "approve" | "cancel" | "reset" | "authenticate" | "provider";
+/** `second_factor_expired`: the paused provider sign-in ran out before its code. */
+export type DesktopTerminalState = "approved" | "canceled" | "invalid" | "locked" | "second_factor_expired";
+type PendingAction = "approve" | "cancel" | "reset" | "authenticate" | "provider" | "verify";
+export type DesktopSecondFactorFeedback = "code_invalid" | "rate_limited";
 export type DesktopLocalFeedback =
   | "authenticated"
   | "mfa_required"
@@ -29,15 +36,19 @@ export type DesktopLocalFeedback =
 export interface DesktopJourneySnapshot {
   view:
     | { kind: "checking" | "unavailable" | DesktopTerminalState }
-    | { kind: "authentication" | "confirmation"; context: DesktopAuthorizationContext };
+    | { kind: "authentication" | "confirmation"; context: DesktopAuthorizationContext }
+    | { kind: "second_factor"; context: DesktopAuthorizationContext; secondFactor: ExternalSecondFactorContext };
   /** The account this request authenticated, while confirming or after approval. */
   account?: NonNullable<DesktopAuthorizationContext["account"]>;
   pending?: PendingAction;
   feedback?: "unavailable";
+  /** The server's verdict on the last Proctor code. */
+  codeFeedback?: DesktopSecondFactorFeedback;
   focusHeading: boolean;
 }
 
 interface DesktopJourneyActions {
+  verifyCode(code: string): Promise<void>;
   approve(): Promise<void>;
   cancel(): Promise<void>;
   useAnotherAccount(): Promise<void>;
@@ -74,6 +85,8 @@ export const desktopJourneyAPI = {
   context: requestDesktopAuthorizationContext,
   providerURL: desktopAuthorizationProviderURL,
   reset: resetDesktopAuthorizationAccount,
+  secondFactor: requestExternalSecondFactorContext,
+  completeSecondFactor: completeExternalSecondFactor,
 };
 
 // The feature owns transaction sequencing. Presentation owns form values and
@@ -93,6 +106,8 @@ export function createDesktopAuthorizationJourney(
   let pending: PendingAction | undefined;
   let terminal: DesktopTerminalState | undefined;
   let feedback: "unavailable" | undefined;
+  let codeFeedback: DesktopSecondFactorFeedback | undefined;
+  let secondFactor: ExternalSecondFactorContext | undefined;
   let focusHeading = false;
   const listeners = new Set<() => void>();
 
@@ -105,6 +120,22 @@ export function createDesktopAuthorizationJourney(
         bindingEstablished = true;
       }
       const loaded = await api.context(input.servingOrigin);
+      secondFactor = undefined;
+      if (loaded.kind === "ready" && loaded.context.state === "second_factor_required") {
+        // The pause names the provider and its own deadline; it is read only
+        // while the request waits for a code.
+        const paused = await api.secondFactor();
+        if (paused.kind === "ready" && paused.context.purpose === "desktop_authorization") {
+          secondFactor = paused.context;
+          return loaded;
+        }
+        if (paused.kind === "expired") {
+          terminal = "second_factor_expired";
+          focusHeading = true;
+          return loaded;
+        }
+        return { kind: "unavailable" };
+      }
       if (loaded.kind !== "ready" || loaded.context.state !== "bound" || !useWebSession) {
         return loaded;
       }
@@ -132,17 +163,27 @@ export function createDesktopAuthorizationJourney(
     const current = resource.getSnapshot();
     if (current.loading) return { kind: "checking" };
     if (current.value.kind !== "ready") return { kind: current.value.kind };
-    return {
-      kind: current.value.context.state === "bound" ? "authentication" : "confirmation",
-      context: current.value.context,
-    };
+    const context = current.value.context;
+    switch (context.state) {
+      case "bound":
+        return { kind: "authentication", context };
+      case "second_factor_required":
+        // Never offer Allow before the code: without the pause details the
+        // request cannot be shown, so it reads as unavailable.
+        return secondFactor === undefined ? { kind: "unavailable" } : { kind: "second_factor", context, secondFactor };
+      case "authenticated":
+        return { kind: "confirmation", context };
+    }
   }
 
   function publish() {
     const view = currentView();
     const account = view.kind === "confirmation" || view.kind === "approved"
       ? currentContext("authenticated")?.account : undefined;
-    snapshot = { view, ...(account === undefined ? {} : { account }), pending, feedback, focusHeading };
+    snapshot = {
+      view, ...(account === undefined ? {} : { account }), pending, feedback,
+      ...(codeFeedback === undefined ? {} : { codeFeedback }), focusHeading,
+    };
     for (const listener of listeners) listener();
   }
   resource.subscribe(publish);
@@ -267,6 +308,30 @@ export function createDesktopAuthorizationJourney(
         }
       });
       return local;
+    },
+    async verifyCode(code) {
+      if (currentContext("second_factor_required") === undefined || secondFactor === undefined) return;
+      codeFeedback = undefined;
+      await perform("verify", () => api.completeSecondFactor("desktop_authorization", code), async (result) => {
+        switch (result.kind) {
+          case "desktop_authenticated":
+            // The request now waits for Allow; read it again rather than trust
+            // a second shape of the same context.
+            focusHeading = true;
+            await resource.retry();
+            return;
+          case "code_invalid":
+          case "rate_limited":
+            codeFeedback = result.kind;
+            return;
+          case "expired":
+            terminal = "second_factor_expired";
+            focusHeading = true;
+            return;
+          default:
+            failed({ kind: "unavailable" });
+        }
+      });
     },
     chooseProvider(providerID) {
       const context = currentContext("bound");

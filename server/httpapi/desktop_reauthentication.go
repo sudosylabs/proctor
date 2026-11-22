@@ -34,6 +34,7 @@ type desktopReauthenticationCompleteRequest struct {
 
 type desktopReauthenticationCompleteResponse struct {
 	RecentlyAuthenticatedUntil string `json:"recently_authenticated_until"`
+	AuthenticationStrength     string `json:"authentication_strength"`
 }
 
 type desktopReauthenticationContextResponse struct {
@@ -95,9 +96,25 @@ func desktopReauthenticationResource(app *identity.Service, cookies route.Cookie
 				"authentication.internal",
 				"authentication.credential_ambiguous",
 				"audit.unavailable",
+				"authentication.mfa.unavailable",
 				"service.busy",
 			},
 			Handle: h.authenticatePassword,
+		},
+		route.Endpoint{
+			Method:       http.MethodPost,
+			Path:         "/auth/desktop/reauthentications/authenticate/second-factor",
+			Auth:         route.AuthPublic,
+			MaxBodyBytes: 1024,
+			Errors: []string{
+				"request.invalid", "authentication.credential_ambiguous", "authentication.desktop_reauthentication.invalid",
+				"authentication.desktop_reauthentication.denied",
+				"authentication.credentials_invalid", "authentication.internal", "audit.unavailable",
+				"authentication.external.invalid", "authentication.external.second_factor_expired",
+				"authentication.external.unavailable", "authentication.mfa.code_invalid", "authentication.mfa.unavailable",
+				"authentication.rate_limited", "authentication.rate_limit_unavailable",
+			},
+			Handle: h.authenticateSecondFactor,
 		},
 		route.Endpoint{
 			Method:       http.MethodGet,
@@ -250,6 +267,24 @@ func (h desktopReauthenticationHandlers) authenticatePassword(request route.Requ
 	return route.JSON(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).WithHeaders(noStoreHeaders()), nil
 }
 
+func (h desktopReauthenticationHandlers) authenticateSecondFactor(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
+	if err != nil {
+		return route.Result{}, route.ErrorWithHeaders(err, noStoreHeaders())
+	}
+	code, err := decodeBoundSecondFactorCode(request)
+	if err != nil {
+		return route.Result{}, route.ErrorWithHeaders(err, noStoreHeaders())
+	}
+	result, err := h.app.AuthenticateDesktopReauthenticationSecondFactor(request.Context, request.Invocation(), identity.CompleteExternalSecondFactorCommand{
+		Binding: binding, Code: code, Source: request.Metadata.IPAddress,
+	})
+	if err != nil {
+		return route.Result{}, route.ErrorWithHeaders(err, noStoreHeaders())
+	}
+	return route.JSON(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).WithHeaders(noStoreHeaders()), nil
+}
+
 func (h desktopReauthenticationHandlers) authenticateExternal(request route.Request) (route.ProtocolResult, error) {
 	binding, err := h.binding(request.HTTP)
 	if err != nil {
@@ -356,6 +391,7 @@ func (h desktopReauthenticationHandlers) complete(request route.Request) (route.
 
 	return route.JSON(http.StatusOK, desktopReauthenticationCompleteResponse{
 		RecentlyAuthenticatedUntil: model.FormatRFC3339(result.RecentlyAuthenticatedUntil),
+		AuthenticationStrength:     string(result.AuthenticationStrength),
 	}).WithHeaders(noStoreHeaders()), nil
 }
 

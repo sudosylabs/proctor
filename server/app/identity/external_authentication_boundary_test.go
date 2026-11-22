@@ -475,8 +475,9 @@ func (s *externalSessionStoreFake) Save(_ context.Context, input *store.SessionC
 // sign-in reads a User's two-step verification recovery state from.
 type externalRecoveryStateStoreFake struct {
 	store.MFAStore
-	state *model.UserMFARecovery
-	reads int
+	state      *model.UserMFARecovery
+	credential *model.MFACredential
+	reads      int
 }
 
 func (s *externalRecoveryStateStoreFake) GetRecoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
@@ -485,6 +486,13 @@ func (s *externalRecoveryStateStoreFake) GetRecoveryState(_ context.Context, use
 		return s.state, nil
 	}
 	return &model.UserMFARecovery{UserID: userID}, nil
+}
+
+func (s *externalRecoveryStateStoreFake) GetByUser(_ context.Context, userID model.UserID) (*model.MFACredential, error) {
+	if s.credential == nil {
+		return nil, store.NewErrNotFound("mfa_credential", userID.String())
+	}
+	return s.credential, nil
 }
 
 type providerConnectionIdentityStoreFake struct {

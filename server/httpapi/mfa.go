@@ -42,6 +42,7 @@ type mfaActivationResponse struct {
 
 type mfaStatusResponse struct {
 	ServiceEnabled           bool   `json:"service_enabled"`
+	CanRaiseStrength         bool   `json:"can_raise_strength"`
 	MFARecoveryRequired      bool   `json:"mfa_recovery_required"`
 	MFAEnrollmentRequired    bool   `json:"mfa_enrollment_required"`
 	AuthenticationMethod     string `json:"authentication_method"`
@@ -176,7 +177,9 @@ func (h mfaHandlers) status(request route.Request) (route.Result, error) {
 	}
 
 	return route.JSON(http.StatusOK, mfaStatusResponse{
-		ServiceEnabled:              status.ServiceEnabled,
+		ServiceEnabled: status.ServiceEnabled,
+		CanRaiseStrength: status.ServiceEnabled && status.Enabled &&
+			status.AuthenticationStrength != model.AuthenticationMultiFactor && !status.MFARecoveryRequired,
 		MFARecoveryRequired:         status.MFARecoveryRequired,
 		MFAEnrollmentRequired:       status.MFAEnrollmentRequired,
 		AuthenticationMethod:        status.AuthenticationMethod,

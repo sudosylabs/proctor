@@ -3934,6 +3934,14 @@
     "translation": "You're receiving this because an administrator sent a test email to this address."
   },
   {
+    "id": "problem.authentication.external.second_factor_expired.detail",
+    "translation": "Your verification step expired. Sign in again."
+  },
+  {
+    "id": "problem.authentication.external.second_factor_expired.title",
+    "translation": "Sign-in verification expired"
+  },
+  {
     "id": "problem.bad_request.detail",
     "translation": "The request is invalid."
   },
@@ -4434,6 +4442,34 @@
     "translation": "Return to sign in"
   },
   {
+    "id": "webapp.desktop_authorization.second_factor.expired.body",
+    "translation": "Go back to Proctor Desktop and choose Sign in again. You can close this page."
+  },
+  {
+    "id": "webapp.desktop_authorization.second_factor.expired.heading",
+    "translation": "This sign-in took too long"
+  },
+  {
+    "id": "webapp.desktop_authorization.second_factor.expired.status",
+    "translation": "Proctor Desktop isn’t signed in"
+  },
+  {
+    "id": "webapp.desktop_authorization.second_factor.lede",
+    "translation": "You signed in with {{.Provider}}. Enter the 6-digit code from your authenticator app to continue to Proctor Desktop."
+  },
+  {
+    "id": "webapp.desktop_authorization.second_factor.rail.finish_by",
+    "translation": "Finish by"
+  },
+  {
+    "id": "webapp.desktop_authorization.second_factor.rail.next.body",
+    "translation": "After your code, you’ll see the request from Proctor Desktop and choose whether to allow it."
+  },
+  {
+    "id": "webapp.desktop_authorization.second_factor.rail.next.heading",
+    "translation": "What happens next"
+  },
+  {
     "id": "webapp.desktop_authorization.skip_to_main",
     "translation": "Skip to Desktop sign-in"
   },
@@ -4468,6 +4504,10 @@
   {
     "id": "webapp.desktop_authorization.use_another_account",
     "translation": "Use a different account"
+  },
+  {
+    "id": "webapp.desktop_authorization.verify.document_title",
+    "translation": "Enter your code for Proctor Desktop · Proctor"
   },
   {
     "id": "webapp.desktop_reauthentication.approved.body",
@@ -4568,6 +4608,34 @@
   {
     "id": "webapp.desktop_reauthentication.returning.heading",
     "translation": "Returning to Proctor Desktop"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.second_factor.expired.body",
+    "translation": "Go back to Proctor Desktop and try again. You can close this page."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.second_factor.expired.heading",
+    "translation": "This took too long"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.second_factor.expired.status",
+    "translation": "Not confirmed"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.second_factor.rail.why.body",
+    "translation": "Some actions in Proctor Desktop need two-step verification. Your code covers them, so you won’t need to sign in again."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.second_factor.rail.why.heading",
+    "translation": "Why a code as well?"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.second_factor.status.password",
+    "translation": "Password confirmed"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.second_factor.status.provider",
+    "translation": "{{.Provider}} confirmed"
   },
   {
     "id": "webapp.desktop_reauthentication.skip_to_main",
@@ -5170,6 +5238,122 @@
     "translation": "Sign-in isn’t available"
   },
   {
+    "id": "webapp.login_verify.cancel",
+    "translation": "Cancel sign-in"
+  },
+  {
+    "id": "webapp.login_verify.checking.body",
+    "translation": "This takes a moment."
+  },
+  {
+    "id": "webapp.login_verify.checking.heading",
+    "translation": "Checking your sign-in"
+  },
+  {
+    "id": "webapp.login_verify.document_title",
+    "translation": "Enter your code · Proctor"
+  },
+  {
+    "id": "webapp.login_verify.error.unavailable",
+    "translation": "We couldn’t check that code. Try again in a moment."
+  },
+  {
+    "id": "webapp.login_verify.expired.action",
+    "translation": "Start again"
+  },
+  {
+    "id": "webapp.login_verify.expired.body",
+    "translation": "Start again and you’ll be asked for a new code."
+  },
+  {
+    "id": "webapp.login_verify.expired.heading",
+    "translation": "This sign-in took too long"
+  },
+  {
+    "id": "webapp.login_verify.expired.status",
+    "translation": "Sign-in not finished"
+  },
+  {
+    "id": "webapp.login_verify.lede",
+    "translation": "Open your authenticator app and enter the 6-digit code for Proctor to finish signing in."
+  },
+  {
+    "id": "webapp.login_verify.mfa_unavailable.action",
+    "translation": "Back to sign-in"
+  },
+  {
+    "id": "webapp.login_verify.mfa_unavailable.body",
+    "translation": "Your account uses two-step verification, and it’s turned off for {{.Institution}} at the moment. Contact {{.Institution}}, or try again later."
+  },
+  {
+    "id": "webapp.login_verify.mfa_unavailable.body_unnamed",
+    "translation": "Your account uses two-step verification, and it’s turned off for your institution at the moment. Contact your institution, or try again later."
+  },
+  {
+    "id": "webapp.login_verify.mfa_unavailable.heading",
+    "translation": "You can’t finish signing in right now"
+  },
+  {
+    "id": "webapp.login_verify.mfa_unavailable.status",
+    "translation": "Sign-in not finished"
+  },
+  {
+    "id": "webapp.login_verify.rail.finish_by",
+    "translation": "Finish by"
+  },
+  {
+    "id": "webapp.login_verify.rail.lost.body",
+    "translation": "Use one of your recovery codes instead. Each code works once."
+  },
+  {
+    "id": "webapp.login_verify.rail.lost.heading",
+    "translation": "Lost your phone?"
+  },
+  {
+    "id": "webapp.login_verify.rail.signed_in_with",
+    "translation": "Signed in with"
+  },
+  {
+    "id": "webapp.login_verify.rail.why.body",
+    "translation": "{{.Provider}} confirmed your password. Your authenticator app confirms it’s really you."
+  },
+  {
+    "id": "webapp.login_verify.rail.why.heading",
+    "translation": "Why a code as well?"
+  },
+  {
+    "id": "webapp.login_verify.signing_in.body",
+    "translation": "Taking you to Proctor…"
+  },
+  {
+    "id": "webapp.login_verify.signing_in.heading",
+    "translation": "Signing you in"
+  },
+  {
+    "id": "webapp.login_verify.skip_to_main",
+    "translation": "Skip to code entry"
+  },
+  {
+    "id": "webapp.login_verify.status",
+    "translation": "Signed in with {{.Provider}}"
+  },
+  {
+    "id": "webapp.login_verify.unavailable.body",
+    "translation": "Something went wrong on our side. Try again in a moment."
+  },
+  {
+    "id": "webapp.login_verify.unavailable.heading",
+    "translation": "We couldn’t check your sign-in"
+  },
+  {
+    "id": "webapp.login_verify.unavailable.retry",
+    "translation": "Try again"
+  },
+  {
+    "id": "webapp.login_verify.unavailable.status",
+    "translation": "Sign-in not checked"
+  },
+  {
     "id": "webapp.password_policy.common",
     "translation": "That password is too common. Choose something longer or less predictable, such as several unrelated words."
   },
@@ -5608,6 +5792,14 @@
   {
     "id": "webapp.reset_password.status.invalid",
     "translation": "Link expired"
+  },
+  {
+    "id": "webapp.second_factor.code_invalid",
+    "translation": "That code isn’t right. Check your authenticator app and try again."
+  },
+  {
+    "id": "webapp.second_factor.verifying",
+    "translation": "Checking your code…"
   },
   {
     "id": "webapp.security.body",

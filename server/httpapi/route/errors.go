@@ -187,6 +187,11 @@ func problemFromApplicationFailure(request *http.Request, failure *apperror.Erro
 		return internalProblem(request)
 	}
 	title, detail := localizedProblemPresentation(request, status)
+	if failure.Code() == "authentication.external.second_factor_expired" {
+		if message, explanation := ProblemPresentation(request, failure.Code()); message != "" {
+			title, detail = message, explanation
+		}
+	}
 	return newProblem(request, failure.Code(), status, title, detail, failure.Fields())
 }
 

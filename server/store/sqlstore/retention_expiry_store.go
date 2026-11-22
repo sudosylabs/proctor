@@ -22,6 +22,7 @@ import (
 // test guards this inventory: adding an owner requires an explicit retention
 // decision. Foreign keys remain the final concurrent-insert deletion fence.
 const auditHardReferences = `EXISTS(SELECT 1 FROM external_login_states WHERE audit_event_id = a.id)
+		OR EXISTS(SELECT 1 FROM external_second_factor_states WHERE audit_event_id = a.id)
 		OR EXISTS(SELECT 1 FROM exam_attempt_manager_end_actions WHERE audit_event_id = a.id)
 		OR EXISTS(SELECT 1 FROM exam_sitting_private_actions WHERE audit_event_id = a.id)
 		OR EXISTS(SELECT 1 FROM exam_sitting_live_corrections WHERE audit_event_id = a.id)
@@ -257,6 +258,8 @@ const auditExpiryCountFacts = `audited_resources AS (
 		),
 		audit_references AS (
 			SELECT audit_event_id AS id FROM external_login_states WHERE audit_event_id IS NOT NULL
+			UNION
+			SELECT audit_event_id FROM external_second_factor_states WHERE audit_event_id IS NOT NULL
 			UNION
 			SELECT audit_event_id FROM exam_attempt_manager_end_actions WHERE audit_event_id IS NOT NULL
 			UNION

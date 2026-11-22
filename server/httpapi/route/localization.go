@@ -18,6 +18,7 @@ import (
 const localizationOrigin = "httpapi"
 
 var problemPresentationNames = []string{
+	"authentication.external.second_factor_expired",
 	"bad_request",
 	"client_error",
 	"conflict",

@@ -201,3 +201,96 @@ func TestDesktopReauthenticationDeniesProofOfAnotherAccount(t *testing.T) {
 	})
 	require.True(t, store.IsNotFound(err), "denied reauthentication issued a code: %v", err)
 }
+
+func TestDesktopReauthenticationSecondFactorStore(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		name := "complete"
+		if changed {
+			name = "password changed"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+			persistence := openTestStore(t)
+			resetTestStore(t, persistence)
+			fixture := newDesktopReauthenticationFixture(t, ctx, persistence, "reauth-factor")
+			binding, browserState, verifier := startDesktopReauthenticationForSQLTest(t, ctx, persistence, fixture)
+			bindingHash := model.HashToken(binding)
+			current, err := persistence.BrowserAuthentication().GetDesktopReauthenticationContext(ctx, bindingHash)
+			require.NoError(t, err)
+			require.Equal(t, model.AuthenticationSingleFactor, current.AuthenticationStrength)
+			password := passwordProofForSQLTest(t, ctx, persistence, fixture.user.ID)
+			pause, err := persistence.ExternalLoginState().CreateExternalSecondFactorState(ctx, &store.ExternalSecondFactorStateCreation{
+				State: &model.ExternalSecondFactorState{
+					Purpose: model.ExternalAuthenticationPurposeDesktopReauthentication, UserID: fixture.user.ID,
+					AuthenticationMethod: "password", BrowserAuthenticationTransactionID: current.ID,
+					BindingHash: bindingHash, PrimaryAuthenticatedAt: model.NowUTC(),
+					ReturnTo: "/reauthenticate/desktop", ClientType: model.SessionClientDesktop,
+					PasswordCredentialID: password.ID, PasswordCredentialRevision: password.Revision,
+				},
+				Lifetime: time.Minute,
+			})
+			require.NoError(t, err)
+			paused, err := persistence.BrowserAuthentication().GetDesktopReauthenticationContext(ctx, bindingHash)
+			require.NoError(t, err)
+			require.Equal(t, model.BrowserAuthenticationStateSecondFactorRequired, paused.State)
+
+			credentialID := model.NewMFACredentialID()
+			_, err = persistence.GetMaster().Exec(ctx, `INSERT INTO mfa_credentials
+				(id, created_at, updated_at, user_id, state, encrypted_secret, encryption_key_id, activated_at, last_used_time_step)
+				VALUES (?, now(), now(), ?, 'active', 'fixture', ?, now(), 1)`,
+				credentialID.String(), fixture.user.ID.String(), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			require.NoError(t, err)
+			audit, err := persistence.Audit().Save(ctx, &model.AuditEvent{
+				ActorID: fixture.user.ID, Action: string(model.ActionMFAChallenge),
+				Resource:  model.Resource{Type: model.ResourceUser, ID: fixture.user.ID.String()},
+				ScopeType: model.RoleScopeInstitution, ScopeID: fixture.institutionID.String(),
+				Status: model.AuditStatusAttempt, NodeID: "desktop-second-factor",
+			})
+			require.NoError(t, err)
+			if changed {
+				_, err = persistence.GetMaster().Exec(ctx, `UPDATE password_credentials SET revision = revision + 1 WHERE id = ?`, password.ID.String())
+				require.NoError(t, err)
+			}
+			now := model.NowUTC()
+			consumed, err := persistence.ExternalLoginState().ConsumeExternalSecondFactorState(ctx, &store.ExternalSecondFactorStateConsumption{
+				ID: pause.ID, Purpose: pause.Purpose, BindingHash: pause.BindingHash,
+				CredentialID: credentialID, TimeStep: now.Unix() / 30, VerifiedAt: now, AuditEventID: audit.ID,
+			})
+			if changed {
+				var conflict *store.ErrConflict
+				require.ErrorAs(t, err, &conflict)
+				require.Equal(t, "password_changed", conflict.Constraint)
+				credential, getErr := persistence.MFA().GetByUser(ctx, fixture.user.ID)
+				require.NoError(t, getErr)
+				require.EqualValues(t, 1, credential.LastUsedTimeStep)
+				return
+			}
+			require.NoError(t, err)
+			_, err = persistence.BrowserAuthentication().AuthenticateDesktopReauthentication(ctx, &store.DesktopReauthenticationAuthentication{
+				BindingHash: bindingHash, UserID: fixture.user.ID, AuthenticationMethod: "password", PasswordProof: password,
+				AuthenticatedAt: consumed.PrimaryAuthenticatedAt, MFACompletedAt: consumed.ConsumedAt,
+			})
+			require.NoError(t, err)
+			code := model.NewCredentialToken()
+			_, err = persistence.BrowserAuthentication().IssueDesktopReauthenticationCode(ctx, &store.DesktopReauthenticationCodeIssue{
+				BindingHash: bindingHash, StateHash: model.HashToken(browserState), CodeHash: model.HashToken(code), CodeLifetime: time.Minute,
+			})
+			require.NoError(t, err)
+			result, err := persistence.BrowserAuthentication().CompleteDesktopReauthentication(ctx,
+				desktopReauthenticationCompletionForSQLTest(t, ctx, persistence, fixture, code, browserState, verifier))
+			require.NoError(t, err)
+			require.Equal(t, fixture.session.ID, result.Session.ID)
+			require.Equal(t, model.AuthenticationMultiFactor, result.Session.AuthenticationStrength)
+			// Two-step completion never predates the Session's own sign-in, so
+			// it is the code's database instant unless the fixture's Go clock
+			// stamped the sign-in later.
+			wantMFA := consumed.ConsumedAt.Time
+			if fixture.session.AuthenticatedAt.After(wantMFA) {
+				wantMFA = fixture.session.AuthenticatedAt
+			}
+			require.Equal(t, model.OptionalTimeFrom(wantMFA), result.Session.MFACompletedAt)
+			require.True(t, result.Session.ReauthenticatedAt.Valid)
+			require.NotEmpty(t, result.AccessTokenHashes)
+		})
+	}
+}

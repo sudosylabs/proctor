@@ -165,10 +165,16 @@ func (s SQLBrowserAuthenticationStore) GetDesktopAuthorizationContext(
 		CreatedAt  time.Time      `db:"created_at"`
 		ExpiresAt  time.Time      `db:"expires_at"`
 	}
-	if err := s.GetMaster().Get(ctx, &row, `SELECT id, state, user_id, device_name, created_at,
-			expires_at
-		FROM browser_authentication_transactions
-		WHERE purpose = 'desktop_authorization'
+	if err := s.GetMaster().Get(ctx, &row, `SELECT id,
+        CASE WHEN state = 'bound' AND EXISTS (
+            SELECT 1 FROM external_second_factor_states AS pause
+            WHERE pause.browser_authentication_transaction_id = browser_authentication_transactions.id
+                AND pause.purpose = 'desktop_authorization' AND pause.consumed_at IS NULL
+                AND pause.expires_at > clock_timestamp()
+        ) THEN 'second_factor_required' ELSE state END AS state,
+        user_id, device_name, created_at, expires_at
+        FROM browser_authentication_transactions
+        WHERE purpose = 'desktop_authorization'
 			AND state IN ('bound', 'authenticated')
 			AND browser_proof_hash = ?
 			AND created_at <= clock_timestamp()
@@ -263,11 +269,19 @@ func authenticateDesktopAuthorization(
 	if activeAttempt {
 		return denyDesktopAuthorizationForActiveAttempt(ctx, tx, selector, selectorValue)
 	}
-	if err = markDesktopAuthorizationAuthenticated(ctx, tx, input, source, selector, selectorValue); err != nil {
+	authenticated, err := markDesktopAuthorizationAuthenticated(ctx, tx, input, source, selector, selectorValue)
+	if err != nil {
 		return nil, err
 	}
-
-	return &store.DesktopAuthorizationAuthenticationResult{}, nil
+	if !input.AuditEventID.IsZero() {
+		if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", nil, authenticated.UpdatedAt); err != nil {
+			return nil, err
+		}
+	}
+	return &store.DesktopAuthorizationAuthenticationResult{Context: &store.DesktopAuthorizationContext{
+		ID: authenticated.ID, State: authenticated.State, UserID: authenticated.UserID,
+		DeviceName: authenticated.DeviceName, CreatedAt: authenticated.CreatedAt, ExpiresAt: authenticated.ExpiresAt,
+	}}, nil
 }
 
 // requireDesktopAuthorizationAuthenticationPath takes the authentication-path and session locks and rejects a user awaiting MFA re-enrollment.
@@ -350,7 +364,7 @@ func markDesktopAuthorizationAuthenticated(
 	input *store.DesktopAuthorizationAuthentication,
 	source *model.Session,
 	selector, selectorValue string,
-) error {
+) (*model.BrowserAuthenticationTransaction, error) {
 	// Fresh local proof gets one database authentication instant. Provider
 	// history can only move back to that instant. A reused session hands over
 	// its latest primary proof, so a recently reauthenticated web session does
@@ -451,13 +465,9 @@ func markDesktopAuthorizationAuthenticated(
 		input.SourceCredentialID.String(),
 	)
 	if err != nil {
-		return translateError("browser_authentication_transaction", "binding", err)
+		return nil, translateError("browser_authentication_transaction", "binding", err)
 	}
-	if _, err = authenticated.model(); err != nil {
-		return err
-	}
-
-	return nil
+	return authenticated.model()
 }
 
 func (s SQLBrowserAuthenticationStore) ResetDesktopAuthorizationAccount(

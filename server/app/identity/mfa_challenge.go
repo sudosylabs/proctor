@@ -167,6 +167,10 @@ func (s *Service) requireMFARecoverySession(principal model.Principal, recent bo
 }
 
 func (s *Service) limitMFAFactorAttempt(ctx context.Context, inv invocation.Invocation) error {
+	return s.limitMFAFactorForUser(ctx, inv.Principal().UserID, inv.RequestMetadata().IPAddress)
+}
+
+func (s *Service) limitMFAFactorForUser(ctx context.Context, userID model.UserID, source string) error {
 	_, limited, err := s.attempts.account(ctx, authenticationAttemptIntent{
 		purpose: authenticationAttemptPurposeMFA,
 		window:  s.loginRateLimit.Window,
@@ -174,12 +178,12 @@ func (s *Service) limitMFAFactorAttempt(ctx context.Context, inv invocation.Invo
 			{
 				dimension: authenticationAttemptDimensionIdentity,
 				maximum:   s.loginRateLimit.MaximumAttempts,
-				identity:  inv.Principal().UserID.String(),
+				identity:  userID.String(),
 			},
 			{
 				dimension: authenticationAttemptDimensionSource,
 				maximum:   s.loginRateLimit.MaximumSourceAttempts,
-				source:    inv.RequestMetadata().IPAddress,
+				source:    source,
 			},
 		},
 	})

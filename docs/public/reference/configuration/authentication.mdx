@@ -195,6 +195,12 @@ letter or underscore. OIDC subjects must map to `sub`.
 | `Authentication.External.Providers[].Settings.Claims.MultiFactorAttribute`<br />Default: no providers | Optional. A released attribute that holds authentication method or context values. Set it together with `MultiFactorValues`. |
 | `Authentication.External.Providers[].Settings.Claims.MultiFactorValues[]`<br />Default: empty list per provider | Unique provider values that show the user signed in with more than one factor. Each must be `1` to `256` safe characters. An exact match raises the strength Proctor records for the sign-in. |
 
+When the provider confirms one factor, an enrolled user can complete the
+second factor in Proctor using an authenticator or recovery code. Proctor
+records the completed sign-in as multi-factor. With Proctor MFA disabled,
+enrolled users need a provider that confirms multiple factors.
+
+
 Proctor checks the names and the required combinations of these settings. It
 can't check that the provider really releases the attributes, or that their
 meaning can be trusted. Before you turn a provider on for users, test sign-in

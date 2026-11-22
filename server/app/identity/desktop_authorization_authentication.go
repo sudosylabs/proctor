@@ -117,7 +117,9 @@ func (s *Service) recordDesktopAuthorizationProof(
 		return nil, err
 	}
 
-	input.BindingHash = model.HashToken(binding)
+	if binding != "" {
+		input.BindingHash = model.HashToken(binding)
+	}
 	input.Capabilities = AccessDeploymentCapabilities(s.capabilities.Snapshot())
 	result, err := s.browserAuthentications.AuthenticateDesktopAuthorization(ctx, &input)
 	if err != nil {

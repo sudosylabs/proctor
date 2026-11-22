@@ -84,6 +84,7 @@ var entityIDs = []idSpec{
 	{typeName: "MailDeliveryID", fieldName: "mail_delivery_id", constructorSubject: "mail-delivery"},
 	{typeName: "DomainEventID", fieldName: "domain_event_id", constructorSubject: "domain-event"},
 	{typeName: "ExternalLoginStateID", fieldName: "external_login_state_id", constructorSubject: "external-login-state"},
+	{typeName: "ExternalSecondFactorStateID", fieldName: "external_second_factor_state_id", constructorSubject: "external-second-factor-state"},
 	{
 		typeName:           "BrowserAuthenticationTransactionID",
 		fieldName:          "browser_authentication_transaction_id",

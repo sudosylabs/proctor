@@ -52,6 +52,10 @@ func (s *desktopReauthenticationStoreFake) GetDesktopReauthenticationContext(con
 	return s.context, nil
 }
 
+func (s *desktopReauthenticationStoreFake) GetDesktopReauthenticationContextByID(ctx context.Context, _ model.BrowserAuthenticationTransactionID) (*store.DesktopReauthenticationContext, error) {
+	return s.GetDesktopReauthenticationContext(ctx, "")
+}
+
 func (s *desktopReauthenticationStoreFake) AuthenticateDesktopReauthentication(_ context.Context, input *store.DesktopReauthenticationAuthentication) (*store.DesktopReauthenticationAuthenticationResult, error) {
 	s.authentication = input
 	if s.authResult != nil {
@@ -210,11 +214,15 @@ func TestDesktopReauthenticationNeverAcceptsABrowserWebSessionAsProof(t *testing
 func TestDesktopReauthenticationDeniesAndAuditsAnotherAccount(t *testing.T) {
 	harness := newDesktopReauthenticationTestHarness(t)
 	owner := model.NewUserID()
+	harness.transactions.context = &store.DesktopReauthenticationContext{
+		ID: model.NewBrowserAuthenticationTransactionID(), UserID: owner, State: model.BrowserAuthenticationStateBound,
+	}
+
 	harness.transactions.authResult = &store.DesktopReauthenticationAuthenticationResult{Denied: true, UserID: owner}
 	identity := &model.ExternalIdentity{ID: model.NewExternalIdentityID(), UserID: harness.user.ID, Provider: "campus"}
 	err := harness.service.authenticateExternalReauthentication(context.Background(), invocation.Invocation{},
-		model.NewBrowserAuthenticationTransactionID(), identity, "oidc",
-		&model.ExternalAuthenticationAssertion{ProviderID: "campus", AuthenticatedAt: time.Now().UnixMilli()})
+		harness.transactions.context.ID, identity, "oidc",
+		&model.ExternalAuthenticationAssertion{ProviderID: "campus", AuthenticatedAt: time.Now().UnixMilli()}, "/reauthenticate/desktop")
 	require.True(t, apperror.Is(err, "authentication.desktop_reauthentication.denied"), "mismatch error = %v", err)
 	require.Len(t, harness.audit.terminal(), 1)
 	rejection := harness.audit.terminal()[0]
@@ -235,7 +243,7 @@ func TestDesktopReauthenticationCompletesFromTheSameDesktopSession(t *testing.T)
 	// Stored instants carry microseconds; Linux clocks also report nanoseconds.
 	reauthenticatedAt := model.TimeUTC(time.Now())
 	harness.transactions.completed = &store.SessionReauthenticationResult{Session: &model.Session{ID: desktop.SessionID,
-		AuthenticatedAt: desktop.AuthenticatedAt, ReauthenticatedAt: model.OptionalTimeFrom(reauthenticatedAt)}}
+		AuthenticatedAt: desktop.AuthenticatedAt, AuthenticationStrength: model.AuthenticationMultiFactor, ReauthenticatedAt: model.OptionalTimeFrom(reauthenticatedAt)}}
 	command := CompleteDesktopReauthenticationCommand{Code: model.NewCredentialToken(), CodeVerifier: model.NewCredentialToken(),
 		State: model.NewCredentialToken(), Source: "192.0.2.10"}
 
@@ -247,6 +255,7 @@ func TestDesktopReauthenticationCompletesFromTheSameDesktopSession(t *testing.T)
 	result, err := harness.service.CompleteDesktopReauthentication(context.Background(), invocation.New(desktop, model.RequestMetadata{}), command)
 	require.NoError(t, err)
 	require.True(t, result.RecentlyAuthenticatedUntil.Equal(reauthenticatedAt.Add(15*time.Minute)))
+	require.Equal(t, model.AuthenticationMultiFactor, result.AuthenticationStrength)
 	completion := harness.transactions.completion
 	require.Equal(t, desktop.SessionID, completion.SessionID, "completion was not bound to the calling Session and key")
 	require.Equal(t, desktop.DesktopRegistrationID, completion.DesktopRegistrationID, "completion was not bound to the calling Session and key")

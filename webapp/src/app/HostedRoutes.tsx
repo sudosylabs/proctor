@@ -13,6 +13,7 @@ import { DesktopReauthenticationPage } from "../features/desktop-reauthenticatio
 import { ForgotPasswordPage } from "../features/forgot-password/ForgotPasswordPage";
 import { JoinPage } from "../features/join/JoinPage";
 import { LoginPage } from "../features/login/LoginPage";
+import { LoginVerifyPage } from "../features/login-verify/LoginVerifyPage";
 import { RegisterPage } from "../features/register/RegisterPage";
 import { ReauthenticatePage } from "../features/reauthenticate/ReauthenticatePage";
 import type { ReauthenticationTask } from "../features/reauthenticate/ReauthenticationApi";
@@ -28,6 +29,7 @@ import { isHostedRoute, type HostedRoute } from "./routes";
 export type HostedPageBootstrap =
   | { route: "/setup" }
   | { route: "/login"; notice?: "external_login_failed" }
+  | { route: "/login/verify" }
   | { route: "/register" }
   | {
       route: "/authorize/desktop";
@@ -38,6 +40,9 @@ export type HostedPageBootstrap =
         value: string;
       };
     }
+  // The provider callback returns here, already bound by cookie, while the
+  // paused Desktop sign-in waits for a code; only the request state rides along.
+  | { route: "/authorize/desktop/verify"; state?: string }
   | {
       route: "/reauthenticate/desktop";
       state?: string;
@@ -78,6 +83,7 @@ type RouteBootstrap<R extends HostedRoute> = Extract<
 type FragmentPolicy =
   | { kind: "none" }
   | { kind: "external_login_notice" }
+  | { kind: "desktop_state" }
   | { kind: "reauthentication_task" }
   | { kind: "invitation_claim"; name: "token" }
   | { kind: "desktop_browser_proof"; name: "proof" }
@@ -111,6 +117,11 @@ const hostedRouteDescriptors = {
       />
     ),
   },
+  "/login/verify": {
+    documentTitle: "webapp.login_verify.document_title",
+    fragment: { kind: "none" },
+    render: () => <LoginVerifyPage />,
+  },
   "/register": {
     documentTitle: "webapp.register.document_title",
     fragment: { kind: "none" },
@@ -133,6 +144,11 @@ const hostedRouteDescriptors = {
         }
       />
     ),
+  },
+  "/authorize/desktop/verify": {
+    documentTitle: "webapp.desktop_authorization.verify.document_title",
+    fragment: { kind: "desktop_state" },
+    render: (bootstrap) => <DesktopAuthorizationPage state={bootstrap.state} />,
   },
   "/reauthenticate/desktop": {
     documentTitle: "webapp.desktop_reauthentication.document_title",
@@ -236,6 +252,15 @@ export function bootstrapHostedPage(
     case "none":
       clearFragment(location, history);
       return { route } as RouteBootstrap<typeof route>;
+    case "desktop_state": {
+      // No proof belongs on this route: drop any fragment and keep only state.
+      const sanitized = new URL(location.href);
+      const state = boundedParameter(sanitized.searchParams.get("state"));
+      sanitized.hash = "";
+      sanitized.searchParams.delete("request");
+      if (sanitized.href !== location.href) history.replaceState(history.state, "", sanitized);
+      return { route, ...(state === undefined ? {} : { state }) } as RouteBootstrap<typeof route>;
+    }
     case "external_login_notice": {
       const fragment = location.hash;
       clearFragment(location, history);

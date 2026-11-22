@@ -281,7 +281,7 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 		fmt.Sprintf(`{"code":%q,"code_verifier":%q,"state":%q}`, code, client.verifier, client.state), asDesktop)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	recentUntil := authentication.AuthenticatedAt.Add(15 * time.Minute)
-	require.JSONEq(t, `{"recently_authenticated_until":"`+model.FormatRFC3339(recentUntil)+`"}`, response.Body.String())
+	require.JSONEq(t, `{"authentication_strength":"single_factor","recently_authenticated_until":"`+model.FormatRFC3339(recentUntil)+`"}`, response.Body.String())
 	attempts := fixture.access.Audits.Attempts()
 	require.Len(t, attempts, 1)
 	require.Equal(t, []store.DesktopReauthenticationCompletion{{

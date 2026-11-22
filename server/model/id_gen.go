@@ -195,6 +195,11 @@ func NewDomainEventID() DomainEventID { return DomainEventID(NewID()) }
 // NewExternalLoginStateID returns a freshly generated external-login-state identifier.
 func NewExternalLoginStateID() ExternalLoginStateID { return ExternalLoginStateID(NewID()) }
 
+// NewExternalSecondFactorStateID returns a freshly generated external-second-factor-state identifier.
+func NewExternalSecondFactorStateID() ExternalSecondFactorStateID {
+	return ExternalSecondFactorStateID(NewID())
+}
+
 // NewBrowserAuthenticationTransactionID returns a freshly generated browser-authentication-transaction identifier.
 func NewBrowserAuthenticationTransactionID() BrowserAuthenticationTransactionID {
 	return BrowserAuthenticationTransactionID(NewID())
@@ -517,6 +522,11 @@ func ParseExternalLoginStateID(value string) (ExternalLoginStateID, error) {
 	return parseID[ExternalLoginStateID](value, "external_login_state_id")
 }
 
+// ParseExternalSecondFactorStateID validates and converts the shared identifier representation.
+func ParseExternalSecondFactorStateID(value string) (ExternalSecondFactorStateID, error) {
+	return parseID[ExternalSecondFactorStateID](value, "external_second_factor_state_id")
+}
+
 // ParseBrowserAuthenticationTransactionID validates and converts the shared identifier representation.
 func ParseBrowserAuthenticationTransactionID(value string) (BrowserAuthenticationTransactionID, error) {
 	return parseID[BrowserAuthenticationTransactionID](value, "browser_authentication_transaction_id")
@@ -727,6 +737,9 @@ func (id DomainEventID) IsZero() bool { return id == "" }
 // IsZero reports whether the external-login-state is the empty zero value.
 func (id ExternalLoginStateID) IsZero() bool { return id == "" }
 
+// IsZero reports whether the external-second-factor-state is the empty zero value.
+func (id ExternalSecondFactorStateID) IsZero() bool { return id == "" }
+
 // IsZero reports whether the browser-authentication-transaction is the empty zero value.
 func (id BrowserAuthenticationTransactionID) IsZero() bool { return id == "" }
 
@@ -924,6 +937,9 @@ func (id DomainEventID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the external-login-state is a canonical non-zero ID.
 func (id ExternalLoginStateID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the external-second-factor-state is a canonical non-zero ID.
+func (id ExternalSecondFactorStateID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the browser-authentication-transaction is a canonical non-zero ID.
 func (id BrowserAuthenticationTransactionID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -1123,6 +1139,9 @@ func (id DomainEventID) String() string { return string(id) }
 // String returns the external-login-state wire/database representation.
 func (id ExternalLoginStateID) String() string { return string(id) }
 
+// String returns the external-second-factor-state wire/database representation.
+func (id ExternalSecondFactorStateID) String() string { return string(id) }
+
 // String returns the browser-authentication-transaction wire/database representation.
 func (id BrowserAuthenticationTransactionID) String() string { return string(id) }
 
@@ -1320,6 +1339,9 @@ func (id DomainEventID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the external-login-state as its canonical string.
 func (id ExternalLoginStateID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the external-second-factor-state as its canonical string.
+func (id ExternalSecondFactorStateID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the browser-authentication-transaction as its canonical string.
 func (id BrowserAuthenticationTransactionID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1639,6 +1661,11 @@ func (id *ExternalLoginStateID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseExternalLoginStateID)
 }
 
+// UnmarshalText decodes and validates the external-second-factor-state when non-empty.
+func (id *ExternalSecondFactorStateID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseExternalSecondFactorStateID)
+}
+
 // UnmarshalText decodes and validates the browser-authentication-transaction when non-empty.
 func (id *BrowserAuthenticationTransactionID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseBrowserAuthenticationTransactionID)
@@ -1848,6 +1875,9 @@ func (id DomainEventID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id)
 
 // MarshalJSON encodes the external-login-state as a JSON string.
 func (id ExternalLoginStateID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
+// MarshalJSON encodes the external-second-factor-state as a JSON string.
+func (id ExternalSecondFactorStateID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
 // MarshalJSON encodes the browser-authentication-transaction as a JSON string.
 func (id BrowserAuthenticationTransactionID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
@@ -2165,6 +2195,11 @@ func (id *DomainEventID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the external-login-state.
 func (id *ExternalLoginStateID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseExternalLoginStateID)
+}
+
+// UnmarshalJSON decodes a JSON string into the external-second-factor-state.
+func (id *ExternalSecondFactorStateID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseExternalSecondFactorStateID)
 }
 
 // UnmarshalJSON decodes a JSON string into the browser-authentication-transaction.

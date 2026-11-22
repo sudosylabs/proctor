@@ -34,6 +34,7 @@ const (
 	BrowserRefreshCookieName                 = "PROCTOR_REFRESH"
 	BrowserCSRFBindingCookieName             = "PROCTOR_CSRF_BINDING"
 	BrowserCSRFCookieName                    = "PROCTOR_CSRF"
+	BrowserExternalSecondFactorCookieName    = "PROCTOR_EXTERNAL_SECOND_FACTOR"
 	BrowserExternalLoginCookieName           = "PROCTOR_EXTERNAL_LOGIN"
 	BrowserInvitationProofCookieName         = "PROCTOR_INVITATION_PROOF"
 	BrowserDesktopAuthorizationCookieName    = "PROCTOR_DESKTOP_AUTHORIZATION"
@@ -51,6 +52,7 @@ type Cookies struct {
 	secure                      bool
 	refreshPath                 string
 	externalLoginPath           string
+	externalSecondFactorPath    string
 	invitationPath              string
 	desktopAuthorizationPath    string
 	desktopReauthenticationPath string
@@ -71,6 +73,7 @@ func NewCookies(publicURL string) (Cookies, error) {
 		secure:                      parsed.Scheme == "https",
 		refreshPath:                 model.APIURLSuffix + "/auth/refresh",
 		externalLoginPath:           model.APIURLSuffix + "/auth/providers/",
+		externalSecondFactorPath:    model.APIURLSuffix + "/auth/external/second-factor",
 		invitationPath:              model.APIURLSuffix + "/auth/browser/invitations",
 		desktopAuthorizationPath:    model.APIURLSuffix + "/auth/desktop/authorizations",
 		desktopReauthenticationPath: model.APIURLSuffix + "/auth/desktop/reauthentications",
@@ -144,6 +147,17 @@ func (c Cookies) ClearExternalLoginBinding(writer http.ResponseWriter) {
 		c.externalLoginPath,
 		true,
 	)
+}
+
+// AttachExternalSecondFactorBinding binds the second-factor routes to the
+// browser that completed the provider callback.
+func (c Cookies) AttachExternalSecondFactorBinding(writer http.ResponseWriter, binding string, expiresAt int64) {
+	c.set(writer, BrowserExternalSecondFactorCookieName, binding, c.externalSecondFactorPath, expiresAt, true)
+}
+
+// ClearExternalSecondFactorBinding expires the browser binding after sign-in finishes.
+func (c Cookies) ClearExternalSecondFactorBinding(writer http.ResponseWriter) {
+	c.expire(writer, BrowserExternalSecondFactorCookieName, c.externalSecondFactorPath, true)
 }
 
 // Attach stores a session's access and refresh credentials and a fresh CSRF

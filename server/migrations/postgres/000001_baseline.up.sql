@@ -3711,7 +3711,8 @@ CREATE TABLE browser_authentication_transactions (
         ))) OR
       (purpose = 'desktop_reauthentication' AND client_type = 'desktop' AND invitation_id IS NULL AND
        invitation_claim_hash IS NULL AND completed_at IS NULL AND user_id IS NOT NULL AND
-       authentication_strength IS NULL AND mfa_completed_at IS NULL AND (
+       authentication_strength IS NULL AND
+       (mfa_completed_at IS NULL OR (authenticated_at IS NOT NULL AND mfa_completed_at BETWEEN authenticated_at AND updated_at)) AND (
         (state IN ('pending', 'bound') AND (handle_hash IS NOT NULL) = (state = 'pending') AND browser_proof_hash IS NOT NULL AND
          state_hash IS NOT NULL AND callback_url IS NOT NULL AND code_challenge IS NOT NULL AND
          authentication_method IS NULL AND authentication_provider_id IS NULL AND external_identity_id IS NULL AND
@@ -3814,6 +3815,60 @@ CREATE TABLE audit_events (
     CONSTRAINT audit_events_user_subject_check
         CHECK (resource_type <> 'user' OR subject_user_id IS NOT DISTINCT FROM resource_id)
 );
+
+CREATE TABLE external_second_factor_states (
+    id varchar(26) PRIMARY KEY,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    purpose varchar(32) NOT NULL CHECK (purpose IN ('login', 'desktop_authorization', 'desktop_reauthentication')),
+    user_id varchar(26) NOT NULL REFERENCES users(id),
+    external_identity_id varchar(26) REFERENCES external_identities(id),
+    provider varchar(64) NOT NULL,
+    authentication_method varchar(64) NOT NULL CHECK (authentication_method <> ''),
+    browser_authentication_transaction_id varchar(26),
+    binding_hash char(64) NOT NULL CHECK (binding_hash ~ '^[0-9a-f]{64}$'),
+    authentication_generation bigint NOT NULL CHECK (authentication_generation >= 0),
+    primary_authenticated_at timestamptz NOT NULL,
+    return_to varchar(2048) NOT NULL,
+    client_type varchar(32) NOT NULL CHECK (client_type IN ('web', 'desktop')),
+    device_id varchar(128) NOT NULL DEFAULT '',
+    device_name varchar(512) NOT NULL DEFAULT '',
+    audit_event_id varchar(26) REFERENCES audit_events(id),
+    external_login_state_id varchar(26) REFERENCES external_login_states(id),
+    password_credential_id varchar(26) REFERENCES password_credentials(id),
+    password_credential_revision bigint,
+    expires_at timestamptz NOT NULL,
+    consumed_at timestamptz,
+    CHECK (expires_at > created_at AND updated_at >= created_at AND
+        (consumed_at IS NULL OR (consumed_at >= created_at AND consumed_at < expires_at))),
+    CHECK ((authentication_method = 'password' AND purpose = 'desktop_reauthentication' AND provider = '' AND
+        external_identity_id IS NULL AND password_credential_id IS NOT NULL AND
+        password_credential_revision IS NOT NULL AND password_credential_revision > 0) OR
+        (authentication_method <> 'password' AND provider <> '' AND external_identity_id IS NOT NULL AND
+         password_credential_id IS NULL AND password_credential_revision IS NULL)),
+    CHECK ((purpose = 'login' AND client_type = 'web' AND external_login_state_id IS NOT NULL AND
+         browser_authentication_transaction_id IS NULL) OR
+        (purpose <> 'login' AND client_type = 'desktop' AND external_login_state_id IS NULL AND
+         browser_authentication_transaction_id IS NOT NULL AND
+         browser_authentication_transaction_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')),
+    CHECK ((purpose = 'desktop_reauthentication') = (audit_event_id IS NULL))
+);
+
+CREATE UNIQUE INDEX external_second_factor_states_binding_idx
+    ON external_second_factor_states (binding_hash) WHERE consumed_at IS NULL;
+CREATE INDEX external_second_factor_states_expiry_idx ON external_second_factor_states (expires_at);
+CREATE INDEX external_second_factor_states_user_idx ON external_second_factor_states (user_id);
+CREATE INDEX external_second_factor_states_identity_idx
+    ON external_second_factor_states (external_identity_id) WHERE external_identity_id IS NOT NULL;
+CREATE INDEX external_second_factor_states_transaction_idx
+    ON external_second_factor_states (browser_authentication_transaction_id) WHERE consumed_at IS NULL;
+CREATE INDEX external_second_factor_states_audit_idx
+    ON external_second_factor_states (audit_event_id) WHERE audit_event_id IS NOT NULL;
+CREATE INDEX external_second_factor_states_login_state_idx
+    ON external_second_factor_states (external_login_state_id) WHERE external_login_state_id IS NOT NULL;
+CREATE INDEX external_second_factor_states_password_idx
+    ON external_second_factor_states (password_credential_id) WHERE password_credential_id IS NOT NULL;
+
 
 CREATE INDEX audit_events_created_at_id_idx ON audit_events (created_at DESC, id DESC);
 CREATE INDEX audit_events_actor_id_created_at_id_idx
@@ -4968,6 +5023,22 @@ ALTER TABLE external_login_states
 	ADD CONSTRAINT external_login_states_audit_event_id_canonical_check
 	CHECK (audit_event_id IS NULL OR audit_event_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
+ALTER TABLE external_second_factor_states
+	ADD CONSTRAINT external_second_factor_states_id_canonical_check
+	CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_user_id_canonical_check
+	CHECK (user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_external_99bdc2b9_canonical_check
+	CHECK (external_identity_id IS NULL OR external_identity_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_browser__b808196e_canonical_check
+	CHECK (browser_authentication_transaction_id IS NULL OR browser_authentication_transaction_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_audit_event_id_canonical_check
+	CHECK (audit_event_id IS NULL OR audit_event_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_external_af342cfb_canonical_check
+	CHECK (external_login_state_id IS NULL OR external_login_state_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_password_ce8c35f7_canonical_check
+	CHECK (password_credential_id IS NULL OR password_credential_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
 ALTER TABLE browser_authentication_transactions
     ADD CONSTRAINT browser_authentication_transactions_id_canonical_check
     CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
@@ -5308,6 +5379,7 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE TRIGGER external_second_factor_states_cancel_audit_expiry AFTER INSERT ON external_second_factor_states FOR EACH ROW EXECUTE FUNCTION cancel_referenced_audit_expiry('audit_event_id');
 CREATE TRIGGER external_login_states_cancel_audit_expiry AFTER INSERT OR UPDATE OF audit_event_id ON external_login_states FOR EACH ROW EXECUTE FUNCTION cancel_referenced_audit_expiry('audit_event_id');
 CREATE TRIGGER exam_attempt_manager_end_actions_cancel_audit_expiry AFTER INSERT ON exam_attempt_manager_end_actions FOR EACH ROW EXECUTE FUNCTION cancel_referenced_audit_expiry('audit_event_id');
 CREATE TRIGGER exam_sitting_private_actions_cancel_audit_expiry AFTER INSERT ON exam_sitting_private_actions FOR EACH ROW EXECUTE FUNCTION cancel_referenced_audit_expiry('audit_event_id');

@@ -63,10 +63,10 @@ paths:
     post:
       operationId: authenticateDesktopReauthenticationWithPassword
       summary: Prove the Desktop Session account's password
-      description: Checks the password of the Desktop Session's own User. It works only when the Desktop Session was signed in with a password. It takes no username, asks for no second factor and creates no Web Session. It also does not yet update the Desktop Session. The Desktop does that later by calling the complete operation.
+      description: Checks the password of the Desktop Session's own User. It works only when the Desktop Session was signed in with a password. It creates no Web Session. When the Desktop Session is single_factor and the User has active Proctor two-step verification, the browser must also prove a code. The Desktop Session is updated only when Desktop calls the complete operation.
       tags: [Authentication]
       x-proctor-auth: public
-      x-proctor-error-codes: [request.invalid, authentication.desktop_reauthentication.invalid, authentication.reauthentication_method_required, authentication.desktop_reauthentication.denied, authentication.credentials_invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.internal, authentication.credential_ambiguous, audit.unavailable, service.busy]
+      x-proctor-error-codes: [request.invalid, authentication.desktop_reauthentication.invalid, authentication.reauthentication_method_required, authentication.desktop_reauthentication.denied, authentication.credentials_invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.internal, authentication.credential_ambiguous, audit.unavailable, service.busy, authentication.mfa.unavailable]
       x-proctor-idempotency: none
       security: []
       requestBody: {$ref: '#/components/requestBodies/DesktopReauthenticationPassword'}
@@ -78,6 +78,28 @@ paths:
         "409": {$ref: '#/components/responses/Conflict'}
         "429": {$ref: '#/components/responses/TooManyRequests'}
         "500": {$ref: '#/components/responses/InternalError'}
+        "503": {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/auth/desktop/reauthentications/authenticate/second-factor:
+    post:
+      operationId: authenticateDesktopReauthenticationSecondFactor
+      summary: Verify the code for Desktop reauthentication
+      description: Uses the Desktop reauthentication cookie and verifies an authenticator code or one unused recovery code. The authenticated browser context can then be approved to finish confirming the Desktop Session.
+      tags: [Authentication]
+      x-proctor-auth: public
+      x-proctor-error-codes: [request.invalid, authentication.credential_ambiguous, authentication.desktop_reauthentication.invalid, authentication.desktop_reauthentication.denied, authentication.credentials_invalid, authentication.internal, audit.unavailable, authentication.external.invalid, authentication.external.second_factor_expired, authentication.external.unavailable, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable]
+      x-proctor-idempotency: none
+      security: []
+      requestBody: {$ref: '#/components/requestBodies/MFACode'}
+      responses:
+        "200": {$ref: '#/components/responses/DesktopReauthenticationContextOK'}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "409": {$ref: '#/components/responses/Conflict'}
+        "410": {$ref: '#/components/responses/Gone'}
+        "429": {$ref: '#/components/responses/TooManyRequests'}
+        "500": {$ref: '#/components/responses/InternalError'}
+        "502": {$ref: '#/components/responses/BadGateway'}
         "503": {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/auth/desktop/reauthentications/authenticate/providers/{provider_id}/login:
     get:
@@ -227,6 +249,7 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopReauthenticationCompleteResponse'}
           example:
+            authentication_strength: multi_factor
             recently_authenticated_until: '2026-08-01T09:17:00Z'
   schemas:
     DesktopReauthenticationStartRequest:
@@ -260,7 +283,7 @@ components:
       additionalProperties: false
       required: [state, display_name, authentication_method, expires_at]
       properties:
-        state: {description: "Where the reauthentication stands. bound means this browser holds the request but has not proved the account yet. authenticated means the proof succeeded and the request is waiting for approval.", type: string, enum: [bound, authenticated]}
+        state: {description: "Where the reauthentication stands. bound means this browser holds the request but has not proved the account yet. second_factor_required means the primary proof succeeded and a code is needed. authenticated means the proof succeeded and the request is waiting for approval.", type: string, enum: [bound, second_factor_required, authenticated]}
         display_name:
           type: string
           description: The Desktop Session account's display name, so the person can see whose sign-in they are confirming.
@@ -275,9 +298,13 @@ components:
     DesktopReauthenticationCompleteResponse:
       type: object
       additionalProperties: false
-      required: [recently_authenticated_until]
+      required: [recently_authenticated_until, authentication_strength]
       properties:
         recently_authenticated_until:
           type: string
           format: date-time
           description: Until this time, actions that need a recent sign-in are allowed. After it, they ask for reauthentication again.
+        authentication_strength:
+          type: string
+          enum: [single_factor, multi_factor]
+          description: The strength of the Desktop Session after confirming the account.

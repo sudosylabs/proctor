@@ -157,6 +157,7 @@ func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
 		ID: model.NewPasswordCredentialID(), UserID: local.UserID, PasswordChangedAt: time.Date(2026, 7, 1, 9, 30, 0, 0, time.UTC),
 	}}, enrolled, 15*time.Minute+59*time.Second)
 	require.Contains(t, body, `"enabled":true`)
+	require.Contains(t, body, `"can_raise_strength":false`)
 	require.Contains(t, body, `"recently_authenticated":true`)
 	require.Contains(t, body, `"recovery_codes_remaining":7`)
 	require.Contains(t, body, `"recovery_codes_total":10`)
@@ -180,6 +181,14 @@ func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
 	require.NotContains(t, body, "recovery_codes_generated_at")
 	// A window shorter than a minute is reported as one minute.
 	require.Contains(t, body, `"recent_authentication_minutes":1`)
+	require.Contains(t, body, `"can_raise_strength":false`)
+	enrolled.enable(external.UserID, authenticatedAt.Add(-time.Hour))
+	require.Contains(t, read(external, nil, enrolled, time.Minute), `"can_raise_strength":true`)
+	recovery := external
+	recovery.MFARecoveryRequired = true
+	recovery.AuthenticationGeneration = 1
+	require.Contains(t, read(recovery, nil, enrolled, time.Minute), `"can_raise_strength":false`)
+
 }
 
 // accountAudit completes a mutation attempt in the Store's commit, as the SQL

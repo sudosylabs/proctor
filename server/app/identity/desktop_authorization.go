@@ -258,6 +258,9 @@ func (s *Service) DesktopAuthorizationContext(
 		return result, nil
 	}
 
+	if current.State == model.BrowserAuthenticationStateSecondFactorRequired {
+		return result, nil
+	}
 	if current.State != model.BrowserAuthenticationStateBound {
 		return nil, apperror.New("authentication.desktop_authorization.rejected")
 	}

@@ -207,6 +207,9 @@ type DomainEventID string
 // ExternalLoginStateID identifies a one-use external login transaction.
 type ExternalLoginStateID string
 
+// ExternalSecondFactorStateID identifies one paused authentication.
+type ExternalSecondFactorStateID string
+
 // BrowserAuthenticationTransactionID identifies one purpose-bound browser authentication.
 type BrowserAuthenticationTransactionID string
 

@@ -39,6 +39,10 @@ type DesktopReauthenticationCreation struct {
 // see. Only the session's own method and provider are offered or accepted.
 type DesktopReauthenticationContext struct {
 	ID                           model.BrowserAuthenticationTransactionID
+	BindingHash                  string
+	AuthenticationStrength       model.AuthenticationStrength
+	AuthenticationGeneration     int64
+	ExternalIdentityID           model.ExternalIdentityID
 	State                        model.BrowserAuthenticationState
 	UserID                       model.UserID
 	ExpectedAuthenticationMethod string
@@ -63,6 +67,7 @@ type DesktopReauthenticationAuthentication struct {
 	ExternalIdentityID   model.ExternalIdentityID
 	PasswordProof        PasswordCredentialProof
 	AuthenticatedAt      time.Time
+	MFACompletedAt       model.OptionalTime
 }
 
 // DesktopReauthenticationAuthenticationResult has Denied set when the proof

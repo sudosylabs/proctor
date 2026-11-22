@@ -413,6 +413,25 @@ func (s *Auditor) BeginCriticalAction(
 	return s.BeginCriticalActionForSubject(ctx, principal, "", action, resource, metadata, parameters, priorState)
 }
 
+// BeginBoundMFAChallenge records an attempt after the browser has presented
+// its bound primary proof and before it has a Session.
+func (s *Auditor) BeginBoundMFAChallenge(
+	ctx context.Context, userID model.UserID, clientType model.SessionClientType,
+	method string, metadata model.RequestMetadata,
+) (*model.AuditEvent, error) {
+	if !userID.IsValid() || !clientType.IsValid() || method == "" || s.deps.Audits == nil {
+		return nil, AuditUnavailable(nil)
+	}
+	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
+	scopeType, scopeID, err := s.resourceScope(ctx, resource)
+	if err != nil {
+		return nil, err
+	}
+	actor := model.Principal{UserID: userID, ClientType: clientType, AuthenticationMethod: method}
+	return s.beginCriticalActionAtScope(ctx, actor, userID, model.ActionMFAChallenge, resource,
+		scopeType, scopeID, metadata, nil, nil)
+}
+
 // BeginCriticalActionForSubject is for a mutation whose resource is not the
 // affected user, such as a role binding. A zero subject leaves the decision to
 // model.AuditEvent's user resource rule.

@@ -25,8 +25,8 @@ type ResultReleaseMail struct {
 }
 
 // PrepareResultRelease prepares the notice for one release. The occurrence
-// derives from the review and its expected revision, and
-// ExpectedRecipientRevision is the candidate revision the notice was built from.
+// derives from the review and its expected revision, and Recipient is the
+// candidate the notice was written for.
 func (m ResultReleaseMail) PrepareResultRelease(
 	ctx context.Context,
 	request ResultReleaseMailPreparation,
@@ -77,5 +77,5 @@ func (m ResultReleaseMail) PrepareResultRelease(
 		Occurrence: prepared.Occurrence,
 		Delivery:   prepared.Delivery,
 		Job:        prepared.Job,
-	}, ExpectedRecipientRevision: recipient.Revision}, nil
+	}, Recipient: recipient}, nil
 }

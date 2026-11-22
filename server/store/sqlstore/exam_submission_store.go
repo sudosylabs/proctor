@@ -813,7 +813,7 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 }
 
 // checkExamSubmissionSealPreconditions checks the final focus loss sequence,
-// seal time and receipt recipient revision, validates the receipt mail, and
+// seal time and receipt recipient, validates the receipt mail, and
 // requires its payload key to be primary, returning the seal time and key.
 func checkExamSubmissionSealPreconditions(
 	ctx context.Context,
@@ -831,7 +831,7 @@ func checkExamSubmissionSealPreconditions(
 	if sealAt.After(databaseNow) {
 		return time.Time{}, "", store.NewErrConflict("exam_submission", "seal_time", nil)
 	}
-	if input.ExpectedRecipientRevision < 1 || recipient.Revision != input.ExpectedRecipientRevision {
+	if !sameMailRecipient(recipient, input.Recipient) {
 		return time.Time{}, "", store.NewErrConflict("exam_submission", "receipt_recipient_changed", nil)
 	}
 

@@ -207,7 +207,7 @@ func testStudentProgressionCrossPeriod(t *testing.T, ss store.Store) {
 	audit := saveClassMemberAuditAttempt(t, ctx, ss, destinationClass.ID.String())
 	progressionDestinationAudit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, destinationClass.ID.String(), "student_progression.execute_row")
 	progressionSourceAudit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, sourceClass.ID.String(), "student_progression.execute_row")
-	progressed, err := ss.ClassMember().Enroll(ctx, &store.ClassMemberEnrollment{Member: candidate, ExpectedRecipientRevision: student.Revision, Notice: notice,
+	progressed, err := ss.ClassMember().Enroll(ctx, &store.ClassMemberEnrollment{Member: candidate, Recipient: new(*student), Notice: notice,
 		StudentProgression: true, ProgressionSourceAuditEventID: progressionSourceAudit.ID, ProgressionDestinationAuditEventID: progressionDestinationAudit.ID,
 		AuditEventID: audit.ID, AuditAt: at.Add(3 * time.Second), Command: command})
 	require.NoError(t, err)
@@ -225,7 +225,7 @@ func testStudentProgressionCrossPeriod(t *testing.T, ss store.Store) {
 	replayAudit := saveClassMemberAuditAttempt(t, ctx, ss, destinationClass.ID.String())
 	replayProgressionDestinationAudit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, destinationClass.ID.String(), "student_progression.execute_row")
 	replayProgressionSourceAudit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, sourceClass.ID.String(), "student_progression.execute_row")
-	replay := &store.ClassMemberEnrollment{Member: candidate, ExpectedRecipientRevision: student.Revision, StudentProgression: true,
+	replay := &store.ClassMemberEnrollment{Member: candidate, Recipient: new(*student), StudentProgression: true,
 		ProgressionSourceAuditEventID: replayProgressionSourceAudit.ID, ProgressionDestinationAuditEventID: replayProgressionDestinationAudit.ID,
 		AuditEventID: replayAudit.ID, AuditAt: at.Add(4 * time.Second), Command: command}
 	_, err = ss.ClassMember().Enroll(ctx, replay)
@@ -241,7 +241,7 @@ func testStudentProgressionCrossPeriod(t *testing.T, ss store.Store) {
 	noOpAudit := saveClassMemberAuditAttempt(t, ctx, ss, destinationClass.ID.String())
 	noOpDestinationAudit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, destinationClass.ID.String(), "student_progression.execute_row")
 	noOpSourceAudit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, sourceClass.ID.String(), "student_progression.execute_row")
-	noOpInput := &store.ClassMemberEnrollment{Member: noOpCandidate, ExpectedRecipientRevision: student.Revision, StudentProgression: true,
+	noOpInput := &store.ClassMemberEnrollment{Member: noOpCandidate, Recipient: new(*student), StudentProgression: true,
 		ProgressionSourceAuditEventID: noOpSourceAudit.ID, ProgressionDestinationAuditEventID: noOpDestinationAudit.ID,
 		AuditEventID: noOpAudit.ID, AuditAt: at.Add(5 * time.Second), Command: noOpCommand}
 	noOpEnrollment, err := ss.ClassMember().Enroll(ctx, noOpInput)

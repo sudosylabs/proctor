@@ -62,16 +62,25 @@ func TestAcademicUnitMemberStore(t *testing.T, ss store.Store) {
 	createNotice := classMemberPreparedMail(t, &model.ClassMember{UserID: auditedUser.ID},
 		model.MailTemplateAcademicUnitAssigned, candidate.CreatedAt)
 	created, err := ss.AcademicUnitMember().Create(ctx, &store.AcademicUnitMemberCreation{Member: candidate,
-		ExpectedRecipientRevision: auditedUser.Revision, Notice: createNotice,
+		Recipient: new(*auditedUser), Notice: createNotice,
 		AuditEventID: createAttempt.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 	require.NoError(t, requireClassMemberMail(t, ctx, ss, createNotice, model.MailTemplateAcademicUnitAssigned))
+	// A change the notice never reads, as a default profile picture is, moves
+	// the revision; the end notice written before it still commits.
+	firstName := "Renamed"
+	renamed, err := ss.User().UpdateProfile(ctx, &store.UserProfileUpdate{
+		UserID: auditedUser.ID, Changes: model.UserProfileChanges{FirstName: &firstName}, ExpectedRevision: auditedUser.Revision,
+		AuditEventID: saveUserProfileAuditAttempt(t, ctx, ss, auditedUser.ID.String()).ID, AuditAt: model.NowUTC(),
+	})
+	require.NoError(t, err)
+	require.Greater(t, renamed.Revision, auditedUser.Revision)
 	endAttempt := saveAcademicUnitAuditAttempt(t, ctx, ss, unit.ID.String())
 	endAt := model.TimeUTC(start.Add(20 * time.Millisecond))
 	endNotice := classMemberPreparedMail(t, &model.ClassMember{UserID: auditedUser.ID},
 		model.MailTemplateAcademicUnitAssignmentEnded, endAt)
 	endedAudited, err := ss.AcademicUnitMember().End(ctx, &store.AcademicUnitMemberEnd{ID: created.ID,
-		ExpectedRevision: created.Revision, ExpectedRecipientRevision: auditedUser.Revision, Notice: endNotice,
+		ExpectedRevision: created.Revision, Recipient: new(*auditedUser), Notice: endNotice,
 		EndAt: start.Add(20 * time.Millisecond), AuditEventID: endAttempt.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 	require.NoError(t, requireClassMemberMail(t, ctx, ss, endNotice, model.MailTemplateAcademicUnitAssignmentEnded))

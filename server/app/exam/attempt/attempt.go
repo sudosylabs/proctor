@@ -54,12 +54,11 @@ type SubmissionMailPreparation struct {
 	Provenance      model.ExamSubmissionProvenance
 }
 
-// PreparedSubmissionMail is a frozen receipt notice and the recipient's user
-// revision it was prepared against, which the sealing store operation uses as
-// its fence.
+// PreparedSubmissionMail is a frozen receipt notice and the User it was
+// written for, which the sealing store operation uses as its fence.
 type PreparedSubmissionMail struct {
-	Notice                    *store.PreparedMail
-	ExpectedRecipientRevision int64
+	Notice    *store.PreparedMail
+	Recipient *model.User
 }
 
 // DesktopBuildResolution is the Desktop build resolved for a principal and the

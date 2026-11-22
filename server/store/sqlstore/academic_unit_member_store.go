@@ -142,7 +142,7 @@ func (s SQLAcademicUnitMemberStore) Create(
 				tx,
 				"academic_unit_member",
 				candidate.UserID,
-				input.ExpectedRecipientRevision,
+				input.Recipient,
 				input.Notice,
 			); err != nil {
 				return nil, err
@@ -367,7 +367,7 @@ func (s SQLAcademicUnitMemberStore) End(ctx context.Context, input *store.Academ
 				tx,
 				"academic_unit_member",
 				before.UserID,
-				input.ExpectedRecipientRevision,
+				input.Recipient,
 				input.Notice,
 			); err != nil {
 				return nil, err

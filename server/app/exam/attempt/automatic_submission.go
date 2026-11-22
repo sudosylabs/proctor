@@ -137,7 +137,7 @@ func (s *Service) SealForSittingClose(
 	}
 
 	var notice *store.PreparedMail
-	var expectedRecipientRevision int64
+	var recipient *model.User
 	if !preparation.Replayed {
 		preparedMail, prepareErr := s.mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: target.CandidateUserID,
@@ -148,26 +148,26 @@ func (s *Service) SealForSittingClose(
 			SealedAt:        at,
 			Provenance:      model.ExamSubmissionSittingClosed,
 		})
-		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.ExpectedRecipientRevision < 1 {
+		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.Recipient == nil {
 			if prepareErr == nil {
 				prepareErr = errors.New("invalid automatic Submission receipt mail preparation")
 			}
 			return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, apperror.New("exam.attempt.unavailable").Wrap(prepareErr))
 		}
 
-		notice, expectedRecipientRevision = preparedMail.Notice, preparedMail.ExpectedRecipientRevision
+		notice, recipient = preparedMail.Notice, preparedMail.Recipient
 	}
 
 	stored, err := s.submissions.SealForSittingClose(ctx, &store.ExamSubmissionAutomaticSeal{
-		Target:                    target,
-		SubmissionID:              proposed,
-		ReceiptCode:               receiptCode,
-		AuditEventID:              auditID,
-		AuditAt:                   at,
-		Notice:                    notice,
-		ExpectedRecipientRevision: expectedRecipientRevision,
-		DomainEventID:             eventID,
-		DomainEventJobID:          eventJobID,
+		Target:           target,
+		SubmissionID:     proposed,
+		ReceiptCode:      receiptCode,
+		AuditEventID:     auditID,
+		AuditAt:          at,
+		Notice:           notice,
+		Recipient:        recipient,
+		DomainEventID:    eventID,
+		DomainEventJobID: eventJobID,
 	})
 	if err != nil {
 		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, storeError(storeErrors, err))

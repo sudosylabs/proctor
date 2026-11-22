@@ -477,7 +477,7 @@ func TestAcademicAdministrationBatchLooksUpRetainedOutcomeBeforeDispatch(t *test
 	enrollment := world.ledger.calls[0].input.(*store.ClassMemberEnrollment)
 	require.Equal(t, lookup.command.KeyDigest, enrollment.Command.KeyDigest, "retained lookup result=%#v command=%#v calls=%#v", result, lookup.command, world.ledger.calls)
 	require.Nil(t, enrollment.Notice, "retained lookup result=%#v command=%#v calls=%#v", result, lookup.command, world.ledger.calls)
-	require.Equal(t, int64(1), enrollment.ExpectedRecipientRevision, "retained lookup result=%#v command=%#v calls=%#v", result, lookup.command, world.ledger.calls)
+	require.Nil(t, enrollment.Recipient, "retained lookup result=%#v command=%#v calls=%#v", result, lookup.command, world.ledger.calls)
 	require.Empty(t, world.classMembers.reads, "retained lookup result=%#v command=%#v calls=%#v", result, lookup.command, world.ledger.calls)
 }
 

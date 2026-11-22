@@ -363,7 +363,7 @@ func (s *Service) SubmitExamAttempt(
 
 	at := target.SealAt
 	var notice *store.PreparedMail
-	var expectedRecipientRevision int64
+	var recipient *model.User
 	if !target.Replayed {
 		preparedMail, prepareErr := s.mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: target.CandidateUserID,
@@ -374,26 +374,26 @@ func (s *Service) SubmitExamAttempt(
 			SealedAt:        at,
 			Provenance:      model.ExamSubmissionCandidateSubmitted,
 		})
-		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.ExpectedRecipientRevision < 1 {
+		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.Recipient == nil {
 			if prepareErr == nil {
 				prepareErr = errors.New("invalid Submission receipt mail preparation")
 			}
 			return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.unavailable").Wrap(prepareErr))
 		}
 
-		notice, expectedRecipientRevision = preparedMail.Notice, preparedMail.ExpectedRecipientRevision
+		notice, recipient = preparedMail.Notice, preparedMail.Recipient
 	}
 
 	stored, err := s.submissions.Seal(ctx, &store.ExamSubmissionSeal{
-		SubmissionID:              submissionID,
-		ReceiptCode:               receiptCode,
-		Access:                    sealAccess,
-		AuditEventID:              auditID,
-		AuditAt:                   at,
-		Notice:                    notice,
-		ExpectedRecipientRevision: expectedRecipientRevision,
-		DomainEventID:             eventID,
-		DomainEventJobID:          eventJobID,
+		SubmissionID:     submissionID,
+		ReceiptCode:      receiptCode,
+		Access:           sealAccess,
+		AuditEventID:     auditID,
+		AuditAt:          at,
+		Notice:           notice,
+		Recipient:        recipient,
+		DomainEventID:    eventID,
+		DomainEventJobID: eventJobID,
 	}, commandIdempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)

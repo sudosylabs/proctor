@@ -45,6 +45,45 @@ module when a change is not server-only. No module has been released yet.
   `e4c05771`, capability `screen_recording`). The readiness overview and the
   prepared preflight carry a `screen_recording_disclosure` for Desktop to show
   before Start.
+- Server: code execution environments. An Attempt whose Exam enables
+  execution gets one isolated machine on an execution host (execenv), kept in
+  step with the Attempt Workspace: saves reach the machine, files it writes
+  come back as the candidate's work, and every seal first settles it, within
+  5 s, recording anything missed as a gap. Candidates open PTY terminals over
+  a binary socket, managers can replace an environment, and reviewers see the
+  command log, recorded input, gaps and overwritten changes as sealed Attempt
+  evidence. Administrators manage Environment Profiles, and the Exam's
+  execution policy is frozen at publication. Every Workspace write now names
+  its author, `candidate` or `environment` (**breaking**: journal `origin` is
+  replaced by `author_kind` and `author_ref`).
+- Server: the in-exam AI assistant. Exam Managers choose a help level, Tutor,
+  Reviewer, Pair or Agent, on an administrator-managed assistant profile
+  (OpenAI-compatible or Anthropic), frozen when the Attempt starts. Pair
+  proposes edits and, with execution, commands; Agent applies edits through
+  the audited Workspace write path. The candidate approves under
+  `always_ask`, and every tool and model call is budgeted. The transcript
+  digest is bound to the Submission receipt, and authorized reviewers read
+  the sealed transcript and its links to Workspace changes.
+- Server: interactive assistant sessions. At Pair and Agent with execution,
+  the assistant can start a program that waits for input or keeps running,
+  such as a REPL, a test watcher or a dev server (`start_session`), type
+  into it (`send_input`) and stop it (`stop_session`). At most 2 run at
+  once, under a 120×40 PTY, each until it exits, is stopped, reaches its
+  timeout (default 300 s) or the environment freezes or seals. The candidate
+  watches and can stop each one at `GET …/assistant/sessions`, and review
+  usage counts sessions, inputs and session time.
+- Server: environment port previews. An Exam can allow the candidate to open
+  servers running in their environment, such as a web app on
+  `localhost:5173`, through the ports or ranges it lists (1024–65535, off by
+  default), with no network device on the machine.
+  `GET /exam-attempts/{id}/environment/ports` lists listening ports, and
+  `…/ports/{port}/socket` carries one TCP connection over a binary
+  WebSocket, at most 32 per Attempt per node. A stream ends at once on a
+  freeze, and within 15 s of lost access or the seal. Reviewers see per-port
+  connection and byte counts at `GET /submissions/{id}/preview-usage`, sealed
+  with the Submission. No page content is stored, and no Integrity Flag is
+  raised. Execution hosts need execenv v0.6.0, and guest images must be
+  rebuilt with its helper (**breaking** for operators).
 
 ### Removed
 
@@ -71,8 +110,9 @@ module when a change is not server-only. No module has been released yet.
 
 - Server: the webapp build manifest and the devseed journal no longer carry
   a `schema_version`; a manifest or journal that does is rejected.
-- Server: execution hosts and interactive terminals, including their APIs,
-  settings, metrics, and persistence (**breaking**).
+- Server: the execution plugin, with its records, leases, sections, routes
+  and environment bindings. Execution environments and terminals are now
+  part of the core (see Added) (**breaking**).
 
 ### Changed
 

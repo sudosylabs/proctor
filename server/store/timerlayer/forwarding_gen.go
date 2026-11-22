@@ -2972,12 +2972,6 @@ func (s *timedExternalLoginStateStore) GetExternalSecondFactorStateByBinding(arg
 	})
 }
 
-func (s *timedExternalLoginStateStore) HasLiveExternalSecondFactorState(arg0 context.Context, arg1 model.BrowserAuthenticationTransactionID) (bool, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExternalLoginState, methodHasLiveExternalSecondFactorState), func(callCtx context.Context) (bool, error) {
-		return s.next.HasLiveExternalSecondFactorState(callCtx, arg1)
-	})
-}
-
 func (s *timedExternalLoginStateStore) ExpireExternalSecondFactorState(arg0 context.Context, arg1 string) (bool, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExternalLoginState, methodExpireExternalSecondFactorState), func(callCtx context.Context) (bool, error) {
 		return s.next.ExpireExternalSecondFactorState(callCtx, arg1)
@@ -3077,6 +3071,12 @@ func (s *timedBrowserAuthenticationStore) BindDesktopReauthentication(arg0 conte
 func (s *timedBrowserAuthenticationStore) GetDesktopReauthenticationContext(arg0 context.Context, arg1 string) (*store.DesktopReauthenticationContext, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodGetDesktopReauthenticationContext), func(callCtx context.Context) (*store.DesktopReauthenticationContext, error) {
 		return s.next.GetDesktopReauthenticationContext(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) GetDesktopReauthenticationContextByID(arg0 context.Context, arg1 model.BrowserAuthenticationTransactionID) (*store.DesktopReauthenticationContext, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodGetDesktopReauthenticationContextByID), func(callCtx context.Context) (*store.DesktopReauthenticationContext, error) {
+		return s.next.GetDesktopReauthenticationContextByID(callCtx, arg1)
 	})
 }
 

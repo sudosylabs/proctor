@@ -123,8 +123,8 @@ func requireSecondFactorPrimaryState(ctx context.Context, tx *sqlxTxWrapper, sta
 	if state.Purpose == model.ExternalAuthenticationPurposeLogin {
 		var id string
 		err := tx.Get(ctx, &id, `SELECT id FROM external_login_states
-            WHERE id = ? AND provider = ? AND purpose = 'login' AND consumed_at IS NOT NULL FOR KEY SHARE`,
-			state.ExternalLoginStateID.String(), state.Provider)
+            WHERE id = ? AND provider = ? AND (purpose = 'login' OR (purpose = 'mfa_recovery' AND target_user_id = ?)) AND consumed_at IS NOT NULL FOR KEY SHARE`,
+			state.ExternalLoginStateID.String(), state.Provider, state.UserID.String())
 		return translateError("external_login_state", state.ExternalLoginStateID.String(), err)
 	}
 
@@ -136,7 +136,6 @@ func requireSecondFactorPrimaryState(ctx context.Context, tx *sqlxTxWrapper, sta
 	if err != nil {
 		return translateError("browser_authentication_transaction", state.BrowserAuthenticationTransactionID.String(), err)
 	}
-	state.ExpiresAt = model.TimeUTC(state.ExpiresAt).Truncate(time.Microsecond)
 	if expiry.Before(state.ExpiresAt) {
 		state.ExpiresAt = model.TimeUTC(expiry)
 	}
@@ -157,15 +156,6 @@ func (s SQLExternalLoginStateStore) GetExternalSecondFactorStateByBinding(
 		return nil, translateError(secondFactorEntity, "", err)
 	}
 	return row.model()
-}
-
-func (s SQLExternalLoginStateStore) HasLiveExternalSecondFactorState(
-	ctx context.Context, id model.BrowserAuthenticationTransactionID,
-) (bool, error) {
-	var found bool
-	err := s.GetMaster().Get(ctx, &found, `SELECT EXISTS(SELECT 1 FROM external_second_factor_states
-        WHERE browser_authentication_transaction_id = ? AND consumed_at IS NULL AND expires_at > clock_timestamp())`, id.String())
-	return found, err
 }
 
 // ExpireExternalSecondFactorState closes the open audit and retains the row
@@ -257,6 +247,12 @@ func consumeExternalSecondFactorProof(
 	if state.AuthenticationGeneration != recovery.Generation || recovery.ReenrollmentRequired {
 		return store.NewErrConflict(secondFactorEntity, "generation_changed", nil)
 	}
+	if state.Purpose != model.ExternalAuthenticationPurposeLogin {
+		if err := requireSecondFactorPrimaryState(ctx, tx, state); err != nil {
+			return err
+		}
+	}
+
 	if state.AuthenticationMethod == "password" {
 		proof := store.PasswordCredentialProof{ID: state.PasswordCredentialID, Revision: state.PasswordCredentialRevision}
 		if err := requireCurrentPasswordProof(ctx, tx, state.UserID, proof); err != nil {

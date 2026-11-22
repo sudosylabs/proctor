@@ -3711,7 +3711,8 @@ CREATE TABLE browser_authentication_transactions (
         ))) OR
       (purpose = 'desktop_reauthentication' AND client_type = 'desktop' AND invitation_id IS NULL AND
        invitation_claim_hash IS NULL AND completed_at IS NULL AND user_id IS NOT NULL AND
-       authentication_strength IS NULL AND mfa_completed_at IS NULL AND (
+       authentication_strength IS NULL AND
+       (mfa_completed_at IS NULL OR (authenticated_at IS NOT NULL AND mfa_completed_at BETWEEN authenticated_at AND updated_at)) AND (
         (state IN ('pending', 'bound') AND (handle_hash IS NOT NULL) = (state = 'pending') AND browser_proof_hash IS NOT NULL AND
          state_hash IS NOT NULL AND callback_url IS NOT NULL AND code_challenge IS NOT NULL AND
          authentication_method IS NULL AND authentication_provider_id IS NULL AND external_identity_id IS NULL AND

@@ -163,6 +163,7 @@ type BrowserAuthenticationStore interface {
 	CreateDesktopReauthentication(context.Context, *DesktopReauthenticationCreation) (*DesktopAuthorizationCreated, error)
 	BindDesktopReauthentication(context.Context, *DesktopAuthorizationBinding) (*DesktopAuthorizationBound, error)
 	GetDesktopReauthenticationContext(context.Context, string) (*DesktopReauthenticationContext, error)
+	GetDesktopReauthenticationContextByID(context.Context, model.BrowserAuthenticationTransactionID) (*DesktopReauthenticationContext, error)
 	AuthenticateDesktopReauthentication(
 		context.Context,
 		*DesktopReauthenticationAuthentication,

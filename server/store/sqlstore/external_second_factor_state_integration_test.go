@@ -46,5 +46,12 @@ func TestExternalSecondFactorStateStore(t *testing.T) {
                created_at = now() - interval '2 minutes', expires_at = now() - interval '1 minute' WHERE id = ?`, id.String())
 			require.NoError(t, err)
 		},
+		CheckWebSessionProof: func(t *testing.T, pause *model.ExternalSecondFactorState) {
+			session := &model.Session{UserID: pause.UserID, ClientType: model.SessionClientWeb,
+				AuthenticationGeneration: pause.AuthenticationGeneration, AuthenticationMethod: pause.AuthenticationMethod,
+				AuthenticationProviderID: pause.Provider}
+			require.Error(t, requireSessionIssuanceRecovery(t.Context(), persistence.GetMaster(), session, ""))
+			require.NoError(t, requireSessionIssuanceRecovery(t.Context(), persistence.GetMaster(), session, pause.ExternalLoginStateID))
+		},
 	})
 }

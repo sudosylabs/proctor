@@ -95,6 +95,10 @@ func (s *Service) completeExternalCallback(
 
 		// The hosted desktop reauthentication page reloads its own state;
 		// the fixed fragment only says this provider attempt did not count.
+		if failure, ok := apperror.As(completionErr); ok && failure.Code() == "authentication.mfa.unavailable" {
+			return
+		}
+
 		if completionErr != nil &&
 			state.Purpose == model.ExternalAuthenticationPurposeDesktopReauthentication &&
 			model.IsSafeRelativeURL(state.ReturnTo) {

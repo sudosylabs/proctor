@@ -86,7 +86,6 @@ type ExternalLoginStateStore interface {
 	Maintain(context.Context, int) (*ExternalLoginStateMaintenanceResult, error)
 	CreateExternalSecondFactorState(context.Context, *ExternalSecondFactorStateCreation) (*model.ExternalSecondFactorState, error)
 	GetExternalSecondFactorStateByBinding(context.Context, string, time.Time) (*model.ExternalSecondFactorState, error)
-	HasLiveExternalSecondFactorState(context.Context, model.BrowserAuthenticationTransactionID) (bool, error)
 	ExpireExternalSecondFactorState(context.Context, string) (bool, error)
 	ConsumeExternalSecondFactorState(context.Context, *ExternalSecondFactorStateConsumption) (*model.ExternalSecondFactorState, error)
 }

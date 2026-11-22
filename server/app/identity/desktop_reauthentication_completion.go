@@ -32,6 +32,7 @@ type CompleteDesktopReauthenticationCommand struct {
 // as recently authenticated.
 type DesktopReauthenticationResult struct {
 	RecentlyAuthenticatedUntil time.Time
+	AuthenticationStrength     model.AuthenticationStrength
 }
 
 // ApproveDesktopReauthentication issues the one-use code and the loopback
@@ -149,13 +150,21 @@ func (s *Service) CompleteDesktopReauthentication(
 		return nil, authenticationUnavailable(errors.New("desktop reauthentication returned no Session"))
 	}
 
-	s.publisher.AuthenticationCacheInvalidated(ctx, principal.UserID, result.AccessTokenHashes)
+	if principal.AuthenticationStrength != model.AuthenticationMultiFactor &&
+		result.Session.AuthenticationStrength == model.AuthenticationMultiFactor {
+		s.publisher.SessionsRevoked(ctx, principal.UserID, []model.SessionID{principal.SessionID}, result.AccessTokenHashes)
+	} else {
+		s.publisher.AuthenticationCacheInvalidated(ctx, principal.UserID, result.AccessTokenHashes)
+	}
 	latest := result.Session.AuthenticatedAt
 	if result.Session.ReauthenticatedAt.Time.After(latest) {
 		latest = result.Session.ReauthenticatedAt.Time
 	}
 
-	return &DesktopReauthenticationResult{RecentlyAuthenticatedUntil: latest.Add(s.recentAuthenticationTTL)}, nil
+	return &DesktopReauthenticationResult{
+		RecentlyAuthenticatedUntil: latest.Add(s.recentAuthenticationTTL),
+		AuthenticationStrength:     result.Session.AuthenticationStrength,
+	}, nil
 }
 
 func desktopReauthenticationOperation(method string) string {

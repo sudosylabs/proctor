@@ -29,8 +29,8 @@ type AuthenticateDesktopReauthenticationPasswordCommand struct {
 }
 
 // AuthenticateDesktopReauthenticationPassword checks the desktop session
-// user's password. It creates no web session and asks for no second factor:
-// only the primary proof is refreshed, and MFA history is unchanged.
+// user's password. A single-factor Session can also require the user's
+// enrolled Proctor factor before its proof is recorded.
 func (s *Service) AuthenticateDesktopReauthenticationPassword(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -92,14 +92,19 @@ func (s *Service) AuthenticateDesktopReauthenticationPassword(
 		return nil, passwordWorkError(err, "authentication.internal")
 	}
 
-	if _, err = s.recordDesktopReauthenticationProof(ctx, inv, &store.DesktopReauthenticationAuthentication{
-		BindingHash:          model.HashToken(command.Binding),
-		UserID:               current.UserID,
-		AuthenticationMethod: "password",
-		PasswordProof:        store.PasswordCredentialProof{ID: credential.ID, Revision: credential.Revision},
-		AuthenticatedAt:      model.TimeUTC(s.now()),
-	}); err != nil {
+	proof := &store.DesktopReauthenticationAuthentication{
+		BindingHash: model.HashToken(command.Binding), UserID: current.UserID, AuthenticationMethod: "password",
+		PasswordProof:   store.PasswordCredentialProof{ID: credential.ID, Revision: credential.Revision},
+		AuthenticatedAt: model.TimeUTC(s.now()),
+	}
+	paused, err := s.pauseDesktopReauthenticationIfRequired(ctx, current, proof, "/reauthenticate/desktop")
+	if err != nil {
 		return nil, err
+	}
+	if !paused {
+		if _, err := s.recordDesktopReauthenticationProof(ctx, inv, proof); err != nil {
+			return nil, err
+		}
 	}
 
 	if err = s.attempts.reset(ctx, receipt, authenticationAttemptDimensionIdentitySource); err != nil {
@@ -178,6 +183,7 @@ func (s *Service) authenticateExternalReauthentication(
 	identity *model.ExternalIdentity,
 	method string,
 	assertion *model.ExternalAuthenticationAssertion,
+	returnTo string,
 ) error {
 	if !transactionID.IsValid() ||
 		identity == nil ||
@@ -190,14 +196,29 @@ func (s *Service) authenticateExternalReauthentication(
 		return apperror.New("authentication.desktop_reauthentication.invalid")
 	}
 
-	_, err := s.recordDesktopReauthenticationProof(ctx, inv, &store.DesktopReauthenticationAuthentication{
+	current, err := s.browserAuthentications.GetDesktopReauthenticationContextByID(ctx, transactionID)
+	if err != nil || current == nil {
+		return desktopReauthenticationStoreErrors.Translate(err)
+	}
+	if current.State != model.BrowserAuthenticationStateBound {
+		return apperror.New("authentication.desktop_reauthentication.invalid")
+	}
+	proof := &store.DesktopReauthenticationAuthentication{
 		TransactionID:        transactionID,
 		UserID:               identity.UserID,
 		AuthenticationMethod: method,
 		ProviderID:           identity.Provider,
 		ExternalIdentityID:   identity.ID,
 		AuthenticatedAt:      model.TimeFromMillis(assertion.AuthenticatedAt),
-	})
+	}
+	// The existing proof operation audits and denies a different identity.
+	if current.UserID == identity.UserID && current.ExternalIdentityID == identity.ID {
+		paused, err := s.pauseDesktopReauthenticationIfRequired(ctx, current, proof, returnTo)
+		if err != nil || paused {
+			return err
+		}
+	}
+	_, err = s.recordDesktopReauthenticationProof(ctx, inv, proof)
 	return err
 }
 
@@ -234,6 +255,7 @@ func (s *Service) completeDesktopReauthentication(
 		identity,
 		attempt.method,
 		assertion,
+		state.ReturnTo,
 	); appErr != nil {
 		return nil, appErr
 	}

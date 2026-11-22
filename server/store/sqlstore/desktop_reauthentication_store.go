@@ -73,12 +73,13 @@ type desktopReauthenticationRow struct {
 	PasswordCredentialID         sql.NullString `db:"password_credential_id"`
 	PasswordCredentialRevision   sql.NullInt64  `db:"password_credential_revision"`
 	AuthenticatedAt              sql.NullTime   `db:"authenticated_at"`
+	MFACompletedAt               sql.NullTime   `db:"mfa_completed_at"`
 }
 
 const desktopReauthenticationColumns = `id, created_at, expires_at, state, user_id, session_id,
 		expected_authentication_method, expected_provider_id, authentication_method,
 		authentication_provider_id, external_identity_id, password_credential_id,
-		password_credential_revision, authenticated_at`
+		password_credential_revision, authenticated_at, mfa_completed_at`
 
 // CreateDesktopReauthentication starts a reauthentication handoff for the
 // caller's exact live desktop session, pinning that session's own
@@ -265,35 +266,58 @@ func (s SQLBrowserAuthenticationStore) GetDesktopReauthenticationContext(
 		return nil, store.NewErrInvalidInput("browser_authentication_transaction", "binding", nil)
 	}
 
-	var row desktopReauthenticationRow
-	if err := s.GetMaster().Get(ctx, &row, `SELECT `+desktopReauthenticationColumns+`
-		FROM browser_authentication_transactions
-		WHERE purpose = 'desktop_reauthentication'
-			AND state IN ('bound', 'authenticated')
-			AND browser_proof_hash = ?
-			AND created_at <= clock_timestamp()
-			AND expires_at > clock_timestamp()`, bindingHash); err != nil {
+	return s.getDesktopReauthenticationContext(ctx, "handoff.browser_proof_hash", bindingHash)
+}
+
+func (s SQLBrowserAuthenticationStore) GetDesktopReauthenticationContextByID(
+	ctx context.Context, id model.BrowserAuthenticationTransactionID,
+) (*store.DesktopReauthenticationContext, error) {
+	if !id.IsValid() {
+		return nil, store.NewErrInvalidInput("browser_authentication_transaction", "id", nil)
+	}
+	return s.getDesktopReauthenticationContext(ctx, "handoff.id", id.String())
+}
+
+func (s SQLBrowserAuthenticationStore) getDesktopReauthenticationContext(
+	ctx context.Context, selector, value string,
+) (*store.DesktopReauthenticationContext, error) {
+	var row struct {
+		ID          model.BrowserAuthenticationTransactionID `db:"id"`
+		State       model.BrowserAuthenticationState         `db:"state"`
+		BindingHash string                                   `db:"browser_proof_hash"`
+		UserID      model.UserID                             `db:"user_id"`
+		Method      string                                   `db:"expected_authentication_method"`
+		Provider    sql.NullString                           `db:"expected_provider_id"`
+		Strength    model.AuthenticationStrength             `db:"authentication_strength"`
+		Generation  int64                                    `db:"authentication_generation"`
+		Identity    sql.NullString                           `db:"external_identity_id"`
+		CreatedAt   time.Time                                `db:"created_at"`
+		ExpiresAt   time.Time                                `db:"expires_at"`
+	}
+	if err := s.GetMaster().Get(ctx, &row, `
+        SELECT handoff.id, handoff.user_id, handoff.created_at, handoff.expires_at,
+            handoff.browser_proof_hash, handoff.expected_authentication_method, handoff.expected_provider_id,
+            sessions.authentication_strength, sessions.authentication_generation, sessions.external_identity_id,
+            CASE WHEN handoff.state = 'bound' AND EXISTS (
+                SELECT 1 FROM external_second_factor_states AS pause
+                WHERE pause.browser_authentication_transaction_id = handoff.id
+                    AND pause.purpose = 'desktop_reauthentication' AND pause.consumed_at IS NULL
+                    AND pause.expires_at > clock_timestamp()
+            ) THEN 'second_factor_required' ELSE handoff.state END AS state
+        FROM browser_authentication_transactions AS handoff
+        JOIN sessions ON sessions.id = handoff.session_id
+        WHERE handoff.purpose = 'desktop_reauthentication'
+            AND handoff.state IN ('bound', 'authenticated') AND `+selector+` = ?
+            AND handoff.created_at <= clock_timestamp() AND handoff.expires_at > clock_timestamp()`, value); err != nil {
 		return nil, translateError("browser_authentication_transaction", "binding", err)
 	}
 
-	id, err := model.ParseBrowserAuthenticationTransactionID(row.ID)
-	if err != nil {
-		return nil, invalidPersistedState("browser_authentication_transaction", "id", err)
-	}
-
-	userID, err := model.ParseUserID(row.UserID)
-	if err != nil {
-		return nil, invalidPersistedState("browser_authentication_transaction", "user_id", err)
-	}
-
 	return &store.DesktopReauthenticationContext{
-		ID:                           id,
-		State:                        model.BrowserAuthenticationState(row.State),
-		UserID:                       userID,
-		ExpectedAuthenticationMethod: row.ExpectedAuthenticationMethod,
-		ExpectedProviderID:           row.ExpectedProviderID.String,
-		CreatedAt:                    row.CreatedAt.UTC(),
-		ExpiresAt:                    row.ExpiresAt.UTC(),
+		ID: row.ID, State: row.State, UserID: row.UserID, BindingHash: row.BindingHash,
+		ExpectedAuthenticationMethod: row.Method, ExpectedProviderID: row.Provider.String,
+		AuthenticationStrength: row.Strength, AuthenticationGeneration: row.Generation,
+		ExternalIdentityID: model.ExternalIdentityID(row.Identity.String),
+		CreatedAt:          row.CreatedAt.UTC(), ExpiresAt: row.ExpiresAt.UTC(),
 	}, nil
 }
 
@@ -396,19 +420,27 @@ func (s SQLBrowserAuthenticationStore) AuthenticateDesktopReauthentication(
 			if err = requireExactExternalIdentity(ctx, tx, input.UserID, input.ProviderID, input.ExternalIdentityID); err != nil {
 				return nil, err
 			}
+		}
 
-			// Provider proof must be fresh for this handoff and is never
-			// recorded later than database time.
+		if input.AuthenticationMethod != "password" || input.MFACompletedAt.Valid {
+			// Delayed password and provider proofs retain their original
+			// primary authentication instant.
 			authenticatedAt = model.TimeUTC(input.AuthenticatedAt)
 			if authenticatedAt.Before(createdAt.Truncate(time.Second)) || authenticatedAt.After(at.Add(externalReauthenticationClockSkew)) {
 				return nil, store.NewErrConflict("browser_authentication_transaction", "reauthentication_time", nil)
 			}
+			authenticatedAt = transitionInstant(authenticatedAt, createdAt)
 			if authenticatedAt.After(at) {
 				authenticatedAt = at
 			}
-			if authenticatedAt.Before(createdAt) {
-				authenticatedAt = createdAt
+		}
+		var completedAt model.OptionalTime
+		if input.MFACompletedAt.Valid {
+			factorAt := transitionInstant(input.MFACompletedAt.Time, authenticatedAt)
+			if factorAt.After(at) {
+				factorAt = at
 			}
+			completedAt = model.OptionalTimeFrom(factorAt)
 		}
 
 		result, err := tx.Exec(
@@ -417,7 +449,7 @@ func (s SQLBrowserAuthenticationStore) AuthenticateDesktopReauthentication(
 			SET updated_at = ?, state = 'authenticated', authentication_method = ?,
 				authentication_provider_id = NULLIF(?, ''), external_identity_id = NULLIF(?, ''),
 				password_credential_id = NULLIF(?, ''), password_credential_revision = NULLIF(?, 0),
-				authenticated_at = ?
+				authenticated_at = ?, mfa_completed_at = ?
 			WHERE id = ?
 				AND purpose = 'desktop_reauthentication'
 				AND state = 'bound'
@@ -429,6 +461,7 @@ func (s SQLBrowserAuthenticationStore) AuthenticateDesktopReauthentication(
 			input.PasswordProof.ID.String(),
 			input.PasswordProof.Revision,
 			authenticatedAt,
+			NullTimeFromOptional(completedAt),
 			current.ID,
 			at,
 		)
@@ -609,7 +642,7 @@ func (s SQLBrowserAuthenticationStore) CancelDesktopReauthentication(
 			browser_proof_hash = NULL, state_hash = NULL, callback_url = NULL,
 			code_challenge = NULL, authentication_method = NULL, authentication_provider_id = NULL,
 			external_identity_id = NULL, password_credential_id = NULL,
-			password_credential_revision = NULL, authenticated_at = NULL, canceled_at = terminal.at
+			password_credential_revision = NULL, authenticated_at = NULL, mfa_completed_at = NULL, canceled_at = terminal.at
 		FROM (SELECT clock_timestamp() AS at) AS terminal
 		WHERE purpose = 'desktop_reauthentication'
 			AND browser_proof_hash = ?
@@ -747,6 +780,13 @@ func (s SQLBrowserAuthenticationStore) CompleteDesktopReauthentication(
 
 		// The proof instant never precedes the session's recorded history.
 		proofAt := transitionInstant(current.AuthenticatedAt.Time, session.AuthenticatedAt, session.ReauthenticatedAt.Time)
+		if current.MFACompletedAt.Valid {
+			factorAt := transitionInstant(current.MFACompletedAt.Time, session.MFACompletedAt.Time)
+			session, err = upgradeSessionAuthentication(ctx, tx, session.ID.String(), session.UserID.String(), factorAt)
+			if err != nil {
+				return nil, err
+			}
+		}
 		return commitSessionReauthentication(ctx, tx, session, proofAt, input.AuditEventID)
 	})
 }

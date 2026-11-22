@@ -18,11 +18,12 @@ import (
 )
 
 type ExternalSecondFactorSQLProbe struct {
-	Activate        func(*testing.T, model.MFACredentialID)
-	AddRecoveryCode func(*testing.T, model.UserID, string)
-	SetGeneration   func(*testing.T, model.UserID)
-	Disable         func(*testing.T, model.UserID)
-	Backdate        func(*testing.T, model.ExternalSecondFactorStateID)
+	Activate             func(*testing.T, model.MFACredentialID)
+	AddRecoveryCode      func(*testing.T, model.UserID, string)
+	SetGeneration        func(*testing.T, model.UserID)
+	Disable              func(*testing.T, model.UserID)
+	Backdate             func(*testing.T, model.ExternalSecondFactorStateID)
+	CheckWebSessionProof func(*testing.T, *model.ExternalSecondFactorState)
 }
 
 // TestExternalSecondFactorStateStore exercises replay protection and the
@@ -112,6 +113,18 @@ func TestExternalSecondFactorStateStore(t *testing.T, ss store.Store, probe Exte
 			require.True(t, store.IsNotFound(err), "%v", err)
 		})
 	}
+	t.Run("web session proof after MFA reset", func(t *testing.T) {
+		user := saveUser(t, ctx, ss)
+		probe.SetGeneration(t, user.ID)
+		pause := createWebSecondFactor(t, ctx, ss, user, institution)
+		credential := seedMFACredentialSealedWith(t, ctx, ss, user.ID, mfaRekeyFixturePrimary)
+		probe.Activate(t, credential.ID)
+		consumed, err := ss.ExternalLoginState().ConsumeExternalSecondFactorState(ctx, factorConsumption(t, ctx, ss, institution, pause, credential))
+		require.NoError(t, err)
+		require.EqualValues(t, 1, consumed.AuthenticationGeneration)
+		probe.CheckWebSessionProof(t, consumed)
+	})
+
 }
 
 func createWebSecondFactor(
@@ -137,11 +150,15 @@ func createWebSecondFactor(
 	})
 	require.NoError(t, err)
 	audit := secondFactorTestAudit(t, ctx, ss, institution, user.ID, model.ActionAuthenticationExternalLogin)
+	recovery, err := ss.MFA().GetRecoveryState(ctx, user.ID)
+	require.NoError(t, err)
+
 	state, err := ss.ExternalLoginState().CreateExternalSecondFactorState(ctx, &store.ExternalSecondFactorStateCreation{
 		State: &model.ExternalSecondFactorState{
 			Purpose: model.ExternalAuthenticationPurposeLogin, UserID: user.ID,
 			ExternalIdentityID: identity.ID, Provider: provider, AuthenticationMethod: "cas",
-			BindingHash: model.HashToken(model.NewCredentialToken()), PrimaryAuthenticatedAt: time.Now(),
+			AuthenticationGeneration: recovery.Generation,
+			BindingHash:              model.HashToken(model.NewCredentialToken()), PrimaryAuthenticatedAt: time.Now(),
 			ReturnTo: "/", ClientType: model.SessionClientWeb, AuditEventID: audit.ID, ExternalLoginStateID: login.ID,
 		},
 		Lifetime: time.Minute,

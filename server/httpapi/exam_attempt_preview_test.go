@@ -325,24 +325,28 @@ func TestCandidatePreviewFreezeEndsTheStreamBeforeTheAccessRecheck(t *testing.T)
 
 func TestCandidatePreviewIdleTimeoutFollowsTrafficInEitherDirection(t *testing.T) {
 	t.Parallel()
-	const idle = 750 * time.Millisecond
+	// Traffic comes every idle/20 and lasts 1.5 idle periods. A loaded CI
+	// runner can stall a send by hundreds of milliseconds; the gap between
+	// sends must stay far below the idle period even then.
+	const idle = 2 * time.Second
 	for _, direction := range []string{"no traffic", "candidate to guest", "guest to candidate"} {
 		t.Run(direction, func(t *testing.T) {
 			t.Parallel()
 			listener := listenPreviewGuest(t)
 			fixture := newPreviewFixtureWithListener(t, listener, func(h *examAttemptPreviewHandlers) { h.idle = idle })
 			conn := fixture.dial(t)
+			require.NoError(t, conn.SetReadDeadline(time.Now().Add(15*time.Second)))
 			guest, err := listener.AcceptTCP()
 			require.NoError(t, err)
 			defer func() { _ = guest.Close() }()
-			require.NoError(t, guest.SetDeadline(time.Now().Add(5*time.Second)))
+			require.NoError(t, guest.SetDeadline(time.Now().Add(15*time.Second)))
 
 			if direction != "no traffic" {
 				// Traffic runs for longer than one idle period but flows only
 				// in the direction named by this subtest.
-				ticker := time.NewTicker(idle / 8)
+				ticker := time.NewTicker(idle / 20)
 				defer ticker.Stop()
-				for range 10 {
+				for range 30 {
 					<-ticker.C
 					switch direction {
 					case "candidate to guest":

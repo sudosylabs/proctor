@@ -114,7 +114,7 @@ func TestRetentionExpiryForeignKeyInventory(t *testing.T) {
 	var actual []string
 	err := s.GetMaster().Select(context.Background(), &actual, `SELECT c.conrelid::regclass::text||'.'||a.attname FROM pg_constraint c JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=ANY(c.conkey) WHERE c.contype='f' AND c.confrelid='audit_events'::regclass`)
 	require.NoError(t, err)
-	expected := []string{"external_login_states.audit_event_id", "exam_attempt_manager_end_actions.audit_event_id", "exam_sitting_private_actions.audit_event_id", "exam_sitting_live_corrections.audit_event_id", "exam_attempt_correction_acknowledgements.audit_event_id", "command_outcomes.original_audit_event_id", "exam_starter_workspace_objects.retired_by_audit_event_id", "exam_attempt_workspace_objects.retired_by_audit_event_id", "administrator_recovery_records.audit_event_id", "submission_review_waivers.audit_event_id", "retention_holds.creation_audit_event_id", "retention_holds.release_audit_event_id"}
+	expected := []string{"external_login_states.audit_event_id", "external_second_factor_states.audit_event_id", "exam_attempt_manager_end_actions.audit_event_id", "exam_sitting_private_actions.audit_event_id", "exam_sitting_live_corrections.audit_event_id", "exam_attempt_correction_acknowledgements.audit_event_id", "command_outcomes.original_audit_event_id", "exam_starter_workspace_objects.retired_by_audit_event_id", "exam_attempt_workspace_objects.retired_by_audit_event_id", "administrator_recovery_records.audit_event_id", "submission_review_waivers.audit_event_id", "retention_holds.creation_audit_event_id", "retention_holds.release_audit_event_id"}
 	sort.Strings(actual)
 	sort.Strings(expected)
 	require.Equal(t, expected, actual, "audit reference inventory changed: actual")

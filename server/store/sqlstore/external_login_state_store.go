@@ -272,6 +272,10 @@ func (s SQLExternalLoginStateStore) Maintain(ctx context.Context, limit int) (*s
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.ExternalLoginStateMaintenanceResult, error) {
+		pausesPurged, pausesTerminalized, err := sweepExternalSecondFactorStates(ctx, tx, limit)
+		if err != nil {
+			return nil, fmt.Errorf("sweep external second factor states: %w", err)
+		}
 		var terminalized int
 		if err := tx.Get(ctx, &terminalized, `WITH candidates AS (
 					SELECT state.id, state.audit_event_id
@@ -301,8 +305,9 @@ func (s SQLExternalLoginStateStore) Maintain(ctx context.Context, limit int) (*s
 		var purged int
 		if err := tx.Get(ctx, &purged, `WITH candidates AS (
 					SELECT id
-					FROM external_login_states
-					WHERE expires_at <= clock_timestamp()-(? * interval '1 millisecond')
+					FROM external_login_states AS login
+					WHERE NOT EXISTS (SELECT 1 FROM external_second_factor_states pause WHERE pause.external_login_state_id = login.id)
+						AND expires_at <= clock_timestamp()-(? * interval '1 millisecond')
 					ORDER BY expires_at, id
 					FOR UPDATE SKIP LOCKED
 					LIMIT ?
@@ -329,13 +334,14 @@ func (s SQLExternalLoginStateStore) Maintain(ctx context.Context, limit int) (*s
 			)
 				OR EXISTS (
 					SELECT 1
-					FROM external_login_states
-					WHERE expires_at <= clock_timestamp()-(? * interval '1 millisecond')
+					FROM external_login_states AS login
+					WHERE NOT EXISTS (SELECT 1 FROM external_second_factor_states pause WHERE pause.external_login_state_id = login.id)
+						AND expires_at <= clock_timestamp()-(? * interval '1 millisecond')
 				)`, externalLoginStateRetention.Milliseconds()); err != nil {
 			return nil, fmt.Errorf("inspect external login state maintenance: %w", err)
 		}
 
-		return &store.ExternalLoginStateMaintenanceResult{Terminalized: terminalized, Purged: purged, More: more}, nil
+		return &store.ExternalLoginStateMaintenanceResult{Terminalized: terminalized + pausesTerminalized, Purged: purged + pausesPurged, More: more || pausesPurged == limit}, nil
 	})
 }
 

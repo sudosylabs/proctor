@@ -84,6 +84,11 @@ type ExternalLoginStateStore interface {
 	GetByStateHash(context.Context, string) (*model.ExternalLoginState, error)
 	Consume(context.Context, *ExternalLoginStateConsumption) (*model.ExternalLoginState, error)
 	Maintain(context.Context, int) (*ExternalLoginStateMaintenanceResult, error)
+	CreateExternalSecondFactorState(context.Context, *ExternalSecondFactorStateCreation) (*model.ExternalSecondFactorState, error)
+	GetExternalSecondFactorStateByBinding(context.Context, string, time.Time) (*model.ExternalSecondFactorState, error)
+	HasLiveExternalSecondFactorState(context.Context, model.BrowserAuthenticationTransactionID) (bool, error)
+	ExpireExternalSecondFactorState(context.Context, string) (bool, error)
+	ConsumeExternalSecondFactorState(context.Context, *ExternalSecondFactorStateConsumption) (*model.ExternalSecondFactorState, error)
 }
 
 // ExternalLoginStateMaintenanceResult reports one bounded pass on the
@@ -113,4 +118,23 @@ type ExternalLoginStateInvitationAdmission struct {
 	State     *model.ExternalLoginState
 	Lifetime  time.Duration
 	ClaimHash string
+}
+
+// ExternalSecondFactorStateCreation uses database time for the pause lifetime.
+type ExternalSecondFactorStateCreation struct {
+	State    *model.ExternalSecondFactorState
+	Lifetime time.Duration
+}
+
+// ExternalSecondFactorStateConsumption ties a verified factor to the exact
+// pause read before verification. A replaced pause cannot inherit the proof.
+type ExternalSecondFactorStateConsumption struct {
+	ID               model.ExternalSecondFactorStateID
+	BindingHash      string
+	Purpose          model.ExternalAuthenticationPurpose
+	CredentialID     model.MFACredentialID
+	TimeStep         int64
+	RecoveryCodeHash string
+	VerifiedAt       time.Time
+	AuditEventID     model.AuditEventID
 }

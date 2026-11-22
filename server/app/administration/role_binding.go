@@ -282,14 +282,14 @@ func (s *Service) CreateRoleBinding(
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.RoleBinding, error) {
 			input := &store.RoleBindingCreation{
-				Binding:                   candidate,
-				ExpectedRoleUpdatedAt:     role.UpdatedAt,
-				ExpectedRolePermissions:   append([]string(nil), role.Permissions...),
-				ExpectedRecipientRevision: recipient.Revision,
-				Notice:                    notice,
-				AuditEventID:              reference.ID,
-				AuditAt:                   reference.MutationAt,
-				Command:                   idempotency,
+				Binding:                 candidate,
+				ExpectedRoleUpdatedAt:   role.UpdatedAt,
+				ExpectedRolePermissions: append([]string(nil), role.Permissions...),
+				Recipient:               recipient,
+				Notice:                  notice,
+				AuditEventID:            reference.ID,
+				AuditAt:                 reference.MutationAt,
+				Command:                 idempotency,
 			}
 			value, storeErr := s.roleBindings.Save(ctx, input)
 			if command.Batch.Fields().Replayed != nil {
@@ -476,14 +476,14 @@ func (s *Service) EndRoleBinding(
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.RoleBinding, error) {
 			input := &store.RoleBindingEnd{
-				ID:                        id,
-				EndAt:                     reference.MutationAt,
-				ExpectedRecipientRevision: recipient.Revision,
-				Notice:                    notice,
-				Capabilities:              identity.AccessDeploymentCapabilities(s.capabilities.Snapshot()),
-				AuditEventID:              reference.ID,
-				AuditAt:                   reference.MutationAt,
-				Command:                   idempotency,
+				ID:           id,
+				EndAt:        reference.MutationAt,
+				Recipient:    recipient,
+				Notice:       notice,
+				Capabilities: identity.AccessDeploymentCapabilities(s.capabilities.Snapshot()),
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
+				Command:      idempotency,
 			}
 			value, storeErr := s.roleBindings.End(ctx, input)
 			if command.Batch.Fields().Replayed != nil {

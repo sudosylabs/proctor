@@ -86,7 +86,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	require.Contains(t, opened.Text, "Exam: "+reviewExamTitle, "rendered notice")
 	// f.at plus a minute, as the notice writes it.
 	require.Contains(t, opened.Text, "Released: Saturday 15 August 2026, 12:01 UTC", "rendered notice")
-	require.Equal(t, int64(reviewCandidateRevision), f.persistence.release.ExpectedRecipientRevision, "release")
+	require.Equal(t, int64(reviewCandidateRevision), f.persistence.release.Recipient.Revision, "release")
 }
 
 func TestReleasePreparationFailureIsAuditedAsAttempt(t *testing.T) {

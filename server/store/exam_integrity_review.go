@@ -147,17 +147,19 @@ type ExamIntegrityReviewFinalize struct {
 }
 
 type ExamIntegrityReviewRelease struct {
-	SubmissionID              model.SubmissionID
-	ReviewID                  model.SubmissionReviewID
-	ActorUserID               model.UserID
-	ManagerOverride           bool
-	ExpectedRevision          int64
-	ChangedAt                 time.Time
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	CandidateUserID           model.UserID
-	Notice                    *PreparedMail
-	ExpectedRecipientRevision int64
+	SubmissionID     model.SubmissionID
+	ReviewID         model.SubmissionReviewID
+	ActorUserID      model.UserID
+	ManagerOverride  bool
+	ExpectedRevision int64
+	ChangedAt        time.Time
+	AuditEventID     model.AuditEventID
+	AuditAt          time.Time
+	CandidateUserID  model.UserID
+	Notice           *PreparedMail
+	// Recipient is the User the Notice was written for; the write refuses it
+	// if anything the mail was written from has changed since.
+	Recipient *model.User
 }
 
 // ExamIntegrityReviewReleasePreparation is the reserved release time.

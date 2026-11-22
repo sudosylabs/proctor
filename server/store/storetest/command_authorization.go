@@ -152,7 +152,7 @@ func testCommandAuthorityAppliesTokenCeiling(t *testing.T, ss store.Store) {
 		command.Authorization = &store.CommandAuthorization{Principal: principal, ScopeType: model.RoleScopeAcademicUnit,
 			ScopeID: unit.ID.String(), Actions: memberActions}
 		_, err := ss.AcademicUnitMember().Create(ctx, &store.AcademicUnitMemberCreation{Member: candidate,
-			ExpectedRecipientRevision: member.Revision, AuditEventID: audit.ID, AuditAt: at, Command: command})
+			Recipient: new(*member), AuditEventID: audit.ID, AuditAt: at, Command: command})
 		return err
 	}
 	addAffiliation := func(key string, principal model.Principal) error {

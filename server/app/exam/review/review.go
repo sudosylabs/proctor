@@ -28,11 +28,11 @@ type ResultReleaseMailPreparation struct {
 	ReleasedAt             time.Time
 }
 
-// PreparedResultReleaseMail is a frozen release notice and the recipient's
-// user revision it was prepared against, which the store release fences on.
+// PreparedResultReleaseMail is a frozen release notice and the User it was
+// written for, which the store release fences on.
 type PreparedResultReleaseMail struct {
-	Notice                    *store.PreparedMail
-	ExpectedRecipientRevision int64
+	Notice    *store.PreparedMail
+	Recipient *model.User
 }
 
 // Dependencies are what New needs. New checks only Authorizer.Sittings; the

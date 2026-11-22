@@ -259,7 +259,7 @@ func sealAutomaticExamSubmission(
 		tx,
 		input.Notice,
 		recipient,
-		input.ExpectedRecipientRevision,
+		input.Recipient,
 		input.SubmissionID,
 		input.AuditAt,
 		model.MailTemplateExamSubmissionAutomaticallySealed,
@@ -418,12 +418,12 @@ func prepareAutomaticExamSubmissionReceipt(
 	tx *sqlxTxWrapper,
 	notice *store.PreparedMail,
 	recipient *model.User,
-	expectedRecipientRevision int64,
+	prepared *model.User,
 	submissionID model.SubmissionID,
 	auditAt time.Time,
 	template model.MailTemplateKey,
 ) (string, error) {
-	if expectedRecipientRevision < 1 || recipient.Revision != expectedRecipientRevision {
+	if !sameMailRecipient(recipient, prepared) {
 		return "", store.NewErrConflict("exam_submission", "receipt_recipient_changed", nil)
 	}
 

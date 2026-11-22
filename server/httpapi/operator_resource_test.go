@@ -91,7 +91,7 @@ func TestRoleBindingResourceOwnsPathCommandAndAuthentication(t *testing.T) {
 	require.Equal(t, http.StatusOK, ended.Code, "end status = %d: %s", ended.Code, ended.Body.String())
 	require.Len(t, fixture.bindings.ended, 1, "the end command reached the Store")
 	require.Equal(t, bindingID, fixture.bindings.ended[0].ID, "the path's binding was ended")
-	require.Equal(t, holder.Revision, fixture.bindings.ended[0].ExpectedRecipientRevision)
+	require.Equal(t, holder.Revision, fixture.bindings.ended[0].Recipient.Revision)
 	require.NotNil(t, fixture.bindings.ended[0].Notice, "the holder's notice commits with the end")
 	require.Equal(t, "end_binding", onlyAdministrationAttempt(t, fixture).Operation)
 }

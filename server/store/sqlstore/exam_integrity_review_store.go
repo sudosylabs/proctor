@@ -1534,7 +1534,7 @@ func releaseReview(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamInte
 		return examIntegrityReviewOutcome{}, store.NewErrConflict("submission_review", "result_release_time", nil)
 	}
 
-	if auth.CandidateUserID != input.CandidateUserID || recipient.Revision != input.ExpectedRecipientRevision {
+	if auth.CandidateUserID != input.CandidateUserID || !sameMailRecipient(recipient, input.Recipient) {
 		return examIntegrityReviewOutcome{}, store.NewErrConflict("submission_review", "result_release_recipient_changed", nil)
 	}
 

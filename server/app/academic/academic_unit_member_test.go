@@ -75,7 +75,7 @@ func TestAcademicUnitMemberCreateUsesAuthorizationWithoutGrantingPermission(t *t
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)}}, publisher.Calls())
 	require.Equal(t, model.UserID(userID), onlyAttempt(t, access).SubjectUserID, "the membership names the member as its subject")
 	require.NotNil(t, persistence.createInput.Notice, "creation mail = %#v", persistence.createInput)
-	require.Equal(t, int64(1), persistence.createInput.ExpectedRecipientRevision, "creation mail = %#v", persistence.createInput)
+	require.Equal(t, int64(1), persistence.createInput.Recipient.Revision, "creation mail = %#v", persistence.createInput)
 	require.Equal(t, 1, rendered.Count(), "creation mail = %#v", persistence.createInput)
 	require.Equal(t, model.MailTemplateAcademicUnitAssigned, persistence.createInput.Notice.Occurrence.TemplateKey, "creation mail = %#v", persistence.createInput)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
@@ -104,7 +104,7 @@ func TestAcademicUnitMemberEndCarriesRevision(t *testing.T) {
 	// Contract: the former member's cached authorization is dropped, once.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: current.UserID}}, publisher.Calls())
 	require.NotNil(t, persistence.endInput.Notice, "end mail = %#v", persistence.endInput)
-	require.Equal(t, int64(1), persistence.endInput.ExpectedRecipientRevision, "end mail = %#v", persistence.endInput)
+	require.Equal(t, int64(1), persistence.endInput.Recipient.Revision, "end mail = %#v", persistence.endInput)
 	require.Equal(t, 1, rendered.Count(), "end mail = %#v", persistence.endInput)
 	require.Equal(t, model.MailTemplateAcademicUnitAssignmentEnded, persistence.endInput.Notice.Occurrence.TemplateKey, "end mail = %#v", persistence.endInput)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit

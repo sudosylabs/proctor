@@ -729,11 +729,11 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 	objects := stageAttemptWorkspaceObjects(t, ctx, workspace, access, content(4, "1"), content(5, "2"))
 	directoryID, fileID := model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID()
 	mutations := []store.ExamAttemptWorkspaceMutation{
-		{Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: directoryID, DestinationPath: "pkg"},
-		{Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: fileID, DestinationPath: "pkg/util.go", ObjectID: objects[0].ObjectID},
+		{Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: directoryID, DestinationPath: "pkg_dir"},
+		{Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: fileID, DestinationPath: "pkg_dir/util.go", ObjectID: objects[0].ObjectID},
 		{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: starterFile.EntryID, ExpectedPath: starterFile.Path,
 			ExpectedContentVersion: starterFile.ContentVersion, ObjectID: objects[1].ObjectID},
-		{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: fileID, ExpectedPath: "pkg/util.go", DestinationPath: "pkg/helpers.go"},
+		{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: fileID, ExpectedPath: "pkg_dir/util.go", DestinationPath: "pkg_dir/helpers.go"},
 		{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: starterFile.EntryID, ExpectedPath: starterFile.Path,
 			ExpectedContentVersion: objects[1].ContentVersion},
 	}
@@ -757,10 +757,10 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 		paths[item.Path] = item
 	}
 	require.Len(t, afterMixed.items, len(initial.items)+1, "manifest = %#v", afterMixed.items)
-	require.Equal(t, directoryID, paths["pkg"].EntryID)
-	require.Equal(t, fileID, paths["pkg/helpers.go"].EntryID)
-	require.Equal(t, objects[0].ContentVersion, paths["pkg/helpers.go"].ContentVersion)
-	require.NotContains(t, paths, "pkg/util.go")
+	require.Equal(t, directoryID, paths["pkg_dir"].EntryID)
+	require.Equal(t, fileID, paths["pkg_dir/helpers.go"].EntryID)
+	require.Equal(t, objects[0].ContentVersion, paths["pkg_dir/helpers.go"].ContentVersion)
+	require.NotContains(t, paths, "pkg_dir/util.go")
 	require.NotContains(t, paths, starterFile.Path)
 	journal, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(access),
 		AfterCursor: initial.cursor, Limit: model.AttemptWorkspaceJournalReadMaximum})
@@ -777,7 +777,10 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 		string(model.AttemptWorkspaceMutationMoveEntry):       1,
 		string(model.AttemptWorkspaceMutationDeleteEntry):     1,
 	}, auditData.OperationCounts)
-	for _, path := range []string{"pkg", "util.go", "helpers.go", starterFile.Path} {
+	// Each path holds a character outside model.IDAlphabet, so a random ID
+	// in the audit can never contain one (a directory named pkg once
+	// matched the author ref mrpkgjt5…).
+	for _, path := range []string{"pkg_dir", "util.go", "helpers.go", starterFile.Path} {
 		require.NotContains(t, string(audit.Result), path, "batch audit carries a Workspace Path")
 	}
 
@@ -809,7 +812,7 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
 			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "atomic/a.txt", ObjectID: atomic.ObjectID},
 		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: fileID,
-			ExpectedPath: "pkg/stale.go", DestinationPath: "pkg/moved.go"},
+			ExpectedPath: "pkg_dir/stale.go", DestinationPath: "pkg_dir/moved.go"},
 		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
 			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "atomic-after"})
 	_, err = workspace.ApplyBatch(ctx, failing, attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-atomic-failure"))
@@ -822,7 +825,7 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
 			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "stale-version"},
 		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: fileID,
-			ExpectedPath: "pkg/helpers.go", ExpectedContentVersion: model.NewWorkspaceContentVersion(), ObjectID: atomic.ObjectID}),
+			ExpectedPath: "pkg_dir/helpers.go", ExpectedContentVersion: model.NewWorkspaceContentVersion(), ObjectID: atomic.ObjectID}),
 		attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-stale-version"))
 	requireAttemptWorkspaceBatchItem(t, err, 1, "attempt_workspace_content_version")
 	requireAttemptWorkspaceStateUnchanged(t, ctx, workspace, journalAccess(access), before)
@@ -853,7 +856,7 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 		}(),
 		"recursive deletion without cursor": newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
 			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry,
-				EntryID: directoryID, ExpectedPath: "pkg", Recursive: true}),
+				EntryID: directoryID, ExpectedPath: "pkg_dir", Recursive: true}),
 	}
 	for name, invalid := range invalidBatches {
 		_, err = workspace.ApplyBatch(ctx, invalid, attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-invalid-"+name))

@@ -34,7 +34,7 @@ func attachResultReleaseMail(t *testing.T, candidate *model.User, input *store.E
 	job, err = job.RequestCancellation(at)
 	require.NoError(t, err)
 	input.CandidateUserID = candidate.ID
-	input.ExpectedRecipientRevision = candidate.Revision
+	input.Recipient = new(*candidate)
 	input.Notice = &store.PreparedMail{Occurrence: &model.MailOccurrence{ID: occurrenceID,
 		Kind: model.MailOccurrenceResultRelease, TemplateKey: model.MailTemplateExamResultReleased,
 		ActorUserID: candidate.ID, CreatedAt: at}, Delivery: &model.MailDelivery{ID: deliveryID,
@@ -285,10 +285,12 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	staleRecipient := *releaseInput
 	staleRecipient.AuditEventID = saveIntegrityReviewAudit(t, ctx, ss, fixture,
 		sealed.Receipt.SubmissionID, model.ActionSubmissionRelease).ID
-	staleRecipient.ExpectedRecipientRevision++
+	// The notice was written for a name the candidate no longer has.
+	staleRecipient.Recipient = new(*releaseInput.Recipient)
+	staleRecipient.Recipient.DisplayName += " (renamed)"
 	_, staleErr := reviews.Release(ctx, &staleRecipient, examCommand(fixture.manager.ID,
 		store.ExamIntegrityReviewReleaseOperation, "review-release-stale-recipient", "review-release-stale-recipient"))
-	require.Error(t, staleErr, "Release(with stale candidate revision) succeeded")
+	require.Error(t, staleErr, "Release(for a changed candidate) succeeded")
 	delivery, deliveryErr := ss.Mail().GetDelivery(ctx, staleRecipient.Notice.Delivery.ID)
 	require.True(t, store.IsNotFound(deliveryErr), "stale-recipient result mail")
 	require.Nil(t, delivery, "stale-recipient result mail")
@@ -328,7 +330,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 		sealed.Receipt.SubmissionID, model.ActionSubmissionRelease).ID
 	replayRelease.ChangedAt, replayRelease.AuditAt = replayPreparation.ReleaseAt,
 		replayPreparation.ReleaseAt
-	replayRelease.Notice, replayRelease.ExpectedRecipientRevision = nil, 0
+	replayRelease.Notice, replayRelease.Recipient = nil, nil
 	replayedRelease, err := reviews.Release(ctx, &replayRelease, examCommand(fixture.manager.ID,
 		store.ExamIntegrityReviewReleaseOperation, "review-release", "review-release"))
 	require.NoError(t, err)

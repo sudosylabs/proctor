@@ -118,12 +118,12 @@ func (s *Service) CreateAcademicUnitMember(
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnitMember, error) {
 			input := &store.AcademicUnitMemberCreation{
-				Member:                    candidate,
-				ExpectedRecipientRevision: recipient.Revision,
-				Notice:                    notice,
-				AuditEventID:              reference.ID,
-				AuditAt:                   reference.MutationAt,
-				Command:                   commandIdempotency,
+				Member:       candidate,
+				Recipient:    recipient,
+				Notice:       notice,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
+				Command:      commandIdempotency,
 			}
 			value, storeErr := s.academicUnitMembers.Create(ctx, input)
 			changed = storeErr == nil && !input.Replayed && !input.NoOp
@@ -222,14 +222,14 @@ func (s *Service) EndAcademicUnitMember(
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnitMember, error) {
 			input := &store.AcademicUnitMemberEnd{
-				ID:                        id,
-				ExpectedRevision:          current.Revision,
-				EndAt:                     reference.MutationAt,
-				ExpectedRecipientRevision: recipient.Revision,
-				Notice:                    notice,
-				AuditEventID:              reference.ID,
-				AuditAt:                   reference.MutationAt,
-				Command:                   commandIdempotency,
+				ID:               id,
+				ExpectedRevision: current.Revision,
+				EndAt:            reference.MutationAt,
+				Recipient:        recipient,
+				Notice:           notice,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
+				Command:          commandIdempotency,
 			}
 			value, storeErr := s.academicUnitMembers.End(ctx, input)
 			changed = storeErr == nil && !input.Replayed && !input.NoOp

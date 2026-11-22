@@ -79,7 +79,7 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 				ScopeID: institution.ID.String(), StartsAt: model.TimeUTC(at),
 			},
 			ExpectedRoleUpdatedAt: role.UpdatedAt, ExpectedRolePermissions: append([]string(nil), role.Permissions...),
-			ExpectedRecipientRevision: user.Revision, Notice: createNotice,
+			Recipient: new(*user), Notice: createNotice,
 			AuditEventID: attempt.ID, AuditAt: at,
 		})
 		require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 		endNotice := classMemberPreparedMail(t, &model.ClassMember{UserID: user.ID},
 			model.MailTemplateAuthorizationInstitutionRoleEnded, model.TimeUTC(at.Add(1*time.Millisecond)))
 		ended, err := ss.RoleBinding().End(ctx, &store.RoleBindingEnd{
-			ID: saved.ID, EndAt: at.Add(1 * time.Millisecond), ExpectedRecipientRevision: user.Revision, Notice: endNotice,
+			ID: saved.ID, EndAt: at.Add(1 * time.Millisecond), Recipient: new(*user), Notice: endNotice,
 			AuditEventID: endAttempt.ID, AuditAt: at.Add(1 * time.Millisecond),
 		})
 		require.NoError(t, err)

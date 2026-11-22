@@ -248,7 +248,7 @@ func endExamAttemptByManager(
 		tx,
 		input.Notice,
 		recipient,
-		input.ExpectedRecipientRevision,
+		input.Recipient,
 		input.SubmissionID,
 		input.AuditAt,
 		model.MailTemplateExamSubmissionManagerEnded,

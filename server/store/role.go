@@ -57,30 +57,34 @@ type RoleStore interface {
 // RoleBindingCreation creates a binding and completes its recorded audit
 // attempt.
 type RoleBindingCreation struct {
-	Binding                   *model.RoleBinding
-	ExpectedRoleUpdatedAt     time.Time
-	ExpectedRolePermissions   []string
-	ExpectedRecipientRevision int64
-	Notice                    *PreparedMail
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Command                   *CommandIdempotency
-	Replayed                  bool
-	NoOp                      bool
+	Binding                 *model.RoleBinding
+	ExpectedRoleUpdatedAt   time.Time
+	ExpectedRolePermissions []string
+	// Recipient is the User the Notice was written for; the write refuses it
+	// if anything the mail was written from has changed since.
+	Recipient    *model.User
+	Notice       *PreparedMail
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Command      *CommandIdempotency
+	Replayed     bool
+	NoOp         bool
 }
 
 // RoleBindingEnd ends a binding and completes its recorded audit attempt.
 type RoleBindingEnd struct {
-	ID                        model.RoleBindingID
-	EndAt                     time.Time
-	ExpectedRecipientRevision int64
-	Notice                    *PreparedMail
-	Capabilities              AccessDeploymentCapabilities
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Command                   *CommandIdempotency
-	Replayed                  bool
-	NoOp                      bool
+	ID    model.RoleBindingID
+	EndAt time.Time
+	// Recipient is the User the Notice was written for; the write refuses it
+	// if anything the mail was written from has changed since.
+	Recipient    *model.User
+	Notice       *PreparedMail
+	Capabilities AccessDeploymentCapabilities
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Command      *CommandIdempotency
+	Replayed     bool
+	NoOp         bool
 }
 
 // RoleBindingSummaryOptions selects, for a page of users, up to Limit current

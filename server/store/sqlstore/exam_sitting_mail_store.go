@@ -362,7 +362,7 @@ func commitSittingMailRecipient(
 	if fanout.CompletedAt.Valid {
 		return &store.ExamSittingMailRecipientResult{Suppressed: true}, nil
 	}
-	if !sameSittingMailRecipient(user, input.Recipient) {
+	if !sameMailRecipient(user, input.Recipient) {
 		return nil, store.NewErrConflict("exam_sitting_mail_recipient", "recipient_changed", nil)
 	}
 
@@ -649,20 +649,6 @@ func lockMailRecipientUser(ctx context.Context, tx *sqlxTxWrapper, userID model.
 		return nil, translateError("user", userID.String(), err)
 	}
 	return row.model()
-}
-
-func sameSittingMailRecipient(current, prepared *model.User) bool {
-	return current != nil &&
-		prepared != nil &&
-		current.ID == prepared.ID &&
-		current.Revision == prepared.Revision &&
-		current.Email == prepared.Email &&
-		current.EmailVerified == prepared.EmailVerified &&
-		current.DisplayName == prepared.DisplayName &&
-		current.Locale == prepared.Locale &&
-		current.Timezone == prepared.Timezone &&
-		current.ArchivedAt == prepared.ArchivedAt &&
-		current.DisabledAt == prepared.DisabledAt
 }
 
 func lockSittingMailProjection(

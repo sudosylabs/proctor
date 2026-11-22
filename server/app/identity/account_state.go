@@ -9,6 +9,7 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -78,12 +79,6 @@ func (s *Service) SetUserEnabled(
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
 
-	current, err := s.users.Get(ctx, userID)
-	if err != nil {
-		return nil, accountStateStoreErrors.Translate(err)
-	}
-
-	disabled := !command.Enabled
 	commandIdempotency, err := idempotency.Prepare(inv, "user.enabled_state", command.IdempotencyKey, struct {
 		UserID  string `json:"user_id"`
 		Enabled bool   `json:"enabled"`
@@ -97,9 +92,45 @@ func (s *Service) SetUserEnabled(
 	batchitem.BindOnboardingImport(commandIdempotency, batch.OnboardingImportID, batch.OnboardingImportRowNumber)
 	batchitem.BindAuthorization(commandIdempotency, batch.Authorization)
 	batchitem.BindBatch(commandIdempotency, batch.Metadata)
+
+	// The write is fenced on the revision it read. A change the command never
+	// reads, such as the default profile picture attached just after an account
+	// is created, can move that revision in between. The refused write rolls
+	// back and records no outcome, so the command starts again from a fresh
+	// read; each try is audited as what it was.
+	for attempt := 1; ; attempt++ {
+		user, stale, err := s.setUserEnabledFromCurrent(ctx, inv, command, reason, commandIdempotency)
+		if !stale || attempt == userEnabledAttempts {
+			return user, err
+		}
+	}
+}
+
+// userEnabledAttempts bounds how often SetUserEnabled starts again after its
+// read went stale.
+const userEnabledAttempts = 3
+
+// setUserEnabledFromCurrent reads the user and applies the command to that
+// read. stale reports that the user changed after the read, so the store
+// refused the write.
+func (s *Service) setUserEnabledFromCurrent(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command SetUserEnabledCommand,
+	reason string,
+	commandIdempotency *store.CommandIdempotency,
+) (*model.User, bool, error) {
+	userID := command.ID
+	current, err := s.users.Get(ctx, userID)
+	if err != nil {
+		return nil, false, accountStateStoreErrors.Translate(err)
+	}
+
+	disabled := !command.Enabled
+	batch := command.Batch.Fields()
 	alreadySatisfied := current.DisabledAt.Valid == disabled
 	if alreadySatisfied && commandIdempotency == nil {
-		return current, nil
+		return current, false, nil
 	}
 
 	now := model.TimeUTC(s.now())
@@ -112,7 +143,7 @@ func (s *Service) SetUserEnabled(
 	if !batch.RetainedOutcome {
 		prepared, err = s.mail.PrepareAccountStateChanged(mail.NoticePreparation{Recipient: &recipient, At: now}, command.Enabled)
 		if err != nil {
-			return nil, accountStateStoreErrors.Translate(err)
+			return nil, false, accountStateStoreErrors.Translate(err)
 		}
 	}
 
@@ -126,6 +157,7 @@ func (s *Service) SetUserEnabled(
 		parameters["reason"] = reason
 	}
 
+	var stale bool
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -154,6 +186,8 @@ func (s *Service) SetUserEnabled(
 				Command:          commandIdempotency,
 			}
 			value, storeErr := s.users.SetDisabled(ctx, input)
+			var conflict *store.ErrConflict
+			stale = errors.As(storeErr, &conflict) && conflict.Resource == "user" && conflict.Constraint == "user_changed"
 			if batch.Replayed != nil {
 				*batch.Replayed = input.Replayed || input.NoOp
 			}
@@ -163,13 +197,13 @@ func (s *Service) SetUserEnabled(
 		accountStateStoreErrors.Translate,
 	)
 	if err != nil {
-		return nil, err
+		return nil, stale, err
 	}
 	if disabled && result != nil && len(result.RevokedSessions) > 0 {
 		s.publisher.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 	}
 
-	return result.User, nil
+	return result.User, false, nil
 }
 
 var accountStateStoreErrors = apperror.AdministrationStoreTable("user", "user.conflict", "user.invalid", map[string]apperror.Code{

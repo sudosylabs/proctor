@@ -48,7 +48,7 @@ func attachSubmissionReceipt(t *testing.T, ctx context.Context, ss store.Store, 
 	}
 	input.Notice = submissionReceiptNotice(t, candidate, input.SubmissionID, input.AuditAt,
 		model.MailTemplateExamSubmissionReceived)
-	input.ExpectedRecipientRevision = candidate.Revision
+	input.Recipient = new(*candidate)
 	input.DomainEventID, input.DomainEventJobID = model.NewDomainEventID(), model.NewJobID()
 }
 
@@ -56,7 +56,7 @@ func attachAutomaticSubmissionReceipt(t *testing.T, candidate *model.User, input
 	t.Helper()
 	input.Notice = submissionReceiptNotice(t, candidate, input.SubmissionID, input.AuditAt,
 		model.MailTemplateExamSubmissionAutomaticallySealed)
-	input.ExpectedRecipientRevision = candidate.Revision
+	input.Recipient = new(*candidate)
 	input.DomainEventID, input.DomainEventJobID = model.NewDomainEventID(), model.NewJobID()
 }
 
@@ -64,7 +64,7 @@ func attachManagerEndedSubmissionReceipt(t *testing.T, candidate *model.User, in
 	t.Helper()
 	input.Notice = submissionReceiptNotice(t, candidate, input.SubmissionID, input.AuditAt,
 		model.MailTemplateExamSubmissionManagerEnded)
-	input.ExpectedRecipientRevision = candidate.Revision
+	input.Recipient = new(*candidate)
 	input.DomainEventID, input.DomainEventJobID = model.NewDomainEventID(), model.NewJobID()
 }
 
@@ -1262,6 +1262,38 @@ func testExamSubmissionAccessFences(t *testing.T, ctx context.Context, ss store.
 		_, err = submissions.Seal(ctx, input,
 			examCommand(fixture.candidate.ID, store.ExamSubmissionSealOperation, "submission-membership", "submission-membership"))
 		require.True(t, store.IsNotFound(err), "Seal(after membership loss) error")
+	})
+
+	// The receipt is fenced on what it was written from, not on the User's
+	// revision: a change the mail never reads, such as a profile picture or a
+	// first name, must not refuse the seal.
+	recipientChangeSeal := func(t *testing.T, key string, changes model.UserProfileChanges) error {
+		t.Helper()
+		fixture := newExamAttemptFixture(t, ctx, ss)
+		connected, focusAccess := connectFocusLossFixture(t, ctx, ss, fixture, key+"-connect")
+		access := submissionAccess(focusAccess, fixture.sitting.ExamRevisionID, connected.Workspace.Cursor, 0)
+		input := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: access,
+			AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID}
+		attachSubmissionReceipt(t, ctx, ss, fixture.candidate, input)
+		changed, err := ss.User().UpdateProfile(ctx, &store.UserProfileUpdate{
+			UserID: fixture.candidate.ID, Changes: changes, ExpectedRevision: fixture.candidate.Revision,
+			AuditEventID: saveUserProfileAuditAttempt(t, ctx, ss, fixture.candidate.ID.String()).ID, AuditAt: model.NowUTC(),
+		})
+		require.NoError(t, err)
+		require.Greater(t, changed.Revision, input.Recipient.Revision, "the change moved the candidate's revision")
+		_, err = submissions.Seal(ctx, input, examCommand(fixture.candidate.ID, store.ExamSubmissionSealOperation, key, key))
+		return err
+	}
+
+	t.Run("recipient changed outside the receipt", func(t *testing.T) {
+		firstName := "Renamed"
+		require.NoError(t, recipientChangeSeal(t, "submission-recipient-first-name", model.UserProfileChanges{FirstName: &firstName}))
+	})
+
+	t.Run("recipient changed in the receipt", func(t *testing.T) {
+		displayName := "Renamed Candidate"
+		err := recipientChangeSeal(t, "submission-recipient-display-name", model.UserProfileChanges{DisplayName: &displayName})
+		requireConflictConstraint(t, err, "receipt_recipient_changed")
 	})
 }
 

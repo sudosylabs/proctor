@@ -63,15 +63,17 @@ type ExamSubmissionSealTarget struct {
 // DomainEventID and DomainEventJobID name the exam.attempt.submitted outbox
 // row and dispatch job a fresh seal inserts; a replay ignores them.
 type ExamSubmissionSeal struct {
-	SubmissionID              model.SubmissionID
-	ReceiptCode               model.SubmissionReceiptCode
-	Access                    ExamSubmissionSealAccess
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Notice                    *PreparedMail
-	ExpectedRecipientRevision int64
-	DomainEventID             model.DomainEventID
-	DomainEventJobID          model.JobID
+	SubmissionID model.SubmissionID
+	ReceiptCode  model.SubmissionReceiptCode
+	Access       ExamSubmissionSealAccess
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Notice       *PreparedMail
+	// Recipient is the User the Notice was written for. The seal refuses it
+	// if anything the mail was written from has changed since.
+	Recipient        *model.User
+	DomainEventID    model.DomainEventID
+	DomainEventJobID model.JobID
 }
 
 // ExamSubmissionReceipt is what the candidate may see of a submission: no
@@ -177,15 +179,17 @@ type ExamSubmissionAutomaticSealTarget struct {
 // the exam.attempt.submitted outbox row and dispatch job a fresh seal
 // inserts; a replay ignores them.
 type ExamSubmissionAutomaticSeal struct {
-	Target                    ExamSubmissionAutomaticSealTarget
-	SubmissionID              model.SubmissionID
-	ReceiptCode               model.SubmissionReceiptCode
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Notice                    *PreparedMail
-	ExpectedRecipientRevision int64
-	DomainEventID             model.DomainEventID
-	DomainEventJobID          model.JobID
+	Target       ExamSubmissionAutomaticSealTarget
+	SubmissionID model.SubmissionID
+	ReceiptCode  model.SubmissionReceiptCode
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Notice       *PreparedMail
+	// Recipient is the User the Notice was written for. The seal refuses it
+	// if anything the mail was written from has changed since.
+	Recipient        *model.User
+	DomainEventID    model.DomainEventID
+	DomainEventJobID model.JobID
 }
 
 // ExamSubmissionAutomaticSealResult adds whether the seal closed the
@@ -255,16 +259,18 @@ type ExamSubmissionManagerEndRequest struct {
 // seal. DomainEventID and DomainEventJobID name the exam.attempt.submitted
 // outbox row and dispatch job a fresh seal inserts; a replay ignores them.
 type ExamSubmissionManagerEnd struct {
-	Request                   ExamSubmissionManagerEndRequest
-	Target                    ExamSubmissionAutomaticSealTarget
-	SubmissionID              model.SubmissionID
-	ReceiptCode               model.SubmissionReceiptCode
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Notice                    *PreparedMail
-	ExpectedRecipientRevision int64
-	DomainEventID             model.DomainEventID
-	DomainEventJobID          model.JobID
+	Request      ExamSubmissionManagerEndRequest
+	Target       ExamSubmissionAutomaticSealTarget
+	SubmissionID model.SubmissionID
+	ReceiptCode  model.SubmissionReceiptCode
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Notice       *PreparedMail
+	// Recipient is the User the Notice was written for. The seal refuses it
+	// if anything the mail was written from has changed since.
+	Recipient        *model.User
+	DomainEventID    model.DomainEventID
+	DomainEventJobID model.JobID
 }
 
 type ExamSubmissionManagerEndResult struct {

@@ -95,7 +95,9 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	require.True(t, f.mail.receipt().SealedAt.Equal(f.at), "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
 	require.Equal(t, model.ExamSubmissionCandidateSubmitted, f.mail.receipt().Provenance, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
 	require.NotNil(t, f.submissions.seal.Notice, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
-	require.Equal(t, int64(2), f.submissions.seal.ExpectedRecipientRevision, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.NotNil(t, f.submissions.seal.Recipient, "the seal is fenced on the User the receipt was written for")
+	require.Equal(t, f.userID, f.submissions.seal.Recipient.ID, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.Equal(t, int64(2), f.submissions.seal.Recipient.Revision, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
 	require.True(t, model.TimeUTC(f.at).Equal(f.submissions.seal.AuditAt), "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
@@ -130,7 +132,7 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 	require.Equal(t, proposedCode, f.submissions.seal.ReceiptCode, "result=%#v seal=%#v", result, f.submissions.seal)
 	require.Empty(t, f.publisher.Calls(), "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.Nil(t, f.submissions.seal.Notice, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
-	require.Equal(t, int64(0), f.submissions.seal.ExpectedRecipientRevision, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
+	require.Nil(t, f.submissions.seal.Recipient, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.False(t, f.mail.receipt().SubmissionID.IsValid(), "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.Empty(t, f.settler.settled, "a replay settles nothing")
 }

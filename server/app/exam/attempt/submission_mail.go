@@ -90,5 +90,5 @@ func (m SubmissionReceiptMail) PrepareSubmissionReceipt(
 		Occurrence: prepared.Occurrence,
 		Delivery:   prepared.Delivery,
 		Job:        prepared.Job,
-	}, ExpectedRecipientRevision: recipient.Revision}, nil
+	}, Recipient: recipient}, nil
 }

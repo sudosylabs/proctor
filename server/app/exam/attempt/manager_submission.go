@@ -147,22 +147,22 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "domain_event_id"))
 	}
 
-	notice, expectedRecipientRevision, err := s.prepareManagerEndReceiptMail(ctx, preparation, proposed, receiptCode)
+	notice, recipient, err := s.prepareManagerEndReceiptMail(ctx, preparation, proposed, receiptCode)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
 	stored, err := s.submissions.EndByManager(ctx, &store.ExamSubmissionManagerEnd{
-		Request:                   request,
-		Target:                    preparation.Target,
-		SubmissionID:              proposed,
-		ReceiptCode:               receiptCode,
-		AuditEventID:              auditID,
-		AuditAt:                   preparation.SealAt,
-		Notice:                    notice,
-		ExpectedRecipientRevision: expectedRecipientRevision,
-		DomainEventID:             eventID,
-		DomainEventJobID:          eventJobID,
+		Request:          request,
+		Target:           preparation.Target,
+		SubmissionID:     proposed,
+		ReceiptCode:      receiptCode,
+		AuditEventID:     auditID,
+		AuditAt:          preparation.SealAt,
+		Notice:           notice,
+		Recipient:        recipient,
+		DomainEventID:    eventID,
+		DomainEventJobID: eventJobID,
 	}, commandIdempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
@@ -210,9 +210,9 @@ func (s *Service) prepareManagerEndReceiptMail(
 	preparation *store.ExamSubmissionManagerEndPreparation,
 	proposed model.SubmissionID,
 	receiptCode model.SubmissionReceiptCode,
-) (*store.PreparedMail, int64, error) {
+) (*store.PreparedMail, *model.User, error) {
 	var notice *store.PreparedMail
-	var expectedRecipientRevision int64
+	var recipient *model.User
 	if !preparation.Replayed {
 		preparedMail, prepareErr := s.mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: preparation.Target.CandidateUserID,
@@ -223,17 +223,17 @@ func (s *Service) prepareManagerEndReceiptMail(
 			SealedAt:        preparation.SealAt,
 			Provenance:      model.ExamSubmissionManagerEndedAttempt,
 		})
-		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.ExpectedRecipientRevision < 1 {
+		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.Recipient == nil {
 			if prepareErr == nil {
 				prepareErr = errors.New("invalid manager-ended Submission receipt mail preparation")
 			}
-			return nil, 0, apperror.New("exam.attempt.unavailable").Wrap(prepareErr)
+			return nil, nil, apperror.New("exam.attempt.unavailable").Wrap(prepareErr)
 		}
 
-		notice, expectedRecipientRevision = preparedMail.Notice, preparedMail.ExpectedRecipientRevision
+		notice, recipient = preparedMail.Notice, preparedMail.Recipient
 	}
 
-	return notice, expectedRecipientRevision, nil
+	return notice, recipient, nil
 }
 
 func validManagerEndReason(reason string) bool {

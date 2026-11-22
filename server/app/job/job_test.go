@@ -33,6 +33,8 @@ type jobRunnerStoreFake struct {
 	claim           *store.JobClaim
 	claimed         bool
 	claimRequests   chan struct{}
+	// heartbeated, when set, receives a signal after each recorded heartbeat.
+	heartbeated chan struct{}
 }
 
 func (s *jobRunnerStoreFake) ReserveWork(_ context.Context, reservation *store.JobWorkReservation) (*store.JobWorkReservationResult, error) {
@@ -67,6 +69,12 @@ func (s *jobRunnerStoreFake) Heartbeat(_ context.Context, _ *store.JobHeartbeat)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.heartbeats++
+	if s.heartbeated != nil {
+		select {
+		case s.heartbeated <- struct{}{}:
+		default:
+		}
+	}
 	if len(s.heartbeatErrors) > 0 {
 		err := s.heartbeatErrors[0]
 		s.heartbeatErrors = s.heartbeatErrors[1:]

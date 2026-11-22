@@ -3817,7 +3817,7 @@ CREATE TABLE audit_events (
 );
 
 CREATE TABLE external_second_factor_states (
-    id varchar(26) PRIMARY KEY CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    id varchar(26) PRIMARY KEY,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     purpose varchar(32) NOT NULL CHECK (purpose IN ('login', 'desktop_authorization', 'desktop_reauthentication')),
@@ -5022,6 +5022,22 @@ ALTER TABLE external_login_states
 	CHECK (browser_authentication_transaction_id IS NULL OR browser_authentication_transaction_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
 	ADD CONSTRAINT external_login_states_audit_event_id_canonical_check
 	CHECK (audit_event_id IS NULL OR audit_event_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE external_second_factor_states
+	ADD CONSTRAINT external_second_factor_states_id_canonical_check
+	CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_user_id_canonical_check
+	CHECK (user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_external_99bdc2b9_canonical_check
+	CHECK (external_identity_id IS NULL OR external_identity_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_browser__b808196e_canonical_check
+	CHECK (browser_authentication_transaction_id IS NULL OR browser_authentication_transaction_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_audit_event_id_canonical_check
+	CHECK (audit_event_id IS NULL OR audit_event_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_external_af342cfb_canonical_check
+	CHECK (external_login_state_id IS NULL OR external_login_state_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT external_second_factor_states_password_ce8c35f7_canonical_check
+	CHECK (password_credential_id IS NULL OR password_credential_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE browser_authentication_transactions
     ADD CONSTRAINT browser_authentication_transactions_id_canonical_check

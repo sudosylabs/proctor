@@ -281,7 +281,14 @@ func TestDesktopReauthenticationSecondFactorStore(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, fixture.session.ID, result.Session.ID)
 			require.Equal(t, model.AuthenticationMultiFactor, result.Session.AuthenticationStrength)
-			require.Equal(t, consumed.ConsumedAt, result.Session.MFACompletedAt)
+			// Two-step completion never predates the Session's own sign-in, so
+			// it is the code's database instant unless the fixture's Go clock
+			// stamped the sign-in later.
+			wantMFA := consumed.ConsumedAt.Time
+			if fixture.session.AuthenticatedAt.After(wantMFA) {
+				wantMFA = fixture.session.AuthenticatedAt
+			}
+			require.Equal(t, model.OptionalTimeFrom(wantMFA), result.Session.MFACompletedAt)
 			require.True(t, result.Session.ReauthenticatedAt.Valid)
 			require.NotEmpty(t, result.AccessTokenHashes)
 		})

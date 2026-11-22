@@ -92,6 +92,16 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 	require.Equal(t, candidate.ID, mailPage.Recipients[0].User.ID)
 	require.Equal(t, model.MailTemplateExamSittingScheduled, mailPage.Recipients[0].TemplateKey)
 	delivery, deliveryJob := newExamSittingMailDelivery(t, fanout, candidate, mailPage.Recipients[0].TemplateKey)
+	// A change the mail never reads moves the revision between the listing and
+	// the commit, as a default profile picture does just after an account is
+	// created; the candidate still gets the mail.
+	firstName := "Renamed"
+	renamed, err := ss.User().UpdateProfile(ctx, &store.UserProfileUpdate{
+		UserID: candidate.ID, Changes: model.UserProfileChanges{FirstName: &firstName}, ExpectedRevision: candidate.Revision,
+		AuditEventID: saveUserProfileAuditAttempt(t, ctx, ss, candidate.ID.String()).ID, AuditAt: model.NowUTC(),
+	})
+	require.NoError(t, err)
+	require.Greater(t, renamed.Revision, candidate.Revision)
 	committed, err := ss.ExamSitting().CommitMailRecipient(ctx, &store.ExamSittingMailRecipientCommit{
 		OccurrenceID: fanout.Occurrence.ID, SittingRevision: fanout.SittingRevision, Recipient: candidate,
 		Delivery: delivery, DeliveryJob: deliveryJob})

@@ -129,12 +129,13 @@ paths:
       operationId: completeExternalAuthentication
       summary: Complete external authentication
       description: >-
-        Checks the provider's callback and uses up the one-time sign-in state. It then creates or updates only the account link that this sign-in was started for, and redirects to the checked return path. Provider credentials are never exposed.
+        Checks the provider's callback and uses up the one-time sign-in state. It then creates or updates only the account link that this sign-in was started for, and redirects to the checked return path. A single-factor provider sign-in for a User with active Proctor two-step verification instead sets a separate HttpOnly binding and redirects the browser to the verification page. The original return path is used after the code succeeds.
       tags:
         - Authentication
       x-proctor-auth: public
       x-proctor-error-codes:
         - authentication.mfa.enrollment_required
+        - authentication.mfa.unavailable
         - authentication.credentials_invalid
         - request.invalid
         - authentication.external.invalid
@@ -174,6 +175,43 @@ paths:
           $ref: '#/components/responses/BadGateway'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/auth/external/second-factor:
+    get:
+      operationId: getExternalSecondFactorContext
+      summary: Read the pending sign-in verification
+      description: Uses the HttpOnly external second-factor cookie set by the provider callback. Returns the account and provider display names and the challenge deadline.
+      tags: [Authentication]
+      x-proctor-auth: public
+      x-proctor-idempotency: none
+      x-proctor-error-codes: [authentication.external.invalid, authentication.external.second_factor_expired, authentication.external.unavailable]
+      security: []
+      responses:
+        "200": {$ref: '#/components/responses/ExternalSecondFactorContextOK'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "410": {$ref: '#/components/responses/Gone'}
+        "502": {$ref: '#/components/responses/BadGateway'}
+    post:
+      operationId: completeExternalSecondFactor
+      summary: Verify a code and finish signing in
+      description: Uses the HttpOnly external second-factor cookie. Accepts an authenticator code or an unused recovery code. A Web sign-in sets the Session cookies and returns the checked original continuation. Desktop authorization returns its authenticated browser context without creating a Web Session. Success clears the verification cookie.
+      tags: [Authentication]
+      x-proctor-auth: public
+      x-proctor-idempotency: none
+      x-proctor-error-codes: [request.invalid, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.external.invalid, authentication.external.second_factor_expired, authentication.external.unavailable, authentication.internal, authentication.sessions.maximum_reached, audit.unavailable, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked]
+      security: []
+      requestBody: {$ref: '#/components/requestBodies/MFACode'}
+      responses:
+        "200": {$ref: '#/components/responses/ExternalSecondFactorCompleted'}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "409": {$ref: '#/components/responses/Conflict'}
+        "410": {$ref: '#/components/responses/Gone'}
+        "429": {$ref: '#/components/responses/TooManyRequests'}
+        "500": {$ref: '#/components/responses/InternalError'}
+        "502": {$ref: '#/components/responses/BadGateway'}
+        "503": {$ref: '#/components/responses/ServiceUnavailable'}
+
 components:
   parameters:
     ReturnTo:
@@ -222,6 +260,33 @@ components:
             device_id: exam-laptop-01
             device_name: Exam laptop
   responses:
+    ExternalSecondFactorContextOK:
+      description: The pending verification challenge
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ExternalSecondFactorContextResponse'}
+          example:
+            purpose: login
+            user_display_name: Morgan Case
+            provider_display_name: Campus CAS
+            expires_at: '2026-03-14T10:22:00Z'
+    ExternalSecondFactorCompleted:
+      description: The checked Web continuation or the authenticated Desktop authorization context
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+        Set-Cookie:
+          description: Clears the verification binding and sets Web Session cookies when signing in on the web.
+          schema: {type: string}
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ExternalSecondFactorCompleteResponse'
+              - $ref: '#/components/schemas/DesktopAuthorizationContextResponse'
+          example:
+            return_to: /exams
     ExternalAuthenticationProviderListOK:
       description: External authentication provider collection
       content:
@@ -247,6 +312,21 @@ components:
             type: string
             format: uri-reference
   schemas:
+    ExternalSecondFactorContextResponse:
+      type: object
+      additionalProperties: false
+      required: [purpose, user_display_name, provider_display_name, expires_at]
+      properties:
+        purpose: {type: string, enum: [login, desktop_authorization], description: The sign-in that needs a second factor.}
+        user_display_name: {type: string, description: The account confirmed by the provider.}
+        provider_display_name: {type: string, description: The provider that confirmed the first factor.}
+        expires_at: {type: string, format: date-time, description: The verification deadline.}
+    ExternalSecondFactorCompleteResponse:
+      type: object
+      additionalProperties: false
+      required: [return_to]
+      properties:
+        return_to: {type: string, format: uri-reference, description: The checked Web continuation.}
     ExternalAuthenticationProviderListResponse:
       description: One page of the collection in its stable order.
       type: object

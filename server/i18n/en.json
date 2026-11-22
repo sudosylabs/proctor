@@ -3934,6 +3934,14 @@
     "translation": "You're receiving this because an administrator sent a test email to this address."
   },
   {
+    "id": "problem.authentication.external.second_factor_expired.detail",
+    "translation": "Your verification step expired. Sign in again."
+  },
+  {
+    "id": "problem.authentication.external.second_factor_expired.title",
+    "translation": "Sign-in verification expired"
+  },
+  {
     "id": "problem.bad_request.detail",
     "translation": "The request is invalid."
   },

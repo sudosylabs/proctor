@@ -470,7 +470,7 @@ components:
       additionalProperties: false
       required: [state, local_login_enabled, external_providers, device_name, requested_at, expires_at]
       properties:
-        state: {description: "Where the request stands. bound means this browser holds the request but no account is signed in for it yet. authenticated means an account is signed in and the request is waiting for approval.", type: string, enum: [bound, authenticated]}
+        state: {description: "Where the request stands. bound means this browser holds the request but no account is signed in for it yet. second_factor_required means the provider proved the account and Proctor still needs its code. authenticated means an account is signed in and the request is waiting for approval.", type: string, enum: [bound, second_factor_required, authenticated]}
         account: {description: "The account that signed in for this request. Present only when state is authenticated.", $ref: '#/components/schemas/DesktopAuthorizationAccountResponse'}
         local_login_enabled: {description: "Whether the page may offer username and password sign-in.", type: boolean}
         external_providers:

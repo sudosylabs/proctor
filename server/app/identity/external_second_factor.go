@@ -21,6 +21,7 @@ import (
 
 const externalSecondFactorExpired apperror.Code = "authentication.external.second_factor_expired"
 
+// ExternalSecondFactorContext is the account and provider information the bound browser may display.
 type ExternalSecondFactorContext struct {
 	Purpose             model.ExternalAuthenticationPurpose
 	UserDisplayName     string
@@ -34,6 +35,7 @@ type CompleteExternalSecondFactorCommand struct {
 	Source  string
 }
 
+// ExternalSecondFactorCompletion returns either a new Web Session or a proved Desktop authorization.
 type ExternalSecondFactorCompletion struct {
 	ReturnTo             string
 	Session              *model.Session
@@ -106,6 +108,7 @@ func (s *Service) pauseExternalSignIn(
 	}}, nil
 }
 
+// ExternalSecondFactorContext describes a live verification challenge to its bound browser.
 func (s *Service) ExternalSecondFactorContext(
 	ctx context.Context, _ invocation.Invocation, binding string,
 ) (*ExternalSecondFactorContext, error) {
@@ -154,6 +157,7 @@ func (s *Service) boundExternalSecondFactor(
 	return state, nil
 }
 
+// CompleteExternalSecondFactor consumes a proved factor and resumes the original sign-in.
 func (s *Service) CompleteExternalSecondFactor(
 	ctx context.Context, inv invocation.Invocation, command CompleteExternalSecondFactorCommand,
 ) (*ExternalSecondFactorCompletion, error) {

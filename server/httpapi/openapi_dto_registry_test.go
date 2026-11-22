@@ -285,6 +285,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ExamSummaryResponse":                            reflect.TypeOf(examSummaryResponse{}),
 	"ExtendExamSittingRequest":                       reflect.TypeOf(extendExamSittingRequest{}),
 	"ExternalAuthenticationProviderResponse":         reflect.TypeOf(externalAuthenticationProviderResponse{}),
+	"ExternalSecondFactorContextResponse":            reflect.TypeOf(externalSecondFactorContextResponse{}),
+	"ExternalSecondFactorCompleteResponse":           reflect.TypeOf(externalSecondFactorCompleteResponse{}),
 	"ExternalAuthenticationStartRequest":             reflect.TypeOf(externalAuthenticationStartRequest{}),
 	"ExternalReauthenticationRequest":                reflect.TypeOf(externalReauthenticationRequest{}),
 	"ExternalReauthenticationResponse":               reflect.TypeOf(externalReauthenticationResponse{}),

@@ -71,8 +71,6 @@ type ExternalAuthenticationStart struct {
 	ExpiresAt   int64
 }
 
-// ExternalAuthenticationCompletion is the internal result of a successful
-// provider callback; its tokens follow the usual one-time session rules.
 // ExternalSecondFactorBinding is the raw browser binding returned only to the
 // HTTP cookie writer.
 type ExternalSecondFactorBinding struct {
@@ -80,6 +78,8 @@ type ExternalSecondFactorBinding struct {
 	ExpiresAt int64
 }
 
+// ExternalAuthenticationCompletion is the internal result of a successful
+// provider callback; its tokens follow the usual one-time session rules.
 type ExternalAuthenticationCompletion struct {
 	SecondFactor *ExternalSecondFactorBinding
 	Restart      *ExternalAuthenticationStart

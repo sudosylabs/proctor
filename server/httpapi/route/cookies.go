@@ -155,6 +155,7 @@ func (c Cookies) AttachExternalSecondFactorBinding(writer http.ResponseWriter, b
 	c.set(writer, BrowserExternalSecondFactorCookieName, binding, c.externalSecondFactorPath, expiresAt, true)
 }
 
+// ClearExternalSecondFactorBinding expires the browser binding after sign-in finishes.
 func (c Cookies) ClearExternalSecondFactorBinding(writer http.ResponseWriter) {
 	c.expire(writer, BrowserExternalSecondFactorCookieName, c.externalSecondFactorPath, true)
 }

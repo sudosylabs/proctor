@@ -4997,6 +4997,7 @@
         "content": {
           "application/json": {
             "example": {
+              "authentication_strength": "multi_factor",
               "recently_authenticated_until": "2026-08-01T09:17:00Z"
             },
             "schema": {
@@ -7357,6 +7358,58 @@
           }
         }
       },
+      "ExternalSecondFactorCompleted": {
+        "content": {
+          "application/json": {
+            "example": {
+              "return_to": "/exams"
+            },
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ExternalSecondFactorCompleteResponse"
+                },
+                {
+                  "$ref": "#/components/schemas/DesktopAuthorizationContextResponse"
+                }
+              ]
+            }
+          }
+        },
+        "description": "The checked Web continuation or the authenticated Desktop authorization context",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          },
+          "Set-Cookie": {
+            "description": "Clears the verification binding and sets Web Session cookies when signing in on the web.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ExternalSecondFactorContextOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "expires_at": "2026-03-14T10:22:00Z",
+              "provider_display_name": "Campus CAS",
+              "purpose": "login",
+              "user_display_name": "Morgan Case"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ExternalSecondFactorContextResponse"
+            }
+          }
+        },
+        "description": "The pending verification challenge",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "Forbidden": {
         "content": {
           "application/problem+json": {
@@ -8014,6 +8067,7 @@
             "example": {
               "authentication_method": "password",
               "authentication_strength": "multi_factor",
+              "can_raise_strength": false,
               "enabled": true,
               "enabled_at": "2026-03-14T10:22:00Z",
               "method": "authenticator_app",
@@ -19086,9 +19140,10 @@
             "type": "string"
           },
           "state": {
-            "description": "Where the request stands. bound means this browser holds the request but no account is signed in for it yet. authenticated means an account is signed in and the request is waiting for approval.",
+            "description": "Where the request stands. bound means this browser holds the request but no account is signed in for it yet. second_factor_required means the provider proved the account and Proctor still needs its code. authenticated means an account is signed in and the request is waiting for approval.",
             "enum": [
               "bound",
+              "second_factor_required",
               "authenticated"
             ],
             "type": "string"
@@ -19523,6 +19578,14 @@
       "DesktopReauthenticationCompleteResponse": {
         "additionalProperties": false,
         "properties": {
+          "authentication_strength": {
+            "description": "The strength of the Desktop Session after confirming the account.",
+            "enum": [
+              "single_factor",
+              "multi_factor"
+            ],
+            "type": "string"
+          },
           "recently_authenticated_until": {
             "description": "Until this time, actions that need a recent sign-in are allowed. After it, they ask for reauthentication again.",
             "format": "date-time",
@@ -19530,7 +19593,8 @@
           }
         },
         "required": [
-          "recently_authenticated_until"
+          "recently_authenticated_until",
+          "authentication_strength"
         ],
         "type": "object"
       },
@@ -19559,9 +19623,10 @@
             "description": "The Desktop Session's own identity provider. Present only when authentication_method is external."
           },
           "state": {
-            "description": "Where the reauthentication stands. bound means this browser holds the request but has not proved the account yet. authenticated means the proof succeeded and the request is waiting for approval.",
+            "description": "Where the reauthentication stands. bound means this browser holds the request but has not proved the account yet. second_factor_required means the primary proof succeeded and a code is needed. authenticated means the proof succeeded and the request is waiting for approval.",
             "enum": [
               "bound",
+              "second_factor_required",
               "authenticated"
             ],
             "type": "string"
@@ -21248,6 +21313,7 @@
           "authentication.external.provider_not_found",
           "authentication.external.rejected",
           "authentication.external.request.invalid",
+          "authentication.external.second_factor_expired",
           "authentication.external.unavailable",
           "authentication.internal",
           "authentication.method.conflict",
@@ -25067,6 +25133,53 @@
         ],
         "type": "object"
       },
+      "ExternalSecondFactorCompleteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "return_to": {
+            "description": "The checked Web continuation.",
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "return_to"
+        ],
+        "type": "object"
+      },
+      "ExternalSecondFactorContextResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "description": "The verification deadline.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "provider_display_name": {
+            "description": "The provider that confirmed the first factor.",
+            "type": "string"
+          },
+          "purpose": {
+            "description": "The sign-in that needs a second factor.",
+            "enum": [
+              "login",
+              "desktop_authorization"
+            ],
+            "type": "string"
+          },
+          "user_display_name": {
+            "description": "The account confirmed by the provider.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "user_display_name",
+          "provider_display_name",
+          "expires_at"
+        ],
+        "type": "object"
+      },
       "FinalDeliveryDeclaration": {
         "additionalProperties": false,
         "properties": {
@@ -26915,6 +27028,10 @@
             ],
             "type": "string"
           },
+          "can_raise_strength": {
+            "description": "Whether this single-factor Session can be upgraded using the User's active Proctor factor. It is false when the service is disabled or MFA recovery is required.",
+            "type": "boolean"
+          },
           "enabled": {
             "description": "Whether two-step verification is on for the User.",
             "type": "boolean"
@@ -26989,6 +27106,7 @@
         },
         "required": [
           "service_enabled",
+          "can_raise_strength",
           "mfa_recovery_required",
           "mfa_enrollment_required",
           "authentication_method",
@@ -40080,7 +40198,7 @@
     },
     "/api/v1/auth/desktop/reauthentications/authenticate/password": {
       "post": {
-        "description": "Checks the password of the Desktop Session's own User. It works only when the Desktop Session was signed in with a password. It takes no username, asks for no second factor and creates no Web Session. It also does not yet update the Desktop Session. The Desktop does that later by calling the complete operation.",
+        "description": "Checks the password of the Desktop Session's own User. It works only when the Desktop Session was signed in with a password. It creates no Web Session. When the Desktop Session is single_factor and the User has active Proctor two-step verification, the browser must also prove a code. The Desktop Session is updated only when Desktop calls the complete operation.",
         "operationId": "authenticateDesktopReauthenticationWithPassword",
         "requestBody": {
           "$ref": "#/components/requestBodies/DesktopReauthenticationPassword"
@@ -40128,7 +40246,8 @@
           "authentication.internal",
           "authentication.credential_ambiguous",
           "audit.unavailable",
-          "service.busy"
+          "service.busy",
+          "authentication.mfa.unavailable"
         ],
         "x-proctor-idempotency": "none"
       }
@@ -40205,6 +40324,71 @@
           "authentication.rate_limited",
           "authentication.rate_limit_unavailable",
           "authentication.credential_ambiguous"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/authenticate/second-factor": {
+      "post": {
+        "description": "Uses the Desktop reauthentication cookie and verifies an authenticator code or one unused recovery code. The authenticated browser context can then be approved to finish confirming the Desktop Session.",
+        "operationId": "authenticateDesktopReauthenticationSecondFactor",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MFACode"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DesktopReauthenticationContextOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Verify the code for Desktop reauthentication",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.credential_ambiguous",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.desktop_reauthentication.denied",
+          "authentication.reauthentication_method_required",
+          "authentication.credentials_invalid",
+          "authentication.internal",
+          "audit.unavailable",
+          "authentication.external.invalid",
+          "authentication.external.second_factor_expired",
+          "authentication.external.unavailable",
+          "authentication.mfa.code_invalid",
+          "authentication.mfa.unavailable",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable"
         ],
         "x-proctor-idempotency": "none"
       }
@@ -40653,6 +40837,101 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/auth/external/second-factor": {
+      "get": {
+        "description": "Uses the HttpOnly external second-factor cookie set by the provider callback. Returns the account and provider display names and the challenge deadline.",
+        "operationId": "getExternalSecondFactorContext",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExternalSecondFactorContextOK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          }
+        },
+        "security": [],
+        "summary": "Read the pending sign-in verification",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "authentication.external.invalid",
+          "authentication.external.second_factor_expired",
+          "authentication.external.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "post": {
+        "description": "Uses the HttpOnly external second-factor cookie. Accepts an authenticator code or an unused recovery code. A Web sign-in sets the Session cookies and returns the checked original continuation. Desktop authorization returns its authenticated browser context without creating a Web Session. Success clears the verification cookie.",
+        "operationId": "completeExternalSecondFactor",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MFACode"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExternalSecondFactorCompleted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Verify a code and finish signing in",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.mfa.code_invalid",
+          "authentication.mfa.unavailable",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.external.invalid",
+          "authentication.external.second_factor_expired",
+          "authentication.external.unavailable",
+          "authentication.internal",
+          "authentication.sessions.maximum_reached",
+          "audit.unavailable",
+          "authentication.desktop_authorization.invalid",
+          "authentication.desktop_authorization.rejected",
+          "authentication.desktop_authorization.unavailable",
+          "authentication.desktop_authorization.account_session_locked"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "description": "Checks a local username or email address and password, then creates an interactive Session for the declared client type. Web and Desktop clients receive their credentials as host-only cookies, and the response body leaves out tokens. A CLI client receives the access and refresh tokens in the body. An account with two-step verification turned on must also send a current authenticator code or one unused recovery code. A failed sign-in does not say which value was wrong. Every attempt that passes the rate limit is recorded in the audit log, whether it succeeds or fails. If that audit record can't be written, the sign-in fails with audit.unavailable and no usable Session is issued. The request must use Content-Type application/json, optionally with charset=utf-8. A cross-origin browser request or a wrong media type returns request.invalid before the password is checked or any cookie is set. Native clients may omit browser origin headers.",
@@ -40900,7 +41179,7 @@
     },
     "/api/v1/auth/providers/{provider_id}/callback": {
       "get": {
-        "description": "Checks the provider's callback and uses up the one-time sign-in state. It then creates or updates only the account link that this sign-in was started for, and redirects to the checked return path. Provider credentials are never exposed.",
+        "description": "Checks the provider's callback and uses up the one-time sign-in state. It then creates or updates only the account link that this sign-in was started for, and redirects to the checked return path. A single-factor provider sign-in for a User with active Proctor two-step verification instead sets a separate HttpOnly binding and redirects the browser to the verification page. The original return path is used after the code succeeds.",
         "operationId": "completeExternalAuthentication",
         "responses": {
           "303": {
@@ -40939,6 +41218,7 @@
         "x-proctor-auth": "public",
         "x-proctor-error-codes": [
           "authentication.mfa.enrollment_required",
+          "authentication.mfa.unavailable",
           "authentication.credentials_invalid",
           "request.invalid",
           "authentication.external.invalid",

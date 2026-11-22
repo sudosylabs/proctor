@@ -49,6 +49,7 @@ func (s *Service) pauseDesktopReauthenticationIfRequired(
 	return true, nil
 }
 
+// AuthenticateDesktopReauthenticationSecondFactor proves the enrolled factor for a paused Desktop handoff.
 func (s *Service) AuthenticateDesktopReauthenticationSecondFactor(
 	ctx context.Context, inv invocation.Invocation, command CompleteExternalSecondFactorCommand,
 ) (*DesktopReauthenticationBrowserContext, error) {

@@ -387,6 +387,7 @@ components:
             $ref: '#/components/schemas/MFAStatusResponse'
           example:
             service_enabled: true
+            can_raise_strength: false
             mfa_recovery_required: false
             mfa_enrollment_required: false
             authentication_method: password
@@ -522,6 +523,7 @@ components:
       additionalProperties: false
       required:
         - service_enabled
+        - can_raise_strength
         - mfa_recovery_required
         - mfa_enrollment_required
         - authentication_method
@@ -533,6 +535,9 @@ components:
         - recovery_codes_total
         - recent_authentication_minutes
       properties:
+        can_raise_strength:
+          type: boolean
+          description: Whether this single-factor Session can be upgraded using the User's active Proctor factor. It is false when the service is disabled or MFA recovery is required.
         service_enabled:
           type: boolean
           description: Whether this server currently offers authenticator app setup and two-step verification.

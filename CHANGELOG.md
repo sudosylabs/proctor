@@ -10,6 +10,8 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: web and Desktop sign-in can use a Proctor authenticator or recovery code as the second factor after sign-in through an external provider. Desktop reauthentication can also raise the strength of an existing Session.
+
 - Server: native capabilities decided on the server. The release's capability
   registry (fields, reasons, fact schemas, baseline rules) compiles each policy
   into activations and rules; `GET /api/v1/exam-sittings/{id}/security-policy`
@@ -115,6 +117,8 @@ module when a change is not server-only. No module has been released yet.
   part of the core (see Added) (**breaking**).
 
 ### Changed
+
+- Server: enrolled users signing in through an external provider that confirms only one factor must enter their Proctor code before sign-in completes.
 
 - Server: each external sign-in provider's protocol settings belong to its
   plugin. A provider keeps `ID`, `Type`, `DisplayName`, `Enabled` and

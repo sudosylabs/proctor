@@ -115,27 +115,31 @@ type AffiliationStore interface {
 }
 
 type AcademicUnitMemberCreation struct {
-	Member                    *model.AcademicUnitMember
-	ExpectedRecipientRevision int64
-	Notice                    *PreparedMail
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Command                   *CommandIdempotency
-	Replayed                  bool
-	NoOp                      bool
+	Member *model.AcademicUnitMember
+	// Recipient is the User the Notice was written for; the write refuses it
+	// if anything the mail was written from has changed since.
+	Recipient    *model.User
+	Notice       *PreparedMail
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Command      *CommandIdempotency
+	Replayed     bool
+	NoOp         bool
 }
 
 type AcademicUnitMemberEnd struct {
-	ID                        model.AcademicUnitMemberID
-	ExpectedRevision          int64
-	ExpectedRecipientRevision int64
-	Notice                    *PreparedMail
-	EndAt                     time.Time
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Command                   *CommandIdempotency
-	Replayed                  bool
-	NoOp                      bool
+	ID               model.AcademicUnitMemberID
+	ExpectedRevision int64
+	// Recipient is the User the Notice was written for; the write refuses it
+	// if anything the mail was written from has changed since.
+	Recipient    *model.User
+	Notice       *PreparedMail
+	EndAt        time.Time
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Command      *CommandIdempotency
+	Replayed     bool
+	NoOp         bool
 }
 
 // AcademicUnitMemberStore persists academic unit membership, which grants no
@@ -166,9 +170,11 @@ type ClassEnrollmentResult struct {
 // ClassMemberEnrollment is the input of an enrollment or transfer. A transfer
 // ends the previous membership and creates Member in the same transaction.
 type ClassMemberEnrollment struct {
-	Member                             *model.ClassMember
-	ExpectedPreviousID                 model.ClassMemberID
-	ExpectedRecipientRevision          int64
+	Member             *model.ClassMember
+	ExpectedPreviousID model.ClassMemberID
+	// Recipient is the User the Notice was written for; the write refuses it
+	// if anything the mail was written from has changed since.
+	Recipient                          *model.User
 	StudentProgression                 bool
 	ProgressionSourceAuditEventID      model.AuditEventID
 	ProgressionDestinationAuditEventID model.AuditEventID
@@ -182,16 +188,18 @@ type ClassMemberEnrollment struct {
 }
 
 type ClassMemberEnd struct {
-	ID                        model.ClassMemberID
-	ExpectedRevision          int64
-	ExpectedRecipientRevision int64
-	EndAt                     time.Time
-	Notice                    *PreparedMail
-	AuditEventID              model.AuditEventID
-	AuditAt                   time.Time
-	Command                   *CommandIdempotency
-	Replayed                  bool
-	NoOp                      bool
+	ID               model.ClassMemberID
+	ExpectedRevision int64
+	// Recipient is the User the Notice was written for; the write refuses it
+	// if anything the mail was written from has changed since.
+	Recipient    *model.User
+	EndAt        time.Time
+	Notice       *PreparedMail
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+	Command      *CommandIdempotency
+	Replayed     bool
+	NoOp         bool
 }
 
 // ClassMemberStore persists student enrollment and its history.

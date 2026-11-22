@@ -749,10 +749,11 @@ module when a change is not server-only. No module has been released yet.
   picture attached just after an account is created, could make a concurrent
   write refuse or drop that User's mail. A Sitting's schedule mail silently
   skipped the candidate, a submission was refused with
-  `receipt_recipient_changed`, and an account disable failed with
-  `user.conflict`. Sitting mail and Submission receipts now compare only what
-  the mail is written from, and enabling or disabling an account starts again
-  from a fresh read up to three times.
+  `receipt_recipient_changed`, an account disable failed with `user.conflict`,
+  and Class and Academic Unit membership, Role Binding and result release
+  changes were refused the same way. Every mail fence now compares
+  only what the mail is written from, and enabling or disabling an account
+  starts again from a fresh read up to three times.
 - Server: Class listings (`GET /api/v1/academic-units/{id}/classes` and
   `GET /api/v1/programme-levels/{id}/classes`) failed with
   `authorization.request.invalid` whenever they returned a Class, because the

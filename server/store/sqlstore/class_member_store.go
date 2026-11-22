@@ -95,7 +95,7 @@ func (s SQLClassMemberStore) Enroll(
 	if input == nil ||
 		input.Member == nil ||
 		(input.Notice == nil && input.Command == nil) ||
-		input.ExpectedRecipientRevision < 1 ||
+		(input.Notice != nil && input.Recipient == nil) ||
 		!input.AuditEventID.IsValid() ||
 		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("class_member", "enrollment", nil)
@@ -142,7 +142,7 @@ func (s SQLClassMemberStore) Enroll(
 			input.ExpectedPreviousID,
 			input.Notice,
 			payloadKeyID,
-			input.ExpectedRecipientRevision,
+			input.Recipient,
 			input.AuditEventID,
 			input.PreviousAuditEventID,
 			input.AuditAt,
@@ -161,7 +161,7 @@ func (s SQLClassMemberStore) Enroll(
 				input.ExpectedPreviousID,
 				input.Notice,
 				payloadKeyID,
-				input.ExpectedRecipientRevision,
+				input.Recipient,
 				input.AuditEventID,
 				input.PreviousAuditEventID,
 				input.AuditAt,
@@ -281,7 +281,7 @@ func (s SQLClassMemberStore) enrollWithTransition(
 	expectedPreviousID model.ClassMemberID,
 	notice *store.PreparedMail,
 	payloadKeyID string,
-	expectedRecipientRevision int64,
+	recipient *model.User,
 	auditEventID model.AuditEventID,
 	previousAuditEventID model.AuditEventID,
 	auditAt time.Time,
@@ -292,7 +292,7 @@ func (s SQLClassMemberStore) enrollWithTransition(
 		expectedPreviousID,
 		notice,
 		payloadKeyID,
-		expectedRecipientRevision,
+		recipient,
 		auditEventID,
 		previousAuditEventID,
 		auditAt,
@@ -305,7 +305,7 @@ func (s SQLClassMemberStore) enroll(
 	auditEventID model.AuditEventID,
 	auditAt time.Time,
 ) (*store.ClassEnrollmentResult, error) {
-	return s.enrollTransaction(ctx, candidate, "", nil, "", 0, auditEventID, "", auditAt)
+	return s.enrollTransaction(ctx, candidate, "", nil, "", nil, auditEventID, "", auditAt)
 }
 
 func (s SQLClassMemberStore) enrollTransaction(
@@ -314,7 +314,7 @@ func (s SQLClassMemberStore) enrollTransaction(
 	expectedPreviousID model.ClassMemberID,
 	notice *store.PreparedMail,
 	payloadKeyID string,
-	expectedRecipientRevision int64,
+	recipient *model.User,
 	auditEventID model.AuditEventID,
 	previousAuditEventID model.AuditEventID,
 	auditAt time.Time,
@@ -330,7 +330,7 @@ func (s SQLClassMemberStore) enrollTransaction(
 			expectedPreviousID,
 			notice,
 			payloadKeyID,
-			expectedRecipientRevision,
+			recipient,
 			auditEventID,
 			previousAuditEventID,
 			auditAt,
@@ -420,13 +420,13 @@ func (s SQLClassMemberStore) enrollInTransaction(
 	expectedPreviousID model.ClassMemberID,
 	notice *store.PreparedMail,
 	payloadKeyID string,
-	expectedRecipientRevision int64,
+	recipient *model.User,
 	auditEventID model.AuditEventID,
 	previousAuditEventID model.AuditEventID,
 	auditAt time.Time,
 	allowNoOp, studentProgression bool,
 ) (*classMemberMutationResult, error) {
-	if err := lockClassEnrollmentPaths(ctx, tx, candidate, notice, payloadKeyID, expectedRecipientRevision); err != nil {
+	if err := lockClassEnrollmentPaths(ctx, tx, candidate, notice, payloadKeyID, recipient); err != nil {
 		return nil, err
 	}
 	if err := requireClassEnrollmentStudent(ctx, tx, candidate); err != nil {
@@ -505,10 +505,10 @@ func lockClassEnrollmentPaths(
 	candidate *model.ClassMember,
 	notice *store.PreparedMail,
 	payloadKeyID string,
-	expectedRecipientRevision int64,
+	recipient *model.User,
 ) error {
 	if notice != nil {
-		if err := lockClassMemberNoticeRecipient(ctx, tx, candidate.UserID, expectedRecipientRevision, notice); err != nil {
+		if err := lockClassMemberNoticeRecipient(ctx, tx, candidate.UserID, recipient, notice); err != nil {
 			return err
 		}
 	}
@@ -890,7 +890,7 @@ func (s SQLClassMemberStore) End(
 		(input.Notice == nil && input.Command == nil) ||
 		!input.ID.IsValid() ||
 		input.ExpectedRevision <= 0 ||
-		input.ExpectedRecipientRevision < 1 ||
+		(input.Notice != nil && input.Recipient == nil) ||
 		input.EndAt.IsZero() ||
 		!input.AuditEventID.IsValid() ||
 		input.AuditAt.IsZero() {
@@ -938,7 +938,7 @@ func (s SQLClassMemberStore) End(
 		if parseErr != nil {
 			return nil, invalidPersistedState("class_member", "user_id", parseErr)
 		}
-		if err := lockClassMemberNoticeRecipient(ctx, tx, userID, input.ExpectedRecipientRevision, input.Notice); err != nil {
+		if err := lockClassMemberNoticeRecipient(ctx, tx, userID, input.Recipient, input.Notice); err != nil {
 			return nil, err
 		}
 		if err := lockClassEnrollment(ctx, tx, row.UserID, row.AcademicPeriodID); err != nil {
@@ -1024,10 +1024,10 @@ func lockClassMemberNoticeRecipient(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	userID model.UserID,
-	expectedRevision int64,
+	prepared *model.User,
 	notice *store.PreparedMail,
 ) error {
-	return lockPreparedMailRecipient(ctx, tx, "class_member", userID, expectedRevision, notice)
+	return lockPreparedMailRecipient(ctx, tx, "class_member", userID, prepared, notice)
 }
 
 func lockPreparedMailRecipient(
@@ -1035,14 +1035,14 @@ func lockPreparedMailRecipient(
 	tx *sqlxTxWrapper,
 	resource string,
 	userID model.UserID,
-	expectedRevision int64,
+	prepared *model.User,
 	notice *store.PreparedMail,
 ) error {
 	current, err := lockMailRecipientUser(ctx, tx, userID)
 	if err != nil {
 		return err
 	}
-	if current.Revision != expectedRevision {
+	if !sameMailRecipient(current, prepared) {
 		return store.NewErrConflict(resource, resource+"_recipient_changed", nil)
 	}
 

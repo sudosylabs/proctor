@@ -234,7 +234,6 @@ func (s *Service) enrollRetainedClassMember(
 			execute := func(ctx context.Context, sourceAuditID model.AuditEventID) (*store.ClassEnrollmentResult, error) {
 				input := &store.ClassMemberEnrollment{
 					Member:                             candidate,
-					ExpectedRecipientRevision:          1,
 					StudentProgression:                 command.Batch.Fields().StudentProgression,
 					ProgressionSourceAuditEventID:      command.Batch.Fields().ProgressionSourceAuditID,
 					ProgressionDestinationAuditEventID: command.Batch.Fields().ProgressionDestinationAuditID,
@@ -459,7 +458,7 @@ func (s *Service) runClassEnrollment(
 
 				input := &store.ClassMemberEnrollment{
 					Member:                             candidate,
-					ExpectedRecipientRevision:          recipient.Revision,
+					Recipient:                          recipient,
 					StudentProgression:                 command.Batch.Fields().StudentProgression,
 					ProgressionSourceAuditEventID:      command.Batch.Fields().ProgressionSourceAuditID,
 					ProgressionDestinationAuditEventID: command.Batch.Fields().ProgressionDestinationAuditID,
@@ -497,7 +496,7 @@ func (s *Service) runClassEnrollment(
 					input := &store.ClassMemberEnrollment{
 						Member:                             candidate,
 						ExpectedPreviousID:                 expectedPreviousID,
-						ExpectedRecipientRevision:          recipient.Revision,
+						Recipient:                          recipient,
 						StudentProgression:                 command.Batch.Fields().StudentProgression,
 						ProgressionSourceAuditEventID:      command.Batch.Fields().ProgressionSourceAuditID,
 						ProgressionDestinationAuditEventID: command.Batch.Fields().ProgressionDestinationAuditID,
@@ -609,14 +608,14 @@ func (s *Service) EndClassMember(
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.ClassMember, error) {
 			input := &store.ClassMemberEnd{
-				ID:                        id,
-				ExpectedRevision:          current.Revision,
-				ExpectedRecipientRevision: recipient.Revision,
-				EndAt:                     reference.MutationAt,
-				Notice:                    &store.PreparedMail{Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job},
-				AuditEventID:              reference.ID,
-				AuditAt:                   reference.MutationAt,
-				Command:                   commandIdempotency,
+				ID:               id,
+				ExpectedRevision: current.Revision,
+				Recipient:        recipient,
+				EndAt:            reference.MutationAt,
+				Notice:           &store.PreparedMail{Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job},
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
+				Command:          commandIdempotency,
 			}
 			value, fresh, storeErr := s.endClassMember(ctx, command, input)
 			freshMutation = fresh
@@ -688,13 +687,12 @@ func (s *Service) endRetainedClassMember(
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.ClassMember, error) {
 			input := &store.ClassMemberEnd{
-				ID:                        command.ID,
-				ExpectedRevision:          1,
-				ExpectedRecipientRevision: 1,
-				EndAt:                     reference.MutationAt,
-				AuditEventID:              reference.ID,
-				AuditAt:                   reference.MutationAt,
-				Command:                   commandIdempotency,
+				ID:               command.ID,
+				ExpectedRevision: 1,
+				EndAt:            reference.MutationAt,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
+				Command:          commandIdempotency,
 			}
 			value, fresh, storeErr := s.endClassMember(ctx, command, input)
 			freshMutation = fresh

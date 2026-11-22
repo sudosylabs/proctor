@@ -172,7 +172,7 @@ func (s SQLRoleBindingStore) Save(
 				tx,
 				"role_binding",
 				candidate.UserID,
-				input.ExpectedRecipientRevision,
+				input.Recipient,
 				input.Notice,
 			); err != nil {
 				return nil, err
@@ -890,7 +890,7 @@ func (s SQLRoleBindingStore) End(
 				tx,
 				"role_binding",
 				current.UserID,
-				input.ExpectedRecipientRevision,
+				input.Recipient,
 				input.Notice,
 			); err != nil {
 				return nil, err

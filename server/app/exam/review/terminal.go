@@ -166,7 +166,7 @@ func (s *Service) terminalMutation(
 	var stored *store.ExamIntegrityReviewMutationResult
 	if kind == terminalRelease {
 		var notice *store.PreparedMail
-		var expectedRecipientRevision int64
+		var recipient *model.User
 		if !releasePreparation.Replayed {
 			prepared, prepareErr := s.mail.PrepareResultRelease(ctx, ResultReleaseMailPreparation{
 				CandidateUserID:        authorization.CandidateUserID,
@@ -176,28 +176,28 @@ func (s *Service) terminalMutation(
 				ExpectedReviewRevision: expectedRevision,
 				ReleasedAt:             at,
 			})
-			if prepareErr != nil || prepared == nil || prepared.Notice == nil || prepared.ExpectedRecipientRevision < 1 {
+			if prepareErr != nil || prepared == nil || prepared.Notice == nil || prepared.Recipient == nil {
 				if prepareErr == nil {
 					prepareErr = errors.New("invalid result release mail preparation")
 				}
 				return Result{}, s.failAudit(ctx, auditID, apperror.New("exam.integrity_review.unavailable").Wrap(prepareErr))
 			}
 
-			notice, expectedRecipientRevision = prepared.Notice, prepared.ExpectedRecipientRevision
+			notice, recipient = prepared.Notice, prepared.Recipient
 		}
 
 		stored, err = s.reviews.Release(ctx, &store.ExamIntegrityReviewRelease{
-			SubmissionID:              submissionID,
-			ReviewID:                  reviewID,
-			ActorUserID:               principal.UserID,
-			ManagerOverride:           override,
-			ExpectedRevision:          expectedRevision,
-			ChangedAt:                 at,
-			AuditEventID:              auditID,
-			AuditAt:                   at,
-			CandidateUserID:           authorization.CandidateUserID,
-			Notice:                    notice,
-			ExpectedRecipientRevision: expectedRecipientRevision,
+			SubmissionID:     submissionID,
+			ReviewID:         reviewID,
+			ActorUserID:      principal.UserID,
+			ManagerOverride:  override,
+			ExpectedRevision: expectedRevision,
+			ChangedAt:        at,
+			AuditEventID:     auditID,
+			AuditAt:          at,
+			CandidateUserID:  authorization.CandidateUserID,
+			Notice:           notice,
+			Recipient:        recipient,
 		}, commandIdempotency)
 	} else {
 		stored, err = s.reviews.Finalize(ctx, &store.ExamIntegrityReviewFinalize{

@@ -78,12 +78,12 @@ func TestExternalSecondFactorStateStore(t *testing.T, ss store.Store, probe Exte
 				if tc.expired {
 					_, err = ss.ExternalLoginState().GetExternalSecondFactorStateByBinding(ctx, state.BindingHash, time.Now())
 					require.True(t, store.IsNotFound(err))
-					maintained, err := ss.ExternalLoginState().Maintain(ctx, 100)
-					require.NoError(t, err)
+					maintained, maintainErr := ss.ExternalLoginState().Maintain(ctx, 100)
+					require.NoError(t, maintainErr)
 					require.Positive(t, maintained.Purged)
 					require.Equal(t, 1, maintained.Terminalized)
-					audit, err := ss.Audit().Get(ctx, state.AuditEventID)
-					require.NoError(t, err)
+					audit, auditErr := ss.Audit().Get(ctx, state.AuditEventID)
+					require.NoError(t, auditErr)
 					require.Equal(t, "authentication.external.second_factor_expired", audit.ErrorCode)
 				}
 				return

@@ -102,7 +102,7 @@ func (s *Service) AuthenticateDesktopReauthenticationPassword(
 		return nil, err
 	}
 	if !paused {
-		if _, err := s.recordDesktopReauthenticationProof(ctx, inv, proof); err != nil {
+		if _, err = s.recordDesktopReauthenticationProof(ctx, inv, proof); err != nil {
 			return nil, err
 		}
 	}
@@ -213,9 +213,9 @@ func (s *Service) authenticateExternalReauthentication(
 	}
 	// The existing proof operation audits and denies a different identity.
 	if current.UserID == identity.UserID && current.ExternalIdentityID == identity.ID {
-		paused, err := s.pauseDesktopReauthenticationIfRequired(ctx, current, proof, returnTo)
-		if err != nil || paused {
-			return err
+		paused, pauseErr := s.pauseDesktopReauthenticationIfRequired(ctx, current, proof, returnTo)
+		if pauseErr != nil || paused {
+			return pauseErr
 		}
 	}
 	_, err = s.recordDesktopReauthenticationProof(ctx, inv, proof)

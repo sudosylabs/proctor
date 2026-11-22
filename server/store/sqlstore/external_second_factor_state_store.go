@@ -96,10 +96,10 @@ func (s SQLExternalLoginStateStore) CreateExternalSecondFactorState(
 		}
 		state.ExpiresAt = at.Add(input.Lifetime)
 		state.PrepareCreate(model.NewExternalSecondFactorStateID(), at)
-		if err := state.Validate(); err != nil {
+		if err = state.Validate(); err != nil {
 			return nil, err
 		}
-		if err := requireSecondFactorPrimaryState(ctx, tx, &state); err != nil {
+		if err = requireSecondFactorPrimaryState(ctx, tx, &state); err != nil {
 			return nil, err
 		}
 

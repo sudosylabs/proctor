@@ -23,7 +23,7 @@ func TestExternalSecondFactorStateStore(t *testing.T) {
 	storetest.TestExternalSecondFactorStateStore(t, persistence, storetest.ExternalSecondFactorSQLProbe{
 		Activate: func(t *testing.T, id model.MFACredentialID) {
 			_, err := persistence.GetMaster().Exec(t.Context(), `UPDATE mfa_credentials
-                SET state = 'active', pending_expires_at = NULL, activated_at = clock_timestamp(), last_used_time_step = 1 WHERE id = ?`, id.String())
+                SET state = 'active', pending_expires_at = NULL, activated_at = GREATEST(created_at, clock_timestamp()), last_used_time_step = 1 WHERE id = ?`, id.String())
 			require.NoError(t, err)
 		},
 		AddRecoveryCode: func(t *testing.T, userID model.UserID, hash string) {

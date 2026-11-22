@@ -248,7 +248,7 @@ func TestDesktopReauthenticationSecondFactorStore(t *testing.T) {
 			})
 			require.NoError(t, err)
 			if changed {
-				_, err := persistence.GetMaster().Exec(ctx, `UPDATE password_credentials SET revision = revision + 1 WHERE id = ?`, password.ID.String())
+				_, err = persistence.GetMaster().Exec(ctx, `UPDATE password_credentials SET revision = revision + 1 WHERE id = ?`, password.ID.String())
 				require.NoError(t, err)
 			}
 			now := model.NowUTC()
@@ -260,8 +260,8 @@ func TestDesktopReauthenticationSecondFactorStore(t *testing.T) {
 				var conflict *store.ErrConflict
 				require.ErrorAs(t, err, &conflict)
 				require.Equal(t, "password_changed", conflict.Constraint)
-				credential, err := persistence.MFA().GetByUser(ctx, fixture.user.ID)
-				require.NoError(t, err)
+				credential, getErr := persistence.MFA().GetByUser(ctx, fixture.user.ID)
+				require.NoError(t, getErr)
 				require.EqualValues(t, 1, credential.LastUsedTimeStep)
 				return
 			}

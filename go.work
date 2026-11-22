@@ -12,10 +12,10 @@ use (
 // clashes with the split googleapis/rpc and googleapis/api modules, and
 // grpc's imports become ambiguous. go mod tidy, and so Dependabot, drops
 // the same pin from server/go.mod, so it lives here where tidy never looks.
-replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20260819154853-08b0e4226688
+replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20260928230214-8a89bd6388cc
 
 replace (
-	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027 => ./packages/cache
+	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261122151211-cf3b54d7e16b => ./packages/cache
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4 => ./packages/mail
-	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4 => ./packages/vfs
+	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b => ./packages/vfs
 )

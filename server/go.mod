@@ -30,9 +30,9 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/sudosylabs/execenv v0.6.1
-	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027
+	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261122151211-cf3b54d7e16b
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4
-	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4
+	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
@@ -125,6 +125,7 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
+	google.golang.org/genproto v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/grpc v1.84.0 // indirect

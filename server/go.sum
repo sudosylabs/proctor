@@ -301,10 +301,14 @@ github.com/sudosylabs/execenv v0.6.1 h1:+a7s3TCQT2/FkAJQfzp54sP8JNU2bdR6D/dDRHsp
 github.com/sudosylabs/execenv v0.6.1/go.mod h1:GjUNpTShtPpcNPVaYOEpQg1meAkpYBitr+5t/weXGcE=
 github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027 h1:SAwhcNF+UVDE/bFiWIBgq9HUnBPLgKsvZp3vgEWt4RI=
 github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027/go.mod h1:I+iXJYDvz/TZy1NZtoXMoMd5ZN70WEdVlsmNZqm/unw=
+github.com/sudosylabs/proctor/packages/cache v0.0.0-20261122151211-cf3b54d7e16b h1:d30TsWijSRc0bbpOXd2uEdO6qKfMDAn1kdRTnFVIZd8=
+github.com/sudosylabs/proctor/packages/cache v0.0.0-20261122151211-cf3b54d7e16b/go.mod h1:jazMvWlaqJudG0JXFZRBdO+MnVGi981lFVvAcEC82bE=
 github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4 h1:i4z6AgMXHSDMbHHASnMfu7W9mmMxGSTdyBYH5ym9GaM=
 github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4/go.mod h1:znl67/8FD4pxWPwP5GJ65NjPUX8EeGHVnNRx+Hpe3PE=
 github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4 h1:TyYJcfVPPTpnTGvZma9nJ2b7a+qG/MDeQYlQiCh+4fA=
 github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4/go.mod h1:KKLdR8h+O3aiQmWABHvZQe4yudRw35UWQfx0yxVsIlQ=
+github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b h1:A8DlDTCV+lxEGccxLRpgLvsXNjinr4CneSnZ/Ej13to=
+github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b/go.mod h1:S+T4PAlidWbA/1NyoNNTFleG0jjr9ugf1DrYMlRYom0=
 github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07/go.mod h1:kDXzergiv9cbyO7IOYJZWg1U88JhDg3PB6klq9Hg2pA=
 github.com/tinylib/msgp v1.6.4 h1:mOwYbyYDLPj35mkA2BjjYejgJk9BuHxDdvRnb6v2ZcQ=
 github.com/tinylib/msgp v1.6.4/go.mod h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77roAqEA=
@@ -462,6 +466,8 @@ google.golang.org/genproto v0.0.0-20180831171423-11092d34479b/go.mod h1:JiN7NxoA
 google.golang.org/genproto v0.0.0-20181029155118-b69ba1387ce2/go.mod h1:JiN7NxoALGmiZfu7CAH4rXhgtRTLTxftemlI0sWmxmc=
 google.golang.org/genproto v0.0.0-20181202183823-bd91e49a0898/go.mod h1:7Ep/1NZk928CDR8SjdVbjWNpdIf6nzjE3BTgJDr2Atg=
 google.golang.org/genproto v0.0.0-20190306203927-b5d61aea6440/go.mod h1:VzzqZJRnGkLBvHegQrXjBqPurQTc5/KpmUdxsrq26oE=
+google.golang.org/genproto v0.0.0-20260928230214-8a89bd6388cc h1:MBreUmlUQ+UROuto7tVQeNrZxy9ZxJsajKJQwWa8mLE=
+google.golang.org/genproto v0.0.0-20260928230214-8a89bd6388cc/go.mod h1:JUQe2nbekxMCka0JpW+abO6SMvrY4Gk3+Cnl84QtcCg=
 google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc h1:rZHRz0ogq4Pid1IKtA/ivHi8XONVF5tqUQXA2TtgpkE=
 google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc/go.mod h1:K/n0XLazCJHjD73YuMyNJsN38BPPy1kfFnKxUXaThFU=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc h1:4bNTbnb44EqGVy9HaQxSY2jnafSUdgV3qHtedvNpDKg=

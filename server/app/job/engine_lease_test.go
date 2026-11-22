@@ -21,17 +21,20 @@ import (
 func TestEngineHeartbeatsLongWorkAndCompletesWithItsFence(t *testing.T) {
 	t.Parallel()
 	claim := jobRunnerClaim(t)
+	persistence := &jobRunnerStoreFake{heartbeated: make(chan struct{}, 1)}
+	// The work lasts until the engine has renewed its lease once, however
+	// slowly a loaded runner fires the heartbeat ticker.
 	descriptor := testDescriptor(handlerFunc(func(ctx context.Context, _ Execution) Outcome {
 		select {
-		case <-time.After(20 * time.Millisecond):
+		case <-persistence.heartbeated:
 			return succeededOutcome()
 		case <-ctx.Done():
 			return RetryableFailure("job.timeout", ctx.Err())
 		}
 	}))
+	descriptor.Timeout = 30 * time.Second
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
-	persistence := &jobRunnerStoreFake{}
 	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.executeClaim(context.Background(), descriptor, claim)

@@ -170,6 +170,70 @@ func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
 	}}, effects.Calls())
 }
 
+// staleReadAccountStateStore moves the User's revision after each read for the
+// first stale writes, as a default profile picture attached in between does,
+// and refuses each of those writes the way the SQL store does.
+type staleReadAccountStateStore struct {
+	store.UserStore
+	user   model.User
+	stale  int
+	inputs []*store.UserDisabledStateChange
+}
+
+func (s *staleReadAccountStateStore) Get(context.Context, model.UserID) (*model.User, error) {
+	read := s.user
+	return &read, nil
+}
+
+func (s *staleReadAccountStateStore) SetDisabled(_ context.Context, input *store.UserDisabledStateChange) (*store.UserDisabledStateResult, error) {
+	s.inputs = append(s.inputs, input)
+	if len(s.inputs) <= s.stale {
+		s.user.Revision++
+		return nil, store.NewErrConflict("user", "user_changed", nil)
+	}
+	updated := s.user
+	updated.DisabledAt = model.OptionalTimeFromMillis(500)
+	updated.Revision++
+	return &store.UserDisabledStateResult{User: &updated}, nil
+}
+
+func TestAccountDisableStartsAgainFromAFreshReadWhenTheUserChanged(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		stale     int
+		writes    int
+		succeeded bool
+	}{
+		"once":        {stale: 1, writes: 2, succeeded: true},
+		"every retry": {stale: userEnabledAttempts, writes: userEnabledAttempts},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &staleReadAccountStateStore{stale: test.stale, user: model.User{ID: model.NewUserID(),
+				CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3, Username: "student",
+				Email: "student@example.edu", Locale: "en", Timezone: "UTC", DefaultProfilePictureSeed: accountStateTestSeed}}
+			fixture := newAccountStateTest(t, &events, persistence, "", nil)
+			fixture.service.now = func() time.Time { return time.UnixMilli(500) }
+			result, err := fixture.service.SetUserEnabled(context.Background(), fixture.inv,
+				SetUserEnabledCommand{ID: persistence.user.ID, IdempotencyKey: "disable-after-picture"})
+
+			require.Len(t, persistence.inputs, test.writes)
+			for index, input := range persistence.inputs {
+				require.Equal(t, int64(3+index), input.ExpectedRevision, "each try is fenced on its own fresh read")
+			}
+			attempts := recordedAttempts(t, fixture.access)
+			require.Len(t, attempts, test.writes, "each try is audited")
+			if !test.succeeded {
+				require.Equal(t, "user.conflict", apperror.CodeOf(err, ""), "error = %v", err)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, result.DisabledAt.Valid)
+		})
+	}
+}
+
 func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {

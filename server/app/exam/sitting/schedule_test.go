@@ -66,6 +66,79 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 		fixture.publisher.Calls())
 }
 
+func TestScheduleOpensAtAnEarlyJoinWindow(t *testing.T) {
+	t.Parallel()
+	fixture := newFixture(t)
+	start, end := testNow.Add(time.Hour), testNow.Add(3*time.Hour)
+	window := model.ExamSittingJoinWindow{
+		OpensAt:  model.OptionalTimeFrom(start.Add(-10 * time.Minute)),
+		ClosesAt: model.OptionalTimeFrom(start.Add(30 * time.Minute)),
+	}
+
+	got, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.inv, ScheduleCommand{
+		ExamID: fixture.examID, ExamRevisionID: fixture.revisionID, ClassID: fixture.classID,
+		ScheduledStartAt: start, ScheduledEndAt: end, JoinWindow: window, IdempotencyKey: "join-key",
+	})
+	require.NoError(t, err)
+	require.True(t, got.Sitting.JoinWindow.Equal(window), "the window reaches the store")
+	require.True(t, fixture.persistence.schedule.Sitting.JoinWindow.Equal(window), "the window reaches the store")
+	require.True(t, fixture.jobs.boundaryStart.Equal(start.Add(-10*time.Minute)), "the open Job runs when the window opens")
+	require.True(t, fixture.jobs.boundaryEnd.Equal(end), "the deadline does not move")
+}
+
+func TestScheduleRefusesAJoinWindowOutsideTheSchedule(t *testing.T) {
+	t.Parallel()
+	start, end := testNow.Add(time.Hour), testNow.Add(3*time.Hour)
+	for field, window := range map[string]model.ExamSittingJoinWindow{
+		"join_opens_at":  {OpensAt: model.OptionalTimeFrom(start.Add(time.Minute))},
+		"join_closes_at": {ClosesAt: model.OptionalTimeFrom(end.Add(time.Minute))},
+	} {
+		fixture := newFixture(t)
+		_, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.inv, ScheduleCommand{
+			ExamID: fixture.examID, ExamRevisionID: fixture.revisionID, ClassID: fixture.classID,
+			ScheduledStartAt: start, ScheduledEndAt: end, JoinWindow: window, IdempotencyKey: "join-key",
+		})
+		assertFaultCode(t, err, "exam.sitting.invalid")
+		failure, _ := apperror.As(err)
+		require.Equal(t, field, failure.Fields()["field"], "the refused bound is named")
+		require.Nil(t, fixture.persistence.schedule, "a refused window reaches no store")
+	}
+}
+
+func TestUpdateScheduleKeepsChecksAndClearsTheJoinWindow(t *testing.T) {
+	t.Parallel()
+	fixture := newFixture(t)
+	current := fixture.sitting(t)
+	start, end := current.ScheduledStartAt, current.ScheduledEndAt
+	window := model.ExamSittingJoinWindow{OpensAt: model.OptionalTimeFrom(start.Add(-5 * time.Minute))}
+	_, err := current.ApplySchedule(current.ExamRevisionID, current.ClassID, start, end, window, testNow)
+	require.NoError(t, err)
+	current.Revision = 1
+	fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: current}
+
+	// Moving the start earlier than the kept opening is refused, not reinterpreted.
+	earlier := start.Add(-10 * time.Minute)
+	_, err = fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
+		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
+		ScheduledStartAt: &earlier, IdempotencyKey: "join-update",
+	})
+	assertFaultCode(t, err, "exam.sitting.invalid")
+	require.Nil(t, fixture.persistence.update)
+
+	updated := fixture.sitting(t)
+	fixture.persistence.result = &store.ExamSittingCommandResult{Value: &store.ExamSittingSnapshot{Sitting: updated}}
+	closesAt := model.OptionalTimeFrom(start.Add(15 * time.Minute))
+	_, err = fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
+		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
+		JoinWindow: &model.ExamSittingJoinWindow{ClosesAt: closesAt}, IdempotencyKey: "join-update-2",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, fixture.persistence.update)
+	require.True(t, fixture.persistence.update.JoinWindow.Equal(model.ExamSittingJoinWindow{ClosesAt: closesAt}),
+		"the new window replaces the old one, dropping its opening")
+	require.True(t, fixture.jobs.boundaryStart.Equal(start), "without an early opening the sitting opens at the start")
+}
+
 func TestScheduleUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testing.T) {
 	t.Parallel()
 	fixture := newFixture(t)
@@ -142,7 +215,7 @@ func TestUpdateScheduleUsesSittingManagementAndOptimisticFence(t *testing.T) {
 	current := fixture.sitting(t)
 	changedAt := testNow
 	changedStart, changedEnd := testNow.Add(2*time.Hour), testNow.Add(5*time.Hour)
-	changed, err := updated.ApplySchedule(fixture.revisionID, fixture.classID, changedStart, changedEnd, changedAt)
+	changed, err := updated.ApplySchedule(fixture.revisionID, fixture.classID, changedStart, changedEnd, model.ExamSittingJoinWindow{}, changedAt)
 	require.NoError(t, err, "ApplySchedule()")
 	require.True(t, changed, "ApplySchedule()")
 	fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: current}
@@ -296,7 +369,7 @@ func TestReplayedUpdateAndCancellationDoNotPublishEffects(t *testing.T) {
 		fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: fixture.sitting(t)}
 		updated := fixture.sitting(t)
 		start, end := testNow.Add(2*time.Hour), testNow.Add(5*time.Hour)
-		_, err := updated.ApplySchedule(fixture.revisionID, fixture.classID, start, end, testNow)
+		_, err := updated.ApplySchedule(fixture.revisionID, fixture.classID, start, end, model.ExamSittingJoinWindow{}, testNow)
 		require.NoError(t, err)
 		fixture.persistence.result = &store.ExamSittingCommandResult{Value: &store.ExamSittingSnapshot{Sitting: updated}, Replayed: true}
 

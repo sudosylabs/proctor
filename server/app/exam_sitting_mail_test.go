@@ -26,7 +26,7 @@ import (
 func TestSittingMailPreparerFreezesAllFourSafeRenderVariants(t *testing.T) {
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		at.Add(24*time.Hour), at.Add(26*time.Hour), at)
+		at.Add(24*time.Hour), at.Add(26*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	preparer, err := newSittingMailPreparer(mailtest.NewRenderer(t), &mailSenderFake{enabled: true,
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), func() time.Time { return at }, nil)

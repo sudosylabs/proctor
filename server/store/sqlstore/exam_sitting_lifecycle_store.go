@@ -638,7 +638,7 @@ func applyDueExamSittingTransition(
 	changed := false
 	switch current.State {
 	case model.ExamSittingScheduled:
-		if now.Before(current.ScheduledStartAt) {
+		if now.Before(current.OpensAt()) {
 			break
 		}
 

@@ -163,6 +163,8 @@ type candidateExamActivityItemResponse struct {
 	Class             candidateExamActivityRelationResponse    `json:"class"`
 	ScheduledStartAt  string                                   `json:"scheduled_start_at"`
 	ScheduledEndAt    string                                   `json:"scheduled_end_at"`
+	JoinOpensAt       string                                   `json:"join_opens_at,omitempty"`
+	JoinClosesAt      string                                   `json:"join_closes_at,omitempty"`
 	SittingState      model.ExamSittingState                   `json:"sitting_state"`
 	SittingReasonCode *string                                  `json:"sitting_reason_code"`
 	ActivityState     store.CandidateExamActivityState         `json:"activity_state"`
@@ -383,6 +385,8 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 			Class:            candidateExamActivityRelationResponse{ID: item.ClassID.String(), DisplayName: item.ClassDisplayName},
 			ScheduledStartAt: model.FormatRFC3339(item.ScheduledStartAt),
 			ScheduledEndAt:   model.FormatRFC3339(item.ScheduledEndAt),
+			JoinOpensAt:      item.JoinWindow.OpensAt.FormatRFC3339(),
+			JoinClosesAt:     item.JoinWindow.ClosesAt.FormatRFC3339(),
 			SittingState:     item.SittingState,
 			ActivityState:    item.ActivityState,
 			AccessState:      item.AccessState,

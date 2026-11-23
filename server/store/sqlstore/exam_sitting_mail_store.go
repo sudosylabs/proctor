@@ -1469,7 +1469,7 @@ func (s SQLExamSittingStore) ListMailReconciliationDue(ctx context.Context,
 		ActorUserID string `db:"actor_user_id"`
 	}
 	query := `SELECT s.id, s.exam_id, s.exam_revision_id, s.class_id, s.scheduled_start_at,
-			s.scheduled_end_at, s.state, s.created_at, s.updated_at, s.opened_at, s.paused_at,
+			s.scheduled_end_at, s.join_opens_at, s.join_closes_at, s.state, s.created_at, s.updated_at, s.opened_at, s.paused_at,
 			s.closing_at, s.closed_at, s.canceled_at, s.reason_code, s.revision, e.academic_unit_id,
 			current_actor.user_id actor_user_id
 		FROM exam_sittings s

@@ -21,14 +21,24 @@ import (
 )
 
 type examAttemptAdmissionGuard struct {
-	ExamID         string    `db:"exam_id"`
-	AcademicUnitID string    `db:"academic_unit_id"`
-	RevisionID     string    `db:"exam_revision_id"`
-	ClassID        string    `db:"class_id"`
-	PeriodID       string    `db:"academic_period_id"`
-	State          string    `db:"state"`
-	ScheduledEnd   time.Time `db:"scheduled_end_at"`
-	DatabaseNow    time.Time `db:"database_now"`
+	ExamID         string       `db:"exam_id"`
+	AcademicUnitID string       `db:"academic_unit_id"`
+	RevisionID     string       `db:"exam_revision_id"`
+	ClassID        string       `db:"class_id"`
+	PeriodID       string       `db:"academic_period_id"`
+	State          string       `db:"state"`
+	ScheduledEnd   time.Time    `db:"scheduled_end_at"`
+	JoinOpensAt    sql.NullTime `db:"join_opens_at"`
+	JoinClosesAt   sql.NullTime `db:"join_closes_at"`
+	DatabaseNow    time.Time    `db:"database_now"`
+}
+
+// joinWindow is the sitting's join window as admission read it.
+func (g examAttemptAdmissionGuard) joinWindow() model.ExamSittingJoinWindow {
+	return model.ExamSittingJoinWindow{
+		OpensAt:  OptionalTimeFromNullTime(g.JoinOpensAt),
+		ClosesAt: OptionalTimeFromNullTime(g.JoinClosesAt),
+	}
 }
 
 type examAttemptStarterRow struct {
@@ -60,7 +70,7 @@ func lockExamAttemptEligibility(
 
 	var guard examAttemptAdmissionGuard
 	if err = tx.Get(ctx, &guard, `SELECT s.exam_id, e.academic_unit_id, s.exam_revision_id,
-			s.class_id, c.academic_period_id, s.state, s.scheduled_end_at
+			s.class_id, c.academic_period_id, s.state, s.scheduled_end_at, s.join_opens_at, s.join_closes_at
 		FROM exam_sittings s
 		JOIN exams e ON e.id = s.exam_id
 		JOIN classes c ON c.id = s.class_id
@@ -126,6 +136,8 @@ func examAttemptAdmissionConflict(err error) error {
 		return store.NewErrConflict("exam_attempt", "exam_attempt_management_authority", nil)
 	case errors.Is(err, model.ErrAttemptAdmissionDeadlineReached):
 		return store.NewErrConflict("exam_sitting", "exam_sitting_deadline_reached", nil)
+	case errors.Is(err, model.ErrAttemptAdmissionJoinClosed):
+		return store.NewErrConflict("exam_sitting", "exam_sitting_join_closed", nil)
 	default:
 		return fmt.Errorf("unmapped Exam Attempt admission refusal: %w", err)
 	}

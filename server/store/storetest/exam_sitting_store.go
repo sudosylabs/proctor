@@ -27,7 +27,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 	fixture := newExamSittingFixture(t, ctx, ss)
 	start := fixture.period.StartsAt.Add(time.Hour)
 	end := start.Add(2 * time.Hour)
-	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, start, end, model.NowUTC())
+	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 	scheduleMail := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled, model.MailTemplateExamSittingScheduled)
@@ -200,7 +200,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 		examCommand(fixture.actor.ID, "exam.revision.publish", "sitting-foreign-revision", "sitting-foreign-revision-command"))
 	require.NoError(t, err)
 	foreignSelection, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, foreignRevision.Revision.ID,
-		fixture.class.ID, start, end, model.NowUTC())
+		fixture.class.ID, start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	foreignOpen, foreignDeadline := newExamSittingLifecycleJobs(t, foreignSelection.ID, 1, start, end)
 	_, err = ss.ExamSitting().Schedule(ctx, &store.ExamSittingSchedule{Sitting: foreignSelection, OpenJob: foreignOpen, DeadlineJob: foreignDeadline, ActorUserID: fixture.actor.ID,
@@ -262,7 +262,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 
 	// A second sitting makes list filtering and tuple pagination observable.
 	secondStart := newStart.Add(24 * time.Hour)
-	second, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, secondStart, secondStart.Add(time.Hour), model.NowUTC())
+	second, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, secondStart, secondStart.Add(time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	secondOpen, secondDeadline := newExamSittingLifecycleJobs(t, second.ID, 1, second.ScheduledStartAt, second.ScheduledEndAt)
 	secondResult, err := ss.ExamSitting().Schedule(ctx, &store.ExamSittingSchedule{Sitting: second, OpenJob: secondOpen, DeadlineJob: secondDeadline, ActorUserID: fixture.actor.ID,
@@ -292,7 +292,7 @@ func TestExamSittingMailReconciliationAfterObsoleteSuppression(t *testing.T, ss 
 	start := fixture.period.StartsAt.Add(4 * time.Hour)
 	end := start.Add(2 * time.Hour)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID,
-		fixture.class.ID, start, end, model.NowUTC())
+		fixture.class.ID, start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 	prepared := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled,
@@ -405,7 +405,7 @@ func PrepareExamSittingInvitationLockOrderFixture(t *testing.T, ss store.Store) 
 
 	start := fixture.period.StartsAt.Add(20 * time.Hour)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID,
-		fixture.class.ID, start, start.Add(2*time.Hour), model.NowUTC())
+		fixture.class.ID, start, start.Add(2*time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, sitting.ScheduledStartAt, sitting.ScheduledEndAt)
 	initialMail := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled,
@@ -463,7 +463,7 @@ func PrepareExamSittingDisabledEligibilityRaceFixture(t *testing.T, ss store.Sto
 	require.NoError(t, err)
 	start := fixture.period.StartsAt.Add(18 * time.Hour)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID,
-		fixture.class.ID, start, start.Add(2*time.Hour), model.NowUTC())
+		fixture.class.ID, start, start.Add(2*time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, sitting.ScheduledStartAt, sitting.ScheduledEndAt)
 	mail := newDisabledExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled,
@@ -538,7 +538,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 
 	start := fixture.period.StartsAt.Add(5 * time.Hour)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID,
-		fixture.class.ID, start, start.Add(2*time.Hour), model.NowUTC())
+		fixture.class.ID, start, start.Add(2*time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, sitting.ScheduledStartAt, sitting.ScheduledEndAt)
 	disabledMail := newDisabledExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled,
@@ -821,7 +821,7 @@ func TestExamSittingClassTransferMailReconciliation(t *testing.T, ss store.Store
 	schedule := func(class *model.Class, suffix string) (*model.ExamSitting, *store.ExamSittingMailFanoutSnapshot) {
 		t.Helper()
 		sitting, sittingErr := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, class.ID,
-			start, end, model.NowUTC())
+			start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 		require.NoError(t, sittingErr)
 		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 		fanout := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled, model.MailTemplateExamSittingScheduled)
@@ -942,7 +942,7 @@ func TestExamSittingMailExpansionMaintenance(t *testing.T, ss store.Store) {
 	start := fixture.period.StartsAt.Add(6 * time.Hour)
 	end := start.Add(2 * time.Hour)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID,
-		fixture.class.ID, start, end, model.NowUTC())
+		fixture.class.ID, start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 	prepared := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled,
@@ -1047,7 +1047,7 @@ func PrepareExamSittingMailRecoveryFixture(t *testing.T, ss store.Store) ExamSit
 	create := func(key string, offset time.Duration) (*store.ExamSittingMailFanout, *store.ExamSittingCommandResult) {
 		start := fixture.period.StartsAt.Add(offset)
 		sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID,
-			fixture.class.ID, start, start.Add(time.Hour), model.NowUTC())
+			fixture.class.ID, start, start.Add(time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 		require.NoError(t, err)
 		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, sitting.ScheduledStartAt, sitting.ScheduledEndAt)
 		mail := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled,
@@ -1077,7 +1077,7 @@ func TestExamSittingMailRetentionCleanup(t *testing.T, ss store.Store, probe Exa
 	start := fixture.period.StartsAt.Add(8 * time.Hour)
 	end := start.Add(2 * time.Hour)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID,
-		fixture.class.ID, start, end, model.NowUTC())
+		fixture.class.ID, start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 	prepared := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled,
@@ -1180,7 +1180,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 
 	schedule := func(key string, classID model.ClassID, startAt, endAt time.Time) *store.ExamSittingCommandResult {
 		t.Helper()
-		sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, classID, startAt, endAt, model.NowUTC())
+		sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, classID, startAt, endAt, model.ExamSittingJoinWindow{}, model.NowUTC())
 		require.NoError(t, err)
 		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, startAt, endAt)
 		result, err := ss.ExamSitting().Schedule(ctx, &store.ExamSittingSchedule{Sitting: sitting, OpenJob: openJob, DeadlineJob: deadlineJob,
@@ -1195,7 +1195,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 	rollbackStart := fixture.period.StartsAt.Add(time.Hour)
 	rollbackEnd := rollbackStart.Add(time.Hour)
 	rollbackSitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID,
-		rollbackStart, rollbackEnd, model.NowUTC())
+		rollbackStart, rollbackEnd, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	reservedOpen, _ := newExamSittingLifecycleJobs(t, rollbackSitting.ID, 1, rollbackStart, rollbackEnd)
 	_, inserted, err := ss.Job().Enqueue(ctx, &store.JobEnqueue{Job: reservedOpen})
@@ -1543,7 +1543,7 @@ func TestExamSittingStoreSQLGuards(t *testing.T, ss store.Store, probe ExamSitti
 	fixture := newExamSittingFixture(t, ctx, ss)
 
 	schedule := func(key string, actor model.UserID, revisionID model.ExamRevisionID, classID model.ClassID, start, end time.Time) (*store.ExamSittingCommandResult, error) {
-		sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, revisionID, classID, start, end, model.NowUTC())
+		sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, revisionID, classID, start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 		require.NoError(t, err)
 		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 		return ss.ExamSitting().Schedule(ctx, &store.ExamSittingSchedule{Sitting: sitting, OpenJob: openJob, DeadlineJob: deadlineJob, ActorUserID: actor,

@@ -26,7 +26,23 @@ var (
 	// ErrAttemptAdmissionDeadlineReached means the sitting's scheduled end has
 	// passed.
 	ErrAttemptAdmissionDeadlineReached = errors.New("sitting has reached its scheduled end")
+	// ErrAttemptAdmissionJoinClosed means the sitting's join window has
+	// closed, so no new Attempt may start.
+	ErrAttemptAdmissionJoinClosed = errors.New("sitting's join window has closed")
 )
+
+// CheckAttemptFirstEntry decides the join window, which binds only the first
+// entry that creates an Attempt: a candidate who already started reconnects
+// and resumes until the scheduled end. An empty window admits as before.
+func CheckAttemptFirstEntry(window ExamSittingJoinWindow, decisionTime time.Time) error {
+	if window.OpensAt.Valid && decisionTime.Before(window.OpensAt.Time) {
+		return ErrAttemptAdmissionSittingState
+	}
+	if window.ClosesAt.Valid && !decisionTime.Before(window.ClosesAt.Time) {
+		return ErrAttemptAdmissionJoinClosed
+	}
+	return nil
+}
 
 // AttemptAdmissionSitting is what admission knows once the sitting and its
 // class are locked.

@@ -24,7 +24,7 @@ func TestListNoShowsAuthorizesClosingSittingAndReturnsBoundedPage(t *testing.T) 
 	t.Parallel()
 	fixture := newFixture(t)
 	sitting, err := model.NewExamSitting(fixture.sittingID, fixture.examID, fixture.revisionID, fixture.classID,
-		testNow.Add(-2*time.Hour), testNow.Add(-time.Hour), testNow.Add(-3*time.Hour))
+		testNow.Add(-2*time.Hour), testNow.Add(-time.Hour), model.ExamSittingJoinWindow{}, testNow.Add(-3*time.Hour))
 	require.NoError(t, err)
 	err = sitting.Open(testNow.Add(-2 * time.Hour))
 	require.NoError(t, err)

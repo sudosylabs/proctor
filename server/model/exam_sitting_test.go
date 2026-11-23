@@ -20,7 +20,7 @@ func TestNewExamSittingCreatesScheduledHalfOpenDelivery(t *testing.T) {
 	startAt := createdAt.Add(24 * time.Hour)
 	endAt := startAt.Add(2 * time.Hour)
 
-	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), startAt, endAt, createdAt)
+	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), startAt, endAt, ExamSittingJoinWindow{}, createdAt)
 	require.NoError(t, err)
 	require.Equal(t, ExamSittingScheduled, sitting.State, "new Sitting state/revision")
 	require.Equal(t, int64(1), sitting.Revision, "new Sitting state/revision")
@@ -37,12 +37,12 @@ func TestNewExamSittingCreatesScheduledHalfOpenDelivery(t *testing.T) {
 func TestExamSittingApplyScheduleIsScheduledOnlyAndAtomic(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
-	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 
 	revisionID, classID := NewExamRevisionID(), NewClassID()
 	startAt, endAt := at.Add(48*time.Hour), at.Add(51*time.Hour)
-	changed, err := sitting.ApplySchedule(revisionID, classID, startAt, endAt, at.Add(time.Minute))
+	changed, err := sitting.ApplySchedule(revisionID, classID, startAt, endAt, ExamSittingJoinWindow{}, at.Add(time.Minute))
 	require.NoError(t, err, "ApplySchedule()")
 	require.True(t, changed, "ApplySchedule()")
 	require.Equal(t, revisionID, sitting.ExamRevisionID)
@@ -52,23 +52,85 @@ func TestExamSittingApplyScheduleIsScheduledOnlyAndAtomic(t *testing.T) {
 	require.Equal(t, int64(2), sitting.Revision)
 	require.Equal(t, at.Add(time.Minute), sitting.UpdatedAt)
 	unchanged := *sitting
-	changed, err = sitting.ApplySchedule(revisionID, classID, startAt, endAt, at.Add(2*time.Minute))
+	changed, err = sitting.ApplySchedule(revisionID, classID, startAt, endAt, ExamSittingJoinWindow{}, at.Add(2*time.Minute))
 	require.NoError(t, err, "no-op ApplySchedule() = %v, %v, Sitting=%#v", changed, err, sitting)
 	require.False(t, changed, "no-op ApplySchedule() = %v, %v, Sitting=%#v", changed, err, sitting)
 	require.Equal(t, unchanged, *sitting, "no-op ApplySchedule() = %v, %v, Sitting=%#v", changed, err, sitting)
 
 	sitting.State = ExamSittingOpen
 	before := *sitting
-	changed, err = sitting.ApplySchedule(NewExamRevisionID(), NewClassID(), startAt.Add(time.Hour), endAt.Add(time.Hour), at.Add(3*time.Minute))
+	changed, err = sitting.ApplySchedule(NewExamRevisionID(), NewClassID(), startAt.Add(time.Hour), endAt.Add(time.Hour), ExamSittingJoinWindow{}, at.Add(3*time.Minute))
 	require.Error(t, err, "open ApplySchedule() = %v, %v, Sitting=%#v", changed, err, sitting)
 	require.False(t, changed, "open ApplySchedule() = %v, %v, Sitting=%#v", changed, err, sitting)
 	require.Equal(t, before, *sitting, "open ApplySchedule() = %v, %v, Sitting=%#v", changed, err, sitting)
 }
 
+func TestExamSittingJoinWindow(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
+	startAt, endAt := at.Add(time.Hour), at.Add(3*time.Hour)
+	window := ExamSittingJoinWindow{
+		OpensAt:  OptionalTimeFrom(startAt.Add(-10 * time.Minute)),
+		ClosesAt: OptionalTimeFrom(startAt.Add(30 * time.Minute)),
+	}
+
+	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), startAt, endAt, window, at)
+	require.NoError(t, err)
+	require.Equal(t, startAt.Add(-10*time.Minute), sitting.OpensAt(), "an early join window opens the sitting early")
+	plain, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), startAt, endAt, ExamSittingJoinWindow{}, at)
+	require.NoError(t, err)
+	require.Equal(t, startAt, plain.OpensAt(), "without a window the sitting opens at the start")
+
+	for name, invalid := range map[string]ExamSittingJoinWindow{
+		"opens after the start":   {OpensAt: OptionalTimeFrom(startAt.Add(time.Second))},
+		"closes at the start":     {ClosesAt: OptionalTimeFrom(startAt)},
+		"closes after the end":    {ClosesAt: OptionalTimeFrom(endAt.Add(time.Second))},
+		"closes before the start": {ClosesAt: OptionalTimeFrom(startAt.Add(-time.Minute))},
+	} {
+		_, err = NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), startAt, endAt, invalid, at)
+		require.Error(t, err, name)
+	}
+	edges := ExamSittingJoinWindow{OpensAt: OptionalTimeFrom(startAt), ClosesAt: OptionalTimeFrom(endAt)}
+	require.NoError(t, edges.ValidateFor(startAt, endAt), "both bounds may touch the schedule")
+
+	changed, err := sitting.ApplySchedule(sitting.ExamRevisionID, sitting.ClassID, startAt, endAt, window, at.Add(time.Minute))
+	require.NoError(t, err)
+	require.False(t, changed, "the same window is no change")
+	changed, err = sitting.ApplySchedule(sitting.ExamRevisionID, sitting.ClassID, startAt, endAt, ExamSittingJoinWindow{}, at.Add(time.Minute))
+	require.NoError(t, err)
+	require.True(t, changed, "clearing the window is a change")
+	require.Equal(t, ExamSittingJoinWindow{}, sitting.JoinWindow)
+	require.Equal(t, int64(2), sitting.Revision)
+
+	_, err = sitting.ApplySchedule(sitting.ExamRevisionID, sitting.ClassID, startAt, endAt,
+		ExamSittingJoinWindow{ClosesAt: OptionalTimeFrom(endAt.Add(time.Minute))}, at.Add(2*time.Minute))
+	require.Error(t, err, "a window that does not fit is refused")
+	require.Equal(t, int64(2), sitting.Revision, "a refused window changes nothing")
+
+	require.NoError(t, sitting.Open(startAt))
+	_, err = sitting.ApplySchedule(sitting.ExamRevisionID, sitting.ClassID, startAt, endAt, window, at.Add(3*time.Minute))
+	require.Error(t, err, "the window is frozen once the sitting opens")
+}
+
+func TestCheckAttemptFirstEntry(t *testing.T) {
+	t.Parallel()
+	startAt := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
+	window := ExamSittingJoinWindow{
+		OpensAt:  OptionalTimeFrom(startAt.Add(-10 * time.Minute)),
+		ClosesAt: OptionalTimeFrom(startAt.Add(30 * time.Minute)),
+	}
+
+	require.NoError(t, CheckAttemptFirstEntry(ExamSittingJoinWindow{}, startAt.Add(100*time.Hour)), "no window admits as before")
+	require.NoError(t, CheckAttemptFirstEntry(window, startAt.Add(-10*time.Minute)), "the window opens inclusively")
+	require.NoError(t, CheckAttemptFirstEntry(window, startAt.Add(30*time.Minute-time.Microsecond)))
+	require.ErrorIs(t, CheckAttemptFirstEntry(window, startAt.Add(30*time.Minute)), ErrAttemptAdmissionJoinClosed, "the window closes at its bound")
+	require.ErrorIs(t, CheckAttemptFirstEntry(window, startAt.Add(-11*time.Minute)), ErrAttemptAdmissionSittingState)
+}
+
 func TestExamSittingCancelRetainsOnlySafeReasonAndIsTerminal(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
-	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 
 	err = sitting.Cancel(ExamSittingReasonManagerCanceled, at.Add(time.Minute))
@@ -84,7 +146,7 @@ func TestExamSittingCancelRetainsOnlySafeReasonAndIsTerminal(t *testing.T) {
 	require.Error(t, err, "repeated Cancel() error=%v Sitting=%#v", err, sitting)
 	require.Equal(t, before, *sitting, "repeated Cancel() error=%v Sitting=%#v", err, sitting)
 
-	invalid, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	invalid, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	invalidBefore := *invalid
 	err = invalid.Cancel(ExamSittingReasonCode("private teacher explanation"), at.Add(time.Minute))
@@ -95,7 +157,7 @@ func TestExamSittingCancelRetainsOnlySafeReasonAndIsTerminal(t *testing.T) {
 func TestExamSittingValidateAcceptsOnlyCoherentLifecycleTimestamps(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
-	base, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	base, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	openedAt, pausedAt := at.Add(time.Hour), at.Add(70*time.Minute)
 	closingAt, closedAt := at.Add(2*time.Hour), at.Add(121*time.Minute)
@@ -143,7 +205,7 @@ func TestExamSittingValidateAcceptsOnlyCoherentLifecycleTimestamps(t *testing.T)
 func TestExamSittingLifecycleTransitionsAreClosedAndAtomic(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
-	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 
 	openedAt := at.Add(time.Hour)
@@ -212,7 +274,7 @@ func TestExamSittingAutomaticCancellationReasonsAreBounded(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
 	for _, reason := range []ExamSittingReasonCode{ExamSittingReasonScheduleElapsed, ExamSittingReasonAcademicStructureInvalid} {
-		sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+		sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), ExamSittingJoinWindow{}, at)
 		require.NoError(t, err)
 		err = sitting.Cancel(reason, at.Add(time.Minute))
 		require.NoError(t, err, "Cancel(%q)", reason)
@@ -250,7 +312,7 @@ func TestExamSittingRetargetRevisionIsLiveOnlyAndAtomic(t *testing.T) {
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
 	for _, state := range []ExamSittingState{ExamSittingOpen, ExamSittingPaused} {
 		t.Run(string(state), func(t *testing.T) {
-			sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), at)
+			sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), ExamSittingJoinWindow{}, at)
 			require.NoError(t, err)
 			err = sitting.Open(at.Add(time.Hour))
 			require.NoError(t, err)
@@ -272,7 +334,7 @@ func TestExamSittingRetargetRevisionIsLiveOnlyAndAtomic(t *testing.T) {
 			require.Equal(t, before, *sitting, "same-Revision retarget error=%v Sitting=%#v", err, sitting)
 		})
 	}
-	scheduled, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), at)
+	scheduled, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	before := *scheduled
 	err = scheduled.RetargetRevision(NewExamRevisionID(), at.Add(time.Minute))

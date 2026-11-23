@@ -2279,6 +2279,10 @@
             "example": {
               "class_id": "ybndrfg8ejkmcpqxot1uwisza4",
               "exam_revision_id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "join_window": {
+                "closes_at": "2026-12-14T09:30:00Z",
+                "opens_at": "2026-12-14T08:50:00Z"
+              },
               "scheduled_end_at": "2026-12-14T11:00:00Z",
               "scheduled_start_at": "2026-12-14T09:00:00Z"
             },
@@ -2528,6 +2532,9 @@
           "application/json": {
             "example": {
               "expected_revision": 3,
+              "join_window": {
+                "opens_at": "2026-12-14T09:20:00Z"
+              },
               "scheduled_end_at": "2026-12-14T11:30:00Z",
               "scheduled_start_at": "2026-12-14T09:30:00Z"
             },
@@ -4084,6 +4091,8 @@
                   },
                   "exam_id": "6xoche483hwrx5rpu8jzjoe7qg",
                   "exam_sitting_id": "39kqk53i4cswfzbi7hbai1r8qg",
+                  "join_closes_at": "2026-09-14T09:30:00Z",
+                  "join_opens_at": "2026-09-14T08:50:00Z",
                   "result": null,
                   "scheduled_end_at": "2026-09-14T11:00:00Z",
                   "scheduled_start_at": "2026-09-14T09:00:00Z",
@@ -6829,6 +6838,8 @@
               "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
               "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
+              "join_closes_at": "2026-12-14T09:30:00Z",
+              "join_opens_at": "2026-12-14T08:50:00Z",
               "revision": 1,
               "scheduled_end_at": "2026-12-14T11:00:00Z",
               "scheduled_start_at": "2026-12-14T09:00:00Z",
@@ -6930,7 +6941,9 @@
               "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
               "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
-              "opened_at": "2026-12-14T09:00:02Z",
+              "join_closes_at": "2026-12-14T09:30:00Z",
+              "join_opens_at": "2026-12-14T08:50:00Z",
+              "opened_at": "2026-12-14T08:50:02Z",
               "paused_at": "2026-12-14T09:41:17Z",
               "revision": 3,
               "scheduled_end_at": "2026-12-14T11:00:00Z",
@@ -16481,10 +16494,11 @@
         "type": "object"
       },
       "CandidateExamAccessState": {
-        "description": "Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.",
+        "description": "Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `join_closed` means the Sitting's join window has closed before they started. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.",
         "enum": [
           "not_open",
           "joinable",
+          "join_closed",
           "resumable",
           "sitting_paused",
           "await_reallow",
@@ -16580,6 +16594,16 @@
           "exam_sitting_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Sitting."
+          },
+          "join_closes_at": {
+            "description": "When the Sitting stops admitting candidates who have not started. Absent when they can start until the end. A candidate who has started can carry on until the end.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "join_opens_at": {
+            "description": "When the candidate can start joining, if the Sitting opens before its scheduled start. Absent when the Sitting opens at the start.",
+            "format": "date-time",
+            "type": "string"
           },
           "result": {
             "description": "The released result, or null until it is released.",
@@ -21590,6 +21614,7 @@
           "exam.attempt.environment_unavailable",
           "exam.attempt.focus_loss_conflict",
           "exam.attempt.invalid",
+          "exam.attempt.join_closed",
           "exam.attempt.management_authority_conflict",
           "exam.attempt.not_found",
           "exam.attempt.preview_connection_ended",
@@ -23982,6 +24007,23 @@
         ],
         "type": "object"
       },
+      "ExamSittingJoinWindow": {
+        "additionalProperties": false,
+        "description": "When candidates may start a new Attempt. Leave a bound out for none. opens_at, at or before the start, opens the Sitting at that time instead, so it must be in the future and inside the Class's Academic Period; the deadline does not move. closes_at, after the start and at or before the deadline, refuses first entry from then on with exam.attempt.join_closed, while candidates who already started carry on. The window is frozen once the Sitting opens.",
+        "properties": {
+          "closes_at": {
+            "description": "When candidates who have not started can no longer join.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "opens_at": {
+            "description": "When candidates can start joining.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ExamSittingListResponse": {
         "additionalProperties": false,
         "description": "One page of Sittings, latest scheduled start first.",
@@ -24114,6 +24156,16 @@
             "$ref": "#/components/schemas/ID",
             "description": "The Sitting's ID."
           },
+          "join_closes_at": {
+            "description": "After this time no candidate can start a new Attempt, and admission fails with exam.attempt.join_closed. Candidates who already started can reconnect until the deadline. It is after the scheduled start and at or before the deadline. Present only when set. It is frozen once the Sitting opens.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "join_opens_at": {
+            "description": "When candidates can start joining, at or before the scheduled start. The Sitting opens at this time instead of the scheduled start; the deadline does not move. Present only when set. It is frozen once the Sitting opens.",
+            "format": "date-time",
+            "type": "string"
+          },
           "opened_at": {
             "description": "When the Sitting opened. Omitted until it opens.",
             "format": "date-time",
@@ -24140,7 +24192,7 @@
             "type": "string"
           },
           "scheduled_start_at": {
-            "description": "When the Sitting is scheduled to open.",
+            "description": "When the Sitting is scheduled to start. It opens then unless join_opens_at is earlier.",
             "format": "date-time",
             "type": "string"
           },
@@ -33597,6 +33649,9 @@
             "$ref": "#/components/schemas/ID",
             "description": "The published Exam Revision to deliver. It must belong to this Exam."
           },
+          "join_window": {
+            "$ref": "#/components/schemas/ExamSittingJoinWindow"
+          },
           "scheduled_end_at": {
             "description": "The Sitting's deadline. It must be after the start and inside the Class's Academic Period.",
             "format": "date-time",
@@ -36036,6 +36091,11 @@
             "required": [
               "scheduled_end_at"
             ]
+          },
+          {
+            "required": [
+              "join_window"
+            ]
           }
         ],
         "description": "Changes to a Sitting that has not opened yet. Send the current revision and at least one value to change. Members you leave out keep their current value.",
@@ -36053,6 +36113,10 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "join_window": {
+            "$ref": "#/components/schemas/ExamSittingJoinWindow",
+            "description": "A new join window, replacing the whole current one; {} removes it. Left out, the current window is kept and checked against the new times."
           },
           "scheduled_end_at": {
             "description": "A new deadline. It must be after the start and inside the Class's Academic Period.",

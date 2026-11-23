@@ -88,6 +88,8 @@ components:
                   display_name: CS201 Group A
                 scheduled_start_at: '2026-09-14T09:00:00Z'
                 scheduled_end_at: '2026-09-14T11:00:00Z'
+                join_opens_at: '2026-09-14T08:50:00Z'
+                join_closes_at: '2026-09-14T09:30:00Z'
                 sitting_state: open
                 sitting_reason_code: null
                 activity_state: in_progress
@@ -157,11 +159,13 @@ components:
         continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is
         suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another
         unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example
-        because they left the Class or manage the Exam. `not_open`, `submitted`, `result_available` and `ended`
-        follow the Sitting and Submission.
+        because they left the Class or manage the Exam. `join_closed` means the Sitting's join window has closed
+        before they started. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and
+        Submission.
       enum:
         - not_open
         - joinable
+        - join_closed
         - resumable
         - sitting_paused
         - await_reallow
@@ -284,6 +288,18 @@ components:
           type: string
           format: date-time
           description: Scheduled end of the Sitting.
+        join_opens_at:
+          type: string
+          format: date-time
+          description: >-
+            When the candidate can start joining, if the Sitting opens before its scheduled start. Absent when the
+            Sitting opens at the start.
+        join_closes_at:
+          type: string
+          format: date-time
+          description: >-
+            When the Sitting stops admitting candidates who have not started. Absent when they can start until the
+            end. A candidate who has started can carry on until the end.
         sitting_state:
           $ref: '#/components/schemas/ExamSittingState'
         sitting_reason_code:

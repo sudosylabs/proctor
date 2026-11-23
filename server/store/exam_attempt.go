@@ -1079,6 +1079,7 @@ type CandidateExamAccessState string
 const (
 	CandidateExamAccessNotOpen               CandidateExamAccessState = "not_open"
 	CandidateExamAccessJoinable              CandidateExamAccessState = "joinable"
+	CandidateExamAccessJoinClosed            CandidateExamAccessState = "join_closed"
 	CandidateExamAccessResumable             CandidateExamAccessState = "resumable"
 	CandidateExamAccessSittingPaused         CandidateExamAccessState = "sitting_paused"
 	CandidateExamAccessAwaitReallow          CandidateExamAccessState = "await_reallow"
@@ -1131,6 +1132,7 @@ type CandidateExamActivityItem struct {
 	ClassDisplayName        string
 	ScheduledStartAt        time.Time
 	ScheduledEndAt          time.Time
+	JoinWindow              model.ExamSittingJoinWindow
 	SittingState            model.ExamSittingState
 	SittingReasonCode       string
 	ActivityState           CandidateExamActivityState

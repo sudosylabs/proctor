@@ -31,7 +31,7 @@ func TestSittingMailExpansionPagesLargeRosterCheckpointsAndIsolatesOneRecipientC
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		at.Add(24*time.Hour), at.Add(26*time.Hour), at)
+		at.Add(24*time.Hour), at.Add(26*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	prepared, err := preparer.Prepare(model.NewUserID(), sitting, store.ExamSittingMailScheduled,
 		mail.SittingScheduleDetails{ExamTitle: "Algorithms", ClassDisplayName: "Class A"})
@@ -70,7 +70,7 @@ func TestSittingMailExpansionLeaseLossReplaysRecipientCommitsWithoutDuplicates(t
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		at.Add(24*time.Hour), at.Add(26*time.Hour), at)
+		at.Add(24*time.Hour), at.Add(26*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	prepared, err := preparer.Prepare(model.NewUserID(), sitting, store.ExamSittingMailScheduled,
 		mail.SittingScheduleDetails{ExamTitle: "Algorithms", ClassDisplayName: "Class A"})
@@ -201,7 +201,7 @@ func TestSittingMailExpansionSkipsAnUnaddressableRecipientAndReachesLaterOnes(t 
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		at.Add(24*time.Hour), at.Add(26*time.Hour), at)
+		at.Add(24*time.Hour), at.Add(26*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	prepared, err := preparer.Prepare(model.NewUserID(), sitting, store.ExamSittingMailScheduled,
 		mail.SittingScheduleDetails{ExamTitle: "Algorithms", ClassDisplayName: "Class A"})

@@ -249,6 +249,9 @@ func (s *SQLExamAttemptStore) connect(
 	if !errors.Is(err, sql.ErrNoRows) {
 		return zero, fmt.Errorf("find existing Exam Attempt: %w", err)
 	}
+	if err = model.CheckAttemptFirstEntry(guard.joinWindow(), guard.DatabaseNow); err != nil {
+		return zero, examAttemptAdmissionConflict(err)
+	}
 
 	return s.firstAdmission(ctx, tx, input, guard)
 }

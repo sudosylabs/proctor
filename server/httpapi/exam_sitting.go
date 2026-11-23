@@ -27,18 +27,27 @@ import (
 )
 
 type scheduleExamSittingRequest struct {
-	ExamRevisionID   string `json:"exam_revision_id"`
-	ClassID          string `json:"class_id"`
-	ScheduledStartAt string `json:"scheduled_start_at"`
-	ScheduledEndAt   string `json:"scheduled_end_at"`
+	ExamRevisionID   string                                       `json:"exam_revision_id"`
+	ClassID          string                                       `json:"class_id"`
+	ScheduledStartAt string                                       `json:"scheduled_start_at"`
+	ScheduledEndAt   string                                       `json:"scheduled_end_at"`
+	JoinWindow       route.Optional[examSittingJoinWindowRequest] `json:"join_window"`
+}
+
+// examSittingJoinWindowRequest is a whole join window. A bound left out is
+// absent, so in a schedule edit {} removes the window.
+type examSittingJoinWindowRequest struct {
+	OpensAt  route.Optional[string] `json:"opens_at"`
+	ClosesAt route.Optional[string] `json:"closes_at"`
 }
 
 type updateExamSittingScheduleRequest struct {
-	ExpectedRevision int64                  `json:"expected_revision"`
-	ExamRevisionID   route.Optional[string] `json:"exam_revision_id"`
-	ClassID          route.Optional[string] `json:"class_id"`
-	ScheduledStartAt route.Optional[string] `json:"scheduled_start_at"`
-	ScheduledEndAt   route.Optional[string] `json:"scheduled_end_at"`
+	ExpectedRevision int64                                        `json:"expected_revision"`
+	ExamRevisionID   route.Optional[string]                       `json:"exam_revision_id"`
+	ClassID          route.Optional[string]                       `json:"class_id"`
+	ScheduledStartAt route.Optional[string]                       `json:"scheduled_start_at"`
+	ScheduledEndAt   route.Optional[string]                       `json:"scheduled_end_at"`
+	JoinWindow       route.Optional[examSittingJoinWindowRequest] `json:"join_window"`
 }
 
 type cancelExamSittingRequest struct {
@@ -64,6 +73,16 @@ func (b *scheduleExamSittingRequest) UnmarshalJSON(encoded []byte) error {
 		return err
 	}
 	*b = scheduleExamSittingRequest(decoded)
+	return nil
+}
+
+func (b *examSittingJoinWindowRequest) UnmarshalJSON(encoded []byte) error {
+	type wire examSittingJoinWindowRequest
+	var decoded wire
+	if err := decodeDuplicateFreeExamSittingObject(encoded, &decoded); err != nil {
+		return err
+	}
+	*b = examSittingJoinWindowRequest(decoded)
 	return nil
 }
 
@@ -161,6 +180,8 @@ type examSittingResponse struct {
 	ClassID          string `json:"class_id"`
 	ScheduledStartAt string `json:"scheduled_start_at"`
 	ScheduledEndAt   string `json:"scheduled_end_at"`
+	JoinOpensAt      string `json:"join_opens_at,omitempty"`
+	JoinClosesAt     string `json:"join_closes_at,omitempty"`
 	State            string `json:"state"`
 	CreatedAt        string `json:"created_at"`
 	UpdatedAt        string `json:"updated_at"`
@@ -551,12 +572,20 @@ func (h examSittingHandlers) schedule(request route.Request) (route.Result, erro
 		return route.Result{}, route.InvalidRequest(errors.New("must be a nonempty interval"))
 	}
 
+	var joinWindow model.ExamSittingJoinWindow
+	if parsed, parseErr := parseExamSittingJoinWindow(body.JoinWindow); parseErr != nil {
+		return route.Result{}, parseErr
+	} else if parsed != nil {
+		joinWindow = *parsed
+	}
+
 	view, err := h.app.ScheduleExamSitting(request.Context, request.Invocation(), sitting.ScheduleCommand{
 		ExamID:           examID,
 		ExamRevisionID:   revisionID,
 		ClassID:          classID,
 		ScheduledStartAt: startAt,
 		ScheduledEndAt:   endAt,
+		JoinWindow:       joinWindow,
 		IdempotencyKey:   request.IdempotencyKey,
 	})
 	if err != nil {
@@ -718,6 +747,11 @@ func (h examSittingHandlers) updateSchedule(request route.Request) (route.Result
 	}
 
 	command.ScheduledEndAt, err = parseOptionalExamSittingTime("scheduled_end_at", body.ScheduledEndAt)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	command.JoinWindow, err = parseExamSittingJoinWindow(body.JoinWindow)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -885,7 +919,39 @@ func examSittingIDs(request route.Request) (model.ExamID, model.ExamSittingID, e
 }
 
 func noExamSittingScheduleChange(body updateExamSittingScheduleRequest) bool {
-	return !body.ExamRevisionID.IsSet() && !body.ClassID.IsSet() && !body.ScheduledStartAt.IsSet() && !body.ScheduledEndAt.IsSet()
+	return !body.ExamRevisionID.IsSet() && !body.ClassID.IsSet() && !body.ScheduledStartAt.IsSet() && !body.ScheduledEndAt.IsSet() &&
+		!body.JoinWindow.IsSet()
+}
+
+// parseExamSittingJoinWindow reads an optional join window: omitted is nil,
+// and null or a null bound is refused, because an absent instant is left out.
+func parseExamSittingJoinWindow(value route.Optional[examSittingJoinWindowRequest]) (*model.ExamSittingJoinWindow, error) {
+	if !value.IsSet() {
+		return nil, nil
+	}
+	if value.IsNull() {
+		return nil, route.InvalidRequest(errors.New("must not be null"))
+	}
+	body := *value.ValuePointer()
+	var window model.ExamSittingJoinWindow
+	for _, bound := range []struct {
+		field string
+		value route.Optional[string]
+		into  *model.OptionalTime
+	}{{"opens_at", body.OpensAt, &window.OpensAt}, {"closes_at", body.ClosesAt, &window.ClosesAt}} {
+		if !bound.value.IsSet() {
+			continue
+		}
+		if bound.value.IsNull() {
+			return nil, route.InvalidRequest(errors.New("must not be null"))
+		}
+		parsed, err := parseExamSittingTime(bound.field, *bound.value.ValuePointer())
+		if err != nil {
+			return nil, err
+		}
+		*bound.into = model.OptionalTimeFrom(parsed)
+	}
+	return &window, nil
 }
 
 func parseOptionalExamSittingTime(field string, value route.Optional[string]) (*time.Time, error) {
@@ -943,6 +1009,8 @@ func examSittingResponseFromView(view store.ExamSittingSnapshot) examSittingResp
 		ClassID:          record.ClassID.String(),
 		ScheduledStartAt: model.FormatRFC3339(record.ScheduledStartAt),
 		ScheduledEndAt:   model.FormatRFC3339(record.ScheduledEndAt),
+		JoinOpensAt:      record.JoinWindow.OpensAt.FormatRFC3339(),
+		JoinClosesAt:     record.JoinWindow.ClosesAt.FormatRFC3339(),
 		State:            string(record.State),
 		CreatedAt:        model.FormatRFC3339(record.CreatedAt),
 		UpdatedAt:        model.FormatRFC3339(record.UpdatedAt),

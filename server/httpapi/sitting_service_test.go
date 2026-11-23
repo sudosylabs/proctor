@@ -65,7 +65,7 @@ func newSittingFixtureWith(t *testing.T, caller model.Principal, actions ...mode
 	t.Helper()
 	f := &sittingFixture{examFixture: newExamFixture(t, caller, actions...)}
 	record, err := model.NewExamSitting(model.NewExamSittingID(), f.examID, model.NewExamRevisionID(), model.NewClassID(),
-		sittingFixtureTime.Add(time.Hour), sittingFixtureTime.Add(3*time.Hour), sittingFixtureTime)
+		sittingFixtureTime.Add(time.Hour), sittingFixtureTime.Add(3*time.Hour), model.ExamSittingJoinWindow{}, sittingFixtureTime)
 	require.NoError(t, err)
 	f.sitting = record
 	f.sittingStore = &sittingLedger{byID: map[model.ExamSittingID]*model.ExamSitting{record.ID: record}}
@@ -247,7 +247,7 @@ func (s *sittingLedger) UpdateSchedule(_ context.Context, input *store.ExamSitti
 	if err != nil {
 		return nil, err
 	}
-	if _, err := record.ApplySchedule(input.ExamRevisionID, input.ClassID, input.ScheduledStartAt, input.ScheduledEndAt, input.AuditAt); err != nil {
+	if _, err := record.ApplySchedule(input.ExamRevisionID, input.ClassID, input.ScheduledStartAt, input.ScheduledEndAt, input.JoinWindow, input.AuditAt); err != nil {
 		return nil, store.NewErrConflict("exam_sitting", "exam_sitting_state", err)
 	}
 	return &store.ExamSittingCommandResult{Value: s.snapshot(record)}, nil

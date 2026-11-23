@@ -260,6 +260,7 @@ type attemptLedger struct {
 	clipReads        int
 	commands         []*store.CommandIdempotency
 	statusLists      []store.SittingCandidateStatusListOptions
+	clipReason       string
 }
 
 func newAttemptLedger(t *testing.T, f *attemptFixture) *attemptLedger {
@@ -501,11 +502,15 @@ func (s *attemptLedger) CompleteScreenClipUpload(_ context.Context, input *store
 	return &value, nil
 }
 
-func (s *attemptLedger) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
+func (s *attemptLedger) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptManagedScreenClip, error) {
 	if s.clip == nil {
-		return []store.ExamAttemptScreenClipView{}, nil
+		return []store.ExamAttemptManagedScreenClip{}, nil
 	}
-	return []store.ExamAttemptScreenClipView{*s.clip}, nil
+	return []store.ExamAttemptManagedScreenClip{{ExamAttemptScreenClipView: *s.clip, PrivateReason: s.clipReason}}, nil
+}
+
+func (s *attemptLedger) ResolveAttemptSitting(_ context.Context, attemptID model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: s.f.examID, SittingID: s.f.sitting.ID}, nil
 }
 
 func (s *attemptLedger) GetAttemptScreenClip(_ context.Context, clips store.ExamAttemptClips, id model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {

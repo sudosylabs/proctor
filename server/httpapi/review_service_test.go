@@ -152,6 +152,7 @@ type reviewLedger struct {
 
 	evidencePage    store.ExamIntegrityEvidencePage
 	attemptEvidence *store.AttemptEvidencePage
+	flagSummaries   []store.ExamIntegrityFlagSummary
 
 	flagLists        []store.ExamIntegrityFlagListOptions
 	evidenceLists    []store.ExamIntegrityEvidenceListOptions
@@ -183,6 +184,9 @@ func (s *reviewLedger) Get(_ context.Context, id model.SubmissionID) (*store.Exa
 
 func (s *reviewLedger) ListFlags(_ context.Context, options store.ExamIntegrityFlagListOptions) (*store.ExamIntegrityFlagPage, error) {
 	s.flagLists = append(s.flagLists, options)
+	if s.flagSummaries != nil {
+		return &store.ExamIntegrityFlagPage{Items: append([]store.ExamIntegrityFlagSummary(nil), s.flagSummaries...)}, nil
+	}
 	return &store.ExamIntegrityFlagPage{Items: []store.ExamIntegrityFlagSummary{{Flag: *s.f.flag, EvidenceCount: 1}}}, nil
 }
 

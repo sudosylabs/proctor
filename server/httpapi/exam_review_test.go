@@ -91,6 +91,42 @@ func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	require.Error(t, err, "cursor accepted an unknown private field")
 }
 
+func TestIntegrityFlagsCarryALocalizedSummaryWithoutApplicationNames(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	flag := func(kind model.IntegrityPolicyKind) model.IntegrityFlag {
+		value := *f.flag
+		value.ID, value.Kind = model.NewIntegrityFlagID(), kind
+		return value
+	}
+	f.reviewStore.flagSummaries = []store.ExamIntegrityFlagSummary{
+		{Flag: flag(model.IntegrityPolicyFocusLoss), EvidenceCount: 2, OverflowCount: 1},
+		{Flag: flag(model.IntegrityPolicyConnectionLoss), EvidenceCount: 1},
+		{Flag: flag(model.IntegrityPolicyBrowserNavigation), EvidenceCount: 4,
+			Browser: &model.BrowserIntegrityGroup{ParticipationID: model.NewAttemptParticipationID(),
+				PolicyRevisionID: model.NewExamRevisionID(), RuleID: "block-search"}},
+		{Flag: flag("native.applications"), EvidenceCount: 1},
+		{Flag: flag("example-plugin.gaze"), EvidenceCount: 5},
+	}
+	httpAPI := f.api(t)
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.request(t, http.MethodGet, "/api/v1/submissions/"+f.submission.ID.String()+"/integrity-flags", "credential"))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page examIntegrityFlagListResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	summaries := make([]string, 0, len(page.Items))
+	for _, item := range page.Items {
+		summaries = append(summaries, item.Summary)
+	}
+	require.Equal(t, []string{
+		"The exam window lost focus 3 times",
+		"The secure connection was lost 1 time",
+		"4 pages were blocked by the “block-search” browser rule",
+		"The “applications” desktop check was not met 1 time",
+		"The “example-plugin.gaze” check reported this 5 times",
+	}, summaries, "evidence beyond what was kept still counts, and a desktop check is named by its identifier, never by an application")
+}
+
 func TestIntegrityReviewHTTPListsAttemptEvidenceWithItsDetail(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)

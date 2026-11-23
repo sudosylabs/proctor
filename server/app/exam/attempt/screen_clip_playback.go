@@ -43,28 +43,39 @@ type PlayScreenClipResult struct {
 	Open      func(start, length int64) (io.ReadCloser, error)
 }
 
-// ListScreenClips returns every clip requested for an attempt, without
-// private reasons.
+// ListScreenClips returns every clip requested for an attempt. A manager
+// clip's private reason is kept only for a caller who manages the sitting; a
+// reviewer sees who asked for it, never why.
 func (s *Service) ListScreenClips(
 	ctx context.Context,
 	inv invocation.Invocation,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
-) (_ []store.ExamAttemptScreenClipView, resultErr error) {
+) (_ []store.ExamAttemptManagedScreenClip, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	attempt := store.ExamAttemptClips{ExamID: examID, SittingID: sittingID, AttemptID: attemptID}
 	if !attempt.IsValid() {
 		return nil, apperror.Invalid("exam.attempt.invalid", "screen_clip")
 	}
-	if _, err := s.authorizeScreenClipView(ctx, inv, attempt); err != nil {
+	viewer, err := s.authorizeScreenClipView(ctx, inv, attempt)
+	if err != nil {
 		return nil, err
 	}
 	clips, err := s.attempts.ListAttemptScreenClips(ctx, attempt)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
-	return clips, nil
+	reasons := viewer.Action == model.ActionExamSittingManage || viewer.Action == model.ActionExamSittingManageOverride
+	listed := make([]store.ExamAttemptManagedScreenClip, len(clips))
+	for i, clip := range clips {
+		listed[i] = store.ExamAttemptManagedScreenClip{ExamAttemptScreenClipView: clip.ExamAttemptScreenClipView}
+		listed[i].Upload = clip.Upload.Clone()
+		if reasons && clip.Source == model.ScreenClipSourceManager {
+			listed[i].PrivateReason = clip.PrivateReason
+		}
+	}
+	return listed, nil
 }
 
 // PlayScreenClip authorizes once, so every range read of the result rests on

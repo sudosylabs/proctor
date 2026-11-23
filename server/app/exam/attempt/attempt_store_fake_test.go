@@ -47,6 +47,7 @@ type attemptStoreFake struct {
 	authorizedSession               model.SessionID
 	managerOptions                  store.ExamAttemptManagerListOptions
 	candidateStatusOptions          []store.SittingCandidateStatusListOptions
+	attemptScreenClips              []store.ExamAttemptManagedScreenClip
 	managerRows                     []store.ExamAttemptManagerSnapshot
 	managerSuspension               *store.ExamAttemptSuspensionView
 	latestParticipation             *store.ExamAttemptParticipationView
@@ -235,8 +236,12 @@ func (f *attemptStoreFake) CompleteScreenClipUpload(_ context.Context, input *st
 	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
 }
 
-func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
-	return []store.ExamAttemptScreenClipView{}, nil
+func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptManagedScreenClip, error) {
+	return append([]store.ExamAttemptManagedScreenClip{}, f.attemptScreenClips...), nil
+}
+
+func (f *attemptStoreFake) ResolveAttemptSitting(_ context.Context, attemptID model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: f.f.sitting.ExamID, SittingID: f.f.sitting.ID}, nil
 }
 
 func (f *attemptStoreFake) GetAttemptScreenClip(

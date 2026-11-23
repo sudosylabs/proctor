@@ -53,6 +53,7 @@ func resourceLocalizationDefinitions() []localization.Definition {
 		localization.Definition{ID: systemAdministratorRoleDescriptionID, Origin: localizationOrigin},
 	)
 	definitions = append(definitions, accessPolicyLocalizationDefinitions()...)
+	definitions = append(definitions, integrityFlagSummaryLocalizationDefinitions()...)
 	return append(definitions, auditSummaryLocalizationDefinitions()...)
 }
 

@@ -107,6 +107,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ScreenClipResponse":                             reflect.TypeOf(screenClipResponse{}),
 	"ScreenClipRange":                                reflect.TypeOf(screenClipRangeResponse{}),
 	"ScreenClipListResponse":                         reflect.TypeOf(route.List[screenClipResponse]{}),
+	"ManagedScreenClipResponse":                      reflect.TypeOf(managedScreenClipResponse{}),
+	"ManagedScreenClipListResponse":                  reflect.TypeOf(route.List[managedScreenClipResponse]{}),
 	"BeginCandidateScreenClipUploadRequest":          reflect.TypeOf(beginScreenClipUploadRequest{}),
 	"ScreenClipUploadResponse":                       reflect.TypeOf(screenClipUploadResponse{}),
 	"ScreenClipChunkResponse":                        reflect.TypeOf(screenClipChunkResponse{}),

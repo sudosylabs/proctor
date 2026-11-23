@@ -116,6 +116,15 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"manager.sitting_board.changed": func() (Event, error) {
 			return NewManagerSittingBoardChangedEvent(examID, sittingID)
 		},
+		"exam_sitting.submissions.changed": func() (Event, error) {
+			return NewSittingSubmissionsChangedEvent(examID, sittingID)
+		},
+		"exam_attempt.screen_clip.changed": func() (Event, error) {
+			return NewScreenClipChangedEvent(examID, sittingID, attemptID, model.NewScreenClipID())
+		},
+		"exam_attempt.evidence.changed": func() (Event, error) {
+			return NewAttemptEvidenceChangedEvent(examID, sittingID, attemptID, at)
+		},
 		"user_settings_changed": func() (Event, error) {
 			return NewUserSettingsChangedEvent(candidateID, model.NewUserSettingsRevision(), 1, at)
 		},

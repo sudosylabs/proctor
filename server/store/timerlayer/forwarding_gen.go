@@ -1688,8 +1688,8 @@ func (s *timedExamAttemptStore) CompleteScreenClipUpload(arg0 context.Context, a
 	})
 }
 
-func (s *timedExamAttemptStore) ListAttemptScreenClips(arg0 context.Context, arg1 store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListAttemptScreenClips), func(callCtx context.Context) ([]store.ExamAttemptScreenClipView, error) {
+func (s *timedExamAttemptStore) ListAttemptScreenClips(arg0 context.Context, arg1 store.ExamAttemptClips) ([]store.ExamAttemptManagedScreenClip, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListAttemptScreenClips), func(callCtx context.Context) ([]store.ExamAttemptManagedScreenClip, error) {
 		return s.next.ListAttemptScreenClips(callCtx, arg1)
 	})
 }
@@ -1697,6 +1697,12 @@ func (s *timedExamAttemptStore) ListAttemptScreenClips(arg0 context.Context, arg
 func (s *timedExamAttemptStore) GetAttemptScreenClip(arg0 context.Context, arg1 store.ExamAttemptClips, arg2 model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGetAttemptScreenClip), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
 		return s.next.GetAttemptScreenClip(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) ResolveAttemptSitting(arg0 context.Context, arg1 model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveAttemptSitting), func(callCtx context.Context) (*store.ExamAttemptSitting, error) {
+		return s.next.ResolveAttemptSitting(callCtx, arg1)
 	})
 }
 

@@ -5910,6 +5910,7 @@
                   "id": "xpq79ar61ncrjiouey6d9tgp91",
                   "policy_kind": "focus_loss",
                   "state": "open",
+                  "summary": "The exam window lost focus 2 times",
                   "unresolved_missing_count": 0
                 },
                 {
@@ -5926,6 +5927,7 @@
                   "id": "17778cuf6b17rhtapprfjozet8",
                   "policy_kind": "browser_navigation",
                   "state": "open",
+                  "summary": "1 page was blocked by the “block-search” browser rule",
                   "unresolved_missing_count": 0
                 }
               ]
@@ -22908,6 +22910,10 @@
             ],
             "type": "string"
           },
+          "summary": {
+            "description": "One sentence, in the request's language, saying what the policy saw and how often, counting evidence beyond what was kept. It names a browser rule or a desktop check by its identifier and never names an application.",
+            "type": "string"
+          },
           "unresolved_missing_count": {
             "description": "The number of missing signals in the sequence that were still missing when collection ended.",
             "format": "int64",
@@ -22920,6 +22926,7 @@
           "exam_attempt_id",
           "generation",
           "policy_kind",
+          "summary",
           "state",
           "created_at",
           "evidence_count",
@@ -28052,6 +28059,103 @@
           "system.mail_test"
         ],
         "type": "string"
+      },
+      "ManagedScreenClipListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedScreenClipResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ManagedScreenClipResponse": {
+        "additionalProperties": false,
+        "description": "A screen clip as the Attempt's managers and reviewers list it.",
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "failure": {
+            "description": "Why the clip failed; present only when state is failed.",
+            "enum": [
+              "attempt_ended",
+              "not_recorded",
+              "upload_deadline",
+              "rejected"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "integrity_flag_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The integrity Flag an incident clip was taken for. Absent for a manager clip."
+          },
+          "range": {
+            "$ref": "#/components/schemas/ScreenClipRange"
+          },
+          "reason": {
+            "description": "The manager's private reason for a manager clip. Present only for a caller who manages the Sitting.",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "requested_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The manager who asked for a manager clip. Absent for an incident clip."
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "manager",
+              "incident"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "requested",
+              "recording",
+              "uploading",
+              "ready",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "exam_attempt_id",
+          "source",
+          "state",
+          "range",
+          "requested_at",
+          "updated_at",
+          "revision"
+        ],
+        "type": "object"
       },
       "MoveExamStarterWorkspaceEntryRequest": {
         "additionalProperties": false,
@@ -52700,7 +52804,7 @@
     },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips": {
       "get": {
-        "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never returned.",
+        "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to a caller who manages the Sitting, never to a reviewer.",
         "operationId": "listExamAttemptScreenClips",
         "parameters": [
           {
@@ -52715,10 +52819,46 @@
             "content": {
               "application/json": {
                 "example": {
-                  "items": []
+                  "items": [
+                    {
+                      "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                      "id": "twz47ydgjcx1ia56br8kpous3h",
+                      "range": {
+                        "end": "2026-08-01T09:42:00Z",
+                        "from_session_start": false,
+                        "start": "2026-08-01T09:40:00Z"
+                      },
+                      "reason": "Looked away from the screen for a long time.",
+                      "requested_at": "2026-08-01T09:42:05Z",
+                      "requested_by": {
+                        "display_name": "Priya Raman",
+                        "id": "nybc6xhg593upqice3sdeyro5k"
+                      },
+                      "revision": 4,
+                      "source": "manager",
+                      "state": "ready",
+                      "updated_at": "2026-08-01T09:43:10Z"
+                    },
+                    {
+                      "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                      "failure": "upload_deadline",
+                      "id": "8kpous3h9nfemqtwz47ydgjcx1",
+                      "integrity_flag_id": "ia56br8kpous3h9nfemqtwz47y",
+                      "range": {
+                        "end": "2026-08-01T09:22:00Z",
+                        "from_session_start": false,
+                        "start": "2026-08-01T09:20:00Z"
+                      },
+                      "requested_at": "2026-08-01T09:21:00Z",
+                      "revision": 3,
+                      "source": "incident",
+                      "state": "failed",
+                      "updated_at": "2026-08-01T09:31:00Z"
+                    }
+                  ]
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ScreenClipListResponse"
+                  "$ref": "#/components/schemas/ManagedScreenClipListResponse"
                 }
               }
             },

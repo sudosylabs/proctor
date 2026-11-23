@@ -2604,6 +2604,48 @@
     "translation": "Display Proctor build information"
   },
   {
+    "id": "integrity.flag.summary.browser_navigation",
+    "translation": {
+      "one": "{{.Count}} page was blocked by the browser rules",
+      "other": "{{.Count}} pages were blocked by the browser rules"
+    }
+  },
+  {
+    "id": "integrity.flag.summary.browser_navigation.rule",
+    "translation": {
+      "one": "{{.Count}} page was blocked by the “{{.Rule}}” browser rule",
+      "other": "{{.Count}} pages were blocked by the “{{.Rule}}” browser rule"
+    }
+  },
+  {
+    "id": "integrity.flag.summary.capability",
+    "translation": {
+      "one": "The “{{.Check}}” check reported this {{.Count}} time",
+      "other": "The “{{.Check}}” check reported this {{.Count}} times"
+    }
+  },
+  {
+    "id": "integrity.flag.summary.connection_loss",
+    "translation": {
+      "one": "The secure connection was lost {{.Count}} time",
+      "other": "The secure connection was lost {{.Count}} times"
+    }
+  },
+  {
+    "id": "integrity.flag.summary.focus_loss",
+    "translation": {
+      "one": "The exam window lost focus {{.Count}} time",
+      "other": "The exam window lost focus {{.Count}} times"
+    }
+  },
+  {
+    "id": "integrity.flag.summary.native",
+    "translation": {
+      "one": "The “{{.Check}}” desktop check was not met {{.Count}} time",
+      "other": "The “{{.Check}}” desktop check was not met {{.Count}} times"
+    }
+  },
+  {
     "id": "mail.academic.academic_unit_assigned.at_label",
     "translation": "Added"
   },

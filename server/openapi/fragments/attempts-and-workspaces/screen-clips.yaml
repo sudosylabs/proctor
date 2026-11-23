@@ -18,8 +18,9 @@ paths:
         - Attempts and workspaces
       description: >-
         Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state:
-        requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never
-        returned.
+        requested, recording the future part of its range, uploading, ready or failed. An incident clip names its
+        integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to
+        a caller who manages the Sitting, never to a reviewer.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -55,9 +56,37 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ScreenClipListResponse'
+                $ref: '#/components/schemas/ManagedScreenClipListResponse'
               example:
-                items: []
+                items:
+                  - id: twz47ydgjcx1ia56br8kpous3h
+                    exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+                    source: manager
+                    state: ready
+                    range:
+                      from_session_start: false
+                      start: '2026-08-01T09:40:00Z'
+                      end: '2026-08-01T09:42:00Z'
+                    requested_at: '2026-08-01T09:42:05Z'
+                    updated_at: '2026-08-01T09:43:10Z'
+                    revision: 4
+                    requested_by:
+                      id: nybc6xhg593upqice3sdeyro5k
+                      display_name: Priya Raman
+                    reason: Looked away from the screen for a long time.
+                  - id: 8kpous3h9nfemqtwz47ydgjcx1
+                    exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+                    source: incident
+                    state: failed
+                    failure: upload_deadline
+                    range:
+                      from_session_start: false
+                      start: '2026-08-01T09:20:00Z'
+                      end: '2026-08-01T09:22:00Z'
+                    requested_at: '2026-08-01T09:21:00Z'
+                    updated_at: '2026-08-01T09:31:00Z'
+                    revision: 3
+                    integrity_flag_id: ia56br8kpous3h9nfemqtwz47y
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -827,6 +856,79 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ScreenClipResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    ManagedScreenClipResponse:
+      description: A screen clip as the Attempt's managers and reviewers list it.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - exam_attempt_id
+        - source
+        - state
+        - range
+        - requested_at
+        - updated_at
+        - revision
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        exam_attempt_id:
+          $ref: '#/components/schemas/ID'
+        source:
+          type: string
+          enum:
+            - manager
+            - incident
+        state:
+          type: string
+          enum:
+            - requested
+            - recording
+            - uploading
+            - ready
+            - failed
+        failure:
+          type: string
+          enum:
+            - attempt_ended
+            - not_recorded
+            - upload_deadline
+            - rejected
+          description: Why the clip failed; present only when state is failed.
+        range:
+          $ref: '#/components/schemas/ScreenClipRange'
+        requested_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        integrity_flag_id:
+          description: The integrity Flag an incident clip was taken for. Absent for a manager clip.
+          $ref: '#/components/schemas/ID'
+        requested_by:
+          description: The manager who asked for a manager clip. Absent for an incident clip.
+          $ref: '#/components/schemas/PersonRef'
+        reason:
+          description: The manager's private reason for a manager clip. Present only for a caller who manages the Sitting.
+          type: string
+    ManagedScreenClipListResponse:
+      description: One page of the collection in its stable order.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedScreenClipResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     BeginCandidateScreenClipUploadRequest:

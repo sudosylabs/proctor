@@ -267,6 +267,7 @@ type examIntegrityFlagResponse struct {
 	ExamAttemptID          string                         `json:"exam_attempt_id"`
 	Generation             int64                          `json:"generation"`
 	PolicyKind             string                         `json:"policy_kind"`
+	Summary                string                         `json:"summary"`
 	State                  string                         `json:"state"`
 	CreatedAt              string                         `json:"created_at"`
 	EvidenceCount          int                            `json:"evidence_count"`
@@ -666,18 +667,7 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 
 	response := examIntegrityFlagListResponse{Items: make([]examIntegrityFlagResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examIntegrityFlagResponse{
-			Browser:                browserIntegrityGroupFrom(item.Browser),
-			ID:                     item.Flag.ID.String(),
-			ExamAttemptID:          item.Flag.AttemptID.String(),
-			Generation:             item.Flag.Generation,
-			PolicyKind:             string(item.Flag.Kind),
-			State:                  string(item.Flag.State),
-			CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
-			EvidenceCount:          item.EvidenceCount,
-			EvidenceOverflowCount:  item.OverflowCount,
-			UnresolvedMissingCount: item.UnresolvedMissingCount,
-		})
+		response.Items = append(response.Items, examIntegrityFlagResponseFrom(request.HTTP, item))
 	}
 
 	if page.HasMore {
@@ -692,6 +682,22 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 	}
 
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+func examIntegrityFlagResponseFrom(request *http.Request, item store.ExamIntegrityFlagSummary) examIntegrityFlagResponse {
+	return examIntegrityFlagResponse{
+		Browser:                browserIntegrityGroupFrom(item.Browser),
+		ID:                     item.Flag.ID.String(),
+		ExamAttemptID:          item.Flag.AttemptID.String(),
+		Generation:             item.Flag.Generation,
+		PolicyKind:             string(item.Flag.Kind),
+		Summary:                integrityFlagSummary(request, item.Flag.Kind, item.Browser, item.EvidenceCount, item.OverflowCount),
+		State:                  string(item.Flag.State),
+		CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
+		EvidenceCount:          item.EvidenceCount,
+		EvidenceOverflowCount:  item.OverflowCount,
+		UnresolvedMissingCount: item.UnresolvedMissingCount,
+	}
 }
 
 func (h examIntegrityReviewHandlers) listEvidence(request route.Request) (route.Result, error) {

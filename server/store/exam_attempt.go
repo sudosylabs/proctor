@@ -1382,10 +1382,13 @@ type ExamAttemptStore interface {
 	CompleteScreenClipUpload(context.Context, *ExamAttemptScreenClipCompletion) (*ExamAttemptScreenClipView, error)
 	// ListAttemptScreenClips returns, newest first, every clip requested for
 	// an attempt of the exact exam and sitting. Private reasons are cleared.
-	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptScreenClipView, error)
+	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptManagedScreenClip, error)
 	// GetAttemptScreenClip returns one clip of an attempt of the exact exam
 	// and sitting.
 	GetAttemptScreenClip(context.Context, ExamAttemptClips, model.ScreenClipID) (*ExamAttemptScreenClipView, error)
+	// ResolveAttemptSitting returns the exam and sitting of an attempt, or
+	// ErrNotFound.
+	ResolveAttemptSitting(context.Context, model.ExamAttemptID) (*ExamAttemptSitting, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.

@@ -64,7 +64,7 @@ func productionResources(
 		examSittingCorrectionResource(application.Corrections),
 		examResourceResource(application.Resources),
 		examStarterWorkspaceResource(application.StarterWorkspaces),
-		examAttemptResource(application.Attempts),
+		examAttemptResource(application.Attempts, application.People),
 		examAttemptTerminalResource(application.Terminals, binarySockets, logger),
 		examAttemptPreviewResource(application.Previews, binarySockets),
 		examAttemptAssistantResource(application.Assistant),

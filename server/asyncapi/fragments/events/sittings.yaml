@@ -340,6 +340,124 @@ components:
               schema_version: 1
               exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+    exam_sitting.submissions.changed:
+      name: exam_sitting.submissions.changed
+      title: Sitting submissions changed
+      summary: Refetch the submission list of one Sitting.
+      description: Refetch the submission list of one Sitting, because a Submission arrived or a review or result release changed. Published once per batch. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting.submissions.changed
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/sitting_submissions_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting.submissions.changed
+            sequence: 47
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+    exam_attempt.screen_clip.changed:
+      name: exam_attempt.screen_clip.changed
+      title: Screen clip changed
+      summary: Refetch an Attempt's screen clips.
+      description: Refetch an Attempt's screen clips, because one was requested or changed state. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt.screen_clip.changed
+              action:
+                type: string
+                const: exam.sitting.manage
+              data:
+                $ref: '../../../schemas/realtime/screen_clip_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt.screen_clip.changed
+            sequence: 47
+            action: exam.sitting.manage
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              screen_clip_id: twz47ydgjcx1ia56br8kpous3h
+    exam_attempt.evidence.changed:
+      name: exam_attempt.evidence.changed
+      title: Attempt evidence changed
+      summary: Refetch an Attempt's live evidence.
+      description: Refetch an Attempt's live integrity Flags, evidence, native conditions and timeline. Sent at most once per Attempt every 5 seconds; the last change in a burst is always sent. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt.evidence.changed
+              action:
+                type: string
+                const: exam.sitting.manage
+              data:
+                $ref: '../../../schemas/realtime/attempt_evidence_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt.evidence.changed
+            sequence: 47
+            action: exam.sitting.manage
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              as_of: '2026-08-01T09:44:55Z'
     candidate.exam_activity.changed:
       name: candidate.exam_activity.changed
       title: Candidate Exam activity changed

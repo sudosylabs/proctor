@@ -360,6 +360,7 @@ const (
 	methodReadSecurityPolicyOverview                methodName = "read_security_policy_overview"
 	methodListAttemptScreenClips                    methodName = "list_attempt_screen_clips"
 	methodGetAttemptScreenClip                      methodName = "get_attempt_screen_clip"
+	methodResolveAttemptSitting                     methodName = "resolve_attempt_sitting"
 	methodResolveOrProvision                        methodName = "resolve_or_provision"
 	methodLink                                      methodName = "link"
 	methodUnlink                                    methodName = "unlink"

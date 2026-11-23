@@ -73,6 +73,12 @@ channels:
         $ref: '#/components/messages/exam_sitting_content_corrected_for_candidate'
       manager.sitting_board.changed:
         $ref: '#/components/messages/manager.sitting_board.changed'
+      exam_sitting.submissions.changed:
+        $ref: '#/components/messages/exam_sitting.submissions.changed'
+      exam_attempt.screen_clip.changed:
+        $ref: '#/components/messages/exam_attempt.screen_clip.changed'
+      exam_attempt.evidence.changed:
+        $ref: '#/components/messages/exam_attempt.evidence.changed'
       candidate.exam_activity.changed:
         $ref: '#/components/messages/candidate.exam_activity.changed'
       exam_attempt_connection_opened:
@@ -216,6 +222,9 @@ operations:
       - $ref: '#/channels/websocket/messages/exam_sitting_content_corrected'
       - $ref: '#/channels/websocket/messages/exam_sitting_content_corrected_for_candidate'
       - $ref: '#/channels/websocket/messages/manager.sitting_board.changed'
+      - $ref: '#/channels/websocket/messages/exam_sitting.submissions.changed'
+      - $ref: '#/channels/websocket/messages/exam_attempt.screen_clip.changed'
+      - $ref: '#/channels/websocket/messages/exam_attempt.evidence.changed'
       - $ref: '#/channels/websocket/messages/candidate.exam_activity.changed'
       - $ref: '#/channels/websocket/messages/exam_attempt_connection_opened'
       - $ref: '#/channels/websocket/messages/exam_attempt_connection_closed'

@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -71,18 +72,25 @@ type OnboardingImportView struct {
 	Revision             int64
 	FailureCode          string
 	FileName             string
+	// CreatedByUserID is who uploaded the import or started the progression.
+	CreatedByUserID model.UserID
 }
 
-// OnboardingImportRowView omits the email address and names the row holds.
+// OnboardingImportRowView shows the person a row names only as the file
+// gave them: a display name and a masked address, never the address itself.
+// UserID is the account the row was matched to, when there is one.
 type OnboardingImportRowView struct {
-	RowNumber    int
-	Reference    string
-	Operation    string
-	Status       model.OnboardingImportRowStatus
-	PreviewCode  string
-	PublicCode   string
-	InvitationID model.InvitationID
-	ResourceID   string
+	RowNumber         int
+	Reference         string
+	Operation         string
+	Status            model.OnboardingImportRowStatus
+	PreviewCode       string
+	PublicCode        string
+	InvitationID      model.InvitationID
+	ResourceID        string
+	PersonDisplayName string
+	PersonEmailMasked string
+	UserID            model.UserID
 }
 
 // ListOnboardingImportsQuery selects one page of administrative imports.
@@ -444,20 +452,32 @@ func onboardingImportView(value *store.OnboardingImport) OnboardingImportView {
 		Revision:            value.Revision,
 		FailureCode:         value.FailureCode,
 		FileName:            value.FileName,
+		CreatedByUserID:     value.ActorUserID,
 	}
 }
 
 func safeOnboardingImportRow(row store.OnboardingImportRow) OnboardingImportRowView {
-	return OnboardingImportRowView{
-		RowNumber:    row.RowNumber,
-		Reference:    row.Reference,
-		Operation:    row.Operation,
-		Status:       row.Status,
-		PreviewCode:  row.PreviewCode,
-		PublicCode:   row.PublicCode,
-		InvitationID: row.InvitationID,
-		ResourceID:   row.ResourceID,
+	view := OnboardingImportRowView{
+		RowNumber:         row.RowNumber,
+		Reference:         row.Reference,
+		Operation:         row.Operation,
+		Status:            row.Status,
+		PreviewCode:       row.PreviewCode,
+		PublicCode:        row.PublicCode,
+		InvitationID:      row.InvitationID,
+		ResourceID:        row.ResourceID,
+		PersonDisplayName: row.DisplayName,
+		UserID:            row.UserID,
 	}
+	if view.PersonDisplayName == "" {
+		view.PersonDisplayName = strings.TrimSpace(row.FirstName + " " + row.LastName)
+	}
+	// Other onboarding_batch.view holders can open the import, so the address
+	// is masked exactly as a mail delivery masks its recipient.
+	if row.Email != "" {
+		view.PersonEmailMasked = mail.MaskAddress(row.Email)
+	}
+	return view
 }
 
 func onboardingImportResource(scope model.RoleScopeType, id string) model.Resource {

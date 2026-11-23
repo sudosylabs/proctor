@@ -48,7 +48,7 @@ func TestStudentProgressionHTTPRequiresRFC3339AndForwardsExactTargets(t *testing
 	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	source, destination := progressionClasses(fixture, at)
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: fixture.principal(model.AuthenticationSingleFactor)},
-		studentProgressionResource(fixture.service))
+		studentProgressionResource(fixture.service, fixture.people))
 	body := `{"source_period_id":"` + source.AcademicPeriodID.String() + `","source_class_id":"` + source.ID.String() + `","destination_period_id":"` +
 		destination.AcademicPeriodID.String() + `","destination_class_id":"` + destination.ID.String() + `","effective_at":"` + at.Format(time.RFC3339Nano) + `"}`
 	request := newJSONRequest(http.MethodPost, "/api/v1/student-progressions", strings.NewReader(body))
@@ -83,7 +83,7 @@ func TestStudentProgressionResponseExposesOnlySafeExactTargetsAndRows(t *testing
 		DestinationClassID: model.NewClassID(), EffectiveAt: at.Add(24 * time.Hour), ParseJobID: model.NewJobID(),
 		CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2, TotalRows: 1, ValidRows: 1}
 	rows := []onboarding.OnboardingImportRowView{{RowNumber: 1, Reference: "safe-membership-reference", Operation: "class.enroll", Status: model.OnboardingImportRowValid}}
-	encoded, err := json.Marshal(onboardingImportResponseFromView(view, rows))
+	encoded, err := json.Marshal(onboardingImportResponseFromView(view, rows, nil))
 	require.NoError(t, err)
 	body := string(encoded)
 	for _, required := range []string{view.SourcePeriodID.String(), view.SourceClassID.String(), view.DestinationPeriodID.String(), view.DestinationClassID.String(), `"effective_at":"`} {
@@ -196,5 +196,5 @@ func TestStudentProgressionReadNamesBothClasses(t *testing.T) {
 // fixture's real service as the caller's multi-factor web Session.
 func studentProgressionAPI(t *testing.T, fixture *onboardingFixture) *route.API {
 	t.Helper()
-	return newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), studentProgressionResource(fixture.service))
+	return newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), studentProgressionResource(fixture.service, fixture.people))
 }

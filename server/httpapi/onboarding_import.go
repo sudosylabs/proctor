@@ -11,16 +11,21 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type onboardingImportHandlers struct{ app *onboarding.Service }
+type onboardingImportHandlers struct {
+	app    *onboarding.Service
+	people *people.Resolver
+}
 
 type onboardingImportCommitRequest struct {
 	ExpectedRevision int64  `json:"expected_revision"`
@@ -64,6 +69,8 @@ type onboardingImportResponse struct {
 	FailureCode          string                        `json:"failure_code,omitempty"`
 	// FileName is the uploaded file's base name, omitted when none was given.
 	FileName string `json:"file_name,omitempty"`
+	// CreatedBy is who uploaded the import or started the progression.
+	CreatedBy *personRefResponse `json:"created_by,omitempty"`
 }
 
 // onboardingImportCursor is the keyset of the last listed import by creation
@@ -99,10 +106,21 @@ type onboardingImportRowResponse struct {
 	PublicCode   string `json:"public_code,omitempty"`
 	InvitationID string `json:"invitation_id,omitempty"`
 	ResourceID   string `json:"resource_id,omitempty"`
+	// Person is the person as the file named them; User the account the row
+	// was matched to.
+	Person *onboardingImportPersonResponse `json:"person,omitempty"`
+	User   *personRefResponse              `json:"user,omitempty"`
 }
 
-func onboardingImportResource(app *onboarding.Service) route.Resource {
-	h := onboardingImportHandlers{app: app}
+// onboardingImportPersonResponse is a row's person from the file's own
+// values, with the address masked as mail deliveries mask a recipient.
+type onboardingImportPersonResponse struct {
+	DisplayName string `json:"display_name,omitempty"`
+	EmailMasked string `json:"email_masked,omitempty"`
+}
+
+func onboardingImportResource(app *onboarding.Service, resolver *people.Resolver) route.Resource {
+	h := onboardingImportHandlers{app: app, people: resolver}
 	return route.NewResource("onboarding-imports",
 		route.Endpoint{
 			Method:       http.MethodPost,
@@ -248,8 +266,12 @@ func (h onboardingImportHandlers) upload(request route.Request) (route.ProtocolR
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
+	response, err := nameOnboardingImport(request, h.people, onboardingImportUnavailable, view, nil)
+	if err != nil {
+		return route.ProtocolResult{}, err
+	}
 
-	return route.StreamingUpload(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
+	return route.StreamingUpload(http.StatusAccepted, response).WithHeaders(noStoreHeaders()), nil
 }
 
 func (h onboardingImportHandlers) list(request route.Request) (route.Result, error) {
@@ -300,8 +322,12 @@ func (h onboardingImportHandlers) list(request route.Request) (route.Result, err
 		return route.Result{}, route.ErrUnpresentable
 	}
 
+	refs, err := nameOnboardingImportPeople(request, h.people, onboardingImportUnavailable, result.Items, nil)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response, err := route.NewList(result.Items, result.HasMore, func(view onboarding.OnboardingImportView) onboardingImportResponse {
-		return onboardingImportResponseFromView(view, nil)
+		return onboardingImportResponseFromView(view, nil, refs)
 	}, func(last onboarding.OnboardingImportView) (string, error) {
 		return route.EncodeCursor(
 			onboardingImportCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order},
@@ -324,7 +350,7 @@ func (h onboardingImportHandlers) get(request route.Request) (route.Result, erro
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, rows)).WithHeaders(noStoreHeaders()), nil
+	return namedOnboardingImport(request, h.people, onboardingImportUnavailable, http.StatusOK, view, rows)
 }
 
 func (h onboardingImportHandlers) commit(request route.Request) (route.Result, error) {
@@ -349,7 +375,7 @@ func (h onboardingImportHandlers) commit(request route.Request) (route.Result, e
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
+	return namedOnboardingImport(request, h.people, onboardingImportUnavailable, http.StatusAccepted, view, nil)
 }
 
 func (h onboardingImportHandlers) cancel(request route.Request) (route.Result, error) {
@@ -361,7 +387,7 @@ func (h onboardingImportHandlers) cancel(request route.Request) (route.Result, e
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
+	return namedOnboardingImport(request, h.people, onboardingImportUnavailable, http.StatusOK, view, nil)
 }
 
 func (h onboardingImportHandlers) report(request route.Request) (route.ProtocolResult, error) {
@@ -379,9 +405,81 @@ func (h onboardingImportHandlers) report(request route.Request) (route.ProtocolR
 	return route.BinaryDownload(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).WithHeaders(headers), nil
 }
 
+// onboardingImportUnavailable and studentProgressionUnavailable are the codes
+// each resource reports when naming its people fails.
+const (
+	onboardingImportUnavailable   = "onboarding_import.unavailable"
+	studentProgressionUnavailable = "student_progression.unavailable"
+)
+
+// nameOnboardingImportPeople names the creators of views and the accounts
+// rows were matched to. An import holds up to 50,000 rows, so the people are
+// read store.MaximumUserDisplayNames at a time.
+func nameOnboardingImportPeople(
+	request route.Request,
+	resolver *people.Resolver,
+	unavailable apperror.Code,
+	views []onboarding.OnboardingImportView,
+	rows []onboarding.OnboardingImportRowView,
+) (people.Refs, error) {
+	ids := make([]model.UserID, 0, len(views)+len(rows))
+	seen := make(map[model.UserID]struct{}, cap(ids))
+	add := func(id model.UserID) {
+		if _, repeated := seen[id]; !id.IsZero() && !repeated {
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	for _, view := range views {
+		add(view.CreatedByUserID)
+	}
+	for _, row := range rows {
+		add(row.UserID)
+	}
+	refs := people.Refs{}
+	for start := 0; start < len(ids); start += store.MaximumUserDisplayNames {
+		chunk, err := namePeople(request, resolver, unavailable, ids[start:min(start+store.MaximumUserDisplayNames, len(ids))]...)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(refs, chunk)
+	}
+	return refs, nil
+}
+
+func nameOnboardingImport(
+	request route.Request,
+	resolver *people.Resolver,
+	unavailable apperror.Code,
+	view onboarding.OnboardingImportView,
+	rows []onboarding.OnboardingImportRowView,
+) (onboardingImportResponse, error) {
+	refs, err := nameOnboardingImportPeople(request, resolver, unavailable, []onboarding.OnboardingImportView{view}, rows)
+	if err != nil {
+		return onboardingImportResponse{}, err
+	}
+	return onboardingImportResponseFromView(view, rows, refs), nil
+}
+
+func namedOnboardingImport(
+	request route.Request,
+	resolver *people.Resolver,
+	unavailable apperror.Code,
+	status int,
+	view onboarding.OnboardingImportView,
+	rows []onboarding.OnboardingImportRowView,
+) (route.Result, error) {
+	response, err := nameOnboardingImport(request, resolver, unavailable, view, rows)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(status, response).WithHeaders(noStoreHeaders()), nil
+}
+
 func onboardingImportResponseFromView(
 	view onboarding.OnboardingImportView,
 	rows []onboarding.OnboardingImportRowView,
+	refs people.Refs,
 ) onboardingImportResponse {
 	response := onboardingImportResponse{
 		ID:                   view.ID.String(),
@@ -414,6 +512,7 @@ func onboardingImportResponseFromView(
 		Revision:             view.Revision,
 		FailureCode:          view.FailureCode,
 		FileName:             view.FileName,
+		CreatedBy:            personRef(refs, view.CreatedByUserID),
 	}
 	if !view.EffectiveAt.IsZero() {
 		response.EffectiveAt = model.FormatRFC3339(view.EffectiveAt)
@@ -422,7 +521,7 @@ func onboardingImportResponseFromView(
 	if rows != nil {
 		response.Rows = make([]onboardingImportRowResponse, 0, len(rows))
 		for _, row := range rows {
-			response.Rows = append(response.Rows, onboardingImportRowResponse{
+			item := onboardingImportRowResponse{
 				RowNumber:    row.RowNumber,
 				Reference:    row.Reference,
 				Operation:    row.Operation,
@@ -431,7 +530,12 @@ func onboardingImportResponseFromView(
 				PublicCode:   row.PublicCode,
 				InvitationID: row.InvitationID.String(),
 				ResourceID:   row.ResourceID,
-			})
+				User:         personRef(refs, row.UserID),
+			}
+			if row.PersonDisplayName != "" || row.PersonEmailMasked != "" {
+				item.Person = &onboardingImportPersonResponse{DisplayName: row.PersonDisplayName, EmailMasked: row.PersonEmailMasked}
+			}
+			response.Rows = append(response.Rows, item)
 		}
 	}
 

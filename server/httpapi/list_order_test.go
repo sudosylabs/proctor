@@ -100,7 +100,7 @@ func TestOnboardingImportListOrderBindsItsCursor(t *testing.T) {
 	newer.ID, newer.CreatedAt = model.NewOnboardingImportID(), at.Add(time.Minute)
 	// The Store reads one past the page, which tells the page another follows.
 	fixture.imports.listed = []*store.OnboardingImport{oldest, &newer}
-	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service))
+	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service, fixture.people))
 	serve := func(query string) *httptest.ResponseRecorder {
 		response := httptest.NewRecorder()
 		httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports?"+query))

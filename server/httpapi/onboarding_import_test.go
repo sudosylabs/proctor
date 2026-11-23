@@ -31,7 +31,7 @@ func TestOnboardingImportResponseExcludesPrivateRowAndCredentialMaterial(t *test
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2, TotalRows: 1, ValidRows: 1}
 	rows := []onboarding.OnboardingImportRowView{{RowNumber: 1, Reference: "safe-row", Operation: "institution_role.create", Status: model.OnboardingImportRowValid}}
-	encoded, err := json.Marshal(onboardingImportResponseFromView(view, rows))
+	encoded, err := json.Marshal(onboardingImportResponseFromView(view, rows, nil))
 	require.NoError(t, err)
 	body := string(encoded)
 	requireNoPrivateFieldNames(t, encoded, "target_email", "email", "claim", "hash", "recipient", "secret")
@@ -51,7 +51,7 @@ func TestOnboardingImportListParsesFiltersAndPagesTheEnvelope(t *testing.T) {
 	oldest.ID, oldest.CreatedAt = model.NewOnboardingImportID(), at.Add(-2*time.Minute)
 	// The Store reads one past the page, which tells the page another follows.
 	fixture.imports.listed = []*store.OnboardingImport{newest, &older, &oldest}
-	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service))
+	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service, fixture.people))
 
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports?state=completed&state=failed&limit=2"))
@@ -99,7 +99,7 @@ func TestOnboardingImportListRejectsMalformedParameters(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			fixture := newOnboardingFixture(t)
-			httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service))
+			httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service, fixture.people))
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports?"+query))
 			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
@@ -112,7 +112,7 @@ func TestOnboardingImportUploadForwardsTheFileNameAndReturnsIt(t *testing.T) {
 	t.Parallel()
 	fixture := newOnboardingFixture(t)
 	classID := fixture.addClass("Year 1").ID.String()
-	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service))
+	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service, fixture.people))
 	upload := func(query string) *httptest.ResponseRecorder {
 		request := authenticatedCatalogRequest(http.MethodPost, "/api/v1/onboarding-imports?mode=student_class&scope_type=class&scope_id="+classID+query)
 		request.Body = io.NopCloser(strings.NewReader("email\nstudent@example.edu\n"))
@@ -141,4 +141,52 @@ func TestOnboardingImportUploadForwardsTheFileNameAndReturnsIt(t *testing.T) {
 	response = upload("&file_name=a.csv&file_name=b.csv")
 	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	require.Len(t, fixture.imports.creations, 2, "a repeated name reached the Store")
+}
+
+// TestOnboardingImportRowsNameTheirPersonAndTheImportItsCreator pins M1 and
+// M2: a row shows the file's name and a masked address, never the address,
+// and the account it matched as a PersonRef; the import names who uploaded
+// it, and a removed account keeps only its ID.
+func TestOnboardingImportRowsNameTheirPersonAndTheImportItsCreator(t *testing.T) {
+	t.Parallel()
+	fixture := newOnboardingFixture(t)
+	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
+	matched := &model.User{ID: model.NewUserID(), Username: "amina", DisplayName: "Amina Diallo", Email: "amina@example.edu"}
+	fixture.users.add(matched)
+	removed := model.NewUserID()
+	value := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportInstitution,
+		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: fixture.access.Institution.ID.String(),
+		ActorUserID: fixture.callerID, ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour),
+		Revision: 2, TotalRows: 3, ValidRows: 3}
+	fixture.imports.put(value)
+	fixture.imports.rows = map[model.OnboardingImportID][]store.OnboardingImportRow{value.ID: {
+		{ImportID: value.ID, RowNumber: 1, Reference: "row-1", Operation: "institution_role.create", Email: "amina.diallo@example.edu",
+			DisplayName: "Amina D.", UserID: matched.ID, Status: model.OnboardingImportRowValid},
+		{ImportID: value.ID, RowNumber: 2, Reference: "row-2", Operation: "institution_role.create", Email: "jb@example.edu",
+			FirstName: "Jonas", LastName: "Berg", Status: model.OnboardingImportRowValid},
+		{ImportID: value.ID, RowNumber: 3, Reference: "row-3", Operation: "class.enroll", UserID: removed, Status: model.OnboardingImportRowValid},
+	}}
+	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service, fixture.people))
+
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports/"+value.ID.String()))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.NotContains(t, response.Body.String(), "amina.diallo@example.edu", "the file's address never leaves unmasked")
+	var body struct {
+		CreatedBy json.RawMessage `json:"created_by"`
+		Rows      []struct {
+			Person json.RawMessage `json:"person"`
+			User   json.RawMessage `json:"user"`
+		} `json:"rows"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Contains(t, string(body.CreatedBy), `"id":"`+fixture.callerID.String()+`"`)
+	require.Contains(t, string(body.CreatedBy), `"display_name":"operator"`)
+	require.Len(t, body.Rows, 3)
+	require.JSONEq(t, `{"display_name": "Amina D.", "email_masked": "a***@example.edu"}`, string(body.Rows[0].Person))
+	require.Contains(t, string(body.Rows[0].User), `"display_name":"Amina Diallo"`)
+	require.JSONEq(t, `{"display_name": "Jonas Berg", "email_masked": "j*@example.edu"}`, string(body.Rows[1].Person))
+	require.Nil(t, body.Rows[1].User, "an unmatched row names no account")
+	require.Nil(t, body.Rows[2].Person, "a row without file values names no person")
+	require.JSONEq(t, `{"id": "`+removed.String()+`"}`, string(body.Rows[2].User), "a removed account keeps only its ID")
 }

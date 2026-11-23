@@ -356,6 +356,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"OnboardingImportListResponse":                   reflect.TypeOf(route.List[onboardingImportResponse]{}),
 	"OnboardingImportResponse":                       reflect.TypeOf(onboardingImportResponse{}),
 	"OnboardingImportRowResponse":                    reflect.TypeOf(onboardingImportRowResponse{}),
+	"OnboardingImportPerson":                         reflect.TypeOf(onboardingImportPersonResponse{}),
 	"PasswordReauthenticationRequest":                reflect.TypeOf(passwordReauthenticationRequest{}),
 	"PasswordResetCompletionRequest":                 reflect.TypeOf(passwordResetCompletion{}),
 	"PasswordResetRequest":                           reflect.TypeOf(passwordResetRequest{}),

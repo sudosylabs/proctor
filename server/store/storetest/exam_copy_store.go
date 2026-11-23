@@ -66,16 +66,23 @@ func TestExamCopyStore(t *testing.T, ss store.Store, lapse ExamCopyLapse) {
 	require.NoError(t, err)
 	require.Equal(t, 1, total, "the catalogue count includes a reserved copy")
 	actions, err := ss.ExamAuthoring().CountExamActions(ctx, store.ExamActionCountOptions{ExamIDs: []model.ExamID{copyID},
-		ViewerUserID: manager.ID, SittingVisibility: visibility, ReviewVisibility: visibility, Maximum: store.MaximumListCount})
+		ViewerUserID: manager.ID, SittingVisibility: visibility, ReviewVisibility: visibility, SubmissionVisibility: visibility, Maximum: store.MaximumListCount})
 	require.NoError(t, err)
 	require.NotContains(t, actions, copyID, "counts reach a reserved copy")
 
 	createAudit := saveExamCopyAudit(t, ctx, ss, manager.ID, model.ResourceAcademicUnit, unit.ID.String(), unit.ID)
 	sourceAudit := saveExamCopyAudit(t, ctx, ss, manager.ID, model.ResourceExam, source.Value.Exam.ID.String(), unit.ID)
 	commit := &store.ExamCopyCommit{SourceExamID: source.Value.Exam.ID, ExamID: copyID, ActorUserID: manager.ID,
-		Resources: copyPlan.resources, StarterEntries: copyPlan.entries, ChangedAt: model.NowUTC(),
+		ExpectedSourceDraftRevision: source.Value.Draft.Revision,
+		Resources:                   copyPlan.resources, StarterEntries: copyPlan.entries, ChangedAt: model.NowUTC(),
 		CreateAuditEventID: createAudit, SourceAuditEventID: sourceAudit, AuditAt: model.NowUTC()}
 	command := examCommand(manager.ID, "exam.copy", "copy-once", "copy-once")
+	stale := *commit
+	stale.ExpectedSourceDraftRevision++
+	_, err = ss.ExamAuthoring().CommitCopy(ctx, &stale, command)
+	var changed *store.ErrConflict
+	require.ErrorAs(t, err, &changed)
+	require.Equal(t, "exam_copy_source_changed", changed.Constraint)
 	committed, err := ss.ExamAuthoring().CommitCopy(ctx, commit, command)
 	require.NoError(t, err)
 	require.False(t, committed.Replayed)

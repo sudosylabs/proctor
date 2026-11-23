@@ -103,6 +103,63 @@ func TestCopyExamReplayPublishesNothing(t *testing.T) {
 	require.Empty(t, publisher.Calls(), "a replay returns the stored copy and announces nothing")
 }
 
+func TestCopyExamRetainedOutcomeSkipsReservationAndWrites(t *testing.T) {
+	t.Parallel()
+	f := newAuthoringFixture(t)
+	f.persistence.actorIsManager = true
+	f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}
+	copier, files := newCopier(t, f)
+	command := CopyCommand{
+		SourceExamID: f.examID, Title: "Copy", AcademicUnitID: f.unitID, IdempotencyKey: "copy-then-replay",
+	}
+	first, err := copier.CopyExam(t.Context(), f.inv, command)
+	require.NoError(t, err)
+
+	initialReservation := f.persistence.copyReservation
+	initialCommit := f.persistence.copyCommit
+	replayed, err := copier.CopyExam(t.Context(), f.inv, command)
+	require.NoError(t, err)
+	require.Equal(t, first.Exam.ID, replayed.Exam.ID)
+	require.Same(t, initialReservation, f.persistence.copyReservation)
+	require.Same(t, initialCommit, f.persistence.copyCommit)
+	require.Len(t, files.resourceUploads, 1)
+	require.Len(t, f.access.Audits.Attempts(), 2)
+	require.Len(t, copier.publisher.(*realtimetest.Publisher).Calls(), 1)
+}
+
+func TestCopyExamRefusesMixedSourceDraftContent(t *testing.T) {
+	t.Parallel()
+	f := newAuthoringFixture(t)
+	f.persistence.actorIsManager = true
+	f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}
+	copier, files := newCopier(t, f)
+	files.afterStage = func() { f.persistence.draftRevision = 2 }
+	_, err := copier.CopyExam(t.Context(), f.inv, CopyCommand{
+		SourceExamID: f.examID, Title: "Copy", AcademicUnitID: f.unitID, IdempotencyKey: "source-edited",
+	})
+	require.True(t, apperror.Is(err, "exam.conflict"), "error = %v", err)
+	require.Nil(t, f.persistence.copyCommit)
+	require.Empty(t, f.access.Audits.Attempts(), "staged files did not reach the audited commit")
+}
+
+func TestCopyExamRechecksTargetAuthorityAfterStaging(t *testing.T) {
+	t.Parallel()
+	f := newAuthoringFixture(t, model.ActionExamManage, model.ActionExamCreate)
+	f.persistence.actorIsManager = true
+	f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}
+	copier, files := newCopier(t, f)
+	afterStaging := f.accessGranting(t, model.ActionExamManage)
+	files.afterStage = func() { copier.authorizer = afterStaging.Authorizer }
+	_, err := copier.CopyExam(t.Context(), f.inv, CopyCommand{
+		SourceExamID: f.examID, Title: "Copy", AcademicUnitID: f.unitID, IdempotencyKey: "target-access-ended",
+	})
+	require.True(t, apperror.Is(err, "resource.not_found"), "error = %v", err)
+	require.Nil(t, f.persistence.copyCommit)
+	require.Empty(t, f.access.Audits.Attempts())
+	require.Len(t, afterStaging.Audits.Decisions(), 2)
+	require.Equal(t, string(model.ActionExamCreate), afterStaging.Audits.Decisions()[1].Action)
+}
+
 // copyFiles is one Resource and one starter file of the source, and the
 // bytes the copy wrote.
 type copyFiles struct {
@@ -111,6 +168,7 @@ type copyFiles struct {
 	resourceUploads []*store.ExamResourceUploadReservation
 	stored          map[model.FileRevisionID][]byte
 	staged          map[model.StarterWorkspaceObjectID][]byte
+	afterStage      func()
 }
 
 func newCopier(t *testing.T, f authoringFixture) (*Copier, *copyFiles) {
@@ -195,6 +253,9 @@ func (c *copyFiles) StageStarterWorkspaceObject(_ context.Context, objectID mode
 		return nil, err
 	}
 	c.staged[objectID] = content
+	if c.afterStage != nil {
+		c.afterStage()
+	}
 	sum := sha256.Sum256(content)
 	return &model.StarterWorkspaceContent{MediaType: mediaType, SizeBytes: int64(len(content)), SHA256: hex.EncodeToString(sum[:])}, nil
 }
@@ -204,6 +265,13 @@ func (f *authoringStoreFake) ReserveCopy(_ context.Context, input *store.ExamCop
 	return f.err
 }
 
+func (f *authoringStoreFake) FindCopy(_ context.Context, _ *store.CommandIdempotency) (*store.ExamAuthoringSnapshot, error) {
+	if f.copyOutcome == nil {
+		return nil, store.NewErrNotFound("command_outcome", "idempotency_key")
+	}
+	return f.copyOutcome, nil
+}
+
 func (f *authoringStoreFake) CommitCopy(_ context.Context, input *store.ExamCopyCommit, _ *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	f.copyCommit = input
 	if f.err != nil {
@@ -211,5 +279,6 @@ func (f *authoringStoreFake) CommitCopy(_ context.Context, input *store.ExamCopy
 	}
 	snapshot := &store.ExamAuthoringSnapshot{Exam: f.copyReservation.Exam, Draft: f.copyReservation.Draft,
 		OwnerUserID: f.copyReservation.Exam.OwnerUserID, ManagerCount: 1, ActorIsManager: true}
+	f.copyOutcome = snapshot
 	return &store.ExamAuthoringCommandResult{Value: snapshot, Replayed: f.copyReplayed}, nil
 }

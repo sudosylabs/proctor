@@ -293,6 +293,7 @@ type authoringStoreFake struct {
 	copyReservation    *store.ExamCopyReservation
 	copyCommit         *store.ExamCopyCommit
 	copyReplayed       bool
+	copyOutcome        *store.ExamAuthoringSnapshot
 	summaries          []store.ExamSummary
 	managerSummaries   []store.ExamManagerSummary
 	managerListOptions store.ExamManagerListOptions

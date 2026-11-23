@@ -57,6 +57,26 @@ func (s SQLExamAuthoringStore) ReserveCopy(ctx context.Context, input *store.Exa
 	return err
 }
 
+func (s SQLExamAuthoringStore) FindCopy(ctx context.Context, command *store.CommandIdempotency) (*store.ExamAuthoringSnapshot, error) {
+	result, err := replayIdempotentMutation(ctx, s.SQLStore, "find exam copy", idempotentMutation[*store.ExamAuthoringSnapshot]{
+		command:           command,
+		decode:            decodeExamCopyOutcome,
+		freshAuditEventID: func(*store.ExamAuthoringSnapshot) (model.AuditEventID, error) { return "", nil },
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Value, nil
+}
+
+func decodeExamCopyOutcome(data []byte) (*store.ExamAuthoringSnapshot, error) {
+	var outcome examAuthoringOutcome
+	if err := decodeOutcome(data, &outcome); err != nil {
+		return nil, err
+	}
+	return outcome.model()
+}
+
 func (s SQLExamAuthoringStore) CommitCopy(
 	ctx context.Context,
 	input *store.ExamCopyCommit,
@@ -76,13 +96,7 @@ func (s SQLExamAuthoringStore) CommitCopy(
 			return commitExamCopy(ctx, tx, input)
 		},
 		encode: encodeExamAuthoringOutcome,
-		decode: func(data []byte) (*store.ExamAuthoringSnapshot, error) {
-			var outcome examAuthoringOutcome
-			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
-				return nil, decodeErr
-			}
-			return outcome.model()
-		},
+		decode: decodeExamCopyOutcome,
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, snapshot *store.ExamAuthoringSnapshot, originalAuditID string) error {
 			for _, auditID := range []model.AuditEventID{input.CreateAuditEventID, input.SourceAuditEventID} {
 				encoded, encodeErr := model.EncodeAuditData(map[string]any{
@@ -110,6 +124,7 @@ func (s SQLExamAuthoringStore) CommitCopy(
 
 func validateExamCopyCommit(input *store.ExamCopyCommit) error {
 	if input == nil || !input.SourceExamID.IsValid() || !input.ExamID.IsValid() || input.SourceExamID == input.ExamID ||
+		input.ExpectedSourceDraftRevision < 1 ||
 		!input.ActorUserID.IsValid() || input.ChangedAt.IsZero() || input.AuditAt.IsZero() ||
 		!input.CreateAuditEventID.IsValid() || !input.SourceAuditEventID.IsValid() ||
 		input.CreateAuditEventID == input.SourceAuditEventID ||
@@ -144,6 +159,15 @@ func commitExamCopy(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamCop
 	}
 	if !source.ActorIsManager && !input.SourceManagerOverride {
 		return nil, store.NewErrNotFound("exam_manager", input.ActorUserID.String())
+	}
+
+	var sourceDraftRevision int64
+	if err := tx.Get(ctx, &sourceDraftRevision, `SELECT revision FROM exam_drafts WHERE exam_id = ? FOR SHARE`,
+		input.SourceExamID.String()); err != nil {
+		return nil, translateError("exam_draft", input.SourceExamID.String(), err)
+	}
+	if sourceDraftRevision != input.ExpectedSourceDraftRevision {
+		return nil, store.NewErrConflict("exam", "exam_copy_source_changed", nil)
 	}
 
 	var reservation struct {

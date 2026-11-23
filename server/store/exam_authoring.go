@@ -144,14 +144,15 @@ type ExamSummary struct {
 
 // ExamActionCountOptions asks for the action counts of one page of exams.
 // SittingVisibility is where the viewer holds exam.sitting.view and
-// ReviewVisibility where they hold submission.review, as ExamManagerScopes
-// reports them. The viewer is never counted as their own candidate.
+// ReviewVisibility and SubmissionVisibility intersect submission.review
+// with submission.view. The viewer is never counted as their own candidate.
 type ExamActionCountOptions struct {
-	ExamIDs           []model.ExamID
-	ViewerUserID      model.UserID
-	SittingVisibility ExamListVisibility
-	ReviewVisibility  ExamListVisibility
-	Maximum           int
+	ExamIDs              []model.ExamID
+	ViewerUserID         model.UserID
+	SittingVisibility    ExamListVisibility
+	ReviewVisibility     ExamListVisibility
+	SubmissionVisibility ExamListVisibility
+	Maximum              int
 }
 
 // ExamActionCounts is what waits for a manager on one exam. NeedsAttention
@@ -339,6 +340,9 @@ type ExamAuthoringStore interface {
 	// replay of CommitCopy returns the copy first committed, and the replay's
 	// own reservation lapses.
 	ReserveCopy(context.Context, *ExamCopyReservation) error
+	// FindCopy returns the retained outcome. It returns ErrNotFound before
+	// a copy has committed for the command.
+	FindCopy(context.Context, *CommandIdempotency) (*ExamAuthoringSnapshot, error)
 	CommitCopy(context.Context, *ExamCopyCommit, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftText(context.Context, *ExamDraftTextUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftFocusLoss(context.Context, *ExamDraftFocusLossUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)

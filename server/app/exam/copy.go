@@ -115,13 +115,22 @@ func (c *Copier) CopyExam(ctx context.Context, inv invocation.Invocation, comman
 	}
 
 	at := model.TimeUTC(c.now())
-	sourceAction, sourceUnitID, err := c.authorizeSource(ctx, inv, command.SourceExamID, at)
-	if err != nil {
+	if _, _, err = c.authorizeSource(ctx, inv, command.SourceExamID, at); err != nil {
 		return View{}, err
 	}
-	createAction, err := c.authorizeTarget(ctx, inv, command.AcademicUnitID, at)
-	if err != nil {
+	if _, err = c.authorizeTarget(ctx, inv, command.AcademicUnitID, at); err != nil {
 		return View{}, err
+	}
+
+	prior, err := c.exams.FindCopy(ctx, commandIdempotency)
+	switch {
+	case err == nil:
+		if prior == nil || !prior.Consistent() {
+			return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no retained copy"))
+		}
+		return projectView(prior), nil
+	case !store.IsNotFound(err):
+		return View{}, examStoreErrors.Translate(err)
 	}
 
 	source, err := c.exams.Get(ctx, command.SourceExamID, principal.UserID)
@@ -148,6 +157,35 @@ func (c *Copier) CopyExam(ctx context.Context, inv invocation.Invocation, comman
 		return View{}, err
 	}
 
+	if err = c.copyBytes(ctx, plan, at); err != nil {
+		return View{}, err
+	}
+
+	auditAt := model.TimeUTC(c.now())
+	sourceAction, sourceUnitID, err := c.authorizeSource(ctx, inv, command.SourceExamID, auditAt)
+	if err != nil {
+		return View{}, err
+	}
+	createAction, err := c.authorizeTarget(ctx, inv, command.AcademicUnitID, auditAt)
+	if err != nil {
+		return View{}, err
+	}
+
+	// Resource and starter workspace edits increment the draft revision.
+	// The fence ensures all the files we staged came from the draft we read.
+	current, err := c.exams.Get(ctx, command.SourceExamID, principal.UserID)
+	if err != nil {
+		return View{}, examStoreErrors.Translate(err)
+	}
+	if !current.Consistent() || current.Exam.ID != command.SourceExamID {
+		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned a mismatched copy source"))
+	}
+	if current.Draft.Revision != source.Draft.Revision {
+		return View{}, apperror.New("exam.conflict")
+	}
+
+	// Long-running file copies leave no incomplete mutation audit if the
+	// process stops before reaching the database commit.
 	createAudit, err := c.auditor.Begin(ctx, access.Mutation{
 		Invocation: inv, Action: createAction,
 		Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: command.AcademicUnitID.String()},
@@ -168,15 +206,12 @@ func (c *Copier) CopyExam(ctx context.Context, inv invocation.Invocation, comman
 		return View{}, c.failAudits(ctx, err, createAudit)
 	}
 
-	if err = c.copyBytes(ctx, plan, at); err != nil {
-		return View{}, c.failAudits(ctx, err, createAudit, sourceAudit)
-	}
-
 	result, err := c.exams.CommitCopy(ctx, &store.ExamCopyCommit{
 		SourceExamID: command.SourceExamID, ExamID: plan.exam.ID, ActorUserID: principal.UserID,
-		SourceManagerOverride: sourceAction == model.ActionExamManageOverride,
-		Resources:             plan.committedResources(), StarterEntries: plan.committedEntries(),
-		ChangedAt: at, CreateAuditEventID: createAudit, SourceAuditEventID: sourceAudit, AuditAt: at,
+		SourceManagerOverride:       sourceAction == model.ActionExamManageOverride,
+		ExpectedSourceDraftRevision: source.Draft.Revision,
+		Resources:                   plan.committedResources(), StarterEntries: plan.committedEntries(),
+		ChangedAt: at, CreateAuditEventID: createAudit, SourceAuditEventID: sourceAudit, AuditAt: auditAt,
 	}, commandIdempotency)
 	if err != nil {
 		return View{}, c.failAudits(ctx, examStoreErrors.Translate(err), createAudit, sourceAudit)

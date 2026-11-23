@@ -46,18 +46,19 @@ type ExamCopyStarterEntry struct {
 	SHA256         string
 }
 
-// ExamCopyCommit makes a reserved copy real. It rechecks the actor's manager
-// relationship with the source unless SourceManagerOverride, and completes
-// both audits: the creation on the new exam and the copy on the source.
+// ExamCopyCommit makes a reserved copy real. It fences on the source draft
+// revision and rechecks the source manager relationship unless overridden.
+// It completes both audits inside the publication transaction.
 type ExamCopyCommit struct {
-	SourceExamID          model.ExamID
-	ExamID                model.ExamID
-	ActorUserID           model.UserID
-	SourceManagerOverride bool
-	Resources             []ExamCopyResource
-	StarterEntries        []ExamCopyStarterEntry
-	ChangedAt             time.Time
-	CreateAuditEventID    model.AuditEventID
-	SourceAuditEventID    model.AuditEventID
-	AuditAt               time.Time
+	SourceExamID                model.ExamID
+	ExamID                      model.ExamID
+	ActorUserID                 model.UserID
+	SourceManagerOverride       bool
+	ExpectedSourceDraftRevision int64
+	Resources                   []ExamCopyResource
+	StarterEntries              []ExamCopyStarterEntry
+	ChangedAt                   time.Time
+	CreateAuditEventID          model.AuditEventID
+	SourceAuditEventID          model.AuditEventID
+	AuditAt                     time.Time
 }

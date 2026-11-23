@@ -31,6 +31,28 @@
       "digest": "sha256:d3f3dc210885d3d3637816454ff14fdcc2d08ae3b32a56885c09247ac87ef2f0"
     },
     {
+      "name": "labeled",
+      "institution_origin": "https://institution.example",
+      "policy": {
+        "enabled": true,
+        "start_rule_id": "start",
+        "rules": [
+          {
+            "rule_id": "start",
+            "label": "PostgreSQL documentation",
+            "origin": "https://library.example",
+            "path_prefix": "/docs",
+            "host_match": "exact",
+            "allow_redirects": false,
+            "blocked_navigation_outcome": "record",
+            "institution_http_exception": false
+          }
+        ]
+      },
+      "canonical": "{\"enabled\":true,\"rules\":[{\"allow_redirects\":false,\"blocked_navigation_outcome\":\"record\",\"host_match\":\"exact\",\"institution_http_exception\":false,\"label\":\"PostgreSQL documentation\",\"origin\":\"https://library.example\",\"path_prefix\":\"/docs\",\"rule_id\":\"start\"}],\"start_rule_id\":\"start\"}",
+      "digest": "sha256:a8add6d4f364c83dd1612ec55e13579f95d53266c0bb71112b56421f553b5cdd"
+    },
+    {
       "name": "http exception",
       "institution_origin": "https://institution.example:8080",
       "policy": {

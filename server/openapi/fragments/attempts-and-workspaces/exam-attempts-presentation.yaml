@@ -123,6 +123,7 @@ components:
               start_rule_id: language-docs
               rules:
                 - rule_id: language-docs
+                  label: Language reference
                   origin: https://docs.example.org
                   path_prefix: /reference
                   host_match: exact

@@ -955,6 +955,7 @@
                     "blocked_navigation_outcome": "record",
                     "host_match": "exact",
                     "institution_http_exception": false,
+                    "label": "Algorithms reference",
                     "origin": "https://reference.example.edu",
                     "path_prefix": "/algorithms",
                     "rule_id": "reference"
@@ -964,6 +965,7 @@
                     "blocked_navigation_outcome": "integrity_evidence",
                     "host_match": "exact_and_subdomains",
                     "institution_http_exception": false,
+                    "label": "Course library",
                     "origin": "https://library.example.edu",
                     "path_prefix": "/",
                     "rule_id": "library"
@@ -4186,6 +4188,7 @@
                     "blocked_navigation_outcome": "record",
                     "host_match": "exact",
                     "institution_http_exception": false,
+                    "label": "Language reference",
                     "origin": "https://docs.example.org",
                     "path_prefix": "/reference",
                     "rule_id": "language-docs"
@@ -15711,6 +15714,12 @@
           "institution_http_exception": {
             "description": "Set to true only for an HTTP rule whose host and explicit port are the same as this installation's own HTTPS origin. It must be false for HTTPS rules. It never allows credentials to be sent over HTTP.",
             "type": "boolean"
+          },
+          "label": {
+            "description": "An optional short name for the site that staff and candidates read in place of the origin, such as \"PostgreSQL documentation\". Plain text of at most 100 characters. Surrounding spaces and invisible or bidirectional characters are removed when you save, and a label that is then empty is left out. Control characters are rejected. It is frozen with the revision and plays no part in matching.",
+            "maxLength": 400,
+            "minLength": 1,
+            "type": "string"
           },
           "origin": {
             "description": "The scheme, host and optional port of the site, in ASCII. Use HTTPS. HTTP is accepted only with institution_http_exception. Leave out the default port (443 for HTTPS, 80 for HTTP). The host must be DNS labels or an IPv4 address. Internationalized names, punycode, IPv6, a trailing dot, credentials, a query, a fragment and any path other than / are rejected. A port is a decimal number from 1 to 65535 with no leading zeros. An IP address works only with exact host matching.",

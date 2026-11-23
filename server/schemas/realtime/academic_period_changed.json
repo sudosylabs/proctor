@@ -1,0 +1,22 @@
+{
+  "title": "Academic Period changed",
+  "description": "Names the Academic Period to refetch and, for a period an Academic Unit owns, that unit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "academic_period_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "academic_period_id": {
+      "$ref": "id.json"
+    },
+    "academic_unit_id": {
+      "$ref": "id.json"
+    }
+  }
+}

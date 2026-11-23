@@ -380,6 +380,10 @@ CREATE TABLE users (
     last_login_at timestamptz,
     last_activity_at timestamptz,
     disabled_at timestamptz,
+    -- Who disabled the account and why, for the disable in force. Both clear
+    -- when the account is enabled again; the audit keeps the history.
+    disabled_by_user_id varchar(26) REFERENCES users(id),
+    disabled_reason varchar(500),
     default_profile_picture_seed char(64) NOT NULL,
     default_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
     custom_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
@@ -392,6 +396,16 @@ CREATE TABLE users (
         lower(left(CASE WHEN display_name <> '' THEN display_name ELSE username END, 64))
     ) STORED,
     CONSTRAINT users_lifecycle_check CHECK (updated_at >= created_at),
+    CONSTRAINT users_disabled_record_check CHECK (
+        disabled_at IS NOT NULL OR (disabled_by_user_id IS NULL AND disabled_reason IS NULL)
+    ),
+    CONSTRAINT users_disabled_reason_check CHECK (
+        disabled_reason IS NULL OR (
+            disabled_reason <> ''
+            AND disabled_reason = btrim(disabled_reason)
+            AND disabled_reason !~ '[\x01-\x1f\x7f-\x9f]'
+        )
+    ),
     -- Profile names are single-line text that mail embeds; Unicode Cc is
     -- rejected (model.ContainsControlCharacter).
     CONSTRAINT users_profile_names_check CHECK (
@@ -407,6 +421,8 @@ CREATE INDEX users_default_profile_picture_file_id_idx
     ON users (default_profile_picture_file_id) WHERE default_profile_picture_file_id IS NOT NULL;
 CREATE INDEX users_custom_profile_picture_file_id_idx
     ON users (custom_profile_picture_file_id) WHERE custom_profile_picture_file_id IS NOT NULL;
+CREATE INDEX users_disabled_by_user_id_idx
+    ON users (disabled_by_user_id) WHERE disabled_by_user_id IS NOT NULL;
 CREATE UNIQUE INDEX users_email_key ON users (email) WHERE archived_at IS NULL;
 -- User directory orders; each serves both directions. A User who was never
 -- active sorts as the least recent.
@@ -527,6 +543,13 @@ CREATE UNIQUE INDEX invitations_pending_institution_role_package_key
 -- The administration list filters by state newest first, and the summary
 -- counts pending Invitations; both read this instead of the whole table.
 CREATE INDEX invitations_state_created_at_idx ON invitations (state, created_at DESC, id DESC);
+
+-- The administration list sorts by expiry and searches by a prefix of the
+-- invited address or the suggested name.
+CREATE INDEX invitations_expires_at_idx ON invitations (expires_at, id);
+CREATE INDEX invitations_target_email_prefix_idx ON invitations (lower(target_email) text_pattern_ops);
+CREATE INDEX invitations_suggested_display_name_prefix_idx
+    ON invitations (lower(suggested_display_name) text_pattern_ops);
 
 -- Administrative imports and student progression retain only a seven-day
 -- private preview/report. Job commands contain the opaque aggregate ID;
@@ -796,6 +819,12 @@ CREATE UNIQUE INDEX mail_deliveries_occurrence_user_recipient_key
 
 CREATE UNIQUE INDEX mail_deliveries_occurrence_invitation_recipient_key
     ON mail_deliveries (occurrence_id, target_invitation_id)
+    WHERE target_invitation_id IS NOT NULL;
+
+-- An invitation's newest delivery, which its summary and the delivery_state
+-- filter read.
+CREATE INDEX mail_deliveries_target_invitation_newest_idx
+    ON mail_deliveries (target_invitation_id, created_at DESC, id DESC)
     WHERE target_invitation_id IS NOT NULL;
 
 CREATE INDEX mail_deliveries_state_deadline_idx
@@ -1656,6 +1685,11 @@ CREATE TABLE roles (
     CONSTRAINT roles_lifecycle_check CHECK (updated_at >= created_at)
 );
 
+-- Removing a User checks the roles they last changed.
+CREATE INDEX roles_updated_by_user_id_idx
+    ON roles (updated_by_user_id)
+    WHERE updated_by_user_id IS NOT NULL;
+
 CREATE UNIQUE INDEX roles_name_key ON roles (name) WHERE archived_at IS NULL;
 
 ALTER TABLE invitations
@@ -1702,6 +1736,11 @@ CREATE UNIQUE INDEX role_bindings_user_id_role_id_scope_type_scope_id_key
 CREATE INDEX role_bindings_user_id_scope_type_scope_id_idx
     ON role_bindings (user_id, scope_type, scope_id)
     WHERE archived_at IS NULL AND end_at IS NULL;
+
+-- Removing a User checks the bindings they granted.
+CREATE INDEX role_bindings_granted_by_user_id_idx
+    ON role_bindings (granted_by_user_id)
+    WHERE granted_by_user_id IS NOT NULL;
 
 CREATE INDEX role_bindings_user_id_start_at_end_at_idx
     ON role_bindings (user_id, start_at, end_at)
@@ -4868,7 +4907,9 @@ ALTER TABLE users
     ADD CONSTRAINT users_default_profile_picture_file_id_canonical_check
     CHECK (default_profile_picture_file_id IS NULL OR default_profile_picture_file_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT users_custom_profile_picture_file_id_canonical_check
-    CHECK (custom_profile_picture_file_id IS NULL OR custom_profile_picture_file_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (custom_profile_picture_file_id IS NULL OR custom_profile_picture_file_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT users_disabled_by_user_id_canonical_check
+    CHECK (disabled_by_user_id IS NULL OR disabled_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE user_settings_documents
     ADD CONSTRAINT user_settings_documents_user_id_canonical_check
@@ -6153,6 +6194,9 @@ CREATE INDEX class_members_user_id_academic_period_id_idx
 -- of a current binding, which start_at and end_at narrow at read time.
 CREATE INDEX role_bindings_role_id_created_at_idx
     ON role_bindings (role_id, created_at DESC, id DESC) WHERE archived_at IS NULL;
+-- The holders of roles bound at one scope, such as a Class's teachers.
+CREATE INDEX role_bindings_scope_type_scope_id_idx
+    ON role_bindings (scope_type, scope_id) WHERE archived_at IS NULL;
 CREATE INDEX role_bindings_origin_academic_unit_member_id_idx
     ON role_bindings (origin_academic_unit_member_id) WHERE origin_academic_unit_member_id IS NOT NULL;
 CREATE INDEX exam_sittings_class_id_idx ON exam_sittings (class_id);

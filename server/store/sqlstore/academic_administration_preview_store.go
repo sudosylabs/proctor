@@ -30,6 +30,10 @@ import (
 // term a filter preview keeps.
 const academicAdministrationFilterQueryMaximumRunes = 256
 
+// academicAdministrationDisableReasonMaximumRunes bounds a user.disable
+// preview's reason, as a single disable bounds its own.
+const academicAdministrationDisableReasonMaximumRunes = 500
+
 // academicAdministrationFilterScopes is every operation a filter preview
 // applies and the one scope type, or any scope, it applies at.
 var academicAdministrationFilterScopes = map[string][]model.RoleScopeType{
@@ -56,6 +60,7 @@ type academicAdministrationFilterDocument struct {
 	AcademicUnitID   string     `json:"academic_unit_id,omitempty"`
 	RoleIDs          []string   `json:"role_id,omitempty"`
 	State            string     `json:"state,omitempty"`
+	MFA              string     `json:"mfa,omitempty"`
 	NeverSignedIn    bool       `json:"never_signed_in,omitempty"`
 	LastActiveAfter  *time.Time `json:"last_active_after,omitempty"`
 	LastActiveBefore *time.Time `json:"last_active_before,omitempty"`
@@ -63,6 +68,7 @@ type academicAdministrationFilterDocument struct {
 	AffiliationKind  string     `json:"affiliation_kind,omitempty"`
 	StartAt          *time.Time `json:"start_at,omitempty"`
 	EndAt            *time.Time `json:"end_at,omitempty"`
+	Reason           string     `json:"reason,omitempty"`
 }
 
 func optionalDocumentTime(value time.Time) *time.Time {
@@ -84,6 +90,7 @@ func encodeAcademicAdministrationFilter(filter *store.AcademicAdministrationFilt
 		Query:            filter.Query,
 		AcademicUnitID:   filter.AcademicUnitID.String(),
 		State:            filter.State,
+		MFA:              string(filter.MFA),
 		NeverSignedIn:    filter.NeverSignedIn,
 		LastActiveAfter:  optionalDocumentTime(filter.LastActiveAfter),
 		LastActiveBefore: optionalDocumentTime(filter.LastActiveBefore),
@@ -91,6 +98,7 @@ func encodeAcademicAdministrationFilter(filter *store.AcademicAdministrationFilt
 		AffiliationKind:  string(filter.AffiliationKind),
 		StartAt:          optionalDocumentTime(filter.StartAt.Time),
 		EndAt:            optionalDocumentTime(filter.EndAt.Time),
+		Reason:           filter.Reason,
 	}
 	for _, kind := range filter.Affiliations {
 		document.Affiliations = append(document.Affiliations, string(kind))
@@ -120,7 +128,9 @@ func decodeAcademicAdministrationFilter(scopeType model.RoleScopeType, encoded [
 		Query:           document.Query,
 		AcademicUnitID:  model.AcademicUnitID(document.AcademicUnitID),
 		State:           document.State,
+		MFA:             store.UserMFAFilter(document.MFA),
 		NeverSignedIn:   document.NeverSignedIn,
+		Reason:          document.Reason,
 		RoleID:          model.RoleID(document.RoleBindingRole),
 		AffiliationKind: model.AffiliationKind(document.AffiliationKind),
 	}
@@ -161,6 +171,9 @@ func validAcademicAdministrationFilter(scopeType model.RoleScopeType, filter *st
 		len(filter.RoleIDs) > store.MaximumUserListRoles ||
 		(filter.AcademicUnitID != "" && !filter.AcademicUnitID.IsValid()) ||
 		(filter.State != "" && filter.State != "active" && filter.State != "disabled") ||
+		(filter.MFA != "" && !filter.MFA.IsValid()) ||
+		(filter.Reason != "" && (filter.Operation != "user.disable" || !utf8.ValidString(filter.Reason) ||
+			utf8.RuneCountInString(filter.Reason) > academicAdministrationDisableReasonMaximumRunes)) ||
 		(filter.NeverSignedIn && (!filter.LastActiveAfter.IsZero() || !filter.LastActiveBefore.IsZero())) ||
 		(!filter.LastActiveAfter.IsZero() && !filter.LastActiveBefore.IsZero() && !filter.LastActiveAfter.Before(filter.LastActiveBefore)) {
 		return false

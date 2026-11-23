@@ -53,6 +53,7 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("StateActivityAndRoleFilters", func(t *testing.T) { testUserListStateActivityAndRoleFilters(t, ss) })
 	t.Run("DirectorySummaries", func(t *testing.T) { testUserDirectorySummaries(t, ss) })
 	t.Run("ListIdentities", func(t *testing.T) { testUserListIdentities(t, ss) })
+	t.Run("Memberships", func(t *testing.T) { testUserMemberships(t, ss) })
 	t.Run("EnablementRevocationAndAuditAreAtomic", func(t *testing.T) {
 		testUserStoreEnablementRevocationAndAuditAreAtomic(t, ss)
 	})
@@ -1192,15 +1193,19 @@ func testUserStoreEnablementRevocationAndAuditAreAtomic(t *testing.T, ss store.S
 	require.False(t, unrevoked.RevokedAt.Valid, "session revocation survived audit rollback: session=%#v credential=%#v", unrevoked, credential)
 	require.False(t, credential.RevokedAt.Valid, "session revocation survived audit rollback: session=%#v credential=%#v", unrevoked, credential)
 
+	disabler := saveUser(t, ctx, ss)
 	disableAttempt := saveUserProfileAuditAttempt(t, ctx, ss, user.ID.String())
 	disableCommand := userDisabledStateChangeWithNotice(t, &store.UserDisabledStateChange{
 		ID: user.ID, ExpectedRevision: user.Revision, Disabled: true,
+		DisabledBy: disabler.ID, DisabledReason: "Left the school",
 		ChangedAt: at, RevocationReason: model.SessionRevocationAccountDisabled,
 		AuditEventID: disableAttempt.ID, AuditAt: at,
 	})
 	disabled, err := ss.User().SetDisabled(ctx, disableCommand)
 	require.NoError(t, err)
 	require.True(t, at.Equal(disabled.User.DisabledAt.Time))
+	require.Equal(t, disabler.ID, disabled.User.DisabledByUserID, "the disable records who disabled the account")
+	require.Equal(t, "Left the school", disabled.User.DisabledReason, "the disable records why")
 	require.Equal(t, user.Revision+1, disabled.User.Revision)
 	require.Len(t, disabled.RevokedSessions, 2)
 	require.Len(t, disabled.RevokedTokenHashes, 4)
@@ -1251,6 +1256,8 @@ func testUserStoreEnablementRevocationAndAuditAreAtomic(t *testing.T, ss store.S
 	enabled, err := ss.User().SetDisabled(ctx, enableCommand)
 	require.NoError(t, err)
 	require.False(t, enabled.User.DisabledAt.Valid)
+	require.True(t, enabled.User.DisabledByUserID.IsZero(), "an enable clears who disabled the account")
+	require.Empty(t, enabled.User.DisabledReason, "an enable clears why")
 	require.Equal(t, disabled.User.Revision+1, enabled.User.Revision)
 	require.NotNil(t, enabled.RevokedSessions)
 	require.Empty(t, enabled.RevokedSessions)

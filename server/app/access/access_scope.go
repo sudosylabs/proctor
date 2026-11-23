@@ -591,6 +591,15 @@ func (s *Authorizer) CanViewInstitutionUsers(ctx context.Context, inv invocation
 	return constraint.InstitutionWide, err
 }
 
+// CanResetUserMFA reports user.mfa.reset without recording a decision. Only
+// the Institution grants it, so it reaches every user; with Institution-wide
+// user.view it is what lets a caller see other accounts' two-step
+// verification.
+func (s *Authorizer) CanResetUserMFA(ctx context.Context, inv invocation.Invocation) (bool, error) {
+	constraint, err := s.GrantedScopes(ctx, inv.Principal(), model.ActionUserMFAReset, model.ResourceUser)
+	return constraint.InstitutionWide, err
+}
+
 // CanViewRoles reports institution-wide role.view without recording a
 // decision.
 func (s *Authorizer) CanViewRoles(ctx context.Context, inv invocation.Invocation) (bool, error) {

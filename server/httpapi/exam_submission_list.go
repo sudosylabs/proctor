@@ -148,7 +148,7 @@ func (h examIntegrityReviewHandlers) submissionListResult(
 			finalizers = append(finalizers, item.Review.FinalizedByUserID)
 		}
 	}
-	refs, err := namePeople(request, h.people, "exam.integrity_review.unavailable", finalizers...)
+	refs, err := namePeople(request, h.people, finalizers...)
 	if err != nil {
 		return route.Result{}, err
 	}

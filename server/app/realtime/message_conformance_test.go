@@ -41,6 +41,8 @@ func conformanceConstructors() map[string]func() (Event, error) {
 	revisionID := model.NewExamRevisionID()
 	digest := strings.Repeat("ab", 32)
 	review := ExamIntegrityReviewEventFact{
+		ExamID:       examID,
+		SittingID:    sittingID,
 		SubmissionID: submissionID,
 		AttemptID:    attemptID,
 		CandidateID:  candidateID,
@@ -88,16 +90,39 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"plugin_settings_changed": func() (Event, error) {
 			return NewPluginSettingsChangedEvent(model.NewInstitutionID(), "display-topology", 3)
 		},
-		"academic_unit_created":  func() (Event, error) { return NewAcademicUnitCreatedEvent(model.NewAcademicUnitID()) },
-		"academic_unit_updated":  func() (Event, error) { return NewAcademicUnitUpdatedEvent(model.NewAcademicUnitID()) },
-		"academic_unit_archived": func() (Event, error) { return NewAcademicUnitArchivedEvent(model.NewAcademicUnitID()) },
+		"academic_unit_created": func() (Event, error) {
+			return NewAcademicUnitCreatedEvent(model.NewAcademicUnitID(), model.NewAcademicUnitID())
+		},
+		"academic_unit_updated": func() (Event, error) { return NewAcademicUnitUpdatedEvent(model.NewAcademicUnitID(), "") },
+		"academic_unit_archived": func() (Event, error) {
+			return NewAcademicUnitArchivedEvent(model.NewAcademicUnitID(), model.NewAcademicUnitID())
+		},
+		"user.changed": func() (Event, error) { return NewUserChangedEvent(candidateID) },
+		"class.changed": func() (Event, error) {
+			return NewClassChangedEvent(model.NewClassID(), model.NewAcademicUnitID())
+		},
+		"academic_period.changed": func() (Event, error) {
+			return NewAcademicPeriodChangedEvent(model.NewAcademicPeriodID(), model.NewAcademicUnitAcademicPeriodOwner(model.NewAcademicUnitID()))
+		},
+		"role.changed": func() (Event, error) { return NewRoleChangedEvent(model.NewInstitutionID(), model.NewRoleID()) },
+		"role_binding.changed": func() (Event, error) {
+			return NewRoleBindingChangedEvent(&model.RoleBinding{ID: model.NewRoleBindingID(), UserID: candidateID, RoleID: model.NewRoleID(),
+				ScopeType: model.RoleScopeClass, ScopeID: model.NewClassID().String()})
+		},
+		"retention.changed": func() (Event, error) {
+			return NewRetentionHoldChangedEvent(model.NewInstitutionID(), model.NewRetentionHoldID(), examID)
+		},
+		"mail_delivery.changed": func() (Event, error) {
+			return NewMailDeliveryChangedEvent(model.NewInstitutionID(), model.NewMailDeliveryID())
+		},
 		"candidate.exam_activity.changed": func() (Event, error) {
 			return NewCandidateExamActivityChangedEvent(candidateID)
 		},
 		"current_user.context.changed":  func() (Event, error) { return NewCurrentUserContextChangedEvent(candidateID) },
 		"current_user.sessions.changed": func() (Event, error) { return NewCurrentUserSessionsChangedEvent(candidateID) },
 		"invitation.changed": func() (Event, error) {
-			return NewInvitationChangedEvent(model.NewUserID(), model.NewInvitationID(), model.InvitationAccepted)
+			return NewInvitationChangedEvent(model.NewUserID(), model.NewInvitationID(), model.InvitationAccepted,
+				model.RoleScopeAcademicUnit, model.NewAcademicUnitID().String())
 		},
 		// The status-only form is checked by
 		// TestJobAndOnboardingImportEventsCoverEveryStatusAndScope.
@@ -131,7 +156,7 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"user_profile_picture_changed": func() (Event, error) {
 			return NewUserProfilePictureChangedEvent(candidateID, model.NewFileEntryID(), 4, at)
 		},
-		"exam_created":       func() (Event, error) { return NewExamCreatedEvent(examID) },
+		"exam_created":       func() (Event, error) { return NewExamCreatedEvent(examID, model.NewAcademicUnitID()) },
 		"exam_draft_updated": func() (Event, error) { return NewExamDraftUpdatedEvent(examID, 12) },
 		"exam_starter_workspace_changed": func() (Event, error) {
 			return NewExamStarterWorkspaceChangedEvent(examID, model.NewStarterWorkspaceEntryID(), 13, "file_replaced", at)
@@ -168,45 +193,45 @@ func conformanceConstructors() map[string]func() (Event, error) {
 			return NewCandidateExamSittingContentCorrectedEvent(examID, sittingID, model.NewExamRevisionID(), revisionID, 6, at)
 		},
 		"exam_attempt_connection_opened": func() (Event, error) {
-			return NewExamAttemptConnectionOpenedEvent(sittingID, attemptID, candidateID, connectionID, at)
+			return NewExamAttemptConnectionOpenedEvent(examID, sittingID, attemptID, candidateID, connectionID, at)
 		},
 		"exam_attempt_connection_closed": func() (Event, error) {
-			return NewExamAttemptConnectionClosedEvent(sittingID, attemptID, candidateID, connectionID, model.AttemptConnectionClosePolicySuspended, at)
+			return NewExamAttemptConnectionClosedEvent(examID, sittingID, attemptID, candidateID, connectionID, model.AttemptConnectionClosePolicySuspended, at)
 		},
 		// The kick leaves out the Connection and the Flag; the policy form
 		// is checked by TestOptionalMembersOfSharedMessagesStayValid.
 		"exam_attempt_suspended": func() (Event, error) {
-			return NewExamAttemptKickedEvent(sittingID, attemptID, candidateID, "", suspensionID, 3, at)
+			return NewExamAttemptKickedEvent(examID, sittingID, attemptID, candidateID, "", suspensionID, 3, at)
 		},
 		"exam_attempt_reallowed": func() (Event, error) {
-			return NewExamAttemptReallowedEvent(sittingID, attemptID, candidateID, suspensionID, 4, at)
+			return NewExamAttemptReallowedEvent(examID, sittingID, attemptID, candidateID, suspensionID, 4, at)
 		},
 		"exam_attempt_access_suspended": func() (Event, error) {
-			return NewCandidateExamAttemptSuspendedEvent(sittingID, attemptID, candidateID,
+			return NewCandidateExamAttemptSuspendedEvent(examID, sittingID, attemptID, candidateID,
 				model.AttemptSuspensionSourcePolicy, model.AttemptSuspensionCandidateReasonFocusLossPolicy, at)
 		},
 		"exam_attempt_access_reallowed": func() (Event, error) {
-			return NewCandidateExamAttemptReallowedEvent(sittingID, attemptID, candidateID, at)
+			return NewCandidateExamAttemptReallowedEvent(examID, sittingID, attemptID, candidateID, at)
 		},
 		"exam_attempt_workspace_changed": func() (Event, error) {
-			return NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID, 7, 9, at)
+			return NewCandidateExamAttemptWorkspaceChangedEvent(examID, sittingID, attemptID, candidateID, 7, 9, at)
 		},
 		"exam_attempt_screen_clips_requested": func() (Event, error) {
-			return NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+			return NewCandidateScreenClipsRequestedEvent(examID, sittingID, attemptID, candidateID, at)
 		},
 		"exam_attempt_focus_warning": func() (Event, error) {
-			return NewCandidateExamAttemptFocusLossWarningEvent(sittingID, attemptID, candidateID, at)
+			return NewCandidateExamAttemptFocusLossWarningEvent(examID, sittingID, attemptID, candidateID, at)
 		},
 		"exam_attempt_integrity_flagged": func() (Event, error) {
-			return NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
+			return NewExamAttemptIntegrityFlaggedEvent(examID, sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
 				model.IntegrityOutcomeFlagAndSuspend, model.FocusLossMaximumEvidenceEpisodes, 3, at)
 		},
 		"exam_attempt_submitted": func() (Event, error) {
-			return NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 0, digest, model.NewAssistantInventory().Digest,
+			return NewExamAttemptSubmittedEvent(examID, sittingID, attemptID, candidateID, submissionID, 0, digest, model.NewAssistantInventory().Digest,
 				model.ExamSubmissionManagerEndedAttempt, at)
 		},
 		"exam_attempt_submitted_for_candidate": func() (Event, error) {
-			return NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
+			return NewCandidateExamAttemptSubmittedEvent(examID, sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
 				model.ExamSubmissionCandidateSubmitted, at)
 		},
 		"exam_integrity_discrepancy_recorded": func() (Event, error) {
@@ -349,24 +374,25 @@ func TestOptionalMembersOfSharedMessagesStayValid(t *testing.T) {
 	contract := loadRealtimeContract(t)
 	at := time.Date(2026, time.August, 1, 9, 30, 0, 0, time.UTC)
 	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
+	examID := model.NewExamID()
 
-	policy, err := NewExamAttemptPolicySuspendedEvent(sittingID, attemptID, candidateID,
+	policy, err := NewExamAttemptPolicySuspendedEvent(examID, sittingID, attemptID, candidateID,
 		model.NewAttemptConnectionID(), model.NewIntegrityFlagID(), model.NewAttemptSuspensionID(), 3, at)
 	require.NoError(t, err)
 	require.Equal(t, examAttemptSuspendedMessage.name, policy.Name)
 	contract.validateData(t, examAttemptSuspendedMessage.key, policy.Data)
 
-	kicked, err := NewExamAttemptKickedEvent(sittingID, attemptID, candidateID,
+	kicked, err := NewExamAttemptKickedEvent(examID, sittingID, attemptID, candidateID,
 		model.NewAttemptConnectionID(), model.NewAttemptSuspensionID(), 3, at)
 	require.NoError(t, err)
 	contract.validateData(t, examAttemptSuspendedMessage.key, kicked.Data)
 
-	manual, err := NewCandidateExamAttemptSuspendedEvent(sittingID, attemptID, candidateID,
+	manual, err := NewCandidateExamAttemptSuspendedEvent(examID, sittingID, attemptID, candidateID,
 		model.AttemptSuspensionSourceManual, model.AttemptSuspensionCandidateReasonManagerSuspended, at)
 	require.NoError(t, err)
 	contract.validateData(t, examAttemptAccessSuspendedMessage.key, manual.Data)
 
-	opened, err := NewExamAttemptConnectionOpenedEvent(sittingID, attemptID, candidateID, model.NewAttemptConnectionID(), at)
+	opened, err := NewExamAttemptConnectionOpenedEvent(examID, sittingID, attemptID, candidateID, model.NewAttemptConnectionID(), at)
 	require.NoError(t, err)
 	contract.validateData(t, examAttemptConnectionOpenedMessage.key, opened.Data)
 }

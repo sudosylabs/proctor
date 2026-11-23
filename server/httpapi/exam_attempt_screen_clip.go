@@ -314,7 +314,7 @@ func (h examAttemptHandlers) listScreenClips(request route.Request) (route.Resul
 	for _, clip := range clips {
 		requesters = append(requesters, clip.RequestedByUserID)
 	}
-	refs, err := namePeople(request, h.people, "exam.attempt.unavailable", requesters...)
+	refs, err := namePeople(request, h.people, requesters...)
 	if err != nil {
 		return route.Result{}, err
 	}

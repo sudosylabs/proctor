@@ -16,6 +16,7 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -54,6 +55,24 @@ type Resolver struct {
 	audits       store.AuditStore
 	institutions store.InstitutionStore
 	authorizer   *access.Authorizer
+	// unavailable is the code a failed read is reported as: the one the
+	// calling area's endpoints already declare.
+	unavailable apperror.Code
+}
+
+// Reporting returns a copy of r that reports a failed read as code.
+func (r *Resolver) Reporting(code apperror.Code) *Resolver {
+	reporting := *r
+	reporting.unavailable = code
+	return &reporting
+}
+
+// fail reports a failed read as the configured code, when one is set.
+func (r *Resolver) fail(err error) error {
+	if r != nil && r.unavailable != "" {
+		return apperror.New(r.unavailable).Wrap(err)
+	}
+	return err
 }
 
 // New returns a Resolver over the catalog. A service built without a user or
@@ -80,15 +99,15 @@ func (r *Resolver) Resolve(ctx context.Context, principal model.Principal, ids [
 		return refs, nil
 	}
 	if r == nil || r.users == nil || r.authorizer == nil {
-		return nil, errUnavailable
+		return nil, r.fail(errUnavailable)
 	}
 	if len(distinct) > store.MaximumUserDisplayNames {
-		return nil, errors.New("too many people to name in one read")
+		return nil, r.fail(errors.New("too many people to name in one read"))
 	}
 
 	names, err := r.users.ListDisplayNames(ctx, distinct)
 	if err != nil {
-		return nil, err
+		return nil, r.fail(err)
 	}
 	for _, name := range names {
 		refs[name.UserID] = Ref{ID: name.UserID, DisplayName: name.DisplayName}
@@ -96,11 +115,11 @@ func (r *Resolver) Resolve(ctx context.Context, principal model.Principal, ids [
 
 	visibility, err := r.authorizer.GrantedUserVisibility(ctx, principal)
 	if err != nil {
-		return nil, err
+		return nil, r.fail(err)
 	}
 	visible, err := r.users.ListVisibleDisplayNames(ctx, distinct, visibility)
 	if err != nil {
-		return nil, err
+		return nil, r.fail(err)
 	}
 	visibleIDs := make([]model.UserID, 0, len(visible))
 	for _, name := range visible {
@@ -111,7 +130,7 @@ func (r *Resolver) Resolve(ctx context.Context, principal model.Principal, ids [
 	}
 	identities, err := r.users.ListIdentities(ctx, visibleIDs)
 	if err != nil {
-		return nil, err
+		return nil, r.fail(err)
 	}
 	for _, identity := range identities {
 		ref, ok := refs[identity.ID]
@@ -166,7 +185,7 @@ func (r *Resolver) NameRecords(ctx context.Context, records Records) (RecordName
 		return RecordNames{}, nil
 	}
 	if r == nil || r.audits == nil {
-		return RecordNames{}, errUnavailable
+		return RecordNames{}, r.fail(errUnavailable)
 	}
 	names, err := r.audits.ListNames(ctx, store.AuditNameOptions{
 		RoleIDs:                     records.Roles,
@@ -176,7 +195,7 @@ func (r *Resolver) NameRecords(ctx context.Context, records Records) (RecordName
 		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
 	})
 	if err != nil {
-		return RecordNames{}, err
+		return RecordNames{}, r.fail(err)
 	}
 	return RecordNames{Roles: names.Roles, AcademicUnits: names.AcademicUnits, Classes: names.Classes}, nil
 }
@@ -185,11 +204,11 @@ func (r *Resolver) NameRecords(ctx context.Context, records Records) (RecordName
 // the Institution.
 func (r *Resolver) InstitutionName(ctx context.Context) (string, error) {
 	if r == nil || r.institutions == nil {
-		return "", errUnavailable
+		return "", r.fail(errUnavailable)
 	}
 	institution, err := r.institutions.GetSingleton(ctx)
 	if err != nil {
-		return "", err
+		return "", r.fail(err)
 	}
 	return institution.DisplayName, nil
 }

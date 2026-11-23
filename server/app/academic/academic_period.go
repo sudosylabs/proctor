@@ -193,6 +193,7 @@ func (s *Service) CreateAcademicPeriod(
 		return nil, err
 	}
 
+	s.publishAcademicPeriodChanged(ctx, result.Value)
 	return result.Value, nil
 }
 
@@ -242,7 +243,7 @@ func (s *Service) UpdateAcademicPeriod(
 		return nil, apperror.DomainInvalid("academic_period.invalid", err)
 	}
 
-	return access.RunAudited(
+	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -265,6 +266,12 @@ func (s *Service) UpdateAcademicPeriod(
 		},
 		academicPeriodStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishAcademicPeriodChanged(ctx, updated)
+	return updated, nil
 }
 
 // ArchiveAcademicPeriod needs academic_period.manage.
@@ -311,7 +318,12 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, inv invocation.Invo
 		},
 		academicPeriodStoreErrors.Translate,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	s.publishAcademicPeriodChanged(ctx, current)
+	return nil
 }
 
 func parseAcademicPeriodOwner(ownerType, ownerID string) (model.AcademicPeriodOwner, error) {

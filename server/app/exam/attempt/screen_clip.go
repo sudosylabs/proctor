@@ -116,7 +116,7 @@ func (s *Service) RequestScreenClip(
 		return RequestScreenClipResult{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
 	if !stored.Replayed {
-		s.publishScreenClipsRequested(ctx, stored.SittingID, stored.Clip.AttemptID, stored.CandidateUserID, stored.Clip.RequestedAt)
+		s.publishScreenClipsRequested(ctx, command.ExamID, stored.SittingID, stored.Clip.AttemptID, stored.CandidateUserID, stored.Clip.RequestedAt)
 		s.publishScreenClipChanged(ctx, stored.ExamID, stored.SittingID, stored.Clip.AttemptID, stored.Clip.ID)
 	}
 	return RequestScreenClipResult{Clip: stored.Clip, Replayed: stored.Replayed}, nil
@@ -126,12 +126,13 @@ func (s *Service) RequestScreenClip(
 // hint delays the request, and a hint with nothing pending is harmless.
 func (s *Service) publishScreenClipsRequested(
 	ctx context.Context,
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	at time.Time,
 ) {
-	event, err := realtime.NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+	event, err := realtime.NewCandidateScreenClipsRequestedEvent(examID, sittingID, attemptID, candidateID, at)
 	if err == nil {
 		err = s.publisher.Publish(ctx, event)
 	}

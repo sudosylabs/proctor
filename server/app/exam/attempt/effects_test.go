@@ -74,7 +74,7 @@ func operationalInvalidationCalls(
 // revoked no Session: the opening, then the operational invalidations.
 func connectionOpenedCalls(t *testing.T, result ConnectionResult) []realtimetest.Call {
 	t.Helper()
-	opened := published(t)(realtime.NewExamAttemptConnectionOpenedEvent(result.Attempt.SittingID, result.Attempt.ID,
+	opened := published(t)(realtime.NewExamAttemptConnectionOpenedEvent(result.Attempt.ExamID, result.Attempt.SittingID, result.Attempt.ID,
 		result.Attempt.CandidateUserID, result.Connection.ID, result.Connection.OpenedAt))
 	return append([]realtimetest.Call{opened},
 		operationalInvalidationCalls(t, result.Attempt.ExamID, result.Attempt.SittingID, result.Attempt.CandidateUserID)...)
@@ -88,13 +88,13 @@ func expiryCalls(t *testing.T, result ParticipationExpiry, closedConnection bool
 	pub := published(t)
 	var calls []realtimetest.Call
 	if closedConnection {
-		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID,
+		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID,
 			result.Connection.ID, result.Connection.CloseReason, result.Connection.ClosedAt.Time)))
 	}
 	calls = append(calls,
-		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID, result.Connection.ID,
+		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID, result.Connection.ID,
 			result.Flag.ID, result.Suspension.ID, result.Attempt.Revision, result.DatabaseTime)),
-		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID,
+		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID,
 			result.Suspension.Source, result.Suspension.CandidateReason, result.DatabaseTime)),
 	)
 	calls = append(calls, operationalInvalidationCalls(t, result.ExamID, result.SittingID, result.CandidateUserID)...)
@@ -110,9 +110,9 @@ func reallowedCalls(t *testing.T, result ReallowResult) []realtimetest.Call {
 	t.Helper()
 	pub := published(t)
 	return append([]realtimetest.Call{
-		pub(realtime.NewExamAttemptReallowedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID, result.Suspension.ID,
+		pub(realtime.NewExamAttemptReallowedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID, result.Suspension.ID,
 			result.Attempt.Revision, result.Attempt.UpdatedAt)),
-		pub(realtime.NewCandidateExamAttemptReallowedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID, result.Attempt.UpdatedAt)),
+		pub(realtime.NewCandidateExamAttemptReallowedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID, result.Attempt.UpdatedAt)),
 	}, operationalInvalidationCalls(t, result.ExamID, result.SittingID, result.CandidateUserID)...)
 }
 
@@ -128,13 +128,13 @@ func manualSuspensionCalls(t *testing.T, result ManualSuspensionResult, closedCo
 	}
 	var calls []realtimetest.Call
 	if closedConnection {
-		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID,
+		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID,
 			connectionID, result.Connection.CloseReason, result.Connection.ClosedAt.Time)))
 	}
 	calls = append(calls,
-		pub(realtime.NewExamAttemptKickedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID, connectionID,
+		pub(realtime.NewExamAttemptKickedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID, connectionID,
 			result.Suspension.ID, result.Attempt.Revision, result.Suspension.StartedAt)),
-		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.SittingID, result.Attempt.ID, result.CandidateUserID,
+		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.CandidateUserID,
 			result.Suspension.Source, result.Suspension.CandidateReason, result.Suspension.StartedAt)),
 	)
 	calls = append(calls, operationalInvalidationCalls(t, result.ExamID, result.SittingID, result.CandidateUserID)...)
@@ -153,14 +153,14 @@ func submittedCalls(t *testing.T, result SubmissionResult, sittingClosedConnecti
 	t.Helper()
 	pub := published(t)
 	calls := []realtimetest.Call{
-		pub(realtime.NewExamAttemptSubmittedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID, result.Receipt.SubmissionID,
+		pub(realtime.NewExamAttemptSubmittedEvent(result.ExamID, result.SittingID, result.Receipt.AttemptID, result.CandidateUserID, result.Receipt.SubmissionID,
 			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Receipt.AssistantTranscriptDigest, result.Provenance, result.Receipt.SubmittedAt)),
-		pub(realtime.NewCandidateExamAttemptSubmittedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID, result.Receipt.SubmissionID,
+		pub(realtime.NewCandidateExamAttemptSubmittedEvent(result.ExamID, result.SittingID, result.Receipt.AttemptID, result.CandidateUserID, result.Receipt.SubmissionID,
 			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Receipt.AssistantTranscriptDigest, result.Provenance, result.Receipt.SubmittedAt)),
 		pub(realtime.NewSittingSubmissionsChangedEvent(result.ExamID, result.SittingID)),
 	}
 	if sittingClosedConnection {
-		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID,
+		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.ExamID, result.SittingID, result.Receipt.AttemptID, result.CandidateUserID,
 			result.ConnectionID, model.AttemptConnectionCloseSittingClosed, result.Receipt.SubmittedAt)))
 	}
 	calls = append(calls, operationalInvalidationCalls(t, result.ExamID, result.SittingID, result.CandidateUserID)...)
@@ -172,7 +172,7 @@ func submittedCalls(t *testing.T, result SubmissionResult, sittingClosedConnecti
 func connectionClosedCalls(t *testing.T, result ConnectionClosedResult) []realtimetest.Call {
 	t.Helper()
 	return []realtimetest.Call{
-		published(t)(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.AttemptID, result.CandidateUserID,
+		published(t)(realtime.NewExamAttemptConnectionClosedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID,
 			result.Connection.ID, result.Connection.CloseReason, result.Connection.ClosedAt.Time)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 	}
@@ -184,7 +184,7 @@ func workspaceChangedCalls(t *testing.T, result WorkspaceBatchResult) []realtime
 	t.Helper()
 	first, last := result.Changes[0], result.Changes[len(result.Changes)-1]
 	return []realtimetest.Call{
-		published(t)(realtime.NewCandidateExamAttemptWorkspaceChangedEvent(result.SittingID, result.AttemptID, result.CandidateUserID,
+		published(t)(realtime.NewCandidateExamAttemptWorkspaceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID,
 			first.Cursor, last.Cursor, last.ChangedAt)),
 	}
 }
@@ -383,9 +383,9 @@ func TestFocusLossWarningEffectPublishesBoundedManagerFlagAndNeutralCandidateWar
 	// warned, the Sitting board is invalidated after both, and the managers'
 	// live evidence is hinted last.
 	require.Equal(t, []realtimetest.Call{
-		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
+		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, at)),
-		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.SittingID, result.AttemptID, result.CandidateUserID, at)),
+		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, at)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, at)),
 	}, calls)
@@ -419,13 +419,13 @@ func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *t
 	// board and the candidate's Exam activity are invalidated next, the closed
 	// Connection is unbound, and the managers' live evidence is hinted last.
 	require.Equal(t, []realtimetest.Call{
-		pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
+		pub(realtime.NewExamAttemptConnectionClosedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			result.Connection.CloseReason, result.Connection.ClosedAt.Time)),
-		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, flagID,
+		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, flagID,
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, at)),
-		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
+		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			flagID, result.Suspension.ID, result.Attempt.Revision, at)),
-		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID,
+		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID,
 			result.Suspension.Source, result.Suspension.CandidateReason, at)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 		pub(realtime.NewCandidateExamActivityChangedEvent(result.CandidateUserID)),

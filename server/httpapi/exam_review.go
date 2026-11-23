@@ -676,7 +676,7 @@ func (h examIntegrityReviewHandlers) get(request route.Request) (route.Result, e
 	for _, decision := range response.Decisions {
 		ids = append(ids, model.UserID(decision.ActorUserID))
 	}
-	refs, err := namePeople(request, h.people, "exam.integrity_review.unavailable", ids...)
+	refs, err := namePeople(request, h.people, ids...)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -1037,7 +1037,7 @@ func (h examIntegrityReviewHandlers) reviewMutationResult(request route.Request,
 	if result.Decision != nil {
 		ids = append(ids, result.Decision.ActorUserID)
 	}
-	refs, err := namePeople(request, h.people, "exam.integrity_review.unavailable", ids...)
+	refs, err := namePeople(request, h.people, ids...)
 	if err != nil {
 		return route.Result{}, err
 	}

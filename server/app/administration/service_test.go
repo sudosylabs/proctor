@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -51,6 +52,7 @@ func (c *catalogFake) RetentionPolicy() store.RetentionPolicyStore         { ret
 func (c *catalogFake) Retention() store.RetentionStore                     { return c.retention }
 func (c *catalogFake) PluginSettings() store.PluginSettingsStore           { return c.pluginSettings }
 func (c *catalogFake) EnvironmentProfile() store.EnvironmentProfileStore   { return nil }
+func (c *catalogFake) Class() store.ClassStore                             { return nil }
 func (c *catalogFake) AttemptEnvironment() store.AttemptEnvironmentStore   { return nil }
 func (c *catalogFake) AttemptRuntimeLease() store.AttemptRuntimeLeaseStore { return nil }
 
@@ -87,6 +89,22 @@ func anyInstitution() *institutionStoreFake {
 
 // publisherIn returns a recording Publisher that also places each
 // authorization invalidation in the log a test shares with its other fakes.
+// roleChangedCall is the role.changed publication for roleID.
+func roleChangedCall(t *testing.T, institutionID model.InstitutionID, roleID model.RoleID) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewRoleChangedEvent(institutionID, roleID)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
+}
+
+// roleBindingChangedCall is the role_binding.changed publication for binding.
+func roleBindingChangedCall(t *testing.T, binding *model.RoleBinding) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewRoleBindingChangedEvent(binding)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
+}
+
 func publisherIn(events *[]string) *realtimetest.Publisher {
 	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
 		if call.Method == realtimetest.InvalidateAuthorization {

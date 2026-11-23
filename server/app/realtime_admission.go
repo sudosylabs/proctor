@@ -102,6 +102,17 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 		_, err = s.sittings.AuthorizeSittingManage(ctx, inv, sittingID)
 		return realtimeSittingFailures.Conceal(err)
 	}
+	// A User is read through the caller's user visibility, which a
+	// unit-scoped grant reaches only through relationships in its subtree.
+	if action == model.ActionUserView && resource.Type == model.ResourceUser {
+		userID, err := model.ParseUserID(resource.ID)
+		if err != nil {
+			return invalidRealtimeRequest("subscription")
+		}
+		err = s.authorization.AuthorizeUserRead(ctx, inv, userID)
+		operational.Record(s.operational, "authorization", "decision", err)
+		return err
+	}
 	err := s.authorization.Authorize(ctx, inv, action, resource)
 	operational.Record(s.operational, "authorization", "decision", err)
 	return err

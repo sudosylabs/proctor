@@ -10,6 +10,7 @@ package storetest
 import (
 	"context"
 	"crypto/sha256"
+	"slices"
 	"testing"
 	"time"
 
@@ -139,6 +140,86 @@ func TestAccessPolicyRoleHolderMFAStore(t *testing.T, ss store.Store) {
 	rotation, err = ss.SessionCredential().RotateRefresh(ctx, roleHolderMFARotation(multiFactorRaw.refresh, multiFactorSession, true))
 	require.NoError(t, err)
 	require.False(t, rotation.Session.MFAEnrollmentRequired, "a multi-factor Session is never restricted")
+
+	testRoleHolderDirectoryMatchesPreflight(t, ctx, ss, bootstrap.Role.ID, bootstrap.Institution.ID)
+}
+
+// testRoleHolderDirectoryMatchesPreflight proves the user directory's
+// role_holder and mfa filters name exactly the people the preflight counts.
+func testRoleHolderDirectoryMatchesPreflight(
+	t *testing.T,
+	ctx context.Context,
+	ss store.Store,
+	roleID model.RoleID,
+	institutionID model.InstitutionID,
+) {
+	t.Helper()
+	grant := func(userID model.UserID) {
+		_, grantErr := SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: userID, RoleID: roleID,
+			ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String(), StartsAt: model.NowUTC().Add(-time.Minute)})
+		require.NoError(t, grantErr)
+	}
+	secured := saveUser(t, ctx, ss)
+	grant(secured.ID)
+	activateTestMFA(t, ctx, ss, secured)
+	unsecured := saveUser(t, ctx, ss)
+	grant(unsecured.ID)
+	learner := saveUser(t, ctx, ss)
+	activateTestMFA(t, ctx, ss, learner)
+
+	snapshot, err := ss.AccessPolicy().Get(ctx, 0)
+	require.NoError(t, err)
+	preflight, err := ss.AccessPolicy().Preflight(ctx, &store.AccessPolicyPreflight{ExpectedRevision: snapshot.Policy.Revision,
+		Settings: snapshot.Policy.Settings(), Capabilities: store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{}, MFA: true},
+		CheckedAt: model.NowUTC()})
+	require.NoError(t, err)
+
+	options := store.UserListOptions{Limit: 201, RoleHolder: true, MFA: store.UserMFADisabled,
+		Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: model.NowUTC()}}
+	count, err := ss.User().Count(ctx, options, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Equal(t, preflight.RoleHoldersWithoutMFACount, count, "the directory and the preflight count the same role holders")
+	require.Equal(t, 2, count, "the administrator and the new role holder lack two-step verification")
+	listed, err := ss.User().List(ctx, options)
+	require.NoError(t, err)
+	require.Len(t, listed, count)
+	require.True(t, slices.ContainsFunc(listed, func(user *model.User) bool { return user.ID == unsecured.ID }))
+
+	options.MFA = store.UserMFAEnabled
+	listed, err = ss.User().List(ctx, options)
+	require.NoError(t, err)
+	require.Len(t, listed, 1, "a learner with two-step verification holds no role")
+	require.Equal(t, secured.ID, listed[0].ID)
+
+	_, err = ss.User().List(ctx, store.UserListOptions{Limit: 10, RoleHolder: true,
+		Visibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.NowUTC()}})
+	var invalid *store.ErrInvalidInput
+	require.ErrorAs(t, err, &invalid, "a scoped visibility cannot list role holders")
+
+	states, err := ss.User().ListMFAStates(ctx, []model.UserID{secured.ID, unsecured.ID, learner.ID})
+	require.NoError(t, err)
+	require.Len(t, states, 2)
+	for _, state := range states {
+		require.NotEqual(t, unsecured.ID, state.UserID)
+		require.True(t, state.EnabledAt.Valid, "an active credential records when it was turned on")
+	}
+}
+
+// activateTestMFA turns on two-step verification for user through the
+// audited activation, as a real setup does.
+func activateTestMFA(t *testing.T, ctx context.Context, ss store.Store, user *model.User) {
+	t.Helper()
+	session, _, raw := saveSession(t, ctx, ss, user.ID.String(), 10)
+	pending := savePendingMFA(t, ctx, ss, user.ID)
+	now := model.TimeUTC(pending.CreatedAt).Add(time.Millisecond)
+	audit, notice := mfaSecurityNoticeFixture(t, ctx, ss, user, model.MailTemplateIdentityMFAEnabled, now)
+	_, err := ss.MFA().Activate(ctx, &store.MFAActivationMutation{
+		Principal: mfaPrincipal(t, ctx, ss, raw.access), RecentAuthenticationTTL: time.Hour,
+		CredentialID: pending.ID, UserID: user.ID, TimeStep: time.Now().Unix() / 30,
+		RecoveryCodes: []*model.MFARecoveryCode{{CodeHash: model.HashToken(model.NewCredentialToken())}},
+		SessionID:     session.ID, At: now, AuditEventID: audit.ID, AuditAt: now, Notice: notice,
+	})
+	require.NoError(t, err)
 }
 
 func roleHolderMFACommand(actorID model.UserID, name string) *store.CommandIdempotency {

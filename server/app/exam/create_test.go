@@ -42,7 +42,7 @@ func TestCreateOwnsAuthorizationAuditPersistenceAndEffects(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"membership", "grants", "decision:exam.create:success", "audit-begin:exam.create", "store.create", "effect.created"}, *fixture.order)
-	created, eventErr := realtime.NewExamCreatedEvent(got.Exam.ID)
+	created, eventErr := realtime.NewExamCreatedEvent(got.Exam.ID, got.Exam.AcademicUnitID)
 	require.NoError(t, eventErr)
 	// Contract: creating an Exam publishes exactly its created fact.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: created}}, fixture.publisher.Calls())

@@ -40,6 +40,12 @@ type userStoreFake struct {
 	countTotal          int
 	summaryOptions      store.UserDirectorySummaryOptions
 	summaries           []store.UserDirectorySummary
+	mfaStates           []store.UserMFAState
+}
+
+func (s *userStoreFake) ListMFAStates(context.Context, []model.UserID) ([]store.UserMFAState, error) {
+	*s.events = append(*s.events, "list-mfa-states")
+	return s.mfaStates, nil
 }
 
 func (s *userStoreFake) Get(context.Context, model.UserID) (*model.User, error) {
@@ -223,7 +229,7 @@ func TestScopedUserSearchReturnsOnlySafeDirectoryFields(t *testing.T) {
 		ID: model.NewUserID(), Username: "student", Email: "private@example.edu", EmailVerified: true,
 		DisplayName: "Student", FirstName: "Private", LastName: "Person", Locale: "fr", Timezone: "Europe/Paris",
 		LastLoginAt: model.OptionalTimeFromMillis(100), LastActivityAt: model.OptionalTimeFromMillis(200),
-		DisabledAt: model.OptionalTimeFromMillis(300),
+		DisabledAt: model.OptionalTimeFromMillis(300), DisabledByUserID: model.NewUserID(), DisabledReason: "Left the school",
 	}
 	persistence := &userStoreFake{events: &events, current: user, countTotal: 1}
 	caller, inv := newCaller()
@@ -242,6 +248,8 @@ func TestScopedUserSearchReturnsOnlySafeDirectoryFields(t *testing.T) {
 	require.False(t, projected.LastLoginAt.Valid)
 	require.False(t, projected.LastActivityAt.Valid)
 	require.False(t, projected.DisabledAt.Valid)
+	require.True(t, projected.DisabledByUserID.IsZero(), "who disabled the account is account metadata")
+	require.Empty(t, projected.DisabledReason, "why the account was disabled is account metadata")
 	require.Empty(t, projected.DefaultProfilePictureSeed)
 	require.True(t, projected.DefaultProfilePictureFileID.IsZero())
 	require.True(t, projected.CustomProfilePictureFileID.IsZero())
@@ -363,7 +371,7 @@ func TestUserSearchSummarizesThePageAtTheVisibilityInstant(t *testing.T) {
 	// role_binding.view grants read once between them.
 	require.Equal(t, []string{
 		"grants", "grants", "decision:user.search:success", "list-users", "count-users", "summarize-users",
-		"grants", "summarize-role-bindings",
+		"grants", "summarize-role-bindings", "grants",
 	}, events)
 	require.Equal(t, []model.UserID{first.ID, second.ID}, persistence.summaryOptions.UserIDs)
 	require.Equal(t, persistence.listOptions.Visibility, persistence.summaryOptions.Visibility, "the summary reads the page's visibility")
@@ -394,7 +402,8 @@ func TestUserSearchOmitsRolesWithoutRoleBindingView(t *testing.T) {
 	require.Len(t, page.Items, 1)
 	require.Nil(t, page.Items[0].Roles, "a caller without role_binding.view reads no Role summary")
 	// Contract: without role_binding.view the Role Bindings are never read.
-	require.Equal(t, []string{"grants", "grants", "decision:user.search:success", "list-users", "count-users", "summarize-users", "grants"}, events)
+	require.Equal(t, []string{"grants", "grants", "decision:user.search:success", "list-users", "count-users", "summarize-users", "grants",
+		"list-mfa-states"}, events)
 }
 
 // newProfileService builds the Service over the User and Role Binding fakes of
@@ -429,7 +438,7 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	// Contract: authorization precedes the read, only the first page counts,
 	// and the summary reads follow the count.
 	authorized := []string{"grants", "grants", "decision:user.search:success"}
-	require.Equal(t, append(slices.Clone(authorized), "list-users", "count-users", "summarize-users", "grants"), events)
+	require.Equal(t, append(slices.Clone(authorized), "list-users", "count-users", "summarize-users", "grants", "grants"), events)
 
 	events = events[:0]
 	later, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Query: "count", Limit: 10,
@@ -437,7 +446,7 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, paging.Total{}, later.Total)
 	// Contract: a continued page authorizes and lists without counting.
-	require.Equal(t, append(slices.Clone(authorized), "list-users", "summarize-users", "grants"), events)
+	require.Equal(t, append(slices.Clone(authorized), "list-users", "summarize-users", "grants", "grants"), events)
 
 	events = events[:0]
 	page, err := service.SearchUserPage(context.Background(), inv, SearchUsersQuery{Query: "count", Limit: 5})
@@ -658,4 +667,51 @@ func TestUserSearchRoleFilterRequiresVisibleRoles(t *testing.T) {
 		require.Equal(t, scoped, persistence.listOptions.Visibility, "the filter narrows the caller's own visibility")
 		require.Equal(t, append(slices.Clone(authorized), "grants", "get-roles", "grants", "list-users", "count-users"), events)
 	})
+}
+
+// TestUserSearchTwoStepAndRoleHolderFiltersFollowTheirVisibility pins who may
+// filter on two-step verification (Institution-wide user.view or
+// user.mfa.reset) and on role holders (Institution-wide user.view only), so
+// a scoped viewer can neither read nor infer either.
+func TestUserSearchTwoStepAndRoleHolderFiltersFollowTheirVisibility(t *testing.T) {
+	t.Parallel()
+	caller, inv := newCaller()
+	unitID := model.NewAcademicUnitID()
+	scoped := unitGrant(caller.UserID, unitID, model.ActionUserView)
+	reset := institutionGrant(caller.UserID, model.ActionUserMFAReset)
+	institution := institutionGrant(caller.UserID, model.ActionUserView)
+	for _, test := range []struct {
+		name   string
+		grants []accesstest.Grant
+		query  SearchUsersQuery
+		field  string
+	}{
+		{name: "scoped mfa", grants: []accesstest.Grant{scoped}, query: SearchUsersQuery{MFA: store.UserMFADisabled}, field: "mfa"},
+		{name: "unknown mfa", grants: []accesstest.Grant{institution}, query: SearchUsersQuery{MFA: "off"}, field: "mfa"},
+		{name: "scoped role holder", grants: []accesstest.Grant{scoped, reset}, query: SearchUsersQuery{RoleHolder: true}, field: "role_holder"},
+		{name: "scoped mfa with reset", grants: []accesstest.Grant{scoped, reset}, query: SearchUsersQuery{MFA: store.UserMFAEnabled}},
+		{name: "institution role holder", grants: []accesstest.Grant{institution},
+			query: SearchUsersQuery{RoleHolder: true, MFA: store.UserMFADisabled}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &userStoreFake{events: &events}
+			service := newDirectoryFilterService(t, persistence, &roleStoreFake{events: &events}, test.grants...)
+			test.query.Limit = 10
+			_, err := service.SearchUsers(context.Background(), inv, test.query)
+			if test.field != "" {
+				var appErr *apperror.Error
+				require.ErrorAs(t, err, &appErr)
+				require.Equal(t, "request.invalid", appErr.Code())
+				require.Equal(t, test.field, appErr.Fields()["field"])
+				require.NotContains(t, events, "list-users", "a refused filter reads nothing")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.query.MFA, persistence.listOptions.MFA)
+			require.Equal(t, test.query.RoleHolder, persistence.listOptions.RoleHolder)
+			require.Equal(t, persistence.listOptions, persistence.countOptions, "the count reads the same filters")
+		})
+	}
 }

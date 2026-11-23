@@ -121,10 +121,19 @@ components:
                 reference: '1'
                 operation: student_class.create
                 status: valid
+                person:
+                  display_name: Amina Diallo
+                  email_masked: a***@example.edu
               - row: 2
                 reference: '2'
                 operation: student_class.create
                 status: valid
+                person:
+                  display_name: Jonas Berg
+                  email_masked: j***@example.edu
+                user:
+                  id: ih1r84kij94nrwis97rft6rduh
+                  display_name: Jonas Berg
               - row: 3
                 reference: '3'
                 operation: student_class.create
@@ -143,6 +152,9 @@ components:
             expires_at: '2026-08-25T13:30:00Z'
             revision: 2
             file_name: chemistry-roster.csv
+            created_by:
+              id: wj3drgzdpnf54rxf5d8qd3dqne
+              display_name: Priya Raman
   schemas:
     IssueScopedRoleInvitationRequest:
       type: object

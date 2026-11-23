@@ -31,6 +31,7 @@ type academicAdministrationPreviewFilterBody struct {
 	AcademicUnitID   string   `json:"academic_unit_id,omitempty"`
 	RoleID           []string `json:"role_id,omitempty"`
 	State            string   `json:"state,omitempty"`
+	MFA              string   `json:"mfa,omitempty"`
 	NeverSignedIn    bool     `json:"never_signed_in,omitempty"`
 	LastActiveAfter  string   `json:"last_active_after,omitempty"`
 	LastActiveBefore string   `json:"last_active_before,omitempty"`
@@ -45,6 +46,7 @@ type academicAdministrationPreviewRequest struct {
 	AffiliationKind string                                  `json:"affiliation_kind,omitempty"`
 	StartAt         string                                  `json:"start_at,omitempty"`
 	EndAt           string                                  `json:"end_at,omitempty"`
+	Reason          string                                  `json:"reason,omitempty"`
 }
 
 type academicAdministrationPreviewCommitRequest struct {
@@ -77,6 +79,7 @@ type academicAdministrationPreviewResponse struct {
 	AffiliationKind string                                        `json:"affiliation_kind,omitempty"`
 	StartAt         string                                        `json:"start_at,omitempty"`
 	EndAt           string                                        `json:"end_at,omitempty"`
+	Reason          string                                        `json:"reason,omitempty"`
 	PreviewDigest   string                                        `json:"preview_digest,omitempty"`
 	Summary         *academicAdministrationPreviewSummaryResponse `json:"summary,omitempty"`
 	TotalRows       int                                           `json:"total_rows"`
@@ -243,10 +246,12 @@ func (h academicAdministrationPreviewHandlers) create(request route.Request) (ro
 		ScopeID:         body.ScopeID,
 		RoleID:          model.RoleID(body.RoleID),
 		AffiliationKind: model.AffiliationKind(body.AffiliationKind),
+		Reason:          optionalReason(body.Reason),
 		Filter: onboarding.AcademicAdministrationUserFilter{
 			Query:          body.Filter.Q,
 			AcademicUnitID: model.AcademicUnitID(body.Filter.AcademicUnitID),
 			State:          user.AccountState(body.Filter.State),
+			MFA:            store.UserMFAFilter(body.Filter.MFA),
 			NeverSignedIn:  body.Filter.NeverSignedIn,
 		},
 	}
@@ -432,6 +437,7 @@ func academicAdministrationPreviewResponseFromView(view onboarding.AcademicAdmin
 		AffiliationKind: string(filter.AffiliationKind),
 		StartAt:         optionalRFC3339(filter.StartAt),
 		EndAt:           optionalRFC3339(filter.EndAt),
+		Reason:          filter.Reason,
 		PreviewDigest:   value.PreviewDigest,
 		TotalRows:       value.TotalRows,
 		SucceededRows:   value.SucceededRows,
@@ -449,6 +455,7 @@ func academicAdministrationPreviewResponseFromView(view onboarding.AcademicAdmin
 			Q:              filter.Query,
 			AcademicUnitID: filter.AcademicUnitID.String(),
 			State:          filter.State,
+			MFA:            string(filter.MFA),
 			NeverSignedIn:  filter.NeverSignedIn,
 		},
 		PreviewExpiresAt: optionalRFC3339(view.PreviewExpiresAt),

@@ -17,6 +17,8 @@ import (
 )
 
 type managerExamIntegrityReviewChangedData struct {
+	ExamID        string `json:"exam_id"`
+	ExamSittingID string `json:"exam_sitting_id"`
 	SubmissionID  string `json:"submission_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	CandidateID   string `json:"candidate_user_id"`
@@ -76,6 +78,8 @@ func NewExamIntegrityDiscrepancyRecordedEvent(
 }
 
 type candidateStudentResultReleasedData struct {
+	ExamID        string `json:"exam_id"`
+	ExamSittingID string `json:"exam_sitting_id"`
 	SubmissionID  string `json:"submission_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	ReviewID      string `json:"submission_review_id"`
@@ -89,6 +93,8 @@ type candidateStudentResultReleasedData struct {
 // candidate release event. It excludes decisions, rationale, evidence, private
 // notes and student remarks.
 type ExamIntegrityReviewEventFact struct {
+	ExamID       model.ExamID
+	SittingID    model.ExamSittingID
 	SubmissionID model.SubmissionID
 	AttemptID    model.ExamAttemptID
 	CandidateID  model.UserID
@@ -126,7 +132,9 @@ func NewExamStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (Event
 // NewCandidateStudentResultReleasedEvent carries the review's identity and
 // state, never its content.
 func NewCandidateStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (Event, error) {
-	if !fact.SubmissionID.IsValid() ||
+	if !fact.ExamID.IsValid() ||
+		!fact.SittingID.IsValid() ||
+		!fact.SubmissionID.IsValid() ||
 		!fact.AttemptID.IsValid() ||
 		!fact.CandidateID.IsValid() ||
 		!fact.ReviewID.IsValid() ||
@@ -138,6 +146,8 @@ func NewCandidateStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (
 	}
 
 	data, err := json.Marshal(candidateStudentResultReleasedData{
+		ExamID:        fact.ExamID.String(),
+		ExamSittingID: fact.SittingID.String(),
 		SubmissionID:  fact.SubmissionID.String(),
 		ExamAttemptID: fact.AttemptID.String(),
 		ReviewID:      fact.ReviewID.String(),
@@ -154,7 +164,9 @@ func NewCandidateStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (
 }
 
 func newManagerExamIntegrityReviewEvent(name string, fact ExamIntegrityReviewEventFact) (Event, error) {
-	if !fact.SubmissionID.IsValid() ||
+	if !fact.ExamID.IsValid() ||
+		!fact.SittingID.IsValid() ||
+		!fact.SubmissionID.IsValid() ||
 		!fact.AttemptID.IsValid() ||
 		!fact.CandidateID.IsValid() ||
 		!fact.ReviewID.IsValid() ||
@@ -166,6 +178,8 @@ func newManagerExamIntegrityReviewEvent(name string, fact ExamIntegrityReviewEve
 	}
 
 	data, err := json.Marshal(managerExamIntegrityReviewChangedData{
+		ExamID:        fact.ExamID.String(),
+		ExamSittingID: fact.SittingID.String(),
 		SubmissionID:  fact.SubmissionID.String(),
 		ExamAttemptID: fact.AttemptID.String(),
 		CandidateID:   fact.CandidateID.String(),

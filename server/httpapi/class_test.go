@@ -41,7 +41,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		classResource(fixture.service),
+		classResource(fixture.service, fixture.people()),
 	)
 
 	request := httptest.NewRequestWithContext(t.Context(),
@@ -103,7 +103,7 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		classResource(fixture.service),
+		classResource(fixture.service, fixture.people()),
 	)
 
 	request := httptest.NewRequestWithContext(t.Context(),
@@ -130,7 +130,7 @@ func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) 
 		t,
 		logger,
 		routetest.Authenticator{Err: apperror.New("user.conflict")},
-		classResource(fixture.service),
+		classResource(fixture.service, fixture.people()),
 	)
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -174,7 +174,7 @@ func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
 	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
-		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service))
+		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service, fixture.people()))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/classes", nil)
@@ -198,7 +198,7 @@ func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
 	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
-		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service))
+		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service, fixture.people()))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programme-levels/"+world.level.ID.String()+"/classes", strings.NewReader(`{"academic_period_id":"`+world.period.ID.String()+`","name":"class-a","display_name":"Class A"}`))
@@ -215,6 +215,61 @@ func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, created.ID.String(), body.ID)
 	require.Equal(t, world.period.ID.String(), body.AcademicPeriodID)
+}
+
+// TestClassGetNamesTeachersOnlyForClassMemberViewers pins that a Class read
+// names its teachers for a caller who may view its members, and that a
+// caller with class.view alone gets no teachers at all.
+func TestClassGetNamesTeachersOnlyForClassMemberViewers(t *testing.T) {
+	t.Parallel()
+	world := newAcademicWorld()
+	teacher := academicUser("ada", "Ada Lovelace", "ada@example.edu")
+	for name, test := range map[string]struct {
+		actions []model.Action
+		want    string
+	}{
+		"members viewer": {
+			actions: []model.Action{model.ActionClassView, model.ActionClassMembersView},
+			want:    `{"teachers":[{"id":"` + teacher.ID.String() + `","display_name":"Ada Lovelace"}],"teachers_more":2}`,
+		},
+		"class viewer": {actions: []model.Action{model.ActionClassView}, want: `{}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			logger, _ := routetest.NewLogger(t)
+			principal := academicCaller()
+			fixture := newAcademicFixture(t, academicOptions{
+				Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, test.actions...)},
+				Units:  world.units(),
+			})
+			fixture.hold(world)
+			fixture.users.add(teacher)
+			fixture.bindings.teachers = []store.ClassTeachers{{ClassID: world.class.ID, UserIDs: []model.UserID{teacher.ID}, More: 2}}
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
+				classResource(fixture.service, fixture.people()))
+
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/"+world.class.ID.String(), nil)
+			request.Header.Set("Authorization", "Bearer credential")
+			response := httptest.NewRecorder()
+			httpAPI.ServeHTTP(response, request)
+			require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+			var body struct {
+				Teachers     json.RawMessage `json:"teachers,omitempty"`
+				TeachersMore json.RawMessage `json:"teachers_more,omitempty"`
+			}
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			encoded, err := json.Marshal(body)
+			require.NoError(t, err)
+			require.JSONEq(t, test.want, string(encoded))
+			if len(test.actions) == 1 {
+				require.Empty(t, fixture.bindings.teacherOf, "no teacher is read for a caller who may not see them")
+				return
+			}
+			require.Len(t, fixture.bindings.teacherOf, 1)
+			require.Equal(t, []model.ClassID{world.class.ID}, fixture.bindings.teacherOf[0].ClassIDs)
+			require.Equal(t, 3, fixture.bindings.teacherOf[0].Limit)
+		})
+	}
 }
 
 func TestClassPatchOptionalWireStates(t *testing.T) {

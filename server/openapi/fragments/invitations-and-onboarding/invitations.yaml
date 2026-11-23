@@ -92,6 +92,71 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: expires_after
+          in: query
+          required: false
+          description: Return only Invitations that expire at or after this instant.
+          schema:
+            type: string
+            format: date-time
+        - name: expires_before
+          in: query
+          required: false
+          description: Return only Invitations that expire before this instant. It must be later than `expires_after`.
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          required: false
+          description: >-
+            Return only Invitations whose invited address or suggested display name starts with this text, compared
+            case-insensitively after trimming spaces. It is matched literally, at most 254 characters.
+          schema:
+            type: string
+            maxLength: 254
+        - name: delivery_state
+          in: query
+          required: false
+          description: >-
+            Return only Invitations whose newest delivery is in one of these states. Repeat the parameter for several
+            states. An Invitation with no delivery matches none.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 6
+            items:
+              type: string
+              enum:
+                - queued
+                - sending
+                - accepted
+                - failed
+                - suppressed
+                - canceled
+        - name: sort
+          in: query
+          required: false
+          description: >-
+            Sort by creation (`created`, the default) or expiry (`expires`) time, with Invitation ID breaking ties. A
+            cursor works only with the sort and direction that produced it.
+          schema:
+            type: string
+            enum:
+              - created
+              - expires
+            default: created
+        - name: dir
+          in: query
+          required: false
+          description: Descending (`desc`, the default, newest or latest first) or ascending (`asc`) by the `sort` key.
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: desc
         - name: cursor
           in: query
           required: false

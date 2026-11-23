@@ -25,6 +25,10 @@ const (
 	MFARecoveryCodeMaxCount     = 20
 )
 
+// MFAMethodAuthenticatorApp is the only second factor: a TOTP authenticator
+// app. Every read that names a method uses it.
+const MFAMethodAuthenticatorApp = "authenticator_app"
+
 // MFAState is the enrollment phase of an MFA credential.
 type MFAState string
 

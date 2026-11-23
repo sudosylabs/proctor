@@ -112,7 +112,7 @@ func TestAcademicUnitUpdateReparentAuthorizesBothScopesBeforeCommit(t *testing.T
 	)
 	// Contract: the update publishes one event naming the unit and reports no
 	// failure.
-	require.Equal(t, []realtimetest.Call{academicUnitEventCall("academic_unit_updated", updated.ID)}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{academicUnitEventCall("academic_unit_updated", &updated)}, publisher.Calls())
 }
 
 func TestAcademicUnitUpdateReparentToRootRequiresInstitutionAuthority(t *testing.T) {

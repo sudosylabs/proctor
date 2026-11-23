@@ -60,7 +60,9 @@ type Service struct {
 	accessPolicies    store.AccessPolicyStore
 	retentionPolicies store.RetentionPolicyStore
 	retention         store.RetentionStore
-	pluginSettings    store.PluginSettingsStore
+	// classes names the unit of a Class whose teachers a binding changed.
+	classes        store.ClassStore
+	pluginSettings store.PluginSettingsStore
 	// environmentProfiles is nil without persistence, which makes profile
 	// administration unavailable.
 	environmentProfiles store.EnvironmentProfileStore
@@ -134,6 +136,7 @@ func New(deps Dependencies) (*Service, error) {
 		assistantProfiles:       catalog.AssistantProfile(),
 		assistantProviders:      append([]string(nil), deps.AssistantProviders...),
 		retention:               catalog.Retention(),
+		classes:                 catalog.Class(),
 		authorizer:              deps.Authorizer,
 		people:                  people.New(catalog, deps.Authorizer),
 		auditor:                 deps.Auditor.MutationAudit(),

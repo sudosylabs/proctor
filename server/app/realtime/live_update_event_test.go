@@ -107,21 +107,23 @@ func TestOnboardingImportChangedEventRefusesInvalidInput(t *testing.T) {
 func TestInvitationChangedEventIsAddressedToTheInviter(t *testing.T) {
 	t.Parallel()
 
-	inviterID, invitationID := model.NewUserID(), model.NewInvitationID()
-	event, err := NewInvitationChangedEvent(inviterID, invitationID, model.InvitationAccepted)
+	inviterID, invitationID, classID := model.NewUserID(), model.NewInvitationID(), model.NewClassID()
+	event, err := NewInvitationChangedEvent(inviterID, invitationID, model.InvitationAccepted, model.RoleScopeClass, classID.String())
 	require.NoError(t, err)
 	require.Equal(t, "invitation.changed", event.Name)
 	require.Equal(t, inviterID, event.UserID)
 	require.Empty(t, event.Action)
 	require.Equal(t, model.Resource{}, event.Resource)
-	require.JSONEq(t, `{"schema_version":1,"invitation_id":"`+invitationID.String()+`","state":"accepted"}`, string(event.Data))
+	require.JSONEq(t, `{"schema_version":1,"invitation_id":"`+invitationID.String()+`","state":"accepted","scope_type":"class","scope_id":"`+classID.String()+`"}`, string(event.Data))
 
-	_, err = NewInvitationChangedEvent("", invitationID, model.InvitationAccepted)
+	_, err = NewInvitationChangedEvent("", invitationID, model.InvitationAccepted, model.RoleScopeClass, classID.String())
 	require.Error(t, err, "missing inviter")
-	_, err = NewInvitationChangedEvent(inviterID, "", model.InvitationAccepted)
+	_, err = NewInvitationChangedEvent(inviterID, "", model.InvitationAccepted, model.RoleScopeClass, classID.String())
 	require.Error(t, err, "missing Invitation")
-	_, err = NewInvitationChangedEvent(inviterID, invitationID, "used")
+	_, err = NewInvitationChangedEvent(inviterID, invitationID, "used", model.RoleScopeClass, classID.String())
 	require.Error(t, err, "unknown state")
+	_, err = NewInvitationChangedEvent(inviterID, invitationID, model.InvitationAccepted, "", classID.String())
+	require.Error(t, err, "missing scope")
 }
 
 func TestCurrentUserSessionsChangedEventIsAddressedToTheUser(t *testing.T) {

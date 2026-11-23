@@ -1,0 +1,19 @@
+{
+  "title": "Mail delivery changed",
+  "description": "Names the mail delivery whose state changed. The recipient and the message are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mail_delivery_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "mail_delivery_id": {
+      "$ref": "id.json"
+    }
+  }
+}

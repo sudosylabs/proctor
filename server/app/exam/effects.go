@@ -19,8 +19,8 @@ import (
 
 const archivedExamSittingPage = 200
 
-func (a *Authoring) publishExamCreated(ctx context.Context, examID model.ExamID) error {
-	event, err := realtime.NewExamCreatedEvent(examID)
+func (a *Authoring) publishExamCreated(ctx context.Context, examID model.ExamID, unitID model.AcademicUnitID) error {
+	event, err := realtime.NewExamCreatedEvent(examID, unitID)
 	if err != nil {
 		return err
 	}

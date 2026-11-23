@@ -1,0 +1,30 @@
+{
+  "title": "Retention changed",
+  "description": "Says which retention read to refetch: the policy, a hold (with the hold and its Exam), or an Exam's records due for removal.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "policy",
+        "hold",
+        "records"
+      ]
+    },
+    "retention_hold_id": {
+      "$ref": "id.json"
+    },
+    "exam_id": {
+      "$ref": "id.json"
+    }
+  }
+}

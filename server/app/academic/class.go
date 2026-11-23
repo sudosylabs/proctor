@@ -356,7 +356,7 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
 
-	return access.RunAudited(
+	created, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -378,6 +378,12 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 		},
 		classStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishClassesChanged(ctx, created.ID)
+	return created, nil
 }
 
 // UpdateClass needs class.manage.
@@ -451,7 +457,7 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
 
-	return access.RunAudited(
+	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -474,6 +480,13 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 		},
 		classStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// A move to another Programme Level can change the owning unit.
+	s.publishClassesChanged(ctx, updated.ID)
+	return updated, nil
 }
 
 // ArchiveClass needs class.manage.
@@ -529,7 +542,12 @@ func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, c
 		},
 		classStoreErrors.Translate,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	s.publishClassChanged(ctx, id, unitID)
+	return nil
 }
 
 var classStoreErrors = apperror.AdministrationStoreTable("class", "class.conflict", "class.invalid", nil)

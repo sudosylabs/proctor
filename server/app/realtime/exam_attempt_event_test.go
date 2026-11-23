@@ -44,13 +44,14 @@ func TestCandidateSittingEventsUseRelationshipOnlyTargetAndSafePayload(t *testin
 
 func TestManagerConnectionEventsAreContentAndCredentialFree(t *testing.T) {
 	t.Parallel()
+	examID := model.NewExamID()
 	sittingID, attemptID := model.NewExamSittingID(), model.NewExamAttemptID()
 	candidateID, connectionID := model.NewUserID(), model.NewAttemptConnectionID()
 	at := time.Date(2026, time.August, 17, 9, 5, 0, 123, time.UTC)
 
-	opened, err := NewExamAttemptConnectionOpenedEvent(sittingID, attemptID, candidateID, connectionID, at)
+	opened, err := NewExamAttemptConnectionOpenedEvent(examID, sittingID, attemptID, candidateID, connectionID, at)
 	require.NoError(t, err)
-	closed, err := NewExamAttemptConnectionClosedEvent(sittingID, attemptID, candidateID, connectionID,
+	closed, err := NewExamAttemptConnectionClosedEvent(examID, sittingID, attemptID, candidateID, connectionID,
 		model.AttemptConnectionCloseTransport, at.Add(time.Minute))
 	require.NoError(t, err)
 	for _, event := range []Event{opened, closed} {
@@ -65,18 +66,19 @@ func TestManagerConnectionEventsAreContentAndCredentialFree(t *testing.T) {
 
 func TestExamAttemptSuspensionAndReallowEventsSeparateCandidateAndManagerPayloads(t *testing.T) {
 	t.Parallel()
+	examID := model.NewExamID()
 	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
 	connectionID, flagID, suspensionID := model.NewAttemptConnectionID(), model.NewIntegrityFlagID(), model.NewAttemptSuspensionID()
 	privateReason := "manager verified secure continuity"
 	at := time.Date(2026, time.August, 18, 9, 5, 0, 0, time.UTC)
-	candidateSuspended, err := NewCandidateExamAttemptSuspendedEvent(sittingID, attemptID, candidateID,
+	candidateSuspended, err := NewCandidateExamAttemptSuspendedEvent(examID, sittingID, attemptID, candidateID,
 		model.AttemptSuspensionSourcePolicy, model.AttemptSuspensionCandidateReasonSecureContinuityLost, at)
 	require.NoError(t, err)
-	managerSuspended, err := NewExamAttemptPolicySuspendedEvent(sittingID, attemptID, candidateID, connectionID, flagID, suspensionID, 2, at)
+	managerSuspended, err := NewExamAttemptPolicySuspendedEvent(examID, sittingID, attemptID, candidateID, connectionID, flagID, suspensionID, 2, at)
 	require.NoError(t, err)
-	candidateReallowed, err := NewCandidateExamAttemptReallowedEvent(sittingID, attemptID, candidateID, at.Add(time.Minute))
+	candidateReallowed, err := NewCandidateExamAttemptReallowedEvent(examID, sittingID, attemptID, candidateID, at.Add(time.Minute))
 	require.NoError(t, err)
-	managerReallowed, err := NewExamAttemptReallowedEvent(sittingID, attemptID, candidateID, suspensionID, 3, at.Add(time.Minute))
+	managerReallowed, err := NewExamAttemptReallowedEvent(examID, sittingID, attemptID, candidateID, suspensionID, 3, at.Add(time.Minute))
 	require.NoError(t, err)
 	for _, event := range []Event{candidateSuspended, candidateReallowed} {
 		require.Equal(t, candidateID, event.UserID)
@@ -92,7 +94,7 @@ func TestExamAttemptSuspensionAndReallowEventsSeparateCandidateAndManagerPayload
 	require.Equal(t, string(model.AttemptSuspensionCandidateReasonSecureContinuityLost), suspendedData["reason_code"])
 	for key := range suspendedData {
 		switch key {
-		case "exam_sitting_id", "exam_attempt_id", "state", "reason_code", "changed_at":
+		case "exam_id", "exam_sitting_id", "exam_attempt_id", "state", "reason_code", "changed_at":
 		default:
 			require.FailNow(t, fmt.Sprintf("candidate suspension payload contains unsafe field %q: %s", key, candidateSuspended.Data))
 		}
@@ -110,7 +112,7 @@ func TestExamAttemptSuspensionAndReallowEventsSeparateCandidateAndManagerPayload
 
 func TestCandidateExamAttemptSuspendedEventAcceptsFocusPolicyReviewReason(t *testing.T) {
 	t.Parallel()
-	event, err := NewCandidateExamAttemptSuspendedEvent(model.NewExamSittingID(), model.NewExamAttemptID(),
+	event, err := NewCandidateExamAttemptSuspendedEvent(model.NewExamID(), model.NewExamSittingID(), model.NewExamAttemptID(),
 		model.NewUserID(), model.AttemptSuspensionSourcePolicy, model.AttemptSuspensionCandidateReasonFocusLossPolicy, time.Now().UTC())
 	require.NoError(t, err)
 	var data map[string]any
@@ -121,11 +123,12 @@ func TestCandidateExamAttemptSuspendedEventAcceptsFocusPolicyReviewReason(t *tes
 
 func TestCandidateExamAttemptWorkspaceChangedEventIsOnlyASafeRefetchHint(t *testing.T) {
 	t.Parallel()
+	examID := model.NewExamID()
 	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
 	at := time.Date(2026, time.August, 19, 10, 0, 0, 0, time.UTC)
-	event, err := NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID, 15, 17, at)
+	event, err := NewCandidateExamAttemptWorkspaceChangedEvent(examID, sittingID, attemptID, candidateID, 15, 17, at)
 	require.NoError(t, err)
-	_, err = NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID, 18, 17, at)
+	_, err = NewCandidateExamAttemptWorkspaceChangedEvent(examID, sittingID, attemptID, candidateID, 18, 17, at)
 	require.Error(t, err, "a batch cannot end before it starts")
 	require.Equal(t, "exam_attempt_workspace_changed", event.Name)
 	require.Equal(t, candidateID, event.UserID)
@@ -139,15 +142,16 @@ func TestCandidateExamAttemptWorkspaceChangedEventIsOnlyASafeRefetchHint(t *test
 
 func TestExamAttemptSubmittedEventsSeparateManagerAndCandidateTargetsWithSafeReceiptData(t *testing.T) {
 	t.Parallel()
+	examID := model.NewExamID()
 
 	sittingID, attemptID := model.NewExamSittingID(), model.NewExamAttemptID()
 	candidateID, submissionID := model.NewUserID(), model.NewSubmissionID()
 	digest := strings.Repeat("d", 64)
 	submittedAt := time.Date(2026, time.August, 21, 10, 15, 0, 123, time.UTC)
-	manager, err := NewExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
+	manager, err := NewExamAttemptSubmittedEvent(examID, sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
 		model.ExamSubmissionManagerEndedAttempt, submittedAt)
 	require.NoError(t, err)
-	candidate, err := NewCandidateExamAttemptSubmittedEvent(sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
+	candidate, err := NewCandidateExamAttemptSubmittedEvent(examID, sittingID, attemptID, candidateID, submissionID, 9, digest, model.NewAssistantInventory().Digest,
 		model.ExamSubmissionManagerEndedAttempt, submittedAt)
 	require.NoError(t, err)
 	require.Equal(t, "exam_attempt_submitted", manager.Name)
@@ -163,10 +167,10 @@ func TestExamAttemptSubmittedEventsSeparateManagerAndCandidateTargetsWithSafeRec
 	require.NoError(t, err)
 	err = json.Unmarshal(candidate.Data, &candidateData)
 	require.NoError(t, err)
-	require.Len(t, managerData, 10, "manager")
+	require.Len(t, managerData, 11, "manager")
 	require.Equal(t, candidateID.String(), managerData["candidate_user_id"], "manager")
 	require.Equal(t, string(model.ExamSubmissionManagerEndedAttempt), managerData["provenance"], "manager")
-	require.Len(t, candidateData, 9, "candidate")
+	require.Len(t, candidateData, 10, "candidate")
 	require.Equal(t, model.NewAssistantInventory().Digest, managerData["assistant_transcript_digest"])
 	require.Equal(t, managerData["assistant_transcript_digest"], candidateData["assistant_transcript_digest"])
 	require.Equal(t, string(model.ExamSubmissionManagerEndedAttempt), candidateData["provenance"], "manager")
@@ -186,12 +190,13 @@ func TestExamAttemptSubmittedEventsSeparateManagerAndCandidateTargetsWithSafeRec
 
 func TestFocusLossEventsSeparateNeutralCandidateWarningFromBoundedManagerFlag(t *testing.T) {
 	t.Parallel()
+	examID := model.NewExamID()
 	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
 	flagID := model.NewIntegrityFlagID()
 	at := time.Date(2026, time.August, 20, 9, 5, 0, 0, time.UTC)
-	warning, err := NewCandidateExamAttemptFocusLossWarningEvent(sittingID, attemptID, candidateID, at)
+	warning, err := NewCandidateExamAttemptFocusLossWarningEvent(examID, sittingID, attemptID, candidateID, at)
 	require.NoError(t, err)
-	flagged, err := NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
+	flagged, err := NewExamAttemptIntegrityFlaggedEvent(examID, sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
 		model.IntegrityOutcomeFlagAndWarn, 100, 17, at)
 	require.NoError(t, err)
 	require.Equal(t, "exam_attempt_focus_warning", warning.Name)
@@ -202,7 +207,7 @@ func TestFocusLossEventsSeparateNeutralCandidateWarningFromBoundedManagerFlag(t 
 	err = json.Unmarshal(warning.Data, &warningData)
 	require.NoError(t, err, "warning data")
 	require.Equal(t, "focus_loss_policy_warning", warningData["warning_code"], "warning data")
-	require.Len(t, warningData, 4, "warning data")
+	require.Len(t, warningData, 5, "warning data")
 	require.Equal(t, "exam_attempt_integrity_flagged", flagged.Name)
 	require.Empty(t, flagged.UserID)
 	require.Equal(t, model.ActionExamSittingView, flagged.Action)
@@ -215,7 +220,7 @@ func TestFocusLossEventsSeparateNeutralCandidateWarningFromBoundedManagerFlag(t 
 	require.Equal(t, float64(100), managerData["retained_evidence_count"], "manager data")
 	require.Equal(t, float64(17), managerData["evidence_overflow_count"], "manager data")
 	require.Equal(t, true, managerData["evidence_available"], "manager data")
-	require.Len(t, managerData, 10, "manager data")
+	require.Len(t, managerData, 11, "manager data")
 	// Field names, not values: the event's random identifiers can spell short words.
 	for _, data := range []map[string]any{warningData, managerData} {
 		for name := range data {
@@ -240,22 +245,23 @@ func assertCandidateSittingEvent(t *testing.T, event Event, name string, sitting
 
 func TestExamAttemptSuspendedEventsValidateProvenancePerSource(t *testing.T) {
 	t.Parallel()
+	examID := model.NewExamID()
 	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
 	connectionID, flagID, suspensionID := model.NewAttemptConnectionID(), model.NewIntegrityFlagID(), model.NewAttemptSuspensionID()
 	at := time.Date(2026, time.August, 18, 9, 5, 0, 0, time.UTC)
 
-	_, err := NewExamAttemptPolicySuspendedEvent(sittingID, attemptID, candidateID, connectionID, "", suspensionID, 2, at)
+	_, err := NewExamAttemptPolicySuspendedEvent(examID, sittingID, attemptID, candidateID, connectionID, "", suspensionID, 2, at)
 	require.Error(t, err, "policy suspension without its Integrity Flag")
-	_, err = NewExamAttemptPolicySuspendedEvent(sittingID, attemptID, candidateID, "", flagID, suspensionID, 2, at)
+	_, err = NewExamAttemptPolicySuspendedEvent(examID, sittingID, attemptID, candidateID, "", flagID, suspensionID, 2, at)
 	require.Error(t, err, "policy suspension without its Connection")
 
-	kicked, err := NewExamAttemptKickedEvent(sittingID, attemptID, candidateID, "", suspensionID, 2, at)
+	kicked, err := NewExamAttemptKickedEvent(examID, sittingID, attemptID, candidateID, "", suspensionID, 2, at)
 	require.NoError(t, err, "kick of a reconnecting candidate")
 	var data map[string]any
 	require.NoError(t, json.Unmarshal(kicked.Data, &data))
 	require.NotContains(t, data, "integrity_flag_id")
 	require.NotContains(t, data, "attempt_connection_id")
-	kicked, err = NewExamAttemptKickedEvent(sittingID, attemptID, candidateID, connectionID, suspensionID, 2, at)
+	kicked, err = NewExamAttemptKickedEvent(examID, sittingID, attemptID, candidateID, connectionID, suspensionID, 2, at)
 	require.NoError(t, err)
 	data = nil
 	require.NoError(t, json.Unmarshal(kicked.Data, &data))
@@ -277,7 +283,7 @@ func TestExamAttemptSuspendedEventsValidateProvenancePerSource(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NewCandidateExamAttemptSuspendedEvent(sittingID, attemptID, candidateID, test.source, test.reason, at)
+			_, err := NewCandidateExamAttemptSuspendedEvent(examID, sittingID, attemptID, candidateID, test.source, test.reason, at)
 			require.Equal(t, test.valid, err == nil, "error = %v", err)
 		})
 	}
@@ -285,15 +291,16 @@ func TestExamAttemptSuspendedEventsValidateProvenancePerSource(t *testing.T) {
 
 func TestTheScreenClipHintReachesOnlyTheCandidateAndCarriesNoRequest(t *testing.T) {
 	t.Parallel()
+	examID := model.NewExamID()
 	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
 	at := time.Date(2026, time.November, 13, 9, 5, 0, 0, time.UTC)
-	hint, err := NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+	hint, err := NewCandidateScreenClipsRequestedEvent(examID, sittingID, attemptID, candidateID, at)
 	require.NoError(t, err)
 	require.Equal(t, "exam_attempt_screen_clips_requested", hint.Name)
 	require.Equal(t, candidateID, hint.UserID)
 	require.Equal(t, model.ActionExamSittingParticipate, hint.Action)
-	require.JSONEq(t, `{"exam_sitting_id":"`+sittingID.String()+`","exam_attempt_id":"`+attemptID.String()+`","changed_at":"2026-11-13T09:05:00Z"}`,
+	require.JSONEq(t, `{"exam_id":"`+examID.String()+`","exam_sitting_id":"`+sittingID.String()+`","exam_attempt_id":"`+attemptID.String()+`","changed_at":"2026-11-13T09:05:00Z"}`,
 		string(hint.Data))
-	_, err = NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, "", at)
+	_, err = NewCandidateScreenClipsRequestedEvent(examID, sittingID, attemptID, "", at)
 	require.Error(t, err)
 }

@@ -1,0 +1,40 @@
+{
+  "title": "Role Binding changed",
+  "description": "Names the Role Binding to refetch, its holder, its Role and the scope it is bound at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role_binding_id",
+    "user_id",
+    "role_id",
+    "scope_type",
+    "scope_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "role_binding_id": {
+      "$ref": "id.json"
+    },
+    "user_id": {
+      "$ref": "id.json"
+    },
+    "role_id": {
+      "$ref": "id.json"
+    },
+    "scope_type": {
+      "type": "string",
+      "enum": [
+        "institution",
+        "academic_unit",
+        "class"
+      ]
+    },
+    "scope_id": {
+      "$ref": "id.json"
+    }
+  }
+}

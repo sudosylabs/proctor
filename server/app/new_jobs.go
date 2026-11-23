@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -197,6 +198,7 @@ func buildApplicationJobDefinitions(
 	}
 
 	mailDelivery := jobs.MailDeliveryDependencies{
+		Changes:    mailDeliveryChanges(deps, shared),
 		Deliveries: deps.Store.Mail(),
 		Sender:     deps.MailDeliverySender,
 		Sealer:     deps.MailSecretSealer,
@@ -311,4 +313,13 @@ func domainEventSubscriptions(deps Dependencies) []events.Subscription {
 		subscriptions[index] = events.Subscription{Key: "attempt_environment:" + string(topic), Topic: topic, Handle: facts.HandleEvent}
 	}
 	return subscriptions
+}
+
+// mailDeliveryChanges announces delivery state changes to Institution mail
+// viewers; without an Institution store there is no one to tell.
+func mailDeliveryChanges(deps Dependencies, shared sharedMechanics) jobs.MailDeliveryChanges {
+	if deps.Store.Institution() == nil {
+		return nil
+	}
+	return realtime.NewJobChangePublisher(shared.realtime, deps.Store.Institution())
 }

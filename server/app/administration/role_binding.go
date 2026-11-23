@@ -307,6 +307,7 @@ func (s *Service) CreateRoleBinding(
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, saved.UserID)
+	s.publishRoleBindingChanged(ctx, saved)
 	return saved, nil
 }
 
@@ -501,6 +502,7 @@ func (s *Service) EndRoleBinding(
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, ended.UserID)
+	s.publishRoleBindingChanged(ctx, ended)
 	return ended, nil
 }
 

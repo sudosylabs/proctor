@@ -160,6 +160,7 @@ func (s *Service) acceptStudentClassByClaimHash(
 			ctx,
 			s.publisher,
 			s.sittings,
+			s.classes,
 			result.ClassMember.UserID,
 			[]model.ClassID{result.ClassMember.ClassID},
 		); effectErr != nil {
@@ -323,6 +324,7 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 	}
 	if !result.Replayed && result.User != nil {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
+		s.publishAcceptedRelationships(ctx, result.User.ID, result.RoleBinding)
 	}
 
 	return &InvitationAcceptanceView{
@@ -446,6 +448,7 @@ func (s *Service) acceptScopedRoleByClaimHash(
 	}
 	if !result.Replayed && result.User != nil {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
+		s.publishAcceptedRelationships(ctx, result.User.ID, result.RoleBinding)
 	}
 
 	return &InvitationAcceptanceView{

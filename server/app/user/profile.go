@@ -522,7 +522,7 @@ func (s *Service) UpdateUserProfile(
 	}
 
 	resource := model.Resource{Type: model.ResourceUser, ID: id.String()}
-	return access.RunAudited(
+	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -545,4 +545,10 @@ func (s *Service) UpdateUserProfile(
 		},
 		StoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishUserChanged(ctx, id)
+	return updated, nil
 }

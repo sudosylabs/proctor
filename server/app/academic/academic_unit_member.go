@@ -137,6 +137,7 @@ func (s *Service) CreateAcademicUnitMember(
 	)
 	if err == nil && changed {
 		s.publisher.InvalidateAuthorization(ctx, userID)
+		s.publishUserChanged(ctx, userID)
 	}
 
 	return result, err
@@ -243,6 +244,7 @@ func (s *Service) EndAcademicUnitMember(
 	)
 	if err == nil && changed {
 		s.publisher.InvalidateAuthorization(ctx, current.UserID)
+		s.publishUserChanged(ctx, current.UserID)
 	}
 
 	return result, err

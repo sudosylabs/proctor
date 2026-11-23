@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -142,6 +143,13 @@ func (s *Service) ReplaceRetentionPolicy(
 		return nil, apperror.New("retention_policy.unavailable")
 	}
 
+	event, err := realtime.NewRetentionPolicyChangedEvent(institution.ID)
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "retention.changed", err)
+	}
 	return stored.Policy.Clone(), nil
 }
 

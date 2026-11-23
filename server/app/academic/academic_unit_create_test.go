@@ -112,7 +112,7 @@ func TestAcademicUnitCreateRootCommitsAuditBeforePublishing(t *testing.T) {
 	require.True(t, time.UnixMilli(500).UTC().Equal(creator.input.AuditAt))
 	// Contract: creation publishes one event naming the saved unit and
 	// reports no failure.
-	require.Equal(t, []realtimetest.Call{academicUnitEventCall("academic_unit_created", saved.ID)}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{academicUnitEventCall("academic_unit_created", saved)}, publisher.Calls())
 	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store", "effect")
 }
 
@@ -188,7 +188,7 @@ func TestAcademicUnitCreateIgnoresPostCommitEffectFailure(t *testing.T) {
 	// Contract: the failed publication is reported once under its operation
 	// name, with the publication error.
 	require.Equal(t, []realtimetest.Call{
-		academicUnitEventCall("academic_unit_created", saved.ID),
+		academicUnitEventCall("academic_unit_created", saved),
 		{Method: realtimetest.Report, Operation: "academic_unit_created", Err: effectErr},
 	}, publisher.Calls())
 	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store", "effect", "effect-report")

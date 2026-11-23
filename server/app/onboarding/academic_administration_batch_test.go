@@ -295,6 +295,13 @@ type batchClassStore struct {
 	periodID model.AcademicPeriodID
 }
 
+// GetAcademicUnitID places every Class in one unit, which class.changed names.
+func (batchClassStore) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {
+	return batchClassUnitID, nil
+}
+
+var batchClassUnitID = model.NewAcademicUnitID()
+
 func (s batchClassStore) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
 	return &model.Class{ID: id, AcademicPeriodID: s.periodID, DisplayName: "Class " + id.String()}, nil
 }

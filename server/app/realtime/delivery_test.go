@@ -59,13 +59,14 @@ func TestRealtimeEventValidateForPublish(t *testing.T) {
 
 func TestExamAuthoringEventsHaveTypedSafePayloads(t *testing.T) {
 	t.Parallel()
-	examID := model.NewExamID()
-	created, err := NewExamCreatedEvent(examID)
+	examID, unitID := model.NewExamID(), model.NewAcademicUnitID()
+	created, err := NewExamCreatedEvent(examID, unitID)
 	require.NoError(t, err)
 	require.Equal(t, "exam_created", created.Name)
 	require.Equal(t, model.ActionExamView, created.Action)
 	require.Equal(t, model.Resource{Type: model.ResourceExam, ID: examID.String()}, created.Resource)
-	require.Empty(t, created.Data)
+	require.JSONEq(t, `{"exam_id":"`+examID.String()+`","academic_unit_id":"`+unitID.String()+`"}`, string(created.Data),
+		"the event names the Exam and its owning unit, and nothing more")
 	updated, err := NewExamDraftUpdatedEvent(examID, 7)
 	require.NoError(t, err)
 	require.Equal(t, `{"exam_id":"`+examID.String()+`","draft_revision":7}`, string(updated.Data))

@@ -205,6 +205,7 @@ func (s *Service) setUserEnabledFromCurrent(
 	if disabled && result != nil && len(result.RevokedSessions) > 0 {
 		s.publisher.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 	}
+	s.publishUserChanged(ctx, userID)
 
 	return result.User, false, nil
 }

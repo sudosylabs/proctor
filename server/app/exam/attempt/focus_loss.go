@@ -152,7 +152,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 	if !result.Duplicate && result.ScreenClipRequested {
 		// The flag asked for the minute either side of it; Desktop reads its clip
 		// requests only when told there are some.
-		s.publishScreenClipsRequested(ctx, result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)
+		s.publishScreenClipsRequested(ctx, result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)
 	}
 
 	return result, nil

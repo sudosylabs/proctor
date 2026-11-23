@@ -53,7 +53,7 @@ func (s *Service) publishMembershipChanged(
 	if s.publisher == nil {
 		return
 	}
-	if err := PublishClassMembershipChanged(ctx, s.publisher, s.sittings, candidateID, classIDs); err != nil {
+	if err := PublishClassMembershipChanged(ctx, s.publisher, s.sittings, s.classes, candidateID, classIDs); err != nil {
 		s.publisher.Report(ctx, "class_member.membership_changed", err)
 	}
 }

@@ -176,6 +176,7 @@ func (s *Service) acceptExternalIdentity(
 	s.publishInvitationChanged(ctx, result.Invitation, "invitation.changed")
 	if result.User != nil && (result.AcademicUnitMember != nil || result.RoleBinding != nil) {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
+		s.publishAcceptedRelationships(ctx, result.User.ID, result.RoleBinding)
 	}
 
 	if result.ClassMember != nil {
@@ -183,6 +184,7 @@ func (s *Service) acceptExternalIdentity(
 			ctx,
 			s.publisher,
 			s.sittings,
+			s.classes,
 			result.ClassMember.UserID,
 			[]model.ClassID{result.ClassMember.ClassID},
 		); effectErr != nil {

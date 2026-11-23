@@ -92,6 +92,7 @@ func (s *Service) ResetUserMFA(ctx context.Context, inv invocation.Invocation, c
 	}
 
 	s.publisher.SessionsRevoked(ctx, command.UserID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
+	s.publishUserChanged(ctx, command.UserID)
 	return nil
 }
 

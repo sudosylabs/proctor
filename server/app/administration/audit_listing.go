@@ -131,7 +131,7 @@ func (s *Service) ListAuditEvents(
 		page.Names.Users = map[model.UserID]string{}
 	}
 	for id, actor := range page.Actors {
-		if !actor.Removed() {
+		if actor.Named() {
 			page.Names.Users[id] = actor.DisplayName
 		}
 	}

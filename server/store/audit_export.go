@@ -16,6 +16,12 @@ import (
 
 const AuditExportCreateOperation = "audit.export.create"
 
+// UsesAcademicTopology reports whether this scope changes when academic
+// ownership changes.
+func (scope AuditVisibilityScope) UsesAcademicTopology() bool {
+	return !scope.InstitutionWide && !scope.AcademicInstitutionWide && len(scope.AcademicUnitRootIDs) > 0
+}
+
 // AuditExportCreation queues one audit export and its build Job. Query is the
 // audit listing it freezes: filters and visibility, with no page bounds.
 type AuditExportCreation struct {
@@ -23,6 +29,8 @@ type AuditExportCreation struct {
 	Query        AuditListOptions
 	AuditEventID model.AuditEventID
 	AuditAt      time.Time
+	// TopologyRevision is required for a subtree-scoped export and zero otherwise.
+	TopologyRevision int64
 }
 
 type AuditExportArtifact struct {
@@ -57,6 +65,8 @@ type AuditExportRead struct {
 	Artifact AuditExportArtifact
 	// Visibility is the audit visibility frozen at the request.
 	Visibility AuditVisibilityScope
+	// TopologyChanged prevents access to files under an obsolete subtree.
+	TopologyChanged bool
 }
 
 // AuditExportStore persists audit exports on the shared export lifecycle:
@@ -65,6 +75,8 @@ type AuditExportRead struct {
 // only after observing its absence. It grants no authority; the caller checks
 // the requester and their current audit visibility.
 type AuditExportStore interface {
+	FindCreation(context.Context, *CommandIdempotency) (model.AuditExportID, error)
+	TopologyRevision(context.Context) (int64, error)
 	Create(context.Context, *AuditExportCreation, *CommandIdempotency) (*model.AuditExport, error)
 	Get(context.Context, model.AuditExportID) (*AuditExportRead, error)
 	BeginBuild(context.Context, *AuditExportBuild) (*AuditExportSnapshot, error)

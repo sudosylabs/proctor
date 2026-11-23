@@ -15,9 +15,9 @@ import (
 const (
 	// AuditExportMaximumEvents bounds one export; a larger selection is
 	// refused when it is requested rather than cut short.
-	AuditExportMaximumEvents       = 100_000
-	AuditExportMaximumBytes  int64 = 512 << 20
-	AuditExportMaximumAttempts     = 3
+	AuditExportMaximumEvents         = 100_000
+	AuditExportMaximumBytes    int64 = 512 << 20
+	AuditExportMaximumAttempts       = 3
 
 	JobTypeAuditExportBuild   JobType = "audit_export.build"
 	JobTypeAuditExportCleanup JobType = "audit_export.cleanup"

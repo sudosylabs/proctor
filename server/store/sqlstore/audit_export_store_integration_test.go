@@ -42,6 +42,11 @@ func TestAuditExportStore(t *testing.T) {
 					_, err := persistence.GetMaster().Exec(ctx, `UPDATE audit_exports SET created_at=created_at-interval '2 days',expires_at=expires_at-interval '2 days',ready_at=ready_at-interval '2 days' WHERE id=?`, id.String())
 					require.NoError(t, err)
 				},
+				MoveUnit: func(t *testing.T, ctx context.Context, unitID, parentID model.AcademicUnitID) {
+					t.Helper()
+					_, err := persistence.GetMaster().Exec(ctx, `UPDATE academic_units SET parent_id=? WHERE id=?`, parentID.String(), unitID.String())
+					require.NoError(t, err)
+				},
 				ArtifactCount: func(t *testing.T, ctx context.Context, id model.AuditExportID) int {
 					t.Helper()
 					var count int

@@ -25,14 +25,17 @@ type AuditExportSQLProbe struct {
 	SetPolicy     func(t *testing.T, ctx context.Context, days int)
 	Expire        func(t *testing.T, ctx context.Context, id model.AuditExportID)
 	ArtifactCount func(t *testing.T, ctx context.Context, id model.AuditExportID) int
+	MoveUnit      func(t *testing.T, ctx context.Context, unitID, parentID model.AcademicUnitID)
 }
 
 func TestAuditExportStore(t *testing.T, ss store.Store, probe AuditExportSQLProbe) {
 	ctx := context.Background()
-	saveInstitution(t, ctx, ss)
+	institution := saveInstitution(t, ctx, ss)
 	requester := saveUser(t, ctx, ss)
 	exports := ss.AuditExport()
-	root := model.NewAcademicUnitID()
+	root := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "audit-root").ID
+	otherRoot := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "audit-other").ID
+	child := saveAcademicUnit(t, ctx, ss, institution.ID.String(), root.String(), "audit-child").ID
 	until := model.TimeUTC(time.Now().Add(-time.Minute))
 	query := store.AuditListOptions{
 		Actions: []string{string(model.ActionRoleManage)}, Status: model.AuditStatusSuccess, Ascending: true,
@@ -42,6 +45,8 @@ func TestAuditExportStore(t *testing.T, ss store.Store, probe AuditExportSQLProb
 	}
 	newCreation := func(t *testing.T, format model.AuditExportFormat) *store.AuditExportCreation {
 		t.Helper()
+		topologyRevision, err := exports.TopologyRevision(ctx)
+		require.NoError(t, err)
 		audit, err := ss.Audit().Save(ctx, &model.AuditEvent{
 			ActorID: requester.ID, Action: string(model.ActionAcademicAuditView),
 			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: root.String()},
@@ -54,7 +59,7 @@ func TestAuditExportStore(t *testing.T, ss store.Store, probe AuditExportSQLProb
 				ID: model.NewAuditExportID(), RequesterUserID: requester.ID, Format: format, Redacted: true,
 				JobID: model.NewJobID(), EventCount: 3,
 			},
-			Query: query, AuditEventID: audit.ID, AuditAt: model.NowUTC(),
+			Query: query, AuditEventID: audit.ID, AuditAt: model.NowUTC(), TopologyRevision: topologyRevision,
 		}
 	}
 	claim := func(t *testing.T, export *model.AuditExport) store.AuditExportBuild {
@@ -130,6 +135,21 @@ func TestAuditExportStore(t *testing.T, ss store.Store, probe AuditExportSQLProb
 	require.NoError(t, err)
 	require.Empty(t, purge, "the published file was offered for removal")
 
+	beforeMove, err := exports.TopologyRevision(ctx)
+	require.NoError(t, err)
+	probe.MoveUnit(t, ctx, child, root)
+	unchanged, err := exports.TopologyRevision(ctx)
+	require.NoError(t, err)
+	require.Equal(t, beforeMove, unchanged, "a no-op ownership update must preserve the audit export")
+	probe.MoveUnit(t, ctx, child, otherRoot)
+	changed, err := exports.TopologyRevision(ctx)
+	require.NoError(t, err)
+	require.Greater(t, changed, beforeMove)
+	read, err = exports.Get(ctx, created.ID)
+	require.NoError(t, err)
+	require.True(t, read.TopologyChanged)
+	require.Zero(t, read.Artifact, "a ready file with an obsolete subtree must not be exposed")
+
 	// Expiry hides the file at once and the sweep then removes it.
 	probe.Expire(t, ctx, created.ID)
 	read, err = exports.Get(ctx, created.ID)
@@ -158,6 +178,9 @@ func TestAuditExportStore(t *testing.T, ss store.Store, probe AuditExportSQLProb
 		Kind: store.JobCompletionPermanentFailure, PublicErrorCode: "audit.export.unavailable",
 	})
 	require.NoError(t, err)
+	read, err = exports.Get(ctx, failedExport.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.ExamExportFailed, read.Export.State, "the terminal Job is visible before reconciliation")
 	reconciled, err = exports.Reconcile(ctx, 100)
 	require.NoError(t, err)
 	require.Equal(t, 1, reconciled)
@@ -172,4 +195,26 @@ func TestAuditExportStore(t *testing.T, ss store.Store, probe AuditExportSQLProb
 	require.NoError(t, exports.FinishWriter(ctx, failedBuild.AuditExportArtifact))
 	require.NoError(t, exports.CompletePurge(ctx, failedBuild.AuditExportArtifact))
 	require.Equal(t, 0, probe.ArtifactCount(t, ctx, failedExport.ID), "a finished writer kept its cleanup reference")
+
+	scoped, err := exports.Create(ctx, newCreation(t, model.AuditExportCSV),
+		examCommand(requester.ID, store.AuditExportCreateOperation, "audit-move-build", "audit-move-build"))
+	require.NoError(t, err)
+	scopedBuild := claim(t, scoped)
+	_, err = exports.BeginBuild(ctx, &scopedBuild)
+	require.NoError(t, err)
+	staleCreation := newCreation(t, model.AuditExportCSV)
+	probe.MoveUnit(t, ctx, child, root)
+	_, err = exports.Create(ctx, staleCreation,
+		examCommand(requester.ID, store.AuditExportCreateOperation, "audit-move-create", "audit-move-create"))
+	var topologyConflict *store.ErrConflict
+	require.ErrorAs(t, err, &topologyConflict)
+	require.Equal(t, "topology_changed", topologyConflict.Constraint, "creation fenced a count made under obsolete ownership")
+	_, err = exports.BeginBuild(ctx, &scopedBuild)
+	require.ErrorAs(t, err, &topologyConflict)
+	require.Equal(t, "topology_changed", topologyConflict.Constraint)
+	err = exports.Publish(ctx, &store.AuditExportPublication{
+		AuditExportBuild: scopedBuild, SizeBytes: 42, SHA256: strings.Repeat("a", 64), EventCount: 1,
+	})
+	require.ErrorAs(t, err, &topologyConflict)
+	require.Equal(t, "topology_changed", topologyConflict.Constraint, "publication fenced a topology change during file construction")
 }

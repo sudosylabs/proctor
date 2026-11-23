@@ -17,10 +17,11 @@ paths:
         Your audit visibility is frozen when you ask: with Institution-wide `audit.view` the file has every matching
         Event, and an Academic Unit auditor's file has the same redacted Events their listing shows. Events written
         after the request aren't included. The file has the listing's fields under the listing's names, except
-        `summary`, `actor` and `repeat`. It never has raw request parameters, earlier state or results. At most
+        `summary`, `actor` and `repeat`. Both formats flatten `resource` into `resource_type` and `resource_id`.
+        It never has raw request parameters, earlier state or results. At most
         100,000 Events fit in one export, and a larger selection is refused, so narrow the filters. The policy's
         export lifetime must be set to 1 to 7 days, and the expiry counts from the request. The request is audited.
-        Watch `job_id` for `job.changed`, or poll the export, to see when it is ready.
+        Poll the export to see when it is ready. Job viewers can also observe `job.changed` for `job_id`.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -83,7 +84,8 @@ paths:
       description: >-
         Only the User who asked for the export can read it, and only while they still hold the audit visibility it
         was made with. Another User's export is not found. The state is `queued`, `ready`, `failed` or `expired`.
-        An expired export never returns its hash. The expiry shown is fixed, even if the policy changes later.
+        An expired export never returns its hash. The expiry stays fixed even if the policy changes later.
+        A change to the academic ownership hierarchy invalidates exports made with academic subtree visibility.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -387,7 +389,7 @@ components:
             failed, and `expired` after `expires_at`.
         job_id:
           $ref: '#/components/schemas/ID'
-          description: The background Job that builds the file. Its `job.changed` events tell you when it finishes.
+          description: The background Job that builds the file. Job viewers can observe its `job.changed` events.
         event_count:
           type: integer
           minimum: 0

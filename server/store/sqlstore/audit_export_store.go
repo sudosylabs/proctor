@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -51,7 +52,7 @@ const auditExportPurgePredicate = `(
 	)`
 
 const auditExportColumns = `id, requester_user_id, format, redacted, state, created_at, expires_at,
-		event_count, job_id, archive_attempt_id, archive_size_bytes, archive_sha256, ready_at`
+		event_count, job_id, archive_attempt_id, archive_size_bytes, archive_sha256, ready_at, topology_revision`
 
 type auditExportRow struct {
 	ID               string         `db:"id"`
@@ -67,6 +68,7 @@ type auditExportRow struct {
 	ArchiveSizeBytes sql.NullInt64  `db:"archive_size_bytes"`
 	ArchiveSHA256    sql.NullString `db:"archive_sha256"`
 	ReadyAt          sql.NullTime   `db:"ready_at"`
+	TopologyRevision sql.NullInt64  `db:"topology_revision"`
 }
 
 // value reads the row as of at: past its expiry an export is expired whatever
@@ -194,6 +196,52 @@ type auditExportOutcome struct {
 
 func (auditExportOutcome) outcomeDocument() {}
 
+func decodeAuditExportOutcome(data []byte) (*model.AuditExport, error) {
+	var outcome auditExportOutcome
+	if err := decodeOutcome(data, &outcome); err != nil {
+		return nil, err
+	}
+	if !outcome.ExportID.IsValid() {
+		return nil, errors.New("invalid audit export outcome")
+	}
+	return &model.AuditExport{ID: outcome.ExportID}, nil
+}
+
+func (s *SQLAuditExportStore) TopologyRevision(ctx context.Context) (int64, error) {
+	var revision int64
+	err := s.GetMaster().Get(ctx, &revision, `SELECT revision FROM academic_topology_revision WHERE singleton`)
+	return revision, err
+}
+
+func requireAuditExportTopology(ctx context.Context, tx *sqlxTxWrapper, expected sql.NullInt64) error {
+	if !expected.Valid {
+		return nil
+	}
+	var current int64
+	if err := tx.Get(ctx, &current, `SELECT revision FROM academic_topology_revision WHERE singleton FOR SHARE`); err != nil {
+		return fmt.Errorf("lock audit export topology revision: %w", err)
+	}
+	if current != expected.Int64 {
+		return store.NewErrConflict("audit_export", "topology_changed", nil)
+	}
+	return nil
+}
+
+func (s *SQLAuditExportStore) FindCreation(ctx context.Context, command *store.CommandIdempotency) (model.AuditExportID, error) {
+	result, err := replayIdempotentMutation(ctx, s.SQLStore, "find audit export creation", idempotentMutation[*model.AuditExport]{
+		command:           command,
+		decode:            decodeAuditExportOutcome,
+		freshAuditEventID: func(*model.AuditExport) (model.AuditEventID, error) { return "", nil },
+	})
+	if store.IsNotFound(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return result.Value.ID, nil
+}
+
 func (s *SQLAuditExportStore) Create(
 	ctx context.Context,
 	input *store.AuditExportCreation,
@@ -208,6 +256,7 @@ func (s *SQLAuditExportStore) Create(
 		input.Export.EventCount < 0 ||
 		input.Export.EventCount > model.AuditExportMaximumEvents ||
 		input.Export.Redacted == input.Query.Visibility.InstitutionWide ||
+		input.TopologyRevision < 0 || (input.TopologyRevision != 0) != input.Query.Visibility.UsesAcademicTopology() ||
 		!input.AuditEventID.IsValid() ||
 		input.AuditAt.IsZero() ||
 		command == nil ||
@@ -231,16 +280,7 @@ func (s *SQLAuditExportStore) Create(
 			return createAuditExport(ctx, tx, input, query, visibility)
 		},
 		encode: func(e *model.AuditExport) ([]byte, error) { return encodeOutcome(auditExportOutcome{ExportID: e.ID}) },
-		decode: func(b []byte) (*model.AuditExport, error) {
-			var outcome auditExportOutcome
-			if err := decodeOutcome(b, &outcome); err != nil {
-				return nil, err
-			}
-			if !outcome.ExportID.IsValid() {
-				return nil, errors.New("invalid audit export outcome")
-			}
-			return &model.AuditExport{ID: outcome.ExportID}, nil
-		},
+		decode: decodeAuditExportOutcome,
 		hydrateReplay: func(ctx context.Context, tx *sqlxTxWrapper, e *model.AuditExport) (*model.AuditExport, error) {
 			row, err := getAuditExport(ctx, tx, e.ID, false)
 			if err != nil {
@@ -274,6 +314,11 @@ func createAuditExport(ctx context.Context, tx *sqlxTxWrapper, input *store.Audi
 		return nil, store.NewErrConflict("audit_export", "policy_unconfigured", nil)
 	}
 
+	topology := sql.NullInt64{Int64: input.TopologyRevision, Valid: input.TopologyRevision != 0}
+	if err = requireAuditExportTopology(ctx, tx, topology); err != nil {
+		return nil, err
+	}
+
 	var at time.Time
 	if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
 		return nil, err
@@ -290,11 +335,11 @@ func createAuditExport(ctx context.Context, tx *sqlxTxWrapper, input *store.Audi
 
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_exports (
 			id, requester_user_id, format, redacted, state, created_at, expires_at, event_count, job_id,
-				visibility, query
+				visibility, query, topology_revision
 		)
-		VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?::jsonb, ?::jsonb)`,
+		VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?)`,
 		e.ID.String(), e.RequesterUserID.String(), string(e.Format), e.Redacted, e.CreatedAt, e.ExpiresAt,
-		e.EventCount, e.JobID.String(), string(visibility), string(query)); err != nil {
+		e.EventCount, e.JobID.String(), string(visibility), string(query), topology); err != nil {
 		return nil, err
 	}
 
@@ -330,6 +375,11 @@ func completeAuditExportAudit(ctx context.Context, tx *sqlxTxWrapper, input *sto
 	return err
 }
 
+const auditExportBuildActive = `EXISTS (
+	SELECT 1 FROM jobs j
+	WHERE j.id = e.job_id AND j.status IN ('queued', 'running', 'cancel_requested')
+)`
+
 func (s *SQLAuditExportStore) Get(ctx context.Context, id model.AuditExportID) (*store.AuditExportRead, error) {
 	if !id.IsValid() {
 		return nil, store.NewErrInvalidInput("audit_export", "id", nil)
@@ -337,10 +387,15 @@ func (s *SQLAuditExportStore) Get(ctx context.Context, id model.AuditExportID) (
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "read audit export", func(ctx context.Context, tx *sqlxTxWrapper) (*store.AuditExportRead, error) {
 		var row struct {
 			auditExportRow
-			Visibility []byte `db:"visibility"`
+			Visibility      []byte `db:"visibility"`
+			TopologyChanged bool   `db:"topology_changed"`
+			BuildEnded      bool   `db:"build_ended"`
 		}
-		if err := tx.Get(ctx, &row, `SELECT `+auditExportColumns+`, visibility
-			FROM audit_exports
+		if err := tx.Get(ctx, &row, `SELECT `+auditExportColumns+`, visibility,
+				topology_revision IS NOT NULL AND topology_revision IS DISTINCT FROM
+					(SELECT revision FROM academic_topology_revision WHERE singleton) AS topology_changed,
+				state = 'queued' AND NOT `+auditExportBuildActive+` AS build_ended
+			FROM audit_exports e
 			WHERE id = ?`, id.String()); err != nil {
 			return nil, translateError("audit_export", id.String(), err)
 		}
@@ -356,13 +411,19 @@ func (s *SQLAuditExportStore) Get(ctx context.Context, id model.AuditExportID) (
 		if err = json.Unmarshal(row.Visibility, &visibility); err != nil {
 			return nil, invalidPersistedState("audit_export", "visibility", err)
 		}
-		result := &store.AuditExportRead{Export: e, Visibility: store.AuditVisibilityScope{
+		if e.State == model.ExamExportQueued && row.BuildEnded {
+			e.State = model.ExamExportFailed
+		}
+		result := &store.AuditExportRead{Export: e, TopologyChanged: row.TopologyChanged, Visibility: store.AuditVisibilityScope{
 			InstitutionWide:         visibility.InstitutionWide,
 			AcademicInstitutionWide: visibility.AcademicInstitutionWide,
 			AcademicUnitRootIDs:     visibility.AcademicUnitRootIDs,
 			AllowedActions:          visibility.AllowedActions,
 		}}
-		if e.State == model.ExamExportReady {
+		if result.Visibility.UsesAcademicTopology() != row.TopologyRevision.Valid {
+			return nil, invalidPersistedState("audit_export", "topology_revision", errors.New("inconsistent scope topology"))
+		}
+		if !result.TopologyChanged && e.State == model.ExamExportReady {
 			result.Artifact = store.AuditExportArtifact{ExportID: e.ID, AttemptID: model.JobAttemptID(row.ArchiveAttemptID.String)}
 		}
 		return result, nil
@@ -380,6 +441,9 @@ func lockAuditExportBuild(ctx context.Context, tx *sqlxTxWrapper, input *store.A
 		row, lockErr = getAuditExport(ctx, tx, input.ExportID, true)
 		return exportBuildRow{JobID: row.JobID, ExpiresAt: row.ExpiresAt}, lockErr
 	})
+	if err == nil {
+		err = requireAuditExportTopology(ctx, tx, row.TopologyRevision)
+	}
 	return row, at, err
 }
 
@@ -487,12 +551,7 @@ func (s *SQLAuditExportStore) Reconcile(ctx context.Context, limit int) (int, er
 			WHERE (e.state IN ('queued', 'ready', 'failed') AND e.expires_at <= clock_timestamp())
 				OR (
 					e.state = 'queued'
-					AND NOT EXISTS(
-						SELECT 1
-						FROM jobs j
-						WHERE j.id = e.job_id
-							AND j.status IN ('queued', 'running', 'cancel_requested')
-					)
+					AND NOT `+auditExportBuildActive+`
 				)
 			ORDER BY e.expires_at, e.id
 			LIMIT ?

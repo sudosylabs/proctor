@@ -94,6 +94,25 @@ func (s *Service) CreateAuditExport(ctx context.Context, inv invocation.Invocati
 	}
 	options.Visibility = visibility
 
+	replayed, err := s.auditExports.FindCreation(ctx, prepared)
+	if err != nil {
+		return nil, auditExportStoreErrors.Translate(err)
+	}
+	if !replayed.IsZero() {
+		read, err := s.loadAuditExport(ctx, inv.Principal().UserID, replayed, visibility)
+		if err != nil {
+			return nil, err
+		}
+		return read.Export, nil
+	}
+
+	var topologyRevision int64
+	if visibility.UsesAcademicTopology() {
+		topologyRevision, err = s.auditExports.TopologyRevision(ctx)
+		if err != nil || topologyRevision < 1 {
+			return nil, apperror.New("audit.export.unavailable").Wrap(err)
+		}
+	}
 	count, err := s.audits.Count(ctx, options, model.AuditExportMaximumEvents+1)
 	if err != nil {
 		return nil, auditListingError(err)
@@ -134,6 +153,7 @@ func (s *Service) CreateAuditExport(ctx context.Context, inv invocation.Invocati
 		func(ctx context.Context, reference access.MutationReference) (*model.AuditExport, error) {
 			return s.auditExports.Create(ctx, &store.AuditExportCreation{
 				Export: export, Query: options, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				TopologyRevision: topologyRevision,
 			}, prepared)
 		},
 		auditExportStoreErrors.Translate,
@@ -225,7 +245,7 @@ func (s *Service) loadAuditExport(ctx context.Context, requester model.UserID, i
 	if read.Export.RequesterUserID != requester {
 		return nil, apperror.New("audit.export.not_found")
 	}
-	if !auditVisibilityCovers(current, read.Visibility) {
+	if read.TopologyChanged || !auditVisibilityCovers(current, read.Visibility) {
 		return nil, access.DeniedError()
 	}
 	return read, nil
@@ -403,6 +423,7 @@ func auditExportWriteUncertain(err error) bool {
 var auditExportStoreErrors = apperror.StoreTable{
 	Rules: apperror.Conflicts("audit_export", map[string]apperror.Code{
 		"policy_unconfigured": "audit.export.policy_unconfigured",
+		"topology_changed":    "authorization.denied",
 		"expired":             "audit.export.expired",
 	}),
 	NotFound:    "audit.export.not_found",

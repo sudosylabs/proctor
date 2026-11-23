@@ -46,6 +46,14 @@ func newAuditExportStoreFake() *auditExportStoreFake {
 	return &auditExportStoreFake{exports: map[model.AuditExportID]*store.AuditExportRead{}, queries: map[model.AuditExportID]store.AuditListOptions{}}
 }
 
+func (s *auditExportStoreFake) FindCreation(context.Context, *store.CommandIdempotency) (model.AuditExportID, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.replayID, nil
+}
+
+func (*auditExportStoreFake) TopologyRevision(context.Context) (int64, error) { return 1, nil }
+
 func (s *auditExportStoreFake) Create(_ context.Context, input *store.AuditExportCreation, _ *store.CommandIdempotency) (*model.AuditExport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,7 +79,7 @@ func (s *auditExportStoreFake) Get(_ context.Context, id model.AuditExportID) (*
 		return nil, store.NewErrNotFound("audit_export", id.String())
 	}
 	export := *read.Export
-	return &store.AuditExportRead{Export: &export, Artifact: read.Artifact, Visibility: read.Visibility}, nil
+	return &store.AuditExportRead{Export: &export, Artifact: read.Artifact, Visibility: read.Visibility, TopologyChanged: read.TopologyChanged}, nil
 }
 
 func (s *auditExportStoreFake) BeginBuild(_ context.Context, input *store.AuditExportBuild) (*store.AuditExportSnapshot, error) {
@@ -275,6 +283,12 @@ func TestAcademicAuditExportCarriesTheRedactedListing(t *testing.T) {
 		require.NotContains(t, file, hidden)
 	}
 	require.NotEmpty(t, event.IPAddress, "the projection changed the stored event")
+
+	exports.exports[export.ID].TopologyChanged = true
+	_, err = service.GetAuditExport(t.Context(), inv, export.ID)
+	require.True(t, apperror.Is(err, "authorization.denied"), "changed topology disclosed export metadata: %v", err)
+	_, err = service.OpenAuditExport(t.Context(), inv, export.ID)
+	require.True(t, apperror.Is(err, "authorization.denied"), "changed topology disclosed export bytes: %v", err)
 }
 
 func TestAuditExportIsOnlyItsCreatorsWhileTheyHoldItsVisibility(t *testing.T) {
@@ -303,6 +317,12 @@ func TestAuditExportIsOnlyItsCreatorsWhileTheyHoldItsVisibility(t *testing.T) {
 	require.True(t, apperror.Is(err, "authorization.denied"), "error = %v", err)
 
 	exports.replayID = export.ID
+	persistence.listCount = model.AuditExportMaximumEvents + 1
+	replayed, err := creator.CreateAuditExport(context.Background(), inv, CreateAuditExportCommand{
+		Format: model.AuditExportCSV, IdempotencyKey: "audit-export-3",
+	})
+	require.NoError(t, err, "replay precedes the fresh export's capacity check")
+	require.Equal(t, export.ID, replayed.ID)
 	_, err = narrowed.CreateAuditExport(context.Background(), inv, CreateAuditExportCommand{
 		Format: model.AuditExportCSV, IdempotencyKey: "audit-export-3",
 	})

@@ -102,7 +102,7 @@ func (s *Service) CountOpenSittings(ctx context.Context, inv invocation.Invocati
 	}
 	count, err := s.desktopCompatibilityPolicies.CountOpenSittings(ctx, maximum)
 	if err != nil {
-		return 0, desktopCompatibilityPolicyError(err)
+		return 0, desktopCompatibilityPolicyStoreErrors.Translate(err)
 	}
 	return count, nil
 }

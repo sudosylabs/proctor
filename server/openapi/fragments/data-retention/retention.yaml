@@ -601,6 +601,16 @@ components:
       content:
         application/json:
           schema:
+            type: object
+            required: [items]
+            properties:
+              items:
+                type: array
+                maxItems: 800
+                items:
+                  type: object
+              next_cursor:
+                $ref: '#/components/schemas/NextCursor'
             anyOf:
               - $ref: '#/components/schemas/RetentionRecordsResponse'
               - $ref: '#/components/schemas/RetentionExamSummariesResponse'

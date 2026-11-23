@@ -373,7 +373,7 @@ func (s *Service) authorizeInstitutionAction(
 ) (*model.Institution, model.Resource, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {
-		return nil, model.Resource{}, desktopCompatibilityPolicyError(err)
+		return nil, model.Resource{}, desktopCompatibilityPolicyStoreErrors.Translate(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
 	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {

@@ -137,6 +137,7 @@ func NewRoleBindingChangedEvent(binding *model.RoleBinding) (Event, error) {
 // RetentionChangeKind says which retention read to refetch.
 type RetentionChangeKind string
 
+// Retention change kinds identify the policy, hold, or records that changed.
 const (
 	RetentionChangePolicy  RetentionChangeKind = "policy"
 	RetentionChangeHold    RetentionChangeKind = "hold"

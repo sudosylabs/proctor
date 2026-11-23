@@ -121,7 +121,8 @@ func (r *turnRun) startSession(arguments json.RawMessage, call model.AssistantCa
 	session := model.AssistantSession{Tag: slot.Tag, CallID: call, ConversationID: r.conversation, TurnID: r.key.TurnID,
 		CandidateUserID: r.target.CandidateID, State: "running", StartedAt: slot.StartedAt, ReservedMilliseconds: slot.TimeoutSeconds * 1000}
 	if sessionExpired(session, r.service.now()) {
-		if _, err = r.service.endSession(r.ctx, r.target.ExamID, r.target.SittingID, r.key.Editor, session, environment.AssistantSessionStatus{Outcome: "timed_out"}); err != nil {
+		if _, err = r.service.endSession(r.ctx, r.target.ExamID, r.target.SittingID, r.key.Editor, session,
+			environment.AssistantSessionStatus{Outcome: "timed_out"}); err != nil {
 			return taggedSessionError(slot.Tag, "The session cannot be settled now.")
 		}
 		return taggedSessionError(slot.Tag, "The session timed out before it started.")

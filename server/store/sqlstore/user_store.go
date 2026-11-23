@@ -1377,7 +1377,7 @@ func (s SQLUserStore) ListMFAStates(ctx context.Context, userIDs []model.UserID)
 	}{}
 	if err := s.GetMaster().Select(ctx, &rows, `SELECT mc.user_id, mc.activated_at
 		FROM mfa_credentials mc
-		WHERE mc.user_id = ANY(?) AND `+activeMFACredentialCondition, pq.Array(idStrings(userIDs))); err != nil {
+		WHERE mc.user_id = ANY(?) AND `+activeMFACondition, pq.Array(idStrings(userIDs))); err != nil {
 		return nil, fmt.Errorf("list user MFA states: %w", err)
 	}
 	states := make([]store.UserMFAState, 0, len(rows))

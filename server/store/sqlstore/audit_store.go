@@ -928,7 +928,7 @@ func (s SQLAuditStore) CountRepeats(ctx context.Context, options store.AuditRepe
 		AND audit_events.resource_id = listed.resource_id
 		AND audit_events.created_at > listed.created_at - make_interval(secs => ?)
 		AND audit_events.created_at <= listed.created_at`, options.Window.Seconds()).
-		Limit(uint64(options.Maximum + 1)) //nolint:gosec // G115: Maximum is 1..1000.
+		Limit(uint64(options.Maximum + 1))
 	inner, innerArgs, err := visible.PlaceholderFormat(sq.Question).ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build audit repeat count: %w", err)

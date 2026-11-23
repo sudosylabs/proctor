@@ -18,8 +18,8 @@ const AuditExportCreateOperation = "audit.export.create"
 
 // UsesAcademicTopology reports whether this scope changes when academic
 // ownership changes.
-func (scope AuditVisibilityScope) UsesAcademicTopology() bool {
-	return !scope.InstitutionWide && !scope.AcademicInstitutionWide && len(scope.AcademicUnitRootIDs) > 0
+func (s AuditVisibilityScope) UsesAcademicTopology() bool {
+	return !s.InstitutionWide && !s.AcademicInstitutionWide && len(s.AcademicUnitRootIDs) > 0
 }
 
 // AuditExportCreation queues one audit export and its build Job. Query is the

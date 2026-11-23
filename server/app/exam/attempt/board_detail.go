@@ -21,11 +21,11 @@ import (
 type DesktopSetupState string
 
 const (
-	// DesktopSetupReady: the newest registration's build would be admitted.
+	// DesktopSetupReady means the newest registration's build would be admitted.
 	DesktopSetupReady DesktopSetupState = "ready"
-	// DesktopSetupNotSetUp: the candidate has no Desktop registration.
+	// DesktopSetupNotSetUp means the candidate has no Desktop registration.
 	DesktopSetupNotSetUp DesktopSetupState = "not_set_up"
-	// DesktopSetupBlockedRelease: the newest registration's build would be
+	// DesktopSetupBlockedRelease means the newest registration's build would be
 	// refused, so the candidate must update.
 	DesktopSetupBlockedRelease DesktopSetupState = "blocked_release"
 )

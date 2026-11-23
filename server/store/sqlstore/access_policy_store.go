@@ -172,12 +172,12 @@ func activeMFACredentialPredicate(userID string) string {
 			SELECT 1
 			FROM mfa_credentials mc
 			WHERE mc.user_id = ` + userID + `
-				AND ` + activeMFACredentialCondition + `
+				AND ` + activeMFACondition + `
 		)`
 }
 
-// activeMFACredentialCondition selects the active credentials mc.
-const activeMFACredentialCondition = `mc.archived_at IS NULL AND mc.state = 'active'`
+// activeMFACondition selects the active credentials mc.
+const activeMFACondition = `mc.archived_at IS NULL AND mc.state = 'active'`
 
 // roleHolderWithoutMFAPredicate selects the role holders, the alias user,
 // without two-step verification at the instant bound to its two placeholders:

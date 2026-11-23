@@ -95,8 +95,8 @@ type ExamPublicationProblem struct {
 }
 
 // PublicationError is the Store error Publish returns for a failed check.
-func (problem ExamPublicationProblem) PublicationError() error {
-	switch problem.Reason {
+func (p ExamPublicationProblem) PublicationError() error {
+	switch p.Reason {
 	case ExamPublicationExamArchived:
 		return NewErrConflict("exam", "exam_archived", nil)
 	case ExamPublicationExecutionDisabled:

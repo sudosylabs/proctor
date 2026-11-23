@@ -1418,7 +1418,11 @@ func filterClassMemberPage(query sq.SelectBuilder, options store.ClassMemberPage
 }
 
 // ListTransfers reads every listed membership in one statement.
-func (s SQLClassMemberStore) ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID, visibility store.ClassVisibilityScope) ([]store.ClassMemberTransfer, error) {
+func (s SQLClassMemberStore) ListTransfers(
+	ctx context.Context,
+	memberIDs []model.ClassMemberID,
+	visibility store.ClassVisibilityScope,
+) ([]store.ClassMemberTransfer, error) {
 	if len(memberIDs) > store.MaximumClassStudentCountClasses || !validVisibilityIDs(memberIDs) ||
 		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
 		return nil, store.NewErrInvalidInput("class_member", "transfers", nil)

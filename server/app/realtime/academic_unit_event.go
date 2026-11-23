@@ -23,8 +23,8 @@ type academicUnitChangedData struct {
 	ParentAcademicUnitID string `json:"parent_academic_unit_id,omitempty"`
 }
 
-// NewAcademicUnitCreatedEvent, like its update and archive siblings, carries
-// only the unit and its parent: subscribers refetch the academic unit.
+// NewAcademicUnitCreatedEvent tells subscribers to refetch a newly created
+// academic unit. The event carries the unit and parent IDs.
 func NewAcademicUnitCreatedEvent(unitID, parentID model.AcademicUnitID) (Event, error) {
 	return newAcademicUnitEvent(academicUnitCreatedMessage, unitID, parentID)
 }

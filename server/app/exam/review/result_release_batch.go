@@ -28,18 +28,16 @@ const ResultReleaseBatchOperation = store.ExamResultReleaseBatchOperation
 type ResultReleaseOutcome = store.ExamResultReleaseOutcome
 
 const (
-	// ResultReleaseReleased: this batch released the result, now or when it
-	// first ran under the same key.
+	// ResultReleaseReleased records a result released by this batch.
 	ResultReleaseReleased = store.ExamResultReleased
-	// ResultReleaseAlready: someone had released it before.
+	// ResultReleaseAlready records a result released before this batch.
 	ResultReleaseAlready = store.ExamResultAlreadyReleased
-	// ResultReleaseNotFinalized: its review is missing or still a draft.
+	// ResultReleaseNotFinalized indicates the review is missing or still a draft.
 	ResultReleaseNotFinalized = store.ExamResultNotFinalized
-	// ResultReleaseDenied: the caller may not release it, or it is not a
-	// Submission of the sitting.
+	// ResultReleaseDenied covers a submission outside the batch's sitting
+	// or the caller's authority.
 	ResultReleaseDenied = store.ExamResultReleaseDenied
-	// ResultReleaseFailed: the release could not be done now; ErrorCode says
-	// why, and the item may be retried.
+	// ResultReleaseFailed carries the ErrorCode for a release that can be retried.
 	ResultReleaseFailed = store.ExamResultReleaseFailed
 )
 

@@ -45,7 +45,7 @@ func TestCandidateExamActivityShowsJoinWindowReceiptAndAttemptTimes(t *testing.T
 			SubmittedAt: savedAt.Add(time.Minute), Provenance: model.ExamSubmissionCandidateSubmitted},
 	}}
 
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/exam-activity", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/exam-activity", nil)
 	request.Header.Set("Authorization", "Bearer candidate")
 	response := httptest.NewRecorder()
 	f.api(t, userProfileResource(nil, f.service, nil, nil)).ServeHTTP(response, request)
@@ -90,7 +90,7 @@ func TestCandidateExamActivityLeavesOutTimesThatNeverHappened(t *testing.T) {
 		Attempt:        &store.CandidateExamActivityAttempt{ID: f.attempt.ID, State: model.ExamAttemptActive},
 	}}
 
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/exam-activity", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/exam-activity", nil)
 	request.Header.Set("Authorization", "Bearer candidate")
 	response := httptest.NewRecorder()
 	f.api(t, userProfileResource(nil, f.service, nil, nil)).ServeHTTP(response, request)

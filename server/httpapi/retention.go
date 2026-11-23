@@ -631,7 +631,7 @@ func (h retentionHandlers) exportRecords(request route.Request) (route.ProtocolR
 	if os.Remove(body.path) == nil {
 		body.path = ""
 	}
-	if err := h.app.ExportRetentionRecords(request.Context, request.Invocation(), body); err != nil {
+	if err = h.app.ExportRetentionRecords(request.Context, request.Invocation(), body); err != nil {
 		_ = body.Close()
 		return route.ProtocolResult{}, err
 	}

@@ -492,11 +492,11 @@ func testRoleBindingExpiryDeadlines(t *testing.T, ss store.Store) {
 	var expired []model.RoleBindingID
 	for _, end := range []time.Time{deadline, deadline, page.CheckedAt.Add(time.Hour)} {
 		user := saveUser(t, ctx, ss)
-		binding, err := SaveRoleBinding(ctx, ss, &model.RoleBinding{
+		binding, saveErr := SaveRoleBinding(ctx, ss, &model.RoleBinding{
 			UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 			ScopeID: institution.ID.String(), StartsAt: deadline.Add(-time.Hour), EndsAt: model.OptionalTimeFrom(end),
 		})
-		require.NoError(t, err)
+		require.NoError(t, saveErr)
 		if end.Equal(deadline) {
 			expired = append(expired, binding.ID)
 		}

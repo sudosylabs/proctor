@@ -282,16 +282,16 @@ func (s *SQLAuditExportStore) Create(
 		encode: func(e *model.AuditExport) ([]byte, error) { return encodeOutcome(auditExportOutcome{ExportID: e.ID}) },
 		decode: decodeAuditExportOutcome,
 		hydrateReplay: func(ctx context.Context, tx *sqlxTxWrapper, e *model.AuditExport) (*model.AuditExport, error) {
-			row, err := getAuditExport(ctx, tx, e.ID, false)
-			if err != nil {
-				return nil, err
+			row, loadErr := getAuditExport(ctx, tx, e.ID, false)
+			if loadErr != nil {
+				return nil, loadErr
 			}
 			if row.RequesterID != input.Export.RequesterUserID.String() {
 				return nil, store.NewErrNotFound("audit_export", e.ID.String())
 			}
 			var at time.Time
-			if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
-				return nil, err
+			if loadErr = tx.Get(ctx, &at, `SELECT clock_timestamp()`); loadErr != nil {
+				return nil, loadErr
 			}
 			return row.value(at)
 		},

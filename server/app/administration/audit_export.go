@@ -99,9 +99,9 @@ func (s *Service) CreateAuditExport(ctx context.Context, inv invocation.Invocati
 		return nil, auditExportStoreErrors.Translate(err)
 	}
 	if !replayed.IsZero() {
-		read, err := s.loadAuditExport(ctx, inv.Principal().UserID, replayed, visibility)
-		if err != nil {
-			return nil, err
+		read, readErr := s.loadAuditExport(ctx, inv.Principal().UserID, replayed, visibility)
+		if readErr != nil {
+			return nil, readErr
 		}
 		return read.Export, nil
 	}
@@ -234,7 +234,9 @@ func (s *Service) readAuditExport(ctx context.Context, inv invocation.Invocation
 	return s.loadAuditExport(ctx, inv.Principal().UserID, id, current)
 }
 
-func (s *Service) loadAuditExport(ctx context.Context, requester model.UserID, id model.AuditExportID, current store.AuditVisibilityScope) (*store.AuditExportRead, error) {
+func (s *Service) loadAuditExport(
+	ctx context.Context, requester model.UserID, id model.AuditExportID, current store.AuditVisibilityScope,
+) (*store.AuditExportRead, error) {
 	read, err := s.auditExports.Get(ctx, id)
 	if err != nil {
 		return nil, auditExportStoreErrors.Translate(err)

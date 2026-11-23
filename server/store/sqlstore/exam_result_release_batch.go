@@ -46,7 +46,10 @@ func (s *SQLExamIntegrityReviewStore) ClaimResultReleaseBatch(
 		(!start.AllFinalized && (len(start.SubmissionIDs) == 0 || len(start.SubmissionIDs) > store.SubmissionListMaximum)) {
 		return nil, store.NewErrInvalidInput("result_release_batch", "start", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "claim result release batch", func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamResultReleaseBatchClaim, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "claim result release batch", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamResultReleaseBatchClaim, error) {
 		row, document, err := lockResultReleaseBatch(ctx, tx, command)
 		found := err == nil
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -125,7 +128,9 @@ func releaseBatchSelection(
 
 // A recovered batch keeps its audit attempt if the abandonment sweep has not
 // terminalized it. The row lock orders a new claim against that sweep.
-func retainReleaseBatchAudit(ctx context.Context, tx *sqlxTxWrapper, prior sql.NullString, prepared *model.AuditEvent, at time.Time) (model.AuditEventID, error) {
+func retainReleaseBatchAudit(
+	ctx context.Context, tx *sqlxTxWrapper, prior sql.NullString, prepared *model.AuditEvent, at time.Time,
+) (model.AuditEventID, error) {
 	if prior.Valid {
 		var status model.AuditStatus
 		if err := tx.Get(ctx, &status, `SELECT status FROM audit_events WHERE id = ? FOR UPDATE`, prior.String); err != nil {
@@ -155,7 +160,9 @@ func (s *SQLExamIntegrityReviewStore) CompleteResultReleaseBatch(
 	return err
 }
 
-func completeResultReleaseBatch(ctx context.Context, tx *sqlxTxWrapper, completion *store.ExamResultReleaseBatchCompletion, command *store.CommandIdempotency) error {
+func completeResultReleaseBatch(
+	ctx context.Context, tx *sqlxTxWrapper, completion *store.ExamResultReleaseBatchCompletion, command *store.CommandIdempotency,
+) error {
 	row, document, err := lockResultReleaseBatch(ctx, tx, command)
 	if err != nil {
 		return err

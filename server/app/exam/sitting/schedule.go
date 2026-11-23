@@ -259,7 +259,7 @@ func (s *Service) UpdateExamSittingSchedule(
 	}
 	// A bound left unchanged is checked against the new times too, so moving
 	// the start past an early join opening is refused rather than reinterpreted.
-	if err := validateJoinWindow(joinWindow, startAt, endAt); err != nil {
+	if err = validateJoinWindow(joinWindow, startAt, endAt); err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
 

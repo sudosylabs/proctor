@@ -766,12 +766,14 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 
 func examIntegrityFlagResponseFrom(request *http.Request, item store.ExamIntegrityFlagSummary) examIntegrityFlagResponse {
 	return examIntegrityFlagResponse{
-		Browser:                browserIntegrityGroupFrom(item.Browser),
-		ID:                     item.Flag.ID.String(),
-		ExamAttemptID:          item.Flag.AttemptID.String(),
-		Generation:             item.Flag.Generation,
-		PolicyKind:             string(item.Flag.Kind),
-		Summary:                integrityFlagSummary(request, item.Flag.Kind, item.Flag.NativeRuleID, item.Browser, item.BrowserRuleLabel, item.EvidenceCount, item.OverflowCount),
+		Browser:       browserIntegrityGroupFrom(item.Browser),
+		ID:            item.Flag.ID.String(),
+		ExamAttemptID: item.Flag.AttemptID.String(),
+		Generation:    item.Flag.Generation,
+		PolicyKind:    string(item.Flag.Kind),
+		Summary: integrityFlagSummary(
+			request, item.Flag.Kind, item.Flag.NativeRuleID, item.Browser, item.BrowserRuleLabel, item.EvidenceCount, item.OverflowCount,
+		),
 		State:                  string(item.Flag.State),
 		CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
 		EvidenceCount:          item.EvidenceCount,

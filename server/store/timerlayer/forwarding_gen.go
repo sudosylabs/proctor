@@ -4100,6 +4100,12 @@ func (s *timedAuditStore) ListNames(arg0 context.Context, arg1 store.AuditNameOp
 	})
 }
 
+func (s *timedAuditStore) CountRepeats(arg0 context.Context, arg1 store.AuditRepeatOptions) ([]store.AuditRepeat, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodCountRepeats), func(callCtx context.Context) ([]store.AuditRepeat, error) {
+		return s.next.CountRepeats(callCtx, arg1)
+	})
+}
+
 func (s *timedAuditStore) FailAbandonedAttempts(arg0 context.Context, arg1 *store.AuditAttemptAbandonment) (int64, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodFailAbandonedAttempts), func(callCtx context.Context) (int64, error) {
 		return s.next.FailAbandonedAttempts(callCtx, arg1)
@@ -4175,6 +4181,12 @@ func (s *timedDesktopCompatibilityPolicyStore) Get(arg0 context.Context) (*model
 func (s *timedDesktopCompatibilityPolicyStore) Replace(arg0 context.Context, arg1 *store.DesktopCompatibilityPolicyReplacement, arg2 *store.CommandIdempotency) (*store.DesktopCompatibilityPolicyReplacementResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDesktopCompatibilityPolicy, methodReplace), func(callCtx context.Context) (*store.DesktopCompatibilityPolicyReplacementResult, error) {
 		return s.next.Replace(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedDesktopCompatibilityPolicyStore) CountOpenSittings(ctx context.Context, maximum int) (int, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateDesktopCompatibilityPolicy, methodCountOpenSittings), func(callCtx context.Context) (int, error) {
+		return s.next.CountOpenSittings(callCtx, maximum)
 	})
 }
 

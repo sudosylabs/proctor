@@ -529,3 +529,7 @@ func TestAcademicAuditListingNamesNoSubject(t *testing.T) {
 	require.Equal(t, []model.UserID{actor}, persistence.namesInputs[0].UserIDs, "a redacted page never names the subject")
 	require.Empty(t, page.Items[0].Operation(), "a redacted Event keeps no operation to choose a summary by")
 }
+
+func (s *auditListingStoreFake) CountRepeats(context.Context, store.AuditRepeatOptions) ([]store.AuditRepeat, error) {
+	return []store.AuditRepeat{}, nil
+}

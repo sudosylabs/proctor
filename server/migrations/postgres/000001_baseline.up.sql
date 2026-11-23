@@ -829,7 +829,10 @@ CREATE INDEX mail_deliveries_terminal_retention_idx
 -- decrement when ciphertext is destroyed or retained history is deleted.
 CREATE TABLE mail_payload_keys (
     key_id char(32) PRIMARY KEY CHECK (key_id ~ '^[0-9a-f]{32}$'),
-    active_references bigint NOT NULL CHECK (active_references >= 0)
+    active_references bigint NOT NULL CHECK (active_references >= 0),
+    -- When the key's current use began: its first reference since it last had
+    -- none. A key with no references has no row.
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
 -- Fan-out expansion is delivered in later mail slices, but its frozen bundle
@@ -1504,6 +1507,9 @@ CREATE INDEX exam_sittings_lifecycle_deadline_due_idx
     ON exam_sittings (scheduled_end_at, id) WHERE state IN ('open', 'paused');
 CREATE INDEX exam_sittings_lifecycle_closing_due_idx
     ON exam_sittings (closing_at, id) WHERE state = 'closing';
+-- The administration counts show how many Sittings are under way.
+CREATE INDEX exam_sittings_under_way_idx
+    ON exam_sittings (state) WHERE state IN ('open', 'paused', 'closing');
 
 -- Resource bytes staged for a live correction remain pending and invisible
 -- until the named correction transaction consumes them. Exact command replay
@@ -3887,6 +3893,11 @@ CREATE INDEX external_second_factor_states_password_idx
 
 
 CREATE INDEX audit_events_created_at_id_idx ON audit_events (created_at DESC, id DESC);
+-- An audit page counts how often each event repeated in the ten minutes up to
+-- it: the same actor, action and resource.
+CREATE INDEX audit_events_repeat_idx
+    ON audit_events (actor_id, action, resource_type, resource_id, created_at)
+    WHERE actor_id IS NOT NULL;
 CREATE INDEX audit_events_actor_id_created_at_id_idx
     ON audit_events (actor_id, created_at DESC, id DESC)
     WHERE actor_id IS NOT NULL;
@@ -4118,9 +4129,10 @@ CREATE TABLE desktop_compatibility_policies (
     institution_id varchar(26) NOT NULL UNIQUE REFERENCES institutions(id),
     revision bigint NOT NULL CHECK (revision > 0),
     minimum_desktop_release varchar(64) NOT NULL,
-    revoked_desktop_build_ids jsonb NOT NULL CHECK (
-        jsonb_typeof(revoked_desktop_build_ids) = 'array' AND
-        jsonb_array_length(revoked_desktop_build_ids) <= 256
+    -- Each entry is {build_id, reason, revoked_at, revoked_by_user_id}.
+    revoked_desktop_builds jsonb NOT NULL CHECK (
+        jsonb_typeof(revoked_desktop_builds) = 'array' AND
+        jsonb_array_length(revoked_desktop_builds) <= 256
     ),
     administrator_message varchar(2048) NOT NULL CHECK (
         char_length(administrator_message) <= 500 AND

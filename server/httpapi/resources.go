@@ -32,7 +32,7 @@ func productionResources(
 		systemResourceWithApplication(health, buildInfo, plugins, application.Identity, time.Now),
 		bootstrapResource(application.Identity),
 		accessPolicyResource(application.Administration),
-		desktopCompatibilityPolicyResource(application.Identity),
+		desktopCompatibilityPolicyResource(application.Identity, application.People),
 		retentionPolicyResource(application.Administration),
 		pluginAdministrationResource(application.Administration),
 		environmentProfileResource(application.Administration),

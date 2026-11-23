@@ -153,7 +153,7 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 	require.Equal(t, winner.Institution.ID, winner.DesktopCompatibilityPolicy.InstitutionID)
 	require.Equal(t, int64(1), winner.DesktopCompatibilityPolicy.Revision)
 	require.Empty(t, winner.DesktopCompatibilityPolicy.MinimumDesktopRelease)
-	require.Empty(t, winner.DesktopCompatibilityPolicy.RevokedDesktopBuildIDs)
+	require.Empty(t, winner.DesktopCompatibilityPolicy.RevokedDesktopBuilds)
 	require.Empty(t, winner.DesktopCompatibilityPolicy.AdministratorMessage)
 	require.False(t, winner.Institution.IsArchived())
 	require.False(t, winner.Administrator.ArchivedAt.Valid)

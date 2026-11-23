@@ -252,7 +252,7 @@ func TestPolicyReplacementRechecksAdministratorAfterBindingEnd(t *testing.T) {
 			name: "desktop compatibility", action: model.ActionDesktopCompatibilityPolicyManage, operation: "desktop_compatibility_policy.replace",
 			replace: func(ctx context.Context, persistence *SQLStore, principal model.Principal, audit *model.AuditEvent, command *store.CommandIdempotency) error {
 				_, err := persistence.DesktopCompatibilityPolicy().Replace(ctx, &store.DesktopCompatibilityPolicyReplacement{ActorID: principal.UserID, ExpectedRevision: 1,
-					Settings:     model.DesktopCompatibilityPolicySettings{MinimumDesktopRelease: "2.0.0", RevokedDesktopBuildIDs: []string{}, Availability: model.DesktopAvailabilityReady},
+					Settings:     model.DesktopCompatibilityPolicySettings{MinimumDesktopRelease: "2.0.0", RevokedDesktopBuilds: []model.DesktopBuildRevocationRequest{}, Availability: model.DesktopAvailabilityReady},
 					AuditEventID: audit.ID, AuditAt: audit.CreatedAt}, command)
 				return err
 			},

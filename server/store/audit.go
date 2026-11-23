@@ -168,9 +168,29 @@ type AuditStore interface {
 	// MaximumAuditSelfCount.
 	CountSelf(context.Context, AuditSelfListOptions) (int, error)
 	ListNames(context.Context, AuditNameOptions) (AuditNames, error)
+	// CountRepeats counts, for each listed event that has an actor, the events
+	// inside Visibility with its actor, action and resource in the Window up
+	// to and including it, itself included, in one read. An event without an
+	// actor has no entry.
+	CountRepeats(context.Context, AuditRepeatOptions) ([]AuditRepeat, error)
 	// FailAbandonedAttempts fails, with model.AuditErrorAttemptAbandoned, up
 	// to Limit attempts older than Age on the database clock, oldest first.
 	FailAbandonedAttempts(context.Context, *AuditAttemptAbandonment) (int64, error)
+}
+
+// AuditRepeatOptions names one page of events, at most 201.
+type AuditRepeatOptions struct {
+	EventIDs   []model.AuditEventID
+	Visibility AuditVisibilityScope
+	Window     time.Duration
+	Maximum    int
+}
+
+// AuditRepeat is how many visible events repeat one event, capped at the
+// read's Maximum.
+type AuditRepeat struct {
+	EventID model.AuditEventID
+	Count   int
 }
 
 // AuditAttemptAbandonment bounds one pass over attempts whose outcome was

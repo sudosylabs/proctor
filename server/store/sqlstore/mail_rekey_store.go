@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -60,10 +61,11 @@ func (s SQLMailStore) InspectKeyState(ctx context.Context) (*store.MailKeyState,
 		}
 
 		rows := make([]struct {
-			KeyID            string `db:"key_id"`
-			ActiveReferences int64  `db:"active_references"`
+			KeyID            string    `db:"key_id"`
+			ActiveReferences int64     `db:"active_references"`
+			CreatedAt        time.Time `db:"created_at"`
 		}, 0, 9)
-		if err := tx.Select(ctx, &rows, `SELECT key_id, active_references
+		if err := tx.Select(ctx, &rows, `SELECT key_id, active_references, created_at
 			FROM mail_payload_keys
 			ORDER BY key_id
 			LIMIT 10`); err != nil {
@@ -87,7 +89,9 @@ func (s SQLMailStore) InspectKeyState(ctx context.Context) (*store.MailKeyState,
 				return nil, invalidPersistedState("mail_rekey", "key_usage", errors.New("active payload-key usage is invalid"))
 			}
 
-			state.Active = append(state.Active, store.MailPayloadKeyUsage{KeyID: row.KeyID, ActiveReferences: row.ActiveReferences})
+			state.Active = append(state.Active, store.MailPayloadKeyUsage{
+				KeyID: row.KeyID, ActiveReferences: row.ActiveReferences, CreatedAt: model.TimeUTC(row.CreatedAt),
+			})
 		}
 
 		completion := mailRekeyCompletionRow{

@@ -124,16 +124,19 @@ func (p *Programme) Validate() error {
 	if !p.AcademicUnitID.IsValid() {
 		return invalidModelError(where, "programme", "academic_unit_id", "must be a valid identifier", details)
 	}
-	if !p.Kind.IsValid() {
-		return invalidModelError(where, "programme", "kind", "must be a known programme kind", details)
-	}
 	if p.Revision < 0 {
 		return invalidModelError(where, "programme", "revision", "must not be negative", details)
 	}
 	if p.ArchivedAt.Valid && p.ArchivedAt.Time.Before(p.CreatedAt) {
 		return invalidModelError(where, "programme", "archived_at", "must not precede created_at", details)
 	}
-	return validateNamed(where, "programme", p.ID.String(), p.Name, p.DisplayName, p.Description)
+	if err := validateNamed(where, "programme", p.ID.String(), p.Name, p.DisplayName, p.Description); err != nil {
+		return err
+	}
+	if !p.Kind.IsValid() {
+		return invalidModelError(where, "programme", "kind", "must be a known programme kind", details)
+	}
+	return nil
 }
 
 // Auditable returns the fields that are safe to record in the audit log.

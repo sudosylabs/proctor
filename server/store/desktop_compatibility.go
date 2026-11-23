@@ -41,6 +41,10 @@ type DesktopCompatibilityPolicyStore interface {
 		*DesktopCompatibilityPolicyReplacement,
 		*CommandIdempotency,
 	) (*DesktopCompatibilityPolicyReplacementResult, error)
+	// CountOpenSittings counts the Institution's Sittings that have opened and
+	// not yet closed (open, paused or closing), capped at maximum (see
+	// MaximumListCount): the Sittings a maintenance window would interrupt.
+	CountOpenSittings(ctx context.Context, maximum int) (int, error)
 }
 
 // ErrDesktopCompatibilityPolicyRevisionConflict carries only the current

@@ -35,6 +35,9 @@
         "current_user.sessions.changed": {
           "$ref": "#/components/messages/current_user.sessions.changed"
         },
+        "desktop_compatibility_policy.changed": {
+          "$ref": "#/components/messages/desktop_compatibility_policy.changed"
+        },
         "exam_archived": {
           "$ref": "#/components/messages/exam_archived"
         },
@@ -716,6 +719,64 @@
           }
         ],
         "title": "Current user Sessions changed"
+      },
+      "desktop_compatibility_policy.changed": {
+        "description": "Sent after a replacement changes the Desktop Compatibility Policy, including its revoked builds. The policy is Institution-wide, so the event names no ID beyond its resource. Delivered to connections that subscribe to desktop_compatibility_policy.manage on the Institution, checked again when it is sent.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "desktop_compatibility_policy.manage",
+              "event": "desktop_compatibility_policy.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                "type": "institution"
+              },
+              "sequence": 42
+            }
+          }
+        ],
+        "name": "desktop_compatibility_policy.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              },
+              "properties": {
+                "action": {
+                  "const": "desktop_compatibility_policy.manage",
+                  "type": "string"
+                },
+                "event": {
+                  "const": "desktop_compatibility_policy.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Desktop Compatibility Policy and the Desktop release list. The event has no data.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Desktop Compatibility Policy changed"
       },
       "exam_archived": {
         "description": "The Exam was archived. Delivered to connections that subscribe to exam.view on the exam.",
@@ -6970,6 +7031,9 @@
         },
         {
           "$ref": "#/channels/websocket/messages/access_policy_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/desktop_compatibility_policy.changed"
         },
         {
           "$ref": "#/channels/websocket/messages/plugin_settings_changed"

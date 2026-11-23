@@ -17,6 +17,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
+	"time"
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/internal/canonicaljson"
@@ -43,7 +44,10 @@ type SignedMatrix struct {
 // Expectation is compiled into the server, never decoded from a request: the
 // exact digests the release's registry and certification list must match.
 type Expectation struct {
-	Build                model.DesktopBuildTuple
+	Build model.DesktopBuildTuple
+	// ReleasedAt is when the release was published. It is pinned with the
+	// rest so the server can list its catalogue with dates.
+	ReleasedAt           time.Time
 	ApplicationReleaseID string
 	RegistryDigest       string
 	MatrixDigest         string
@@ -61,6 +65,7 @@ type Artifacts struct {
 // does not alias the caller's buffers.
 func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]ed25519.PublicKey) (model.DesktopBuildTuple, error) {
 	if expected.Build.Validate() != nil ||
+		expected.ReleasedAt.IsZero() ||
 		!model.IsValidAgreementID(expected.ApplicationReleaseID) ||
 		!model.IsValidAgreementID(artifacts.Matrix.KeyID) ||
 		len(artifacts.Matrix.Payload) == 0 ||
@@ -109,6 +114,7 @@ func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]e
 	}
 
 	build := expected.Build
+	build.ReleasedAt = model.TimeUTC(expected.ReleasedAt)
 	build.NativeAgreement = agreement
 	return build, nil
 }

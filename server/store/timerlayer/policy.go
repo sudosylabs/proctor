@@ -139,6 +139,8 @@ const (
 	methodCountByAcademicUnit                       methodName = "count_by_academic_unit"
 	methodCountByProgramme                          methodName = "count_by_programme"
 	methodCountByProgrammes                         methodName = "count_by_programmes"
+	methodCountOpenSittings                         methodName = "count_open_sittings"
+	methodCountRepeats                              methodName = "count_repeats"
 	methodTally                                     methodName = "tally"
 	methodCountByProgrammeLevel                     methodName = "count_by_programme_level"
 	methodAccess                                    methodName = "access"

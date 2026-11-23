@@ -587,14 +587,14 @@ func insertInitialDesktopCompatibilityPolicy(
 		policy.Validate() != nil ||
 		policy.Revision != 1 ||
 		policy.MinimumDesktopRelease != "" ||
-		len(policy.RevokedDesktopBuildIDs) != 0 ||
+		len(policy.RevokedDesktopBuilds) != 0 ||
 		policy.AdministratorMessage != "" ||
 		policy.Availability != model.DesktopAvailabilityReady ||
 		policy.RetryAt.Valid {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "initial", nil)
 	}
 
-	revokedBuildIDs, err := json.Marshal(policy.RevokedDesktopBuildIDs)
+	revokedBuildIDs, err := json.Marshal(desktopBuildRevocationDocuments(policy.RevokedDesktopBuilds))
 	if err != nil {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "revoked_build_ids", nil).Wrap(err)
 	}
@@ -603,7 +603,7 @@ func insertInitialDesktopCompatibilityPolicy(
 		ctx,
 		`
 		INSERT INTO desktop_compatibility_policies (
-			singleton, institution_id, revision, minimum_desktop_release, revoked_desktop_build_ids,
+			singleton, institution_id, revision, minimum_desktop_release, revoked_desktop_builds,
 			administrator_message, availability, retry_at, created_at, updated_at
 		)
 		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

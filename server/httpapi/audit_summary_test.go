@@ -339,3 +339,30 @@ func TestAuditResourceNamesTheActorForEveryReader(t *testing.T) {
 		"the reader has no user.view, so no username or picture")
 	require.True(t, strings.HasPrefix(page.Items[0].Summary, "Ada Admin "), page.Items[0].Summary)
 }
+
+func TestAuditResourceShowsRepeatsCountedInTheCallersVisibility(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := operatorTestPrincipal()
+	actor := model.NewUserID()
+	repeated, single := model.NewAuditEventID(), model.NewAuditEventID()
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionAuditView))
+	event := func(id model.AuditEventID) *model.AuditEvent {
+		return &model.AuditEvent{ID: id, CreatedAt: model.TimeFromMillis(100), ActorID: actor,
+			Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: model.NewClassID().String()},
+			Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`)}
+	}
+	fixture.audits.events = []*model.AuditEvent{event(repeated), event(single)}
+	fixture.audits.repeats = map[model.AuditEventID]int{repeated: 3, single: 1}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, auditResource(fixture.service))
+
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits", "", true)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page route.List[auditEventResponse]
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 2)
+	require.Equal(t, &auditRepeatResponse{Count: 3, WindowSeconds: 600}, page.Items[0].Repeat)
+	require.Nil(t, page.Items[1].Repeat, "an event seen once has no repeat")
+	require.Len(t, fixture.audits.repeatReads, 1, "one read for the page")
+	require.True(t, fixture.audits.repeatReads[0].Visibility.InstitutionWide, "the repeat read uses the listing's visibility")
+}

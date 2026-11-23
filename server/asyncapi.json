@@ -47,11 +47,17 @@
         "exam_attempt.connect": {
           "$ref": "#/components/messages/exam_attempt.connect"
         },
+        "exam_attempt.evidence.changed": {
+          "$ref": "#/components/messages/exam_attempt.evidence.changed"
+        },
         "exam_attempt.focus_loss": {
           "$ref": "#/components/messages/exam_attempt.focus_loss"
         },
         "exam_attempt.renew": {
           "$ref": "#/components/messages/exam_attempt.renew"
+        },
+        "exam_attempt.screen_clip.changed": {
+          "$ref": "#/components/messages/exam_attempt.screen_clip.changed"
         },
         "exam_attempt.security.update": {
           "$ref": "#/components/messages/exam_attempt.security.update"
@@ -148,6 +154,9 @@
         },
         "exam_revision_published": {
           "$ref": "#/components/messages/exam_revision_published"
+        },
+        "exam_sitting.submissions.changed": {
+          "$ref": "#/components/messages/exam_sitting.submissions.changed"
         },
         "exam_sitting_canceled": {
           "$ref": "#/components/messages/exam_sitting_canceled"
@@ -987,6 +996,69 @@
         ],
         "title": "Connect to the Exam Attempt"
       },
+      "exam_attempt.evidence.changed": {
+        "description": "Refetch an Attempt's live integrity Flags, evidence, native conditions and timeline. Sent at most once per Attempt every 5 seconds; the last change in a burst is always sent. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.manage",
+              "data": {
+                "as_of": "2026-08-01T09:44:55Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8"
+              },
+              "event": "exam_attempt.evidence.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 47
+            }
+          }
+        ],
+        "name": "exam_attempt.evidence.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.manage",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/attempt_evidence_changed"
+                },
+                "event": {
+                  "const": "exam_attempt.evidence.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch an Attempt's live evidence.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Attempt evidence changed"
+      },
       "exam_attempt.focus_loss": {
         "description": "The server applies the Exam's Focus Loss policy. When it raises a Flag on an Exam that records the screen, it also asks for the minute either side of it and sends exam_attempt_screen_clips_requested.",
         "examples": [
@@ -1099,6 +1171,69 @@
           }
         ],
         "title": "Renew the Exam Attempt Participation"
+      },
+      "exam_attempt.screen_clip.changed": {
+        "description": "Refetch an Attempt's screen clips, because one was requested or changed state. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.manage",
+              "data": {
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "screen_clip_id": "twz47ydgjcx1ia56br8kpous3h"
+              },
+              "event": "exam_attempt.screen_clip.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 47
+            }
+          }
+        ],
+        "name": "exam_attempt.screen_clip.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.manage",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/screen_clip_changed"
+                },
+                "event": {
+                  "const": "exam_attempt.screen_clip.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch an Attempt's screen clips.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Screen clip changed"
       },
       "exam_attempt.security.update": {
         "description": "Uses the same processed-control boundary as exam_attempt.renew and never extends the lease.",
@@ -3131,6 +3266,67 @@
         ],
         "title": "Exam Revision published"
       },
+      "exam_sitting.submissions.changed": {
+        "description": "Refetch the submission list of one Sitting, because a Submission arrived or a review or result release changed. Published once per batch. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8"
+              },
+              "event": "exam_sitting.submissions.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 47
+            }
+          }
+        ],
+        "name": "exam_sitting.submissions.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/sitting_submissions_changed"
+                },
+                "event": {
+                  "const": "exam_sitting.submissions.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the submission list of one Sitting.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting submissions changed"
+      },
       "exam_sitting_canceled": {
         "description": "A Sitting was canceled before it opened. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
         "examples": [
@@ -5035,6 +5231,32 @@
           "revision"
         ],
         "title": "Access Policy changed",
+        "type": "object"
+      },
+      "attempt_evidence_changed": {
+        "additionalProperties": false,
+        "description": "Names an Attempt that gained integrity Flags, evidence or native conditions, and the time the change is current as of. No evidence is included.",
+        "properties": {
+          "as_of": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "as_of"
+        ],
+        "title": "Attempt evidence changed",
         "type": "object"
       },
       "class_changed": {
@@ -7186,6 +7408,32 @@
         "title": "Role changed",
         "type": "object"
       },
+      "screen_clip_changed": {
+        "additionalProperties": false,
+        "description": "Names a screen clip that was requested or changed state. Its reason, range and state stay in the clip list.",
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "screen_clip_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "screen_clip_id"
+        ],
+        "title": "Screen clip changed",
+        "type": "object"
+      },
       "security_control": {
         "additionalProperties": false,
         "description": "Desktop's security control: its sequence, the binding it renews and the delivery watermarks it has allocated. At most 16 KiB. The server identifies a control by the SHA-256 of its canonical JSON (object keys sorted, integers only, JSON.stringify string escaping), so key order and whitespace do not matter; duplicate keys, unknown members and non-integer numbers are refused. A retained sequence sent again with different content is refused with exam.security.control_conflict; an older sequence changes nothing. The server refuses a control whose policy is no longer current with exam.security.policy_changed.",
@@ -7355,6 +7603,24 @@
           "exam_sitting_id"
         ],
         "title": "Sitting board invalidation",
+        "type": "object"
+      },
+      "sitting_submissions_changed": {
+        "additionalProperties": false,
+        "description": "Names the Exam Sitting whose submission list should be refetched. No Submission, candidate or review is named.",
+        "properties": {
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "exam_sitting_id"
+        ],
+        "title": "Sitting submissions changed",
         "type": "object"
       },
       "subscription": {
@@ -7826,6 +8092,15 @@
         },
         {
           "$ref": "#/channels/websocket/messages/manager.sitting_board.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting.submissions.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.screen_clip.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.evidence.changed"
         },
         {
           "$ref": "#/channels/websocket/messages/candidate.exam_activity.changed"

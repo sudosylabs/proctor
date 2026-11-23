@@ -281,34 +281,38 @@ func (s *Authorizer) AuthorizeExamList(
 	ctx context.Context,
 	inv invocation.Invocation,
 ) (store.ExamListVisibility, error) {
-	principal := inv.Principal()
-	decisionAt := model.TimeUTC(s.now())
-	ordinary, err := s.GrantedScopesAt(ctx, principal, model.ActionExamView, model.ResourceExam, decisionAt)
+	return s.AuthorizeExamManagerList(ctx, inv, model.ActionExamView, model.ActionExamViewOverride)
+}
+
+// AuthorizeExamManagerList is AuthorizeExamList for any pair of exam manager
+// actions, such as exam.sitting.view or submission.view, for lists that run
+// across exams. It records one decision at the institution.
+func (s *Authorizer) AuthorizeExamManagerList(
+	ctx context.Context,
+	inv invocation.Invocation,
+	ordinaryAction, overrideAction model.Action,
+) (store.ExamListVisibility, error) {
+	visibility, err := s.ExamManagerScopes(ctx, inv.Principal(), ordinaryAction, overrideAction)
 	if err != nil {
 		return store.ExamListVisibility{}, err
 	}
 
-	override, err := s.GrantedScopesAt(ctx, principal, model.ActionExamViewOverride, model.ResourceExam, decisionAt)
-	if err != nil {
-		return store.ExamListVisibility{}, err
-	}
-
-	hasOrdinary := ordinary.InstitutionWide || len(ordinary.AcademicUnitRootIDs) > 0
-	hasOverride := override.InstitutionWide || len(override.AcademicUnitRootIDs) > 0
+	hasOrdinary := visibility.OrdinaryInstitutionWide || len(visibility.OrdinaryAcademicUnitRootIDs) > 0
+	hasOverride := visibility.OverrideInstitutionWide || len(visibility.OverrideAcademicUnitRootIDs) > 0
 	institution, err := s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
 	if err != nil {
 		return store.ExamListVisibility{}, ResourceError("institution", err)
 	}
 
-	action := model.ActionExamView
+	action := ordinaryAction
 	if hasOverride {
-		action = model.ActionExamViewOverride
+		action = overrideAction
 	}
 
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
 	if err := s.deps.Audit.RecordAuthorizationDecision(
 		ctx,
-		principal,
+		inv.Principal(),
 		action,
 		resource,
 		model.RoleScopeInstitution,
@@ -321,6 +325,33 @@ func (s *Authorizer) AuthorizeExamList(
 
 	if !hasOrdinary && !hasOverride {
 		return store.ExamListVisibility{}, DeniedError()
+	}
+
+	return visibility, nil
+}
+
+// ExamManagerScopes reads an exam manager action pair's scopes at one
+// instant without recording a decision, so use it only to shape a list the
+// caller is already authorized to read, such as which rows show a review.
+func (s *Authorizer) ExamManagerScopes(
+	ctx context.Context,
+	principal model.Principal,
+	ordinaryAction, overrideAction model.Action,
+) (store.ExamListVisibility, error) {
+	ordinaryDefinition, ordinaryOK := model.DefinitionForAction(ordinaryAction)
+	overrideDefinition, overrideOK := model.DefinitionForAction(overrideAction)
+	if !ordinaryOK || !overrideOK {
+		return store.ExamListVisibility{}, errors.New("exam manager list actions are not declared")
+	}
+	decisionAt := model.TimeUTC(s.now())
+	ordinary, err := s.GrantedScopesAt(ctx, principal, ordinaryAction, ordinaryDefinition.ResourceType, decisionAt)
+	if err != nil {
+		return store.ExamListVisibility{}, err
+	}
+
+	override, err := s.GrantedScopesAt(ctx, principal, overrideAction, overrideDefinition.ResourceType, decisionAt)
+	if err != nil {
+		return store.ExamListVisibility{}, err
 	}
 
 	return store.ExamListVisibility{

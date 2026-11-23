@@ -103,6 +103,7 @@ func (s *Service) publishParticipationExpired(ctx context.Context, result Partic
 		AttemptID:       result.Attempt.ID,
 		CandidateUserID: result.CandidateUserID,
 		At:              result.DatabaseTime,
+		EvidenceChanged: true,
 		Suspension: &integritySuspensionNotice{
 			ConnectionID:    result.Connection.ID,
 			FlagID:          result.Flag.ID,
@@ -269,6 +270,7 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 		CandidateUserID: result.CandidateUserID,
 		At:              result.ReceivedAt,
 		Warning:         result.CandidateWarningCreated,
+		EvidenceChanged: result.FlagCreated || result.ManagerNotificationRequired || result.GapDetected,
 		Invalidate: func() error {
 			var joined error
 			if result.GapDetected || result.FlagCreated || result.SuspensionCreated {
@@ -317,9 +319,35 @@ type integrityEffects struct {
 	Flagged    *integrityFlagNotice
 	Suspension *integritySuspensionNotice
 	Warning    bool
+	// EvidenceChanged hints the managers' live evidence reads, after every
+	// other event.
+	EvidenceChanged bool
 	// Invalidate runs after the events and before the closed connection is
 	// unbound.
 	Invalidate func() error
+}
+
+// evidenceHintWindow is how often an attempt's managers may be told its
+// live evidence changed.
+const evidenceHintWindow = 5 * time.Second
+
+// publishEvidenceChanged tells the sitting's managers that the attempt's
+// live evidence changed, throttled per attempt. A lost hint only delays the
+// refresh, so a failure is reported and nothing more.
+func (s *Service) publishEvidenceChanged(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	at time.Time,
+) {
+	event, err := realtime.NewAttemptEvidenceChangedEvent(examID, sittingID, attemptID, at)
+	if err == nil {
+		err = s.evidenceHints.Publish(ctx, attemptID.String(), "exam_attempt.evidence.changed", event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "exam_attempt.evidence.changed", err)
+	}
 }
 
 type integrityFlagNotice struct {
@@ -438,6 +466,9 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 	if effects.ClosedConnection != nil {
 		joined = errors.Join(joined, s.publisher.UnbindExamAttemptConnection(ctx, effects.ClosedConnection.ID))
 	}
+	if effects.EvidenceChanged && effects.ExamID.IsValid() {
+		s.publishEvidenceChanged(ctx, effects.ExamID, effects.SittingID, effects.AttemptID, effects.At)
+	}
 
 	return joined
 }
@@ -495,8 +526,14 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 		return nil, err
 	}
 
+	submissionsEvent, err := realtime.NewSittingSubmissionsChangedEvent(result.ExamID, result.SittingID)
+	if err != nil {
+		return nil, err
+	}
+
 	sessionErr := s.publishSealedAssistantSessions(ctx, result)
-	return errors.Join(sessionErr, s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
+	return errors.Join(sessionErr, s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent),
+		s.publisher.Publish(ctx, submissionsEvent)), nil
 }
 
 // publishAttemptSealedForSittingClose unbinds the connection the seal closed

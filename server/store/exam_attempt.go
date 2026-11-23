@@ -1158,13 +1158,49 @@ const (
 	SittingCandidateSubmitted    SittingCandidatePresenceState = "submitted"
 )
 
+// IsValid reports whether the state is one the board shows.
+func (s SittingCandidatePresenceState) IsValid() bool {
+	switch s {
+	case SittingCandidateNotStarted, SittingCandidateReady, SittingCandidateConnected, SittingCandidateReconnecting,
+		SittingCandidateLeaseExpired, SittingCandidateSuspended, SittingCandidateSubmitted:
+		return true
+	default:
+		return false
+	}
+}
+
+// SittingCandidateStatusFilter narrows a sitting's candidates. PresenceStates
+// keeps any of the states; FailingChecks keeps candidates whose live
+// participation fails an enforced native rule; Attention keeps candidates with
+// unresolved integrity attention; Query matches the display name or username.
+type SittingCandidateStatusFilter struct {
+	PresenceStates []SittingCandidatePresenceState
+	FailingChecks  bool
+	Attention      bool
+	Query          string
+}
+
 type SittingCandidateStatusListOptions struct {
 	ExamID                 model.ExamID
 	SittingID              model.ExamSittingID
 	ExcludeCandidateUserID model.UserID
 	AfterCandidateUserID   model.UserID
 	ReallowAuthorized      bool
-	Limit                  int
+	Filter                 SittingCandidateStatusFilter
+	// IncludeCounts asks for Counts, which ignore Filter.
+	IncludeCounts bool
+	Limit         int
+}
+
+// SittingCandidateStatusCounts counts a sitting's candidates, other than the
+// reader, at one instant. NeedsAttention counts candidates who are suspended,
+// fail a check or have unresolved integrity attention.
+type SittingCandidateStatusCounts struct {
+	Total            int64
+	ByPresenceState  map[SittingCandidatePresenceState]int64
+	WithFailedChecks int64
+	WithAttention    int64
+	NeedsAttention   int64
 }
 
 type SittingCandidateIdentity struct {
@@ -1229,7 +1265,9 @@ type SittingCandidateStatusPage struct {
 	// EnvironmentsWaitingCapacity counts the sitting's environments waiting
 	// for an execution host with room, across every page.
 	EnvironmentsWaitingCapacity int64
-	Items                       []SittingCandidateStatusItem
+	// Counts is set when the options asked for it.
+	Counts *SittingCandidateStatusCounts
+	Items  []SittingCandidateStatusItem
 }
 
 // ConsistentWith reports whether the page is for the given exam and sitting,
@@ -1344,10 +1382,13 @@ type ExamAttemptStore interface {
 	CompleteScreenClipUpload(context.Context, *ExamAttemptScreenClipCompletion) (*ExamAttemptScreenClipView, error)
 	// ListAttemptScreenClips returns, newest first, every clip requested for
 	// an attempt of the exact exam and sitting. Private reasons are cleared.
-	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptScreenClipView, error)
+	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptManagedScreenClip, error)
 	// GetAttemptScreenClip returns one clip of an attempt of the exact exam
 	// and sitting.
 	GetAttemptScreenClip(context.Context, ExamAttemptClips, model.ScreenClipID) (*ExamAttemptScreenClipView, error)
+	// ResolveAttemptSitting returns the exam and sitting of an attempt, or
+	// ErrNotFound.
+	ResolveAttemptSitting(context.Context, model.ExamAttemptID) (*ExamAttemptSitting, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.

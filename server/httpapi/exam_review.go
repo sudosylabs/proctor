@@ -267,6 +267,7 @@ type examIntegrityFlagResponse struct {
 	ExamAttemptID          string                         `json:"exam_attempt_id"`
 	Generation             int64                          `json:"generation"`
 	PolicyKind             string                         `json:"policy_kind"`
+	Summary                string                         `json:"summary"`
 	State                  string                         `json:"state"`
 	CreatedAt              string                         `json:"created_at"`
 	EvidenceCount          int                            `json:"evidence_count"`
@@ -352,7 +353,31 @@ func examIntegrityReviewResource(app *review.Service, resolver *people.Resolver)
 		"exam.integrity_review.invalid",
 		"exam.integrity_review.unavailable",
 	)
+	listErrors := []string{
+		"authorization.request.invalid",
+		"authorization.unavailable",
+		"request.invalid",
+		"resource.not_found",
+		"exam.integrity_review.invalid",
+		"exam.integrity_review.unavailable",
+		"exam.sitting.invalid",
+		"exam.sitting.unavailable",
+	}
 	return route.NewResource("exam-integrity-reviews",
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/exams/{exam_id}/sittings/{exam_sitting_id}/submissions",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: listErrors,
+			Handle: h.listSittingSubmissions,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/submissions",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: listErrors[:len(listErrors)-1],
+			Handle: h.listSubmissions,
+		},
 		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   flags,
@@ -602,6 +627,26 @@ func examIntegrityReviewResource(app *review.Service, resolver *people.Resolver)
 			Handle: h.release,
 		},
 		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        "/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases",
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.releaseSittingResults,
+		},
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   candidateResult,
 			Auth:   route.AuthSessionRequired,
@@ -666,18 +711,7 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 
 	response := examIntegrityFlagListResponse{Items: make([]examIntegrityFlagResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examIntegrityFlagResponse{
-			Browser:                browserIntegrityGroupFrom(item.Browser),
-			ID:                     item.Flag.ID.String(),
-			ExamAttemptID:          item.Flag.AttemptID.String(),
-			Generation:             item.Flag.Generation,
-			PolicyKind:             string(item.Flag.Kind),
-			State:                  string(item.Flag.State),
-			CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
-			EvidenceCount:          item.EvidenceCount,
-			EvidenceOverflowCount:  item.OverflowCount,
-			UnresolvedMissingCount: item.UnresolvedMissingCount,
-		})
+		response.Items = append(response.Items, examIntegrityFlagResponseFrom(request.HTTP, item))
 	}
 
 	if page.HasMore {
@@ -692,6 +726,42 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 	}
 
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+func examIntegrityFlagResponseFrom(request *http.Request, item store.ExamIntegrityFlagSummary) examIntegrityFlagResponse {
+	return examIntegrityFlagResponse{
+		Browser:                browserIntegrityGroupFrom(item.Browser),
+		ID:                     item.Flag.ID.String(),
+		ExamAttemptID:          item.Flag.AttemptID.String(),
+		Generation:             item.Flag.Generation,
+		PolicyKind:             string(item.Flag.Kind),
+		Summary:                integrityFlagSummary(request, item.Flag.Kind, item.Flag.NativeRuleID, item.Browser, item.EvidenceCount, item.OverflowCount),
+		State:                  string(item.Flag.State),
+		CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
+		EvidenceCount:          item.EvidenceCount,
+		EvidenceOverflowCount:  item.OverflowCount,
+		UnresolvedMissingCount: item.UnresolvedMissingCount,
+	}
+}
+
+func examIntegrityEvidenceResponseFrom(item model.IntegrityEvidence) examIntegrityEvidenceResponse {
+	return examIntegrityEvidenceResponse{
+		Browser:              item.Browser,
+		ID:                   item.ID.String(),
+		ExamAttemptID:        item.AttemptID.String(),
+		ParticipationID:      item.ParticipationID.String(),
+		IntegrityFlagID:      item.FlagID.String(),
+		Generation:           item.Generation,
+		PolicyKind:           string(item.Kind),
+		SignalID:             item.SignalID.String(),
+		Sequence:             item.Sequence,
+		DurationMilliseconds: item.DurationMilliseconds,
+		Source:               string(item.Source),
+		MissingBefore:        item.MissingBefore,
+		ObservedAt:           model.FormatRFC3339(item.ObservedAt),
+		RecordedAt:           model.FormatRFC3339(item.RecordedAt),
+		Detail:               item.Detail,
+	}
 }
 
 func (h examIntegrityReviewHandlers) listEvidence(request route.Request) (route.Result, error) {
@@ -720,23 +790,7 @@ func (h examIntegrityReviewHandlers) listEvidence(request route.Request) (route.
 
 	response := examIntegrityEvidenceListResponse{Items: make([]examIntegrityEvidenceResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examIntegrityEvidenceResponse{
-			Browser:              item.Browser,
-			ID:                   item.ID.String(),
-			ExamAttemptID:        item.AttemptID.String(),
-			ParticipationID:      item.ParticipationID.String(),
-			IntegrityFlagID:      item.FlagID.String(),
-			Generation:           item.Generation,
-			PolicyKind:           string(item.Kind),
-			SignalID:             item.SignalID.String(),
-			Sequence:             item.Sequence,
-			DurationMilliseconds: item.DurationMilliseconds,
-			Source:               string(item.Source),
-			MissingBefore:        item.MissingBefore,
-			ObservedAt:           model.FormatRFC3339(item.ObservedAt),
-			RecordedAt:           model.FormatRFC3339(item.RecordedAt),
-			Detail:               item.Detail,
-		})
+		response.Items = append(response.Items, examIntegrityEvidenceResponseFrom(item))
 	}
 
 	if page.HasMore {

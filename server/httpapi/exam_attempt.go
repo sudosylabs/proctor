@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -51,10 +52,13 @@ func candidateAttemptAccessHeaders(request *http.Request) (candidateAttemptHeade
 // examAttemptHandlers also serves the security preflight, native delivery,
 // browser delivery and delivery budget resources, which live in their own
 // files.
-type examAttemptHandlers struct{ app *attempt.Service }
+type examAttemptHandlers struct {
+	app    *attempt.Service
+	people *people.Resolver
+}
 
-func examAttemptResource(app *attempt.Service) route.Resource {
-	h := examAttemptHandlers{app: app}
+func examAttemptResource(app *attempt.Service, resolver *people.Resolver) route.Resource {
+	h := examAttemptHandlers{app: app, people: resolver}
 	managerCollection := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts"
 	managerMember := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}"
 	managerBrowserActivity := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/browser-activity"

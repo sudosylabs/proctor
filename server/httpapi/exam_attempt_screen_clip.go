@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -44,6 +45,35 @@ type screenClipResponse struct {
 	RequestedAt   string                  `json:"requested_at"`
 	UpdatedAt     string                  `json:"updated_at"`
 	Revision      int64                   `json:"revision"`
+}
+
+// managedScreenClipResponse is a clip as its attempt's managers and reviewers
+// list it. An incident clip names its Flag; a manager clip names who asked
+// for it and, to the sitting's managers only, why.
+type managedScreenClipResponse struct {
+	ID              string                  `json:"id"`
+	ExamAttemptID   string                  `json:"exam_attempt_id"`
+	Source          string                  `json:"source"`
+	State           string                  `json:"state"`
+	Failure         string                  `json:"failure,omitempty"`
+	Range           screenClipRangeResponse `json:"range"`
+	RequestedAt     string                  `json:"requested_at"`
+	UpdatedAt       string                  `json:"updated_at"`
+	Revision        int64                   `json:"revision"`
+	IntegrityFlagID string                  `json:"integrity_flag_id,omitempty"`
+	RequestedBy     *personRefResponse      `json:"requested_by,omitempty"`
+	Reason          string                  `json:"reason,omitempty"`
+}
+
+func managedScreenClipResponseFrom(clip store.ExamAttemptManagedScreenClip, refs people.Refs) managedScreenClipResponse {
+	view := screenClipResponseFromView(clip.ExamAttemptScreenClipView)
+	return managedScreenClipResponse{
+		ID: view.ID, ExamAttemptID: view.ExamAttemptID, Source: view.Source, State: view.State, Failure: view.Failure,
+		Range: view.Range, RequestedAt: view.RequestedAt, UpdatedAt: view.UpdatedAt, Revision: view.Revision,
+		IntegrityFlagID: clip.FlagID.String(),
+		RequestedBy:     personRef(refs, clip.RequestedByUserID),
+		Reason:          clip.PrivateReason,
+	}
 }
 
 func screenClipResponseFromView(clip store.ExamAttemptScreenClipView) screenClipResponse {
@@ -280,12 +310,24 @@ func (h examAttemptHandlers) listScreenClips(request route.Request) (route.Resul
 	if err != nil {
 		return route.Result{}, err
 	}
+	requesters := make([]model.UserID, 0, len(clips))
+	for _, clip := range clips {
+		requesters = append(requesters, clip.RequestedByUserID)
+	}
+	refs, err := namePeople(request, h.people, requesters...)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response, err := route.BoundedList(
 		request,
 		"screen_clip",
 		clips,
-		screenClipListKey,
-		screenClipResponseFromView,
+		func(clip store.ExamAttemptManagedScreenClip) route.BoundedKey {
+			return screenClipListKey(clip.ExamAttemptScreenClipView)
+		},
+		func(clip store.ExamAttemptManagedScreenClip) managedScreenClipResponse {
+			return managedScreenClipResponseFrom(clip, refs)
+		},
 	)
 	if err != nil {
 		return route.Result{}, err

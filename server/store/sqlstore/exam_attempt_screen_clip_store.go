@@ -772,11 +772,12 @@ func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
 	})
 }
 
-// ListAttemptScreenClips returns every clip requested for an attempt.
+// ListAttemptScreenClips returns every clip requested for an attempt, with
+// each manager clip's private reason.
 func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 	ctx context.Context,
 	attempt store.ExamAttemptClips,
-) ([]store.ExamAttemptScreenClipView, error) {
+) ([]store.ExamAttemptManagedScreenClip, error) {
 	if !attempt.IsValid() {
 		return nil, store.NewErrInvalidInput("screen_clip", "attempt", nil)
 	}
@@ -791,13 +792,16 @@ func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 		model.ScreenClipManagerRequestLimit+model.ScreenClipIncidentRequestLimit); err != nil {
 		return nil, fmt.Errorf("list Attempt screen clips: %w", err)
 	}
-	clips := make([]store.ExamAttemptScreenClipView, 0, len(rows))
+	clips := make([]store.ExamAttemptManagedScreenClip, 0, len(rows))
 	for _, row := range rows {
 		clip, err := row.model()
 		if err != nil {
 			return nil, err
 		}
-		clips = append(clips, store.NewExamAttemptScreenClipView(clip))
+		clips = append(clips, store.ExamAttemptManagedScreenClip{
+			ExamAttemptScreenClipView: store.NewExamAttemptScreenClipView(clip),
+			PrivateReason:             clip.PrivateReason,
+		})
 	}
 	return clips, nil
 }
@@ -826,4 +830,31 @@ func (s *SQLExamAttemptStore) GetAttemptScreenClip(
 	}
 	view := store.NewExamAttemptScreenClipView(clip)
 	return &view, nil
+}
+
+// ResolveAttemptSitting returns the exam and sitting of an attempt.
+func (s *SQLExamAttemptStore) ResolveAttemptSitting(
+	ctx context.Context,
+	attemptID model.ExamAttemptID,
+) (*store.ExamAttemptSitting, error) {
+	if !attemptID.IsValid() {
+		return nil, store.NewErrInvalidInput("exam_attempt", "id", nil)
+	}
+	var row struct {
+		ExamID    string `db:"exam_id"`
+		SittingID string `db:"exam_sitting_id"`
+	}
+	if err := s.GetMaster().Get(ctx, &row, `SELECT exam_id, exam_sitting_id FROM exam_attempts WHERE id = ?`,
+		attemptID.String()); err != nil {
+		return nil, translateError("exam_attempt", attemptID.String(), err)
+	}
+	examID, err := model.ParseExamID(row.ExamID)
+	if err != nil {
+		return nil, invalidPersistedState("exam_attempt", "exam_id", err)
+	}
+	sittingID, err := model.ParseExamSittingID(row.SittingID)
+	if err != nil {
+		return nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
+	}
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: examID, SittingID: sittingID}, nil
 }

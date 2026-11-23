@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // AuthorizeSittingView rechecks the caller's view permission without returning
@@ -305,4 +306,137 @@ func (s *Service) authorizeManagerAction(
 		override:     action == overrideAction,
 		examArchived: examAccess.Exam.IsArchived(),
 	}, nil
+}
+
+// SittingSubmissionsAuthorization says what a caller may see of one
+// sitting's submissions: always the list, and its reviews only with
+// ReviewVisible.
+type SittingSubmissionsAuthorization struct {
+	AcademicUnitID model.AcademicUnitID
+	ReviewVisible  bool
+}
+
+// AuthorizeSittingSubmissions authorizes listing one sitting's submissions
+// with submission.view, then asks, under submission.review, whether reviews
+// show. Both rest on the manager relationship, as each Submission's own reads
+// do; a refused review decision only hides the reviews.
+func (s *Service) AuthorizeSittingSubmissions(
+	ctx context.Context,
+	inv invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+) (_ SittingSubmissionsAuthorization, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	resource, err := s.examSittingResource(ctx, inv, examID, sittingID)
+	if err != nil {
+		return SittingSubmissionsAuthorization{}, err
+	}
+	at := model.TimeUTC(s.now())
+	decision, err := s.authorizeManagerAction(ctx, inv, examID, resource, at,
+		model.ActionSubmissionView, model.ActionSubmissionViewOverride)
+	if err != nil {
+		return SittingSubmissionsAuthorization{}, err
+	}
+	authorization := SittingSubmissionsAuthorization{AcademicUnitID: decision.unitID}
+	_, err = s.authorizeManagerAction(ctx, inv, examID, resource, at,
+		model.ActionSubmissionReview, model.ActionSubmissionReviewOverride)
+	switch {
+	case err == nil:
+		authorization.ReviewVisible = true
+	case !apperror.Is(err, "authorization.denied"):
+		return SittingSubmissionsAuthorization{}, err
+	}
+	return authorization, nil
+}
+
+// AuthorizeSittingRelease authorizes a bulk result release for one sitting.
+// Each Submission it names is then authorized again, as a single release is.
+func (s *Service) AuthorizeSittingRelease(
+	ctx context.Context,
+	inv invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+) (_ access.ManagerAuthorization, _ model.AcademicUnitID, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	resource, err := s.examSittingResource(ctx, inv, examID, sittingID)
+	if err != nil {
+		return access.ManagerAuthorization{}, "", err
+	}
+	decision, err := s.authorizeManagerAction(ctx, inv, examID, resource, model.TimeUTC(s.now()),
+		model.ActionSubmissionRelease, model.ActionSubmissionReleaseOverride)
+	if err != nil {
+		return access.ManagerAuthorization{}, "", err
+	}
+	return access.ManagerAuthorization{Override: decision.override}, decision.unitID, nil
+}
+
+// AuthorizeLiveEvidence authorizes a manager's live, read-only evidence read
+// of one of the sitting's attempts. It needs exam.sitting.manage, as the live
+// board's controls do, and submission.view, as the same evidence read through
+// the Submission needs; both rest on the manager relationship and both
+// decisions are recorded, as an evidence read's is.
+func (s *Service) AuthorizeLiveEvidence(
+	ctx context.Context,
+	inv invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+) (_ model.AcademicUnitID, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	resource, err := s.examSittingResource(ctx, inv, examID, sittingID)
+	if err != nil {
+		return "", err
+	}
+	at := model.TimeUTC(s.now())
+	if _, err = s.authorizeManagerAction(ctx, inv, examID, resource, at,
+		model.ActionExamSittingManage, model.ActionExamSittingManageOverride); err != nil {
+		return "", err
+	}
+	decision, err := s.authorizeManagerAction(ctx, inv, examID, resource, at,
+		model.ActionSubmissionView, model.ActionSubmissionViewOverride)
+	if err != nil {
+		return "", err
+	}
+	return decision.unitID, nil
+}
+
+// AuthorizeSubmissionList authorizes listing submissions across exams under
+// submission.view, and reads, without a further decision, the
+// submission.review scopes that decide which rows show their review.
+func (s *Service) AuthorizeSubmissionList(
+	ctx context.Context,
+	inv invocation.Invocation,
+) (view, review store.ExamListVisibility, err error) {
+	if inv.Principal().Validate() != nil {
+		return store.ExamListVisibility{}, store.ExamListVisibility{}, apperror.Invalid("exam.sitting.invalid", "principal")
+	}
+	view, err = s.authorizer.AuthorizeExamManagerList(ctx, inv, model.ActionSubmissionView, model.ActionSubmissionViewOverride)
+	if err != nil {
+		return store.ExamListVisibility{}, store.ExamListVisibility{}, err
+	}
+	review, err = s.authorizer.ExamManagerScopes(ctx, inv.Principal(), model.ActionSubmissionReview, model.ActionSubmissionReviewOverride)
+	if err != nil {
+		return store.ExamListVisibility{}, store.ExamListVisibility{}, err
+	}
+	return view, review, nil
+}
+
+// examSittingResource resolves a sitting named under an exam, so a sitting of
+// another exam is not found rather than authorized.
+func (s *Service) examSittingResource(
+	ctx context.Context,
+	inv invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+) (model.Resource, error) {
+	if !examID.IsValid() || !sittingID.IsValid() || inv.Principal().Validate() != nil {
+		return model.Resource{}, apperror.Invalid("exam.sitting.invalid", "exam_sitting_id")
+	}
+	snapshot, err := s.sittings.Resolve(ctx, sittingID)
+	if err != nil {
+		return model.Resource{}, storeErrors.Translate(err)
+	}
+	if snapshot.Sitting.ID != sittingID || snapshot.Sitting.ExamID != examID {
+		return model.Resource{}, apperror.New("exam.sitting.not_found")
+	}
+	return model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, nil
 }

@@ -127,7 +127,9 @@ func (f *reviewFixture) AuthenticateDPoP(ctx context.Context, token, _, _, _ str
 func (f *reviewFixture) api(t *testing.T) *route.API {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
-	return newFocusedResourceAPI(t, logger, f, examIntegrityReviewResource(f.service, testPeople(f.users, f.access.Authorizer)))
+	resolver := testPeople(f.users, f.access.Authorizer)
+	return newFocusedResourceAPI(t, logger, f, examIntegrityReviewResource(f.service, resolver),
+		examLiveEvidenceResource(f.service, resolver))
 }
 
 // request is an authenticated request; the bearer token chooses the caller.
@@ -152,6 +154,9 @@ type reviewLedger struct {
 
 	evidencePage    store.ExamIntegrityEvidencePage
 	attemptEvidence *store.AttemptEvidencePage
+	flagSummaries   []store.ExamIntegrityFlagSummary
+	submissionLists []store.SubmissionListOptions
+	liveTimelines   []store.LiveTimelineListOptions
 
 	flagLists        []store.ExamIntegrityFlagListOptions
 	evidenceLists    []store.ExamIntegrityEvidenceListOptions
@@ -162,6 +167,42 @@ type reviewLedger struct {
 	resultReads      []model.ExamAttemptID
 	previewReads     []model.SubmissionID
 	previewUsage     []model.PreviewUsage
+}
+
+func (s *reviewLedger) ResolveLiveEvidence(_ context.Context, attemptID model.ExamAttemptID) (*store.LiveEvidenceScope, error) {
+	if attemptID != s.f.attemptID {
+		return nil, store.NewErrNotFound("exam_attempt", attemptID.String())
+	}
+	return &store.LiveEvidenceScope{AttemptID: attemptID, ExamID: s.f.examID, SittingID: s.f.sitting.ID,
+		CandidateUserID: s.f.candidate.UserID, AsOf: reviewFixtureTime}, nil
+}
+
+// ListLiveTimeline lists the seeded Flag as the timeline's one entry.
+func (s *reviewLedger) ListLiveTimeline(_ context.Context, options store.LiveTimelineListOptions) (*store.LiveTimelinePage, error) {
+	s.liveTimelines = append(s.liveTimelines, options)
+	return &store.LiveTimelinePage{Items: []store.LiveTimelineItem{{Kind: store.LiveTimelineFlag, At: s.f.flag.CreatedAt,
+		Flag: &store.ExamIntegrityFlagSummary{Flag: *s.f.flag, EvidenceCount: 1}}}}, nil
+}
+
+// ListSubmissions lists the seeded Submission with its draft review.
+func (s *reviewLedger) ListSubmissions(_ context.Context, options store.SubmissionListOptions) (*store.SubmissionListPage, error) {
+	s.submissionLists = append(s.submissionLists, options)
+	authorization := s.f.authorization()
+	item := store.SubmissionListItem{SubmissionID: s.f.submission.ID, ExamID: authorization.ExamID, ExamTitle: "Algorithms",
+		SittingID: authorization.SittingID, AttemptID: s.f.attemptID,
+		Candidate:   store.SittingCandidateIdentity{UserID: s.f.candidate.UserID, Username: "candidate", DisplayName: "Candidate"},
+		SubmittedAt: s.f.submission.SubmittedAt, ReceiptCode: s.f.submission.ReceiptCode, FlagCount: 1,
+		IntegrityState: model.SubmissionIntegritySettled, ReviewVisible: options.ReviewVisible || options.ReviewVisibility != nil}
+	if item.ReviewVisible {
+		item.Review = &store.SubmissionListReview{ID: s.f.review.ID, State: s.f.review.State,
+			ReleaseState: s.f.review.ReleaseState, Revision: s.f.review.Revision}
+	}
+	page := &store.SubmissionListPage{Items: []store.SubmissionListItem{item}}
+	if options.IncludeCounts {
+		reviewed := int64(0)
+		page.Counts = &store.SubmissionListCounts{Total: 1, Reviewed: &reviewed, Released: &reviewed, FlaggedSubmissions: 1, Flags: 1}
+	}
+	return page, nil
 }
 
 func (s *reviewLedger) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamIntegrityReviewAuthorization, error) {
@@ -183,6 +224,9 @@ func (s *reviewLedger) Get(_ context.Context, id model.SubmissionID) (*store.Exa
 
 func (s *reviewLedger) ListFlags(_ context.Context, options store.ExamIntegrityFlagListOptions) (*store.ExamIntegrityFlagPage, error) {
 	s.flagLists = append(s.flagLists, options)
+	if s.flagSummaries != nil {
+		return &store.ExamIntegrityFlagPage{Items: append([]store.ExamIntegrityFlagSummary(nil), s.flagSummaries...)}, nil
+	}
 	return &store.ExamIntegrityFlagPage{Items: []store.ExamIntegrityFlagSummary{{Flag: *s.f.flag, EvidenceCount: 1}}}, nil
 }
 

@@ -34,7 +34,7 @@ import (
 func TestCandidateExamPresentationRequiresBoundHeadersAndNeverEchoesSecrets(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	request := f.candidateRequest(t, http.MethodGet, f.candidatePath("/presentation"))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -63,7 +63,7 @@ func TestCandidateExamPresentationRequiresBoundHeadersAndNeverEchoesSecrets(t *t
 func TestCandidateExamHTTPRejectsMissingOrDuplicateProtectionHeadersBeforeApplication(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	for _, mutate := range []func(*http.Request){
 		func(request *http.Request) { request.Header.Del(candidateAttemptCredentialHeader) },
 		func(request *http.Request) {
@@ -84,7 +84,7 @@ func TestCandidateExamHTTPRejectsMissingOrDuplicateProtectionHeadersBeforeApplic
 func TestCandidateExamWorkspaceUsesBoundedOpaqueCursor(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	request := f.candidateRequest(t, http.MethodGet, f.candidatePath("/workspace?limit=1"))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -119,7 +119,7 @@ func TestCandidateSubmitExamAttemptUsesStrictCausalSelectorsAndReturnsSafeReceip
 	t.Parallel()
 
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	body := `{"participation_id":"` + f.participation.ID.String() + `","generation":1,"expected_current_revision_id":"` +
 		f.attempt.AdmissionRevisionID.String() + `","expected_workspace_cursor":4,"final_focus_loss_sequence":0}`
 	request := f.candidateRequest(t, http.MethodPost, f.candidatePath("/submissions"))
@@ -154,7 +154,7 @@ func TestCandidateAcknowledgesExactCorrectionWithBoundSessionFences(t *testing.T
 	t.Parallel()
 
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	correctionID := model.NewExamRevisionID()
 	currentRevisionID := model.NewExamRevisionID()
 	f.attemptStore.presentation.RuntimeCapabilities.ExamRevision.CurrentRevisionID = currentRevisionID
@@ -185,7 +185,7 @@ func TestCandidateAcknowledgesExactCorrectionWithBoundSessionFences(t *testing.T
 		"credential", "connection", "participation", "generation", "audit", "private")
 
 	invalidFixture := newAttemptFixture(t)
-	invalidAPI := invalidFixture.api(t, examAttemptResource(invalidFixture.service))
+	invalidAPI := invalidFixture.api(t, examAttemptResource(invalidFixture.service, invalidFixture.people))
 	invalid := invalidFixture.candidateRequest(t, http.MethodPut, invalidFixture.candidatePath(
 		"/corrections/"+model.NewExamRevisionID().String()+"/acknowledgement"))
 	invalid.Body = io.NopCloser(strings.NewReader(`{"participation_id":"` + invalidFixture.participation.ID.String() +
@@ -220,7 +220,7 @@ func TestSubmissionManifestCursorIsUnversionedStrictAndPathFree(t *testing.T) {
 func TestCandidateExamContentIsInlinePrivateNoStoreAndConditional(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	resource := f.attemptStore.resource.Resource
 	path := f.candidatePath("/resources/" + resource.ResourceID.String() + "/content")
 	request := f.candidateRequest(t, http.MethodGet, path)
@@ -245,7 +245,7 @@ func TestCandidateExamContentIsInlinePrivateNoStoreAndConditional(t *testing.T) 
 func TestCandidateWorkspaceContentUsesContentVersionETagAndExactEntry(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	entry := f.workspaceStore.items[0]
 	request := f.candidateRequest(t, http.MethodGet, f.candidatePath("/workspace/files/"+entry.EntryID.String()+"/content"))
 	response := httptest.NewRecorder()
@@ -266,7 +266,7 @@ func TestManagedExamAttemptListIsBoundedSafeAndOpaque(t *testing.T) {
 	otherWorkspace, err := model.NewExamAttemptWorkspace(model.NewExamAttemptWorkspaceID(), other.ID, other.CreatedAt)
 	require.NoError(t, err)
 	f.attemptStore.others = []store.ExamAttemptManagerSnapshot{{Attempt: other, Workspace: otherWorkspace}}
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	path := "/api/v1/exams/" + f.examID.String() + "/sittings/" + f.sitting.ID.String() + "/attempts?limit=1&state=active"
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet, path, nil))
@@ -302,6 +302,38 @@ func TestManagedExamAttemptListIsBoundedSafeAndOpaque(t *testing.T) {
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "manager exact = %d headers=%#v body=%s", response.Code, response.Header(), response.Body.String())
 }
 
+func TestCandidateStatusBoardFiltersAndCountsTheFirstPage(t *testing.T) {
+	t.Parallel()
+	f := newAttemptFixture(t)
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
+	base := "/api/v1/exams/" + f.examID.String() + "/sittings/" + f.sitting.ID.String() + "/candidate-statuses"
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet,
+		base+"?presence_state=connected&presence_state=suspended&check=failing&attention=true&q=Ada", nil))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Len(t, f.attemptStore.statusLists, 1)
+	listed := f.attemptStore.statusLists[0]
+	require.Equal(t, store.SittingCandidateStatusFilter{
+		PresenceStates: []store.SittingCandidatePresenceState{store.SittingCandidateConnected, store.SittingCandidateSuspended},
+		FailingChecks:  true, Attention: true, Query: "Ada",
+	}, listed.Filter)
+	require.True(t, listed.IncludeCounts)
+	var page map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Equal(t, map[string]any{
+		"total": 4.0, "with_failed_checks": 1.0, "with_attention": 2.0,
+		"by_presence_state": map[string]any{"not_started": 0.0, "ready": 0.0, "connected": 3.0, "reconnecting": 0.0,
+			"lease_expired": 0.0, "suspended": 1.0, "submitted": 0.0},
+	}, page["counts"], "every presence state is counted, zero or not")
+
+	for _, query := range []string{"presence_state=away", "presence_state=ready&presence_state=ready", "check=passing", "attention=false"} {
+		refused := httptest.NewRecorder()
+		httpAPI.ServeHTTP(refused, f.managerRequest(t, http.MethodGet, base+"?"+query, nil))
+		assertHTTPProblem(t, refused, http.StatusBadRequest, "request.invalid")
+	}
+	require.Len(t, f.attemptStore.statusLists, 1, "a refused filter reads nothing")
+}
+
 func TestManagedBrowserActivityIsNestedMinimizedNoStoreAndKeysetPaginated(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
@@ -312,7 +344,7 @@ func TestManagedBrowserActivityIsNestedMinimizedNoStoreAndKeysetPaginated(t *tes
 				ClientOccurredAt: attemptFixtureTime, ReceivedAt: attemptFixtureTime.Add(time.Duration(sequence) * time.Second)}}
 	}
 	f.deliveryStore.browserActivity = []store.BrowserActivityRecord{record(1), record(2)}
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	path := f.managerPath("/browser-activity?limit=1")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet, path, nil))
@@ -343,7 +375,7 @@ func TestManagerSubmissionReadManifestAndFileArePurposeSpecificAndProtected(t *t
 	t.Parallel()
 
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	submissionID := f.submissionStore.submission.ID
 	base := f.managerPath("/submissions/" + submissionID.String())
 	for _, path := range []string{base, base + "/manifest?limit=1"} {
@@ -353,6 +385,10 @@ func TestManagerSubmissionReadManifestAndFileArePurposeSpecificAndProtected(t *t
 		require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "GET %s = %d headers=%v body=%s", path, response.Code, response.Header(), response.Body.String())
 		for _, forbidden := range []string{"starter_object", "attempt_object", "storage_origin", "vfs", "url"} {
 			require.NotContains(t, strings.ToLower(response.Body.String()), forbidden, "GET %s exposed", path)
+		}
+		if path == base {
+			require.Contains(t, response.Body.String(), `"receipt_code":"`+attemptReceiptCode.Display()+`"`,
+				"a manager can match the code a candidate reads out")
 		}
 	}
 	reads := f.submissionStore.manifestReads
@@ -405,7 +441,7 @@ func TestManagerSubmissionIntegrityRetirementOmitsFormerCounters(t *testing.T) {
 				submission.IntegrityRetiredAt = model.OptionalTimeFrom(submission.SubmittedAt.Add(time.Hour))
 				submission.BrowserActivity = model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}
 			}
-			httpAPI := f.api(t, examAttemptResource(f.service))
+			httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet, f.managerPath("/submissions/"+submission.ID.String()), nil))
 			require.Equal(t, http.StatusOK, response.Code, "header read = %d: %s", response.Code, response.Body.String())
@@ -541,7 +577,7 @@ func TestManagerReallowExamAttemptUsesExactSuspensionAndNeverReturnsPrivateReaso
 	t.Parallel()
 	f := newAttemptFixture(t)
 	suspensionID := suspendByPolicy(f, 2, 1).ID
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	request := newJSONRequest(http.MethodPost, f.managerPath("/reallow"), strings.NewReader(`{"suspension_id":"`+suspensionID.String()+`","expected_revision":2,"reason":"manager verified connectivity"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Idempotency-Key", "reallow-once")
@@ -564,7 +600,7 @@ func TestManagerSuspendExamAttemptUsesRevisionFenceAndNeverReturnsPrivateReason(
 	t.Parallel()
 	f := newAttemptFixture(t)
 	f.moveAttemptTo(model.ExamAttemptActive, 2)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	path := f.managerPath("/suspend")
 	request := newJSONRequest(http.MethodPost, path, strings.NewReader(`{"expected_revision":2,"reason":"candidate left the room"}`))
 	request.Header.Set("Authorization", "Bearer credential")
@@ -597,7 +633,7 @@ func TestManagerSuspendExamAttemptUsesRevisionFenceAndNeverReturnsPrivateReason(
 func TestManagerReplaceEnvironmentNamesTheIncarnationSeen(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	path := f.managerPath("/environment/replace")
 	send := func(body, key string) *httptest.ResponseRecorder {
 		request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
@@ -621,7 +657,7 @@ func TestManagerReplaceEnvironmentNamesTheIncarnationSeen(t *testing.T) {
 func TestManagerScreenClipRequestNeverReturnsItsPrivateReason(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	path := f.managerPath("/screen-clips")
 	send := func(body, key string) *httptest.ResponseRecorder {
 		request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
@@ -665,7 +701,7 @@ func TestCandidateScreenClipChunksAreNumberedFromOneOnTheWire(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
 	clipID := f.attemptStore.deliverClip(model.ScreenClipRecording, nil)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	base := f.candidatePath("/screen-clip-requests/" + clipID.String() + "/upload")
 	send := func(method, path string, body io.Reader) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), method, path, body)
@@ -713,6 +749,28 @@ func TestCandidateScreenClipChunksAreNumberedFromOneOnTheWire(t *testing.T) {
 	require.Contains(t, completed.Body.String(), `"state":"ready"`)
 }
 
+func TestManagerScreenClipListNamesTheRequesterAndItsReason(t *testing.T) {
+	t.Parallel()
+	f := newAttemptFixture(t)
+	f.attemptStore.deliverClip(model.ScreenClipReady, &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: 1,
+		ChunkSHA256: []string{digestOf([]byte("x"))}})
+	f.attemptStore.clipReason = "candidate looked away for a long time"
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet, f.managerPath("/screen-clips"), nil))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page struct {
+		Items []map[string]any `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, "candidate looked away for a long time", page.Items[0]["reason"], "the sitting's manager sees the reason")
+	requester, ok := page.Items[0]["requested_by"].(map[string]any)
+	require.True(t, ok, "a manager clip names who asked for it: %s", response.Body.String())
+	require.Equal(t, f.caller.UserID.String(), requester["id"])
+	require.NotContains(t, page.Items[0], "integrity_flag_id", "a manager clip has no Flag")
+}
+
 func TestManagersPlayScreenClipsByRange(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
@@ -720,7 +778,7 @@ func TestManagersPlayScreenClipsByRange(t *testing.T) {
 	clipID := f.attemptStore.deliverClip(model.ScreenClipReady, &model.ScreenClipUpload{MediaType: "video/mp4",
 		SizeBytes: int64(len(content)), ChunkSHA256: []string{digestOf([]byte(content))}})
 	f.content.chunks[0] = []byte(content)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	path := f.managerPath("/screen-clips/" + clipID.String() + "/content")
 	play := func(rangeHeader string) *httptest.ResponseRecorder {
 		request := f.managerRequest(t, http.MethodGet, path, nil)
@@ -759,7 +817,7 @@ func TestManagerEndExamAttemptUsesRevisionFenceAndReturnsOnlySafeReceipt(t *test
 	t.Parallel()
 	f := newAttemptFixture(t)
 	f.moveAttemptTo(model.ExamAttemptActive, 1)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	path := f.managerPath("/end")
 	privateReason := "candidate requested an assisted early end"
 	request := newJSONRequest(http.MethodPost, path, strings.NewReader(`{"expected_revision":1,"reason":"`+privateReason+`"}`))
@@ -795,7 +853,7 @@ func TestManagerAttemptRefetchExposesPrivateFreeActiveSuspensionIdentity(t *test
 	t.Parallel()
 	f := newAttemptFixture(t)
 	suspension := suspendByPolicy(f, 2, 2)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet, f.managerPath(""), nil))
 	require.Equal(t, http.StatusOK, response.Code, "manager suspension response")
@@ -815,7 +873,7 @@ func TestCandidateWorkspaceJournalPagesExactProtectedQueries(t *testing.T) {
 			Author: model.NewCandidateWorkspaceAuthor(f.connection.ID)}
 	}
 	f.workspaceStore.cursor, f.workspaceStore.journal = 5, []model.AttemptWorkspaceJournalEntry{change(4), change(5)}
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	base := f.candidatePath("/workspace")
 
 	journalResponse := httptest.NewRecorder()
@@ -865,7 +923,7 @@ func TestCandidateWorkspaceJournalPagesExactProtectedQueries(t *testing.T) {
 func TestCandidateWorkspaceBatchMapsEveryMutationAndStreamsBodiesInOrder(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	entryID := f.workspaceStore.items[0].EntryID
 	version := f.workspaceStore.items[0].ContentVersion
 	directoryID := model.NewAttemptWorkspaceEntryID()
@@ -937,7 +995,7 @@ func TestCandidateWorkspaceBatchMapsEveryMutationAndStreamsBodiesInOrder(t *test
 func TestCandidateWorkspaceBatchWithoutFilesNeedsNoContentPart(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	body, contentType := candidateWorkspaceBatch(t, f.workspaceManifest(-1, map[string]any{"operation": "create_directory", "path": "src"}))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(f, body, contentType, "mkdir-once"))
@@ -1028,7 +1086,7 @@ func TestCandidateWorkspaceBatchRejectsMalformedRequestsBeforeTheApplication(t *
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			f := newAttemptFixture(t)
-			httpAPI := f.api(t, examAttemptResource(f.service))
+			httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 			var request *http.Request
 			if test.parts == nil {
 				request = candidateWorkspaceBatchRequest(f, strings.NewReader(test.raw), "application/json", "malformed")
@@ -1072,7 +1130,7 @@ func TestCandidateWorkspaceBatchRefusesFileBodiesThatDoNotMatchTheManifest(t *te
 				map[string]any{"operation": "create_file", "path": "a.txt", "media_type": "text/plain", "size": 1, "sha256": digestOf([]byte("a"))},
 				map[string]any{"operation": "create_file", "path": "b.txt", "media_type": "text/plain", "size": 1, "sha256": digestOf([]byte("b"))},
 			)
-			httpAPI := f.api(t, examAttemptResource(f.service))
+			httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 			body, contentType := candidateWorkspaceMultipart(t, test.parts(candidateWorkspaceManifestParts(t, twoFiles))...)
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(f, body, contentType, "bodies"))
@@ -1103,7 +1161,7 @@ func TestCandidateWorkspaceBatchRequiresIdempotencyAndProtectionHeaders(t *testi
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			f := newAttemptFixture(t)
-			httpAPI := f.api(t, examAttemptResource(f.service))
+			httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 			body, contentType := candidateWorkspaceBatch(t, f.workspaceManifest(-1, map[string]any{"operation": "create_directory", "path": "src"}))
 			request := candidateWorkspaceBatchRequest(f, body, contentType, "headers")
 			test.mutate(request)
@@ -1139,7 +1197,7 @@ func TestCandidateWorkspaceBatchPresentsTheRefusingItem(t *testing.T) {
 			t.Parallel()
 			f := newAttemptFixture(t)
 			f.workspaceStore.batchErr = test.storeErr
-			httpAPI := f.api(t, examAttemptResource(f.service))
+			httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 			body, contentType := candidateWorkspaceBatch(t, f.workspaceManifest(-1,
 				map[string]any{"operation": "create_directory", "path": test.firstDir},
 				map[string]any{"operation": "create_directory", "path": "src"}))
@@ -1170,7 +1228,7 @@ func TestCandidateWorkspaceBatchForwardsTheRecursiveDeleteSnapshot(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			f := newAttemptFixture(t)
-			httpAPI := f.api(t, examAttemptResource(f.service))
+			httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 			entryID := model.NewAttemptWorkspaceEntryID()
 			raw := `{"participation_id":"` + f.participation.ID.String() + `","generation":1` + test.fields +
 				`,"mutations":[{"operation":"delete_entry","entry_id":"` + entryID.String() + `","expected_path":"src"` +
@@ -1198,7 +1256,7 @@ func TestCandidateWorkspaceBatchRefusesToPresentAResultWithoutOneChangePerMutati
 	f := newAttemptFixture(t)
 	f.workspaceStore.result = &store.ExamAttemptWorkspaceBatchResult{SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 		CandidateUserID: f.candidate.UserID, WorkspaceID: f.workspace.ID}
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	body, contentType := candidateWorkspaceBatch(t, f.workspaceManifest(-1, map[string]any{"operation": "create_directory", "path": "src"}))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(f, body, contentType, "empty-result"))
@@ -1209,7 +1267,7 @@ func TestCandidateWorkspaceBatchRefusesToPresentAResultWithoutOneChangePerMutati
 func TestCandidateWorkspaceSingleMutationRoutesAreGone(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	httpAPI := f.api(t, examAttemptResource(f.service))
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
 	base := f.candidatePath("/workspace")
 	entryID := f.workspaceStore.items[0].EntryID.String()
 	for _, test := range []struct{ method, path string }{

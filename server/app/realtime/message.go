@@ -102,4 +102,7 @@ var (
 	examIntegrityReviewFinalizedMessage       = declare("exam_integrity_review_finalized", "exam_integrity_review_finalized")
 	examStudentResultReleasedMessage          = declare("exam_student_result_released", "exam_student_result_released")
 	candidateExamStudentResultReleasedMessage = declare("exam_student_result_released_for_candidate", "exam_student_result_released")
+	sittingSubmissionsChangedMessage          = declare("exam_sitting.submissions.changed", "exam_sitting.submissions.changed")
+	screenClipChangedMessage                  = declare("exam_attempt.screen_clip.changed", "exam_attempt.screen_clip.changed")
+	attemptEvidenceChangedMessage             = declare("exam_attempt.evidence.changed", "exam_attempt.evidence.changed")
 )

@@ -124,6 +124,7 @@ func New(deps Dependencies) (*App, error) {
 	return &App{
 		ExamPeople:           people.New(deps.Store, authorizer).Reporting("exam.unavailable"),
 		ReviewPeople:         people.New(deps.Store, authorizer).Reporting("exam.integrity_review.unavailable"),
+		AttemptPeople:        people.New(deps.Store, authorizer).Reporting("exam.attempt.unavailable"),
 		InvitationPeople:     people.New(deps.Store, authorizer).Reporting("invitation.unavailable"),
 		AdministrationPeople: people.New(deps.Store, authorizer).Reporting("administration.unavailable"),
 		OnboardingPeople:     people.New(deps.Store, authorizer).Reporting("onboarding_import.unavailable"),

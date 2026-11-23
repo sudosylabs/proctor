@@ -92,6 +92,16 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 		}
 		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, inv, sittingID))
 	}
+	if action == model.ActionExamSittingManage && resource.Type == model.ResourceExamSitting {
+		// Clip and live evidence hints go to the sitting's managers, who need the
+		// manager relationship as well as the grant, as the reads they point to do.
+		sittingID, err := model.ParseExamSittingID(resource.ID)
+		if err != nil {
+			return invalidRealtimeRequest("subscription")
+		}
+		_, err = s.sittings.AuthorizeSittingManage(ctx, inv, sittingID)
+		return realtimeSittingFailures.Conceal(err)
+	}
 	// A User is read through the caller's user visibility, which a
 	// unit-scoped grant reaches only through relationships in its subtree.
 	if action == model.ActionUserView && resource.Type == model.ResourceUser {

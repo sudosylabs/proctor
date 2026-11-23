@@ -173,6 +173,11 @@ type BrowserSourceStatus struct {
 	RemainingRuntimeResetStarts int64                      `json:"remaining_runtime_reset_starts"`
 	Summary                     *UnretainedDeliverySummary `json:"summary"`
 	ServerTime                  time.Time                  `json:"server_time"`
+	// Scope and interpretation progress are used to publish a fresh
+	// evidence refetch hint after a commit.
+	ExamID                 ExamID        `json:"-"`
+	SittingID              ExamSittingID `json:"-"`
+	InterpretationAdvanced bool          `json:"-"`
 }
 
 func (v BrowserSourceStatus) Validate() error {

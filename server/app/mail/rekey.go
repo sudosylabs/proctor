@@ -33,6 +33,8 @@ type RekeyView struct {
 type PayloadKeyUsageView struct {
 	KeyID            string
 	ActiveReferences int64
+	// CreatedAt is when the key's current use began.
+	CreatedAt time.Time
 }
 
 // KeyStateView reports the configured and required primary mail payload keys
@@ -74,7 +76,7 @@ func (s *Operations) GetMailKeyState(ctx context.Context, inv invocation.Invocat
 			return KeyStateView{}, apperror.New("mail.unavailable").Wrap(errors.New("mail key state is invalid"))
 		}
 
-		view.Active = append(view.Active, PayloadKeyUsageView{KeyID: usage.KeyID, ActiveReferences: usage.ActiveReferences})
+		view.Active = append(view.Active, PayloadKeyUsageView{KeyID: usage.KeyID, ActiveReferences: usage.ActiveReferences, CreatedAt: usage.CreatedAt})
 	}
 
 	return view, nil

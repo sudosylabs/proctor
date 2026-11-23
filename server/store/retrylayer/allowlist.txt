@@ -52,12 +52,16 @@ InvitationStore.ReplayAdministration                       always
 # Rejects a nil command as invalid input; with one, the outcome is durable.
 InvitationStore.RecordBatchDuplicate                       always
 
+ExamAuthoringStore.FindCopy                               always
 ExamAuthoringStore.Create                                  command
+ExamAuthoringStore.CommitCopy                              command
 ExamAuthoringStore.UpdateDraftText                         command
 ExamAuthoringStore.UpdateDraftFocusLoss                    command
 ExamAuthoringStore.UpdateDraftExecution                    command
 ExamAuthoringStore.UpdateDraftAssistant command
 ExamAuthoringStore.List                                    always
+ExamAuthoringStore.Count                                   always
+ExamAuthoringStore.CountExamActions                        always
 ExamAuthoringStore.Archive                                 command
 ExamAuthoringStore.Access                                  always
 ExamAuthoringStore.Get                                     always
@@ -65,12 +69,17 @@ ExamAuthoringStore.Resolve                                 always
 ExamAuthoringStore.UpdateDraftNativePolicy                 command
 
 ExamRevisionStore.GetSummary                               always
+ExamRevisionStore.CheckPublication                         always
 ExamRevisionStore.List                                     always
 ExamRevisionStore.GetSnapshot                              always
 
 ExamSittingStore.Resolve                                   always
 ExamSittingStore.Get                                       always
 ExamSittingStore.List                                      always
+ExamSittingStore.ListCandidateBoardTargets                 always
+ExamSittingStore.CountCandidates                           always
+ExamSittingStore.ListHistory                               always
+ExamSittingStore.ListCorrections                           always
 ExamSittingStore.Schedule                                  command
 ExamSittingStore.UpdateSchedule                            command
 ExamSittingStore.Cancel                                    command
@@ -89,6 +98,8 @@ ExamAttemptStore.SuspendAttempt                            command
 ExamAttemptStore.ReallowAttempt                            command
 ExamAttemptStore.Get                                       always
 ExamAttemptStore.List                                      always
+ExamAttemptStore.ListSittingCandidateDetails               always
+ExamAttemptStore.ListManagerEnds                           always
 ExamAttemptStore.GetCandidatePresentation                  always
 ExamAttemptStore.ResolveCandidateAccess                    always
 ExamAttemptStore.ResolveCandidateResource                  always
@@ -140,6 +151,8 @@ UserStore.List                                             always
 UserStore.Count                                            always
 UserStore.ListDirectorySummaries                           always
 UserStore.ListIdentities                                   always
+UserStore.ListMFAStates                                    always
+UserStore.ListMemberships                                  always
 UserStore.MatchVisibility                                  always
 UserStore.ListDisplayNames                                 always
 UserStore.ListVisibleDisplayNames                          always
@@ -187,10 +200,12 @@ RoleStore.GetByIDs                                         always
 RoleStore.List                                             always
 
 RoleBindingStore.Get                                       always
+RoleBindingStore.ListExpiries                              always
 RoleBindingStore.ListByUser                                always
 RoleBindingStore.ListVisibleByUser                         always
 RoleBindingStore.ListVisibleSummariesByUsers               always
 RoleBindingStore.ListByScope                               always
+RoleBindingStore.ListTeachersByClasses                     always
 RoleBindingStore.ListCurrentByRoles                        always
 RoleBindingStore.CountCurrentByRoles                       always
 RoleBindingStore.CountHoldersByRoles                       always
@@ -238,3 +253,6 @@ AssistantTranscriptStore.Decision always
 AssistantProfileStore.Usage always
 
 ExamAttemptStore.ListCandidateStarterWorkspace always
+
+AuditExportStore.FindCreation                             always
+AuditExportStore.TopologyRevision                         always

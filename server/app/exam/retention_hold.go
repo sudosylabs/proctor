@@ -19,9 +19,12 @@ import (
 )
 
 type CreateRetentionHoldCommand struct {
-	Scope          model.RetentionHoldScope
-	ReasonCode     string
-	PrivateReason  string
+	Scope         model.RetentionHoldScope
+	ReasonCode    string
+	PrivateReason string
+	// Until, when set, is when the hold is due for review. It never releases
+	// the hold.
+	Until          model.OptionalTime
 	IdempotencyKey string
 }
 
@@ -109,7 +112,7 @@ func (r *Records) CreateRetentionHold(
 		scope,
 		action,
 		"create_hold",
-		map[string]any{"retention_hold_id": holdID.String(), "reason_code": command.ReasonCode},
+		map[string]any{"retention_hold_id": holdID.String(), "reason_code": command.ReasonCode, "until_set": command.Until.Valid},
 	)
 	if err != nil {
 		return nil, err
@@ -120,6 +123,7 @@ func (r *Records) CreateRetentionHold(
 		HoldID:              holdID,
 		ReasonCode:          command.ReasonCode,
 		PrivateReason:       command.PrivateReason,
+		Until:               command.Until,
 	}, commandIdempotency)
 	if err != nil {
 		return nil, r.failMutation(ctx, mutation, err)
@@ -128,6 +132,9 @@ func (r *Records) CreateRetentionHold(
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold creation result is incomplete"))
 	}
 
+	if !result.Replayed {
+		r.publishHoldChanged(ctx, result.Hold)
+	}
 	return result.Hold, nil
 }
 
@@ -185,9 +192,12 @@ func (r *Records) ReleaseRetentionHold(
 		return nil, r.failMutation(ctx, mutation, err)
 	}
 
-	if !result.Released() {
+	if !result.ConsistentWithRelease(command.HoldID, command.Scope) {
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold release result is incomplete"))
 	}
 
+	if !result.Replayed {
+		r.publishHoldChanged(ctx, result.Hold)
+	}
 	return result.Hold, nil
 }

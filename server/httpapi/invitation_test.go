@@ -22,6 +22,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // invitationAPI serves the Invitation resource over the fixture's real
@@ -29,7 +30,7 @@ import (
 func invitationAPI(t *testing.T, fixture *onboardingFixture, principal model.Principal) http.Handler {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
-	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service))
+	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service, fixture.people))
 }
 
 func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {
@@ -84,9 +85,11 @@ func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T
 	httpAPI.ServeHTTP(secondPageResponse, secondPage)
 	options = fixture.invitations.lastList(t)
 	require.Equal(t, http.StatusOK, secondPageResponse.Code, "second Invitation page = %d %s options=%#v", secondPageResponse.Code, secondPageResponse.Body.String(), options)
-	require.Equal(t, decodedCursor.CreatedAt, options.BeforeCreatedAt.Format(time.RFC3339Nano), "second page options=%#v", options)
-	require.Equal(t, decodedCursor.ID, options.BeforeID.String(), "second page options=%#v", options)
-	require.Equal(t, invitation.ID, options.BeforeID, "the cursor continues after the listed Invitation")
+	require.Equal(t, decodedCursor.At, options.AfterAt.Format(time.RFC3339Nano), "second page options=%#v", options)
+	require.Equal(t, decodedCursor.ID, options.AfterID.String(), "second page options=%#v", options)
+	require.Equal(t, invitation.ID, options.AfterID, "the cursor continues after the listed Invitation")
+	require.Equal(t, store.InvitationOrderCreated, options.Order, "the listing is newest first by default")
+	require.True(t, options.Descending, "the listing is newest first by default")
 
 	id := invitation.ID.String()
 	detail := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations/"+id, nil)
@@ -186,7 +189,7 @@ func TestInvitationAdministrationHTTPRejectsMalformedCursor(t *testing.T) {
 	principal := fixture.principal(model.AuthenticationSingleFactor)
 	principal.ClientType = model.SessionClientCLI
 	logger, logs := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service, fixture.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations?cursor=not-a-cursor", nil)
 	request.Header.Set("Authorization", "Bearer pat")
 	response := httptest.NewRecorder()
@@ -203,7 +206,7 @@ func TestInvitationAcceptanceHTTPReturnsOnlyRecordIDsForFreshAndReplay(t *testin
 			invitation, claim := fixture.pendingStudentInvitation(t, fixture.addClass("Biology 101"), "student@example.edu")
 			fixture.invitations.replayAcceptance = replayed
 			logger, _ := routetest.NewLogger(t)
-			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, invitationResource(fixture.service))
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, invitationResource(fixture.service, fixture.people))
 			body, _ := json.Marshal(map[string]string{"claim": claim, "password": "correct horse battery staple", "username": "student"})
 			request := newJSONRequest(http.MethodPost, "/api/v1/invitations/student-class/accept", bytes.NewReader(body))
 			response := httptest.NewRecorder()
@@ -381,4 +384,82 @@ func TestScopedRoleInvitationHTTPRequiresAuthenticatedExistingUserAndInstitution
 	patAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusUnauthorized, response.Code, "institution Role PAT issue = %d %s", response.Code, response.Body.String())
 	require.Len(t, fixture.invitations.scopedRoleIssues, issued, "a PAT issue reached the Store")
+}
+
+// TestInvitationAdministrationNamesInviterAndScope pins the names beside an
+// administered Invitation's IDs: who issued it and where it admits someone.
+func TestInvitationAdministrationNamesInviterAndScope(t *testing.T) {
+	t.Parallel()
+	fixture := newOnboardingFixture(t)
+	fixture.users.add(&model.User{ID: fixture.callerID, Username: "priya", DisplayName: "Priya Raman"})
+	class := fixture.addClass("Biology 101")
+	invitation, _ := fixture.pendingStudentInvitation(t, class, "student@example.edu")
+	httpAPI := invitationAPI(t, fixture, fixture.principal(model.AuthenticationMultiFactor))
+
+	request := newJSONRequest(http.MethodGet, "/api/v1/invitations/"+invitation.ID.String(), nil)
+	request.Header.Set("Authorization", "Bearer token")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var got invitationAdministrationResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &got))
+	require.NotNil(t, got.Inviter)
+	require.Equal(t, fixture.callerID.String(), got.Inviter.ID)
+	require.Equal(t, "Priya Raman", got.Inviter.DisplayName)
+	require.Equal(t, scopeRefResponse{Type: model.RoleScopeClass, ID: class.ID.String()}, got.Scope,
+		"the scope is named only when the lookup finds it")
+	require.Nil(t, got.Role, "a student Invitation grants no Role")
+}
+
+// TestInvitationListingReadsItsOrderSearchDeliveryAndExpiryFilters pins I1:
+// the sort and direction reach the Store and the cursor carries them, so a
+// cursor from another order is refused; delivery_state repeats, q is a
+// trimmed prefix, and the expiry bounds are read like the creation bounds.
+func TestInvitationListingReadsItsOrderSearchDeliveryAndExpiryFilters(t *testing.T) {
+	fixture := newOnboardingFixture(t)
+	class := fixture.addClass("Biology 101")
+	invitation, _ := fixture.pendingStudentInvitation(t, class, "student@example.edu")
+	fixture.invitations.listed, fixture.invitations.more = []*model.Invitation{invitation}, true
+	httpAPI := invitationAPI(t, fixture, fixture.principal(model.AuthenticationMultiFactor))
+	serve := func(query string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations"+query, nil)
+		request.Header.Set("Authorization", "Bearer session")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	response := serve("?sort=expires&dir=asc&q=%20stud%20&delivery_state=failed&delivery_state=suppressed" +
+		"&expires_after=2026-09-01T00:00:00Z&expires_before=2026-09-08T00:00:00Z")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	options := fixture.invitations.lastList(t)
+	require.Equal(t, store.InvitationOrderExpires, options.Order)
+	require.False(t, options.Descending)
+	require.Equal(t, "stud", options.Query)
+	require.Equal(t, []model.MailDeliveryState{model.MailDeliveryFailed, model.MailDeliverySuppressed}, options.DeliveryStates)
+	require.True(t, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC).Equal(options.ExpiresAfter))
+	require.True(t, time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC).Equal(options.ExpiresBefore))
+
+	var listed struct {
+		NextCursor string `json:"next_cursor"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &listed))
+	cursor, err := decodeInvitationCursor(listed.NextCursor)
+	require.NoError(t, err)
+	require.Equal(t, invitationCursor{Sort: "expires", Dir: "asc", At: model.FormatRFC3339(invitation.ExpiresAt), ID: invitation.ID.String()}, cursor,
+		"the cursor carries the order and the expiry key")
+
+	response = serve("?sort=expires&dir=asc&cursor=" + url.QueryEscape(listed.NextCursor))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	options = fixture.invitations.lastList(t)
+	require.True(t, invitation.ExpiresAt.Equal(options.AfterAt))
+	require.Equal(t, invitation.ID, options.AfterID)
+
+	for _, query := range []string{
+		"?cursor=" + url.QueryEscape(listed.NextCursor),
+		"?sort=name", "?dir=up", "?delivery_state=bounced",
+		"?expires_after=2026-09-08T00:00:00Z&expires_before=2026-09-01T00:00:00Z", "?expires_before=soon",
+	} {
+		assertHTTPProblem(t, serve(query), http.StatusBadRequest, "request.invalid")
+	}
 }

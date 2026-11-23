@@ -16,7 +16,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/getkin/kin-openapi v0.153.0
 	github.com/gorilla/mux v1.8.1
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/hashicorp/memberlist v0.7.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.12.3

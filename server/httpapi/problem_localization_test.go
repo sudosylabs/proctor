@@ -48,7 +48,7 @@ func TestSessionAndBuiltInRolePresentationLocalizesWithoutChangingIdentifiers(t 
 	role := roleResponseFromModel(request, &model.Role{
 		Name: model.SystemAdministratorRoleName, DisplayName: "System Administrator",
 		Description: "Full installation access.", BuiltIn: true,
-	})
+	}, nil)
 	require.Equal(t, model.SystemAdministratorRoleName, role.Name)
 	require.Equal(t, "Administrateur système", role.DisplayName)
 	require.Equal(t, "Accès complet à l’installation.", role.Description)

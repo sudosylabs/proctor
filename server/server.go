@@ -314,12 +314,13 @@ type runtimeComponents struct {
 	pluginReconciler *pluginhost.Reconciler
 	metrics          runtimeMetrics
 	// tracing flushes and stops span export; nil when tracing was never built.
-	tracing   runtimeTracing
-	transport runtimeTransport
-	websocket runtimeComponent
-	readiness runtimeReadiness
-	listen    func(string, string) (net.Listener, error)
-	newHTTP   func(httpServerSettings) httpRuntime
+	tracing           runtimeTracing
+	transport         runtimeTransport
+	stopRealtimeHints func(context.Context) error
+	websocket         runtimeComponent
+	readiness         runtimeReadiness
+	listen            func(string, string) (net.Listener, error)
+	newHTTP           func(httpServerSettings) httpRuntime
 }
 
 // lifecycleMilestones records only stages that the node successfully entered.

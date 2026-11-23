@@ -83,7 +83,7 @@ func TestInvitationListCountsTheFirstPageAndPendingSummary(t *testing.T) {
 	require.Equal(t, paging.Total{Counted: true, Total: 9}, first.Total)
 	require.Equal(t, persistence.listOptions, persistence.countOptions, "the count reads the list's visibility and filters")
 
-	later, err := service.ListInvitations(context.Background(), caller, ListInvitationsQuery{Limit: 25, BeforeCreatedAt: now, BeforeID: model.NewInvitationID()})
+	later, err := service.ListInvitations(context.Background(), caller, ListInvitationsQuery{Limit: 25, AfterAt: now, AfterID: model.NewInvitationID()})
 	require.NoError(t, err)
 	require.Equal(t, paging.Total{}, later.Total)
 

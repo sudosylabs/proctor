@@ -169,6 +169,10 @@ func (s *Service) executeImportRow(
 			current.Mode == model.OnboardingImportStudentProgression &&
 			(operation == AcademicAdministrationClassEnroll || operation == AcademicAdministrationClassTransfer)
 		batchItem := academicAdministrationImportRowItem(row)
+		var reason *string
+		if filterMode && current.Filter != nil && current.Filter.Reason != "" {
+			reason = &current.Filter.Reason
+		}
 
 		run := func(ctx context.Context, sourceAuditID, destinationAuditID model.AuditEventID) (AcademicAdministrationBatchResult, error) {
 			if progression {
@@ -182,6 +186,7 @@ func (s *Service) executeImportRow(
 				ScopeType:                     row.ScopeType,
 				ScopeID:                       row.ScopeID,
 				IdempotencyKey:                row.ImportID.String(),
+				Reason:                        reason,
 				onboardingImportID:            row.ImportID,
 				onboardingImportRowNumber:     row.RowNumber,
 				progression:                   progression,

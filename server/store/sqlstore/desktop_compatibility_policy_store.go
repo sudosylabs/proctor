@@ -8,6 +8,7 @@
 package sqlstore
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -27,15 +28,15 @@ type SQLDesktopCompatibilityPolicyStore struct {
 }
 
 type desktopCompatibilityPolicyRow struct {
-	InstitutionID          string     `db:"institution_id"`
-	Revision               int64      `db:"revision"`
-	MinimumDesktopRelease  string     `db:"minimum_desktop_release"`
-	RevokedDesktopBuildIDs jsonValue  `db:"revoked_desktop_build_ids"`
-	AdministratorMessage   string     `db:"administrator_message"`
-	Availability           string     `db:"availability"`
-	RetryAt                *time.Time `db:"retry_at"`
-	CreatedAt              time.Time  `db:"created_at"`
-	UpdatedAt              time.Time  `db:"updated_at"`
+	InstitutionID         string     `db:"institution_id"`
+	Revision              int64      `db:"revision"`
+	MinimumDesktopRelease string     `db:"minimum_desktop_release"`
+	RevokedDesktopBuilds  jsonValue  `db:"revoked_desktop_builds"`
+	AdministratorMessage  string     `db:"administrator_message"`
+	Availability          string     `db:"availability"`
+	RetryAt               *time.Time `db:"retry_at"`
+	CreatedAt             time.Time  `db:"created_at"`
+	UpdatedAt             time.Time  `db:"updated_at"`
 }
 
 // desktopCompatibilityPolicyReplacementOutcome is the committed result of a
@@ -56,15 +57,74 @@ func (desktopCompatibilityPolicyReplacementDocument) outcomeDocument() {}
 // desktopCompatibilityPolicyDocument spells model.DesktopCompatibilityPolicy
 // inside a persisted outcome; the two convert directly.
 type desktopCompatibilityPolicyDocument struct {
-	InstitutionID          model.InstitutionID       `json:"institution_id"`
-	Revision               int64                     `json:"revision"`
-	MinimumDesktopRelease  string                    `json:"minimum_desktop_release"`
-	RevokedDesktopBuildIDs []string                  `json:"revoked_desktop_build_ids"`
-	AdministratorMessage   string                    `json:"administrator_message"`
-	Availability           model.DesktopAvailability `json:"availability"`
-	RetryAt                model.OptionalTime        `json:"retry_at"`
-	CreatedAt              time.Time                 `json:"created_at"`
-	UpdatedAt              time.Time                 `json:"updated_at"`
+	InstitutionID         model.InstitutionID              `json:"institution_id"`
+	Revision              int64                            `json:"revision"`
+	MinimumDesktopRelease string                           `json:"minimum_desktop_release"`
+	RevokedDesktopBuilds  []desktopBuildRevocationDocument `json:"revoked_desktop_builds"`
+	AdministratorMessage  string                           `json:"administrator_message"`
+	Availability          model.DesktopAvailability        `json:"availability"`
+	RetryAt               model.OptionalTime               `json:"retry_at"`
+	CreatedAt             time.Time                        `json:"created_at"`
+	UpdatedAt             time.Time                        `json:"updated_at"`
+}
+
+// desktopBuildRevocationDocument spells model.DesktopBuildRevocation in the
+// policy row's revoked_desktop_builds and in a persisted outcome.
+type desktopBuildRevocationDocument struct {
+	BuildID         string       `json:"build_id"`
+	Reason          string       `json:"reason"`
+	RevokedAt       time.Time    `json:"revoked_at"`
+	RevokedByUserID model.UserID `json:"revoked_by_user_id"`
+}
+
+func newDesktopCompatibilityPolicyDocument(policy *model.DesktopCompatibilityPolicy) desktopCompatibilityPolicyDocument {
+	return desktopCompatibilityPolicyDocument{
+		InstitutionID:         policy.InstitutionID,
+		Revision:              policy.Revision,
+		MinimumDesktopRelease: policy.MinimumDesktopRelease,
+		RevokedDesktopBuilds:  desktopBuildRevocationDocuments(policy.RevokedDesktopBuilds),
+		AdministratorMessage:  policy.AdministratorMessage,
+		Availability:          policy.Availability,
+		RetryAt:               policy.RetryAt,
+		CreatedAt:             policy.CreatedAt,
+		UpdatedAt:             policy.UpdatedAt,
+	}
+}
+
+func (d desktopCompatibilityPolicyDocument) model() *model.DesktopCompatibilityPolicy {
+	return &model.DesktopCompatibilityPolicy{
+		InstitutionID:         d.InstitutionID,
+		Revision:              d.Revision,
+		MinimumDesktopRelease: d.MinimumDesktopRelease,
+		RevokedDesktopBuilds:  desktopBuildRevocations(d.RevokedDesktopBuilds),
+		AdministratorMessage:  d.AdministratorMessage,
+		Availability:          d.Availability,
+		RetryAt:               d.RetryAt,
+		CreatedAt:             d.CreatedAt,
+		UpdatedAt:             d.UpdatedAt,
+	}
+}
+
+func desktopBuildRevocationDocuments(revocations []model.DesktopBuildRevocation) []desktopBuildRevocationDocument {
+	documents := make([]desktopBuildRevocationDocument, 0, len(revocations))
+	for _, revocation := range revocations {
+		documents = append(documents, desktopBuildRevocationDocument{
+			BuildID: revocation.BuildID, Reason: revocation.Reason,
+			RevokedAt: model.TimeUTC(revocation.RevokedAt), RevokedByUserID: revocation.RevokedByUserID,
+		})
+	}
+	return documents
+}
+
+func desktopBuildRevocations(documents []desktopBuildRevocationDocument) []model.DesktopBuildRevocation {
+	revocations := make([]model.DesktopBuildRevocation, 0, len(documents))
+	for _, document := range documents {
+		revocations = append(revocations, model.DesktopBuildRevocation{
+			BuildID: document.BuildID, Reason: document.Reason,
+			RevokedAt: model.TimeUTC(document.RevokedAt), RevokedByUserID: document.RevokedByUserID,
+		})
+	}
+	return revocations
 }
 
 func newSQLDesktopCompatibilityPolicyStore(sqlStore *SQLStore) store.DesktopCompatibilityPolicyStore {
@@ -104,7 +164,7 @@ func (s SQLDesktopCompatibilityPolicyStore) Replace(
 					return nil, store.NewErrInvalidInput("desktop_compatibility_policy", "outcome", nil)
 				}
 				return encodeOutcome(desktopCompatibilityPolicyReplacementDocument{
-					Policy:  desktopCompatibilityPolicyDocument(*outcome.Policy),
+					Policy:  newDesktopCompatibilityPolicyDocument(outcome.Policy),
 					Changed: outcome.Changed,
 				})
 			},
@@ -191,7 +251,7 @@ func replaceDesktopCompatibilityPolicy(
 	// The recorded change never precedes a policy lifecycle stamped
 	// by a leading node clock; PostgreSQL time decided authority.
 	at := transitionInstant(databaseNow, current.CreatedAt, current.UpdatedAt)
-	if err = candidate.Replace(input.ExpectedRevision, input.Settings, at); err != nil {
+	if err = candidate.Replace(input.ExpectedRevision, input.Settings, input.ActorID, at); err != nil {
 		return desktopCompatibilityPolicyReplacementOutcome{}, store.NewErrInvalidInput(
 			"desktop_compatibility_policy",
 			"replacement",
@@ -232,7 +292,7 @@ func updateDesktopCompatibilityPolicy(
 	candidate *model.DesktopCompatibilityPolicy,
 	previousRevision int64,
 ) error {
-	encodedBuildIDs, encodeErr := json.Marshal(candidate.RevokedDesktopBuildIDs)
+	encodedBuildIDs, encodeErr := json.Marshal(desktopBuildRevocationDocuments(candidate.RevokedDesktopBuilds))
 	if encodeErr != nil {
 		return store.NewErrInvalidInput(
 			"desktop_compatibility_policy",
@@ -245,7 +305,7 @@ func updateDesktopCompatibilityPolicy(
 		ctx,
 		`
 		UPDATE desktop_compatibility_policies
-		   SET revision = ?, minimum_desktop_release = ?, revoked_desktop_build_ids = ?::jsonb,
+		   SET revision = ?, minimum_desktop_release = ?, revoked_desktop_builds = ?::jsonb,
 		       administrator_message = ?, availability = ?, retry_at = ?, updated_at = ?
 		 WHERE singleton = 1 AND revision = ?`,
 		candidate.Revision,
@@ -292,7 +352,7 @@ func getDesktopCompatibilityPolicy(
 	lock string,
 ) (*model.DesktopCompatibilityPolicy, error) {
 	query := `SELECT institution_id, revision, minimum_desktop_release,
-		revoked_desktop_build_ids, administrator_message, availability, retry_at, created_at, updated_at
+		revoked_desktop_builds, administrator_message, availability, retry_at, created_at, updated_at
 		FROM desktop_compatibility_policies WHERE singleton = 1`
 	if lock != "" {
 		query += " " + lock
@@ -327,20 +387,22 @@ func (r desktopCompatibilityPolicyRow) model() (*model.DesktopCompatibilityPolic
 	if err != nil {
 		return nil, invalidPersistedState("desktop_compatibility_policy", "institution_id", err)
 	}
-	revokedBuildIDs := []string{}
-	if err := json.Unmarshal(r.RevokedDesktopBuildIDs, &revokedBuildIDs); err != nil {
-		return nil, invalidPersistedState("desktop_compatibility_policy", "revoked_build_ids", err)
+	revoked := []desktopBuildRevocationDocument{}
+	decoder := json.NewDecoder(bytes.NewReader(r.RevokedDesktopBuilds))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&revoked); err != nil {
+		return nil, invalidPersistedState("desktop_compatibility_policy", "revoked_desktop_builds", err)
 	}
 	policy := &model.DesktopCompatibilityPolicy{
-		InstitutionID:          institutionID,
-		Revision:               r.Revision,
-		MinimumDesktopRelease:  r.MinimumDesktopRelease,
-		RevokedDesktopBuildIDs: revokedBuildIDs,
-		AdministratorMessage:   r.AdministratorMessage,
-		Availability:           model.DesktopAvailability(r.Availability),
-		RetryAt:                model.OptionalTimeFromPtr(r.RetryAt),
-		CreatedAt:              model.TimeUTC(r.CreatedAt),
-		UpdatedAt:              model.TimeUTC(r.UpdatedAt),
+		InstitutionID:         institutionID,
+		Revision:              r.Revision,
+		MinimumDesktopRelease: r.MinimumDesktopRelease,
+		RevokedDesktopBuilds:  desktopBuildRevocations(revoked),
+		AdministratorMessage:  r.AdministratorMessage,
+		Availability:          model.DesktopAvailability(r.Availability),
+		RetryAt:               model.OptionalTimeFromPtr(r.RetryAt),
+		CreatedAt:             model.TimeUTC(r.CreatedAt),
+		UpdatedAt:             model.TimeUTC(r.UpdatedAt),
 	}
 	if err := policy.Validate(); err != nil {
 		return nil, invalidPersistedState("desktop_compatibility_policy", "value", err)
@@ -371,8 +433,7 @@ func validateDesktopCompatibilityPolicyReplacement(
 func decodeDesktopCompatibilityPolicyReplacementOutcome(encoded []byte) (desktopCompatibilityPolicyReplacementOutcome, error) {
 	var document desktopCompatibilityPolicyReplacementDocument
 	err := decodeOutcome(encoded, &document)
-	policy := model.DesktopCompatibilityPolicy(document.Policy)
-	outcome := desktopCompatibilityPolicyReplacementOutcome{Policy: &policy, Changed: document.Changed}
+	outcome := desktopCompatibilityPolicyReplacementOutcome{Policy: document.Policy.model(), Changed: document.Changed}
 	if err != nil || outcome.Policy.Validate() != nil {
 		return desktopCompatibilityPolicyReplacementOutcome{}, invalidPersistedState(
 			"command_outcome",
@@ -397,7 +458,7 @@ func completeDesktopCompatibilityPolicyAudit(
 		"resulting_revision":        outcome.Policy.Revision,
 		"changed":                   outcome.Changed,
 		"minimum_desktop_release":   outcome.Policy.MinimumDesktopRelease,
-		"revoked_build_count":       len(outcome.Policy.RevokedDesktopBuildIDs),
+		"revoked_build_count":       len(outcome.Policy.RevokedDesktopBuilds),
 		"administrator_message_set": outcome.Policy.AdministratorMessage != "",
 		"availability":              outcome.Policy.Availability,
 		"retry_at_set":              outcome.Policy.RetryAt.Valid,
@@ -428,3 +489,12 @@ func completeDesktopCompatibilityPolicyAudit(
 }
 
 var _ store.DesktopCompatibilityPolicyStore = (*SQLDesktopCompatibilityPolicyStore)(nil)
+
+// CountOpenSittings reads at most one row past maximum.
+func (s SQLDesktopCompatibilityPolicyStore) CountOpenSittings(ctx context.Context, maximum int) (int, error) {
+	if !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("desktop_compatibility_policy", "open_sittings", nil)
+	}
+	return countBoundedSQL(ctx, s.GetMaster(),
+		`SELECT 1 FROM exam_sittings WHERE state IN ('open', 'paused', 'closing')`, nil, maximum, "open sittings")
+}

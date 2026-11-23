@@ -93,6 +93,9 @@ func TestInvitationStore(t *testing.T, ss store.Store, probes ...InvitationSQLPr
 	t.Run("AdministrationPaginationIsStable", func(t *testing.T) {
 		testInvitationAdministrationPaginationIsStable(t, ss)
 	})
+	t.Run("AdministrationListingFilters", func(t *testing.T) {
+		testInvitationAdministrationListingFilters(t, ss)
+	})
 	t.Run("OnboardingImportLifecycle", func(t *testing.T) {
 		testOnboardingImportLifecycle(t, ss)
 	})
@@ -856,7 +859,7 @@ func testInvitationAdministrationPaginationIsStable(t *testing.T, ss store.Store
 	require.True(t, first.More)
 	boundary := first.Items[len(first.Items)-1].Invitation
 	second, err := ss.Invitation().List(ctx, store.InvitationListOptions{Visibility: visibility, Limit: 2,
-		BeforeCreatedAt: boundary.CreatedAt, BeforeID: boundary.ID})
+		AfterAt: boundary.CreatedAt, AfterID: boundary.ID})
 	require.NoError(t, err)
 	require.Len(t, second.Items, 1)
 	require.False(t, second.More)
@@ -897,7 +900,7 @@ func testInvitationAdministrationPaginationIsStable(t *testing.T, ss store.Store
 				}
 				last := page.Items[0].Invitation
 				paged = append(paged, last.ID)
-				options.BeforeCreatedAt, options.BeforeID = last.CreatedAt, last.ID
+				options.AfterAt, options.AfterID = last.CreatedAt, last.ID
 			}
 			total, countErr := ss.Invitation().Count(ctx, options, store.MaximumListCount)
 			require.NoError(t, countErr)
@@ -1479,7 +1482,8 @@ func scopedRoleInvitationAcceptanceFixture(t *testing.T, ctx context.Context, ss
 ) *store.ScopedRoleInvitationAcceptance {
 	t.Helper()
 	binding := &model.RoleBinding{UserID: userID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
-		ScopeType: invitation.ScopeType, ScopeID: invitation.ScopeID, StartsAt: invitation.EffectiveStartsAt(at), EndsAt: invitation.IntendedEndsAt}
+		ScopeType: invitation.ScopeType, ScopeID: invitation.ScopeID, StartsAt: invitation.EffectiveStartsAt(at), EndsAt: invitation.IntendedEndsAt,
+		GrantedByUserID: invitation.InviterUserID, GrantedVia: model.RoleBindingGrantedByInvitation}
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	attempt, err := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: userID, SessionID: sessionID,
 		Action: "invitation.accept", Resource: model.Resource{Type: resourceTypeForScopedInvitation(invitation), ID: invitation.ScopeID},

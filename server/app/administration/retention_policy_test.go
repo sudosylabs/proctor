@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -157,6 +158,10 @@ func TestRetentionPolicyReplacementPassesAtomicAuditAndIdempotency(t *testing.T)
 	require.Equal(t, "retention_policy.replace", idempotency.Operation, "atomic input")
 	result.AuditRetentionDays = 1
 	require.Equal(t, command.Settings.AuditRetentionDays, next.AuditRetentionDays, "replacement result shares mutable Store policy")
+	changed, err := realtime.NewRetentionPolicyChangedEvent(fixture.institution.ID)
+	require.NoError(t, err)
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: changed}},
+		fixture.service.publisher.(*realtimetest.Publisher).Calls(), "retention viewers hear of the new policy after commit")
 }
 
 func TestRetentionPolicyReplacementReplayAndNoOpUseStoreOutcome(t *testing.T) {
@@ -329,7 +334,8 @@ func newRetentionPolicyFixture(t *testing.T) retentionPolicyFixture {
 	access := grantedAccess(t, nil, institutionGrant(principal.UserID,
 		model.ActionRetentionPolicyView, model.ActionRetentionPolicyManage, model.ActionRetentionCleanupManage))
 	service := &Service{retentionPolicies: policies, retention: &retentionLifecycleFake{}, institutions: &institutionStoreFake{institution: institution},
-		authorizer: access.Authorizer, auditor: access.Auditor.MutationAudit(), recentAuthenticationTTL: time.Minute, now: func() time.Time { return at }}
+		authorizer: access.Authorizer, auditor: access.Auditor.MutationAudit(), publisher: &realtimetest.Publisher{},
+		recentAuthenticationTTL: time.Minute, now: func() time.Time { return at }}
 	inv := invocation.New(principal, model.RequestMetadata{RequestID: "retention-policy"})
 	return retentionPolicyFixture{service: service, policies: policies, access: access, institution: institution,
 		inv: inv, stranger: strangerTo(inv), at: at}

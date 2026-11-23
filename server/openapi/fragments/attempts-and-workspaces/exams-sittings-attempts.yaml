@@ -940,6 +940,17 @@ components:
         active_suspension:
           description: The active Suspension. Omitted unless the Attempt is suspended.
           $ref: '#/components/schemas/ExamAttemptSuspensionResponse'
+        ended_by_user_id:
+          $ref: '#/components/schemas/ID'
+          description: >-
+            The manager who ended the Attempt. Present only when a manager ended it, and only for callers who
+            may manage the Sitting.
+        ended_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: The manager who ended the Attempt, named. Present with ended_by_user_id.
+        end_reason_text:
+          type: string
+          description: The manager's private reason for ending the Attempt. Present with ended_by_user_id.
     ReallowExamAttemptRequest:
       description: Which Suspension to close, and why.
       type: object

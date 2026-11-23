@@ -252,6 +252,10 @@ func (f invitationClassStoreFake) Get(context.Context, model.ClassID) (*model.Cl
 	return f.class, nil
 }
 
+func (f invitationClassStoreFake) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {
+	return testAcademicUnitID, nil
+}
+
 type invitationPeriodStoreFake struct {
 	store.AcademicPeriodStore
 	period *model.AcademicPeriod
@@ -268,6 +272,10 @@ type invitationAcademicUnitStoreFake struct {
 
 func (f invitationAcademicUnitStoreFake) Get(context.Context, model.AcademicUnitID) (*model.AcademicUnit, error) {
 	return f.unit, nil
+}
+
+func (f invitationAcademicUnitStoreFake) ListAncestors(context.Context, model.AcademicUnitID) ([]*model.AcademicUnit, error) {
+	return nil, nil
 }
 
 type invitationRoleStoreFake struct {

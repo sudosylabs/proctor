@@ -32,7 +32,7 @@ func TestSittingComposerFreezesAndSelectsRecipientLocales(t *testing.T) {
 		from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		at.Add(24*time.Hour), at.Add(26*time.Hour), at)
+		at.Add(24*time.Hour), at.Add(26*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	prepared, err := composer.Prepare(model.NewUserID(), sitting, store.ExamSittingMailScheduled,
 		SittingScheduleDetails{ExamTitle: "Algorithms", ClassDisplayName: "Class A"})

@@ -10,7 +10,10 @@ package attempt
 import (
 	"context"
 	"errors"
+	"maps"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -19,6 +22,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ManagedAttempt is a managed view of one attempt. ManagerEnd says who ended
+// it and why when a manager did, and only to a caller who may manage the
+// sitting.
+type ManagedAttempt struct {
+	store.ExamAttemptManagerSnapshot
+	ManagerEnd *ManagerEnd
+}
+
 // GetExamAttempt returns a managed view of one attempt.
 func (s *Service) GetExamAttempt(
 	ctx context.Context,
@@ -26,8 +37,36 @@ func (s *Service) GetExamAttempt(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
-) (_ store.ExamAttemptManagerSnapshot, resultErr error) {
+) (_ ManagedAttempt, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	snapshot, err := s.getExamAttempt(ctx, inv, examID, sittingID, attemptID)
+	if err != nil {
+		return ManagedAttempt{}, err
+	}
+
+	manageAuthorized, err := s.sittingManageAuthorized(ctx, inv, sittingID)
+	if err != nil {
+		return ManagedAttempt{}, err
+	}
+	ends, err := s.managerEnds(ctx, sittingID, []model.ExamAttemptID{attemptID}, manageAuthorized)
+	if err != nil {
+		return ManagedAttempt{}, err
+	}
+
+	managed := ManagedAttempt{ExamAttemptManagerSnapshot: snapshot}
+	if end, ended := ends[attemptID]; ended {
+		managed.ManagerEnd = &end
+	}
+	return managed, nil
+}
+
+func (s *Service) getExamAttempt(
+	ctx context.Context,
+	inv invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+) (store.ExamAttemptManagerSnapshot, error) {
 	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() {
 		return store.ExamAttemptManagerSnapshot{}, apperror.Invalid("exam.attempt.invalid", "attempt")
 	}
@@ -105,31 +144,53 @@ type ListManagedAttemptsQuery struct {
 }
 
 // ManagedAttemptPage is one page of snapshots; HasMore reports that a later
-// page exists.
+// page exists. ManagerEnds holds who ended each attempt a manager ended, for
+// a caller who may manage the sitting.
 type ManagedAttemptPage struct {
-	Items   []store.ExamAttemptManagerSnapshot
-	HasMore bool
+	Items       []store.ExamAttemptManagerSnapshot
+	ManagerEnds map[model.ExamAttemptID]ManagerEnd
+	HasMore     bool
 }
 
 // SittingCandidateStatusesQuery selects one page of per-candidate statuses
-// after AfterCandidateUserID.
+// after AfterCandidateUserID, narrowed by Filter.
 type SittingCandidateStatusesQuery struct {
 	ExamID               model.ExamID
 	SittingID            model.ExamSittingID
 	AfterCandidateUserID model.UserID
+	Filter               store.SittingCandidateStatusFilter
 	Limit                int
 }
 
+// candidateStatusQueryMaximumRunes bounds the name search.
+const candidateStatusQueryMaximumRunes = 100
+
+func validCandidateStatusFilter(filter store.SittingCandidateStatusFilter) bool {
+	if utf8.RuneCountInString(filter.Query) > candidateStatusQueryMaximumRunes || !utf8.ValidString(filter.Query) {
+		return false
+	}
+	seen := make(map[store.SittingCandidatePresenceState]struct{}, len(filter.PresenceStates))
+	for _, state := range filter.PresenceStates {
+		if _, repeated := seen[state]; repeated || !state.IsValid() {
+			return false
+		}
+		seen[state] = struct{}{}
+	}
+	return true
+}
+
 // SittingCandidateStatusesPage is one page of per-candidate statuses; HasMore
-// reports that a later page exists.
+// reports that a later page exists. Details holds each candidate's board
+// details.
 type SittingCandidateStatusesPage struct {
 	store.SittingCandidateStatusPage
+	Details map[model.UserID]CandidateBoardDetail
 	HasMore bool
 }
 
 // ListSittingCandidateStatuses excludes the caller. It requires sitting view;
 // whether the caller also holds sitting management decides if re-allow is
-// offered.
+// offered. The first page also counts the whole board, whatever the filter.
 func (s *Service) ListSittingCandidateStatuses(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -142,7 +203,8 @@ func (s *Service) ListSittingCandidateStatuses(
 		!query.SittingID.IsValid() ||
 		query.Limit < 1 ||
 		query.Limit > 200 ||
-		!query.AfterCandidateUserID.IsZero() && !query.AfterCandidateUserID.IsValid() {
+		!query.AfterCandidateUserID.IsZero() && !query.AfterCandidateUserID.IsValid() ||
+		!validCandidateStatusFilter(query.Filter) {
 		return SittingCandidateStatusesPage{}, apperror.Invalid("exam.attempt.invalid", "candidate_statuses")
 	}
 
@@ -150,14 +212,9 @@ func (s *Service) ListSittingCandidateStatuses(
 		return SittingCandidateStatusesPage{}, err
 	}
 
-	reallowAuthorized := false
-	if _, err := s.managers.AuthorizeSittingManage(ctx, inv, query.SittingID); err == nil {
-		reallowAuthorized = true
-	} else {
-		var fault *apperror.Error
-		if !errors.As(err, &fault) || fault.Code() != "authorization.denied" {
-			return SittingCandidateStatusesPage{}, err
-		}
+	reallowAuthorized, err := s.sittingManageAuthorized(ctx, inv, query.SittingID)
+	if err != nil {
+		return SittingCandidateStatusesPage{}, err
 	}
 
 	stored, err := s.attempts.ListSittingCandidateStatuses(ctx, store.SittingCandidateStatusListOptions{
@@ -166,13 +223,28 @@ func (s *Service) ListSittingCandidateStatuses(
 		ExcludeCandidateUserID: principal.UserID,
 		AfterCandidateUserID:   query.AfterCandidateUserID,
 		ReallowAuthorized:      reallowAuthorized,
-		Limit:                  query.Limit + 1,
+		Filter: store.SittingCandidateStatusFilter{
+			PresenceStates: append([]store.SittingCandidatePresenceState(nil), query.Filter.PresenceStates...),
+			FailingChecks:  query.Filter.FailingChecks,
+			Attention:      query.Filter.Attention,
+			Query:          strings.TrimSpace(query.Filter.Query),
+		},
+		IncludeCounts: query.AfterCandidateUserID.IsZero(),
+		Limit:         query.Limit + 1,
 	})
 	if err != nil {
 		return SittingCandidateStatusesPage{}, storeError(storeErrors, err)
 	}
 
+	if query.AfterCandidateUserID.IsZero() != (stored.Counts != nil) {
+		return SittingCandidateStatusesPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("candidate status counts mismatch the page"))
+	}
 	page := SittingCandidateStatusesPage{SittingCandidateStatusPage: *stored, HasMore: len(stored.Items) > query.Limit}
+	if stored.Counts != nil {
+		counts := *stored.Counts
+		counts.ByPresenceState = maps.Clone(stored.Counts.ByPresenceState)
+		page.Counts = &counts
+	}
 	page.Items = append([]store.SittingCandidateStatusItem(nil), stored.Items[:min(len(stored.Items), query.Limit)]...)
 	for i := range page.Items {
 		if page.Items[i].NativeSecurity != nil {
@@ -185,7 +257,24 @@ func (s *Service) ListSittingCandidateStatuses(
 		}
 	}
 
+	if page.Details, err = s.candidateBoardDetails(ctx, page.SittingCandidateStatusPage, reallowAuthorized); err != nil {
+		return SittingCandidateStatusesPage{}, err
+	}
+
 	return page, nil
+}
+
+// sittingManageAuthorized reports whether the caller may also manage the
+// sitting. A denial is an answer, not a failure.
+func (s *Service) sittingManageAuthorized(ctx context.Context, inv invocation.Invocation, sittingID model.ExamSittingID) (bool, error) {
+	if _, err := s.managers.AuthorizeSittingManage(ctx, inv, sittingID); err != nil {
+		var fault *apperror.Error
+		if !errors.As(err, &fault) || fault.Code() != "authorization.denied" {
+			return false, err
+		}
+		return false, nil
+	}
+	return true, nil
 }
 
 // ListExamAttempts requires sitting view and excludes the caller's own
@@ -205,6 +294,10 @@ func (s *Service) ListExamAttempts(
 	}
 
 	if err := s.managers.AuthorizeSittingView(ctx, inv, query.SittingID); err != nil {
+		return ManagedAttemptPage{}, err
+	}
+	manageAuthorized, err := s.sittingManageAuthorized(ctx, inv, query.SittingID)
+	if err != nil {
 		return ManagedAttemptPage{}, err
 	}
 
@@ -235,6 +328,14 @@ func (s *Service) ListExamAttempts(
 		}
 
 		page.Items = append(page.Items, *cloneManagerSnapshot(&row))
+	}
+
+	ids := make([]model.ExamAttemptID, 0, len(page.Items))
+	for _, item := range page.Items {
+		ids = append(ids, item.Attempt.ID)
+	}
+	if page.ManagerEnds, err = s.managerEnds(ctx, query.SittingID, ids, manageAuthorized); err != nil {
+		return ManagedAttemptPage{}, err
 	}
 
 	return page, nil

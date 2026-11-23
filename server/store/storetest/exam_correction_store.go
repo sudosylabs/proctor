@@ -63,7 +63,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	fixture := newExamSittingFixtureWithCapacity(t, ctx, ss, capacity)
 	startAt := fixture.period.StartsAt.Add(time.Hour)
 	endAt := startAt.Add(2 * time.Hour)
-	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, startAt, endAt, model.NowUTC())
+	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, startAt, endAt, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, sitting.Revision, startAt, endAt)
 	_, err = ss.ExamSitting().Schedule(ctx, &store.ExamSittingSchedule{Sitting: sitting, OpenJob: openJob, DeadlineJob: deadlineJob,
@@ -72,7 +72,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 		examCommand(fixture.actor.ID, "exam.sitting.schedule", "correction-sitting", "correction-sitting-command"))
 	require.NoError(t, err)
 	scheduledOnly, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID,
-		startAt.Add(4*time.Hour), endAt.Add(4*time.Hour), model.NowUTC())
+		startAt.Add(4*time.Hour), endAt.Add(4*time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	scheduledOpen, scheduledDeadline := newExamSittingLifecycleJobs(t, scheduledOnly.ID, scheduledOnly.Revision, scheduledOnly.ScheduledStartAt, scheduledOnly.ScheduledEndAt)
 	_, err = ss.ExamSitting().Schedule(ctx, &store.ExamSittingSchedule{Sitting: scheduledOnly, OpenJob: scheduledOpen, DeadlineJob: scheduledDeadline,

@@ -15,6 +15,30 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// publishRoleChanged reports a failed publication without failing the use
+// case.
+func (s *Service) publishRoleChanged(ctx context.Context, institution model.Resource, roleID model.RoleID) {
+	institutionID, err := model.ParseInstitutionID(institution.ID)
+	var event realtime.Event
+	if err == nil {
+		event, err = realtime.NewRoleChangedEvent(institutionID, roleID)
+	}
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "role.changed", err)
+	}
+}
+
+// publishRoleBindingChanged reports a failed publication without failing the
+// use case.
+func (s *Service) publishRoleBindingChanged(ctx context.Context, binding *model.RoleBinding) {
+	if err := realtime.PublishRoleBindingChanged(ctx, s.publisher, s.classes, s.academicUnits, binding); err != nil {
+		s.publisher.Report(ctx, "role_binding.changed", err)
+	}
+}
+
 // publishAccessPolicyChanged closes the sessions a replacement revoked, drops
 // the cached authentication of those it shortened, and then tells everyone
 // who may view the policy to refetch it.

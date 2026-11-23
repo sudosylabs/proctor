@@ -48,6 +48,7 @@ type SecurityPreflightProbe struct {
 func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...SecurityPreflightProbe) {
 	ctx := context.Background()
 	t.Run("ScreenRecordingDisclosure", func(t *testing.T) { testScreenRecordingDisclosure(t, ctx, ss) })
+	t.Run("OverviewCandidateRules", func(t *testing.T) { testOverviewCandidateRules(t, ctx, ss) })
 	fixture := newExamAttemptFixture(t, ctx, ss)
 	connection := &store.ExamAttemptConnect{CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID}
 	prepareExamAttemptConnect(t, ctx, ss, connection)
@@ -563,6 +564,30 @@ func testClosedNativeDelivery(t *testing.T, ctx context.Context, ss store.Store,
 		_, err := ss.NativeDelivery().NativeDeliveryStatus(ctx, foreign)
 		require.True(t, store.IsNotFound(err), "foreign historical delivery")
 	}
+}
+
+// testOverviewCandidateRules checks that the overview carries the focus-loss
+// rule and Browser Policy frozen in the Sitting's revision.
+func testOverviewCandidateRules(t *testing.T, ctx context.Context, ss store.Store) {
+	focus := model.FocusLossPolicy{Enabled: true, MinimumDuration: time.Second, IncidentCount: 4, Window: 10 * time.Minute,
+		Outcome: model.IntegrityOutcomeFlagAndSuspend}
+	browser, err := model.NewBrowserPolicy(true, "docs", []model.BrowserPolicyRule{{RuleID: "docs", Label: "PostgreSQL documentation",
+		Origin: "https://www.postgresql.org", PathPrefix: "/docs", HostMatch: model.BrowserPolicyHostExact,
+		BlockedNavigationOutcome: model.BrowserPolicyBlockedNavigationRecord}})
+	require.NoError(t, err)
+	fixture := newExamAttemptFixtureWithPolicies(t, ctx, ss, &focus, &browser)
+	connection := &store.ExamAttemptConnect{CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID}
+	prepareExamAttemptConnect(t, ctx, ss, connection)
+	build := connection.DesktopBuild
+	build.NativeAgreement = syntheticNativeAgreement(t, build)
+	access := store.SecurityPreflightAccess{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, DesktopBuild: build, DesktopCompatibilityPolicyRevision: connection.DesktopCompatibilityPolicyRevision}
+
+	overview, err := ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, access)
+	require.NoError(t, err)
+	require.Equal(t, focus, overview.FocusLoss, "the overview carries the revision's focus-loss rule")
+	require.Equal(t, model.NativeModeEnforce, overview.Resolved.Policy.FocusLossMode)
+	require.Equal(t, browser, overview.BrowserPolicy, "the overview carries the revision's Browser Policy")
+	require.Equal(t, "PostgreSQL documentation", overview.BrowserPolicy.Rules[0].Label, "the rule label is frozen with the revision")
 }
 
 // testScreenRecordingDisclosure checks that a recording exam's overview and

@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -217,11 +218,41 @@ func (s *Service) ResolveAttemptDesktopBuild(
 	return attempt.DesktopBuildResolution{}, errors.New("Desktop build is missing from the verified catalog")
 }
 
+// AssessDesktopBuilds reports, for each build, whether the verified catalog
+// and the compatibility policy would admit it to an Attempt now. The policy is
+// read once for the whole list. Availability is not considered: it is the
+// installation's state, not the build's.
+func (s *Service) AssessDesktopBuilds(ctx context.Context, builds []model.DesktopBuildTuple) ([]bool, error) {
+	admitted := make([]bool, len(builds))
+	if len(builds) == 0 {
+		return admitted, nil
+	}
+
+	policy, err := s.desktopCompatibilityPolicies.Get(ctx)
+	if err != nil || policy == nil {
+		return nil, desktopCompatibilityPolicyError(err)
+	}
+
+	for index, build := range builds {
+		result, evaluateErr := s.desktopBuilds.evaluate(policy, DesktopCompatibilityQuery{
+			DesktopRelease:   build.DesktopRelease,
+			DesktopBuildID:   build.DesktopBuildID,
+			Platform:         string(build.Platform),
+			Architecture:     string(build.Architecture),
+			RealtimeProtocol: build.RealtimeProtocol,
+		})
+		// A registration whose recorded build is malformed is not admitted;
+		// it is not a fault of the read.
+		admitted[index] = evaluateErr == nil && result.Compatibility == DesktopCompatibilityCompatible
+	}
+	return admitted, nil
+}
+
 // GetDesktopCompatibilityPolicy returns a copy of the current policy.
 func (s *Service) GetDesktopCompatibilityPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
-) (*model.DesktopCompatibilityPolicy, error) {
+) (*DesktopCompatibilityPolicyView, error) {
 	if _, _, err := s.authorizeInstitutionAction(ctx, inv, model.ActionAccessPolicyView); err != nil {
 		return nil, err
 	}
@@ -229,7 +260,7 @@ func (s *Service) GetDesktopCompatibilityPolicy(
 	if err != nil || policy == nil {
 		return nil, desktopCompatibilityPolicyError(err)
 	}
-	return policy.Clone(), nil
+	return s.describePolicy(policy.Clone()), nil
 }
 
 // ReplaceDesktopCompatibilityPolicy replaces the current policy; it requires
@@ -238,7 +269,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
 	command ReplaceDesktopCompatibilityPolicyCommand,
-) (*model.DesktopCompatibilityPolicy, error) {
+) (*DesktopCompatibilityPolicyView, error) {
 	if err := access.RequireStrongRecentSession(
 		inv.Principal(),
 		s.now(),
@@ -291,7 +322,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 			Value: map[string]any{
 				"expected_revision":         command.ExpectedRevision,
 				"minimum_desktop_release":   command.Settings.MinimumDesktopRelease,
-				"revoked_build_count":       len(command.Settings.RevokedDesktopBuildIDs),
+				"revoked_build_count":       len(command.Settings.RevokedDesktopBuilds),
 				"administrator_message_set": command.Settings.AdministratorMessage != "",
 				"availability":              command.Settings.Availability,
 				"retry_at_set":              command.Settings.RetryAt.Valid,
@@ -322,8 +353,17 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	if stored == nil || stored.Policy == nil || stored.Policy.Validate() != nil {
 		return nil, apperror.New("desktop_compatibility_policy.unavailable")
 	}
+	if stored.Changed && !stored.Replayed && s.publisher != nil {
+		event, eventErr := realtime.NewDesktopCompatibilityPolicyChangedEvent(institution.ID)
+		if eventErr == nil {
+			eventErr = s.publisher.Publish(ctx, event)
+		}
+		if eventErr != nil {
+			s.publisher.Report(ctx, "desktop_compatibility_policy.changed", eventErr)
+		}
+	}
 
-	return stored.Policy.Clone(), nil
+	return s.describePolicy(stored.Policy.Clone()), nil
 }
 
 func (s *Service) authorizeInstitutionAction(
@@ -333,7 +373,7 @@ func (s *Service) authorizeInstitutionAction(
 ) (*model.Institution, model.Resource, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {
-		return nil, model.Resource{}, desktopCompatibilityPolicyError(err)
+		return nil, model.Resource{}, desktopCompatibilityPolicyStoreErrors.Translate(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
 	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
@@ -414,7 +454,7 @@ func (c *desktopBuildCatalog) evaluate(
 		return result, nil
 	}
 
-	if _, revoked := slices.BinarySearch(policy.RevokedDesktopBuildIDs, query.DesktopBuildID); revoked {
+	if _, revoked := slices.BinarySearch(policy.RevokedBuildIDs(), query.DesktopBuildID); revoked {
 		result.Compatibility = DesktopCompatibilityUpdateRequired
 		result.Reason = "build_revoked"
 		return result, nil

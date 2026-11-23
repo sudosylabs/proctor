@@ -210,6 +210,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.NoError(t, err)
 	require.True(t, resolved.ConsistentWith(access), "ResolveCandidateAccess returned a result inconsistent with its request")
 	require.Equal(t, store.CandidateAttemptAccessTarget{
+		ExamID:    fixture.examID,
 		AttemptID: input.AttemptID, SittingID: fixture.sitting.ID, ClassID: fixture.sitting.ClassID,
 		CandidateUserID: fixture.candidate.ID, ParticipationID: connected.Participation.ID,
 		Generation: connected.Participation.Generation,
@@ -354,6 +355,8 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.Equal(t, store.SittingCandidateConnected, statuses.Items[0].Presence.State)
 	require.True(t, statuses.Items[0].Presence.LastLeaseRenewedAt.Valid)
 	require.True(t, statuses.Items[0].Presence.LeaseExpiresAt.Valid)
+	require.Nil(t, statuses.Counts, "counts are read only when asked for")
+	testSittingCandidateStatusFilters(t, ctx, ss, fixture)
 	testConcurrentExamAttemptAdmission(t, ctx, ss, fixture)
 
 	closeInput := &store.ExamAttemptConnectionClose{ConnectionID: input.ConnectionID, CandidateUserID: fixture.candidate.ID,
@@ -1274,7 +1277,7 @@ func newExamAttemptFixtureWithAssistantOptions(t *testing.T, ctx context.Context
 	for scheduleAttempt := 1; ; scheduleAttempt++ {
 		var end time.Time
 		start, end = model.NowUTC().Add(time.Second), model.NowUTC().Add(time.Hour)
-		sitting, err = model.NewExamSitting(model.NewExamSittingID(), created.Value.Exam.ID, published.Revision.ID, class.ID, start, end, now)
+		sitting, err = model.NewExamSitting(model.NewExamSittingID(), created.Value.Exam.ID, published.Revision.ID, class.ID, start, end, model.ExamSittingJoinWindow{}, now)
 		require.NoError(t, err)
 		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 		key := "attempt-sitting-" + string(rune('0'+scheduleAttempt))
@@ -1463,4 +1466,75 @@ func requireExpiryLinks(t *testing.T, result *store.ExamAttemptParticipationExpi
 	require.Equal(t, result.Flag.ID, result.Suspension.FlagID)
 	require.False(t, result.Suspension.StartedAt.IsZero())
 	require.False(t, result.DatabaseTime.IsZero())
+}
+
+// testSittingCandidateStatusFilters runs against a sitting whose one
+// candidate is connected.
+func testSittingCandidateStatusFilters(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture) {
+	t.Helper()
+	var counts *store.SittingCandidateStatusCounts
+	list := func(filter store.SittingCandidateStatusFilter) *store.SittingCandidateStatusPage {
+		t.Helper()
+		page, err := ss.ExamAttempt().ListSittingCandidateStatuses(ctx, store.SittingCandidateStatusListOptions{
+			ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
+			Filter: filter, IncludeCounts: true, Limit: 50,
+		})
+		require.NoError(t, err)
+		require.True(t, page.ConsistentWith(fixture.examID, fixture.sitting.ID))
+		require.NotNil(t, page.Counts)
+		if counts == nil {
+			counts = page.Counts
+		}
+		require.Equal(t, *counts, *page.Counts, "counts describe the whole board, whatever the filter")
+		return page
+	}
+
+	all := list(store.SittingCandidateStatusFilter{})
+	require.Len(t, all.Items, 1)
+	require.Equal(t, int64(1), counts.Total)
+	require.Equal(t, map[store.SittingCandidatePresenceState]int64{store.SittingCandidateConnected: 1}, counts.ByPresenceState)
+	require.Zero(t, counts.WithFailedChecks)
+	attention := int64(0)
+	if all.Items[0].IntegrityAttentionCount > 0 {
+		attention = 1
+	}
+	require.Equal(t, attention, counts.WithAttention)
+	require.Equal(t, attention, counts.NeedsAttention, "an unsuspended candidate passing every check needs attention only for integrity")
+	require.Len(t, list(store.SittingCandidateStatusFilter{Attention: true}).Items, int(attention))
+
+	require.Len(t, list(store.SittingCandidateStatusFilter{
+		PresenceStates: []store.SittingCandidatePresenceState{store.SittingCandidateReady, store.SittingCandidateConnected},
+	}).Items, 1)
+	require.Empty(t, list(store.SittingCandidateStatusFilter{
+		PresenceStates: []store.SittingCandidatePresenceState{store.SittingCandidateSuspended},
+	}).Items)
+	require.Empty(t, list(store.SittingCandidateStatusFilter{FailingChecks: true}).Items)
+	require.Len(t, list(store.SittingCandidateStatusFilter{Query: strings.ToUpper(fixture.candidate.DisplayName)}).Items, 1,
+		"the name search ignores case")
+	require.Empty(t, list(store.SittingCandidateStatusFilter{Query: fixture.candidate.Username}).Items, "hidden usernames do not match")
+	require.Empty(t, list(store.SittingCandidateStatusFilter{Query: "%"}).Items, "the name search is literal")
+
+	across := func(visibility store.ExamListVisibility) *store.ExamSittingAcrossItem {
+		t.Helper()
+		page, err := ss.ExamSitting().ListAcrossExams(ctx, store.ExamSittingAcrossListOptions{
+			Visibility: visibility, ReaderUserID: fixture.manager.ID, States: []model.ExamSittingState{model.ExamSittingOpen},
+			AcademicUnitID: fixture.unitID, Limit: 201,
+		})
+		require.NoError(t, err)
+		require.False(t, page.ServerTime.IsZero())
+		for i := range page.Items {
+			if page.Items[i].SittingID == fixture.sitting.ID {
+				return &page.Items[i]
+			}
+		}
+		return nil
+	}
+	everyone := across(store.ExamListVisibility{ActorUserID: fixture.manager.ID, OverrideInstitutionWide: true})
+	require.NotNil(t, everyone)
+	require.Equal(t, fixture.examID, everyone.ExamID)
+	require.NotEmpty(t, everyone.ExamTitle)
+	require.NotEmpty(t, everyone.ClassDisplayName)
+	require.NotNil(t, everyone.Counts, "an open sitting is counted")
+	require.Equal(t, *counts, *everyone.Counts, "the list across exams counts a sitting exactly as its board does")
+	require.Nil(t, across(store.ExamListVisibility{ActorUserID: fixture.manager.ID}), "a viewer with no scope sees no sitting")
 }

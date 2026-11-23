@@ -112,7 +112,7 @@ func TestAcademicUnitCreateRootCommitsAuditBeforePublishing(t *testing.T) {
 	require.True(t, time.UnixMilli(500).UTC().Equal(creator.input.AuditAt))
 	// Contract: creation publishes one event naming the saved unit and
 	// reports no failure.
-	require.Equal(t, []realtimetest.Call{academicUnitEventCall("academic_unit_created", saved.ID)}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{academicUnitEventCall("academic_unit_created", saved)}, publisher.Calls())
 	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store", "effect")
 }
 
@@ -188,7 +188,7 @@ func TestAcademicUnitCreateIgnoresPostCommitEffectFailure(t *testing.T) {
 	// Contract: the failed publication is reported once under its operation
 	// name, with the publication error.
 	require.Equal(t, []realtimetest.Call{
-		academicUnitEventCall("academic_unit_created", saved.ID),
+		academicUnitEventCall("academic_unit_created", saved),
 		{Method: realtimetest.Report, Operation: "academic_unit_created", Err: effectErr},
 	}, publisher.Calls())
 	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store", "effect", "effect-report")
@@ -200,4 +200,30 @@ func assertAcademicUnitCreateEvents(t *testing.T, got []string, want ...string) 
 	for index := range want {
 		require.Equal(t, want[index], got[index], "events = %v, want %v", got, want)
 	}
+}
+
+func TestAcademicUnitCreateKeepsKindAndDefaultsToOther(t *testing.T) {
+	t.Parallel()
+
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, nil, nil, institutionGrant(principal.UserID, model.ActionAcademicUnitManage))
+	creator := &academicUnitCreateStore{result: &model.AcademicUnit{ID: model.NewAcademicUnitID()}}
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&[]string{})})
+
+	_, err := service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{
+		Kind: model.AcademicUnitKindFaculty, Name: "engineering", DisplayName: "Engineering",
+	})
+	require.NoError(t, err)
+	require.Equal(t, model.AcademicUnitKindFaculty, creator.input.Unit.Kind)
+
+	_, err = service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{Name: "science", DisplayName: "Science"})
+	require.NoError(t, err)
+	require.Equal(t, model.AcademicUnitKindOther, creator.input.Unit.Kind, "an omitted kind is other")
+
+	creator.input = nil
+	_, err = service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{
+		Kind: "campus", Name: "arts", DisplayName: "Arts",
+	})
+	require.True(t, apperror.Is(err, "academic_unit.invalid"), "unknown kind error = %v", err)
+	require.Nil(t, creator.input, "an unknown kind reaches no store")
 }

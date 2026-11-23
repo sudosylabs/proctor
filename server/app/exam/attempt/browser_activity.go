@@ -201,6 +201,10 @@ func (s *Service) AppendExamAttemptBrowserActivity(
 		}
 	}
 
+	if acknowledgement.InterpretationAdvanced {
+		s.publishEvidenceChanged(ctx, acknowledgement.ExamID, acknowledgement.SittingID, candidateAccess.AttemptID, acknowledgement.ServerTime)
+	}
+
 	return *acknowledgement, nil
 }
 

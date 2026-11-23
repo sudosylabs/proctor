@@ -24,8 +24,16 @@ import (
 // ListAcademicPeriodsQuery is the input of ListAcademicPeriods.
 type ListAcademicPeriodsQuery struct {
 	Query string
+	// OwnerType keeps one kind of owner (institution or academic_unit), and
+	// OwnerID, which needs OwnerType, one owner.
+	OwnerType string
+	OwnerID   string
+	// ActiveAt, when set, keeps the periods covering that instant.
+	ActiveAt   time.Time
+	Order      store.AcademicPeriodOrder
+	Descending bool
 	// AfterStartAt, AfterName and AfterID are the last period of the previous
-	// page, all set or all empty.
+	// page, all set or all empty; a name-order page leaves AfterStartAt zero.
 	AfterStartAt time.Time
 	AfterName    string
 	AfterID      model.AcademicPeriodID
@@ -87,29 +95,53 @@ func (s *Service) ListAcademicPeriods(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListAcademicPeriodsQuery,
-) (paging.Page[*model.AcademicPeriod], error) {
+) (AcademicPeriodPage, error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Page[*model.AcademicPeriod]{}, err
+		return AcademicPeriodPage{}, err
+	}
+
+	ownerType := model.ResourceType(query.OwnerType)
+	switch {
+	case ownerType != "" && ownerType != model.ResourceInstitution && ownerType != model.ResourceAcademicUnit:
+		return AcademicPeriodPage{}, apperror.New("request.invalid").WithField("field", "owner_type")
+	case query.OwnerID != "" && ownerType == "":
+		return AcademicPeriodPage{}, apperror.New("request.invalid").WithField("field", "owner_type")
+	case ownerType == model.ResourceInstitution && query.OwnerID != "" && !model.InstitutionID(query.OwnerID).IsValid(),
+		ownerType == model.ResourceAcademicUnit && query.OwnerID != "" && !model.AcademicUnitID(query.OwnerID).IsValid():
+		return AcademicPeriodPage{}, apperror.New("request.invalid").WithField("field", "owner_id")
+	}
+	if query.Order != "" && query.Order != store.AcademicPeriodOrderStart && query.Order != store.AcademicPeriodOrderName {
+		return AcademicPeriodPage{}, apperror.New("request.invalid").WithField("field", "sort")
 	}
 
 	visibility, err := s.authorizer.AuthorizeAcademicPeriodList(ctx, inv)
 	if err != nil {
-		return paging.Page[*model.AcademicPeriod]{}, err
+		return AcademicPeriodPage{}, err
 	}
 
 	periods, err := s.academicPeriods.ListVisible(ctx, visibility, store.AcademicPeriodListOptions{
 		Term:         strings.TrimSpace(query.Query),
+		OwnerType:    ownerType,
+		OwnerID:      query.OwnerID,
+		ActiveAt:     query.ActiveAt,
+		Order:        query.Order,
+		Descending:   query.Descending,
 		AfterStartAt: query.AfterStartAt,
 		AfterName:    query.AfterName,
 		AfterID:      query.AfterID,
 		Limit:        probe,
 	})
 	if err != nil {
-		return paging.Page[*model.AcademicPeriod]{}, academicPeriodStoreErrors.Translate(err)
+		return AcademicPeriodPage{}, academicPeriodStoreErrors.Translate(err)
 	}
 
-	return paging.New(periods, limit), nil
+	page := paging.New(periods, limit)
+	counts, err := s.periodCounts(ctx, inv, page.Items)
+	if err != nil {
+		return AcademicPeriodPage{}, err
+	}
+	return AcademicPeriodPage{Page: page, StructureCounts: counts}, nil
 }
 
 // CreateAcademicPeriod needs academic_period.manage.
@@ -193,6 +225,7 @@ func (s *Service) CreateAcademicPeriod(
 		return nil, err
 	}
 
+	s.publishAcademicPeriodChanged(ctx, result.Value)
 	return result.Value, nil
 }
 
@@ -242,7 +275,7 @@ func (s *Service) UpdateAcademicPeriod(
 		return nil, apperror.DomainInvalid("academic_period.invalid", err)
 	}
 
-	return access.RunAudited(
+	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -265,6 +298,12 @@ func (s *Service) UpdateAcademicPeriod(
 		},
 		academicPeriodStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishAcademicPeriodChanged(ctx, updated)
+	return updated, nil
 }
 
 // ArchiveAcademicPeriod needs academic_period.manage.
@@ -311,7 +350,12 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, inv invocation.Invo
 		},
 		academicPeriodStoreErrors.Translate,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	s.publishAcademicPeriodChanged(ctx, current)
+	return nil
 }
 
 func parseAcademicPeriodOwner(ownerType, ownerID string) (model.AcademicPeriodOwner, error) {

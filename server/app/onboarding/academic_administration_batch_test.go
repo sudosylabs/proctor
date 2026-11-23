@@ -240,6 +240,7 @@ func (c *batchCatalog) RetentionPolicy() store.RetentionPolicyStore       { retu
 func (c *batchCatalog) Retention() store.RetentionStore                   { return c.retention }
 func (c *batchCatalog) PluginSettings() store.PluginSettingsStore         { return nil }
 func (c *batchCatalog) EnvironmentProfile() store.EnvironmentProfileStore { return nil }
+func (c *batchCatalog) AuditExport() store.AuditExportStore               { return nil }
 func (c *batchCatalog) PasswordCredential() store.PasswordCredentialStore { return c.passwords }
 func (c *batchCatalog) Session() store.SessionStore                       { return c.session }
 func (c *batchCatalog) SessionCredential() store.SessionCredentialStore   { return c.credentials }
@@ -294,6 +295,13 @@ type batchClassStore struct {
 	store.ClassStore
 	periodID model.AcademicPeriodID
 }
+
+// GetAcademicUnitID places every Class in one unit, which class.changed names.
+func (batchClassStore) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {
+	return batchClassUnitID, nil
+}
+
+var batchClassUnitID = model.NewAcademicUnitID()
 
 func (s batchClassStore) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
 	return &model.Class{ID: id, AcademicPeriodID: s.periodID, DisplayName: "Class " + id.String()}, nil
@@ -632,3 +640,60 @@ func TestAcademicAdministrationSensitiveBatchRequiresStrongRecentInteractiveSess
 func (c *batchCatalog) AssistantProfile() store.AssistantProfileStore { return nil }
 
 func (c *batchCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }
+
+// TestAcademicAdministrationDisableBatchWritesItsOneReasonToEveryAudit pins
+// U4: a user.disable batch takes one reason, validated as the single disable
+// validates its own, and every disabled person's audit entry carries it; no
+// other operation takes a reason.
+func TestAcademicAdministrationDisableBatchWritesItsOneReasonToEveryAudit(t *testing.T) {
+	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	run := func(t *testing.T, operation AcademicAdministrationBatchOperation, reason string) (*batchWorld, AcademicAdministrationBatchResult, error) {
+		t.Helper()
+		inv := batchCaller(now)
+		world := newBatchWorld(t, now, batchWorldOptions{callers: []model.UserID{inv.Principal().UserID}})
+		result, err := world.service.RunAcademicAdministrationBatch(context.Background(), inv, RunAcademicAdministrationBatchCommand{
+			Operation: operation, ScopeType: model.RoleScopeInstitution, ScopeID: world.access.Institution.ID.String(),
+			IdempotencyKey: "batch", Reason: &reason, Items: []AcademicAdministrationBatchItemCommand{
+				{IdempotencyKey: "first", UserID: model.NewUserID()}, {IdempotencyKey: "second", UserID: model.NewUserID()},
+			}})
+		return world, result, err
+	}
+
+	world, result, err := run(t, AcademicAdministrationUserDisable, "  Left before the start of term  ")
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Succeeded, "%#v", result)
+	disables, batches := 0, 0
+	for _, event := range world.access.Audits.Events() {
+		if event.Operation() == "disable_user_batch" {
+			batches++
+			require.Equal(t, model.AuditStatusSuccess, event.Status)
+			require.Equal(t, string(model.ActionOnboardingBatchManage), event.Action)
+		}
+		if event.Operation() == model.AuditOperationDisableAccount {
+			disables++
+			require.Equal(t, "Left before the start of term", event.AccountDisableReason(), "the reason is trimmed once for the batch")
+		}
+	}
+	require.Equal(t, 2, disables, "every disabled person's audit entry carries the reason")
+	require.Equal(t, 1, batches, "the batch records its own outcome")
+
+	for name, test := range map[string]struct {
+		operation AcademicAdministrationBatchOperation
+		reason    string
+	}{
+		"enable":         {AcademicAdministrationUserEnable, "Back from leave"},
+		"only spaces":    {AcademicAdministrationUserDisable, "   "},
+		"too long":       {AcademicAdministrationUserDisable, strings.Repeat("a", 501)},
+		"control":        {AcademicAdministrationUserDisable, "Left\nterm"},
+		"session revoke": {AcademicAdministrationUserSessionsRevoke, "Lost laptop"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			world, _, err := run(t, test.operation, test.reason)
+			var appErr *apperror.Error
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, "request.invalid", appErr.Code())
+			require.Equal(t, "reason", appErr.Fields()["field"])
+			require.Empty(t, world.ledger.calls, "a refused reason refuses the whole batch before any row runs")
+		})
+	}
+}

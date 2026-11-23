@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -63,14 +64,22 @@ const reviewCandidateRevision = 2
 
 func newReviewFixture(t *testing.T) *reviewFixture {
 	t.Helper()
+	return newReviewFixtureWith(t, model.ActionSubmissionView, model.ActionSubmissionReview, model.ActionSubmissionRelease)
+}
+
+// newReviewFixtureWith grants the caller actions in the Exam's unit instead.
+func newReviewFixtureWith(t *testing.T, actions ...model.Action) *reviewFixture {
+	t.Helper()
 	f := &reviewFixture{userID: model.NewUserID(), candidateID: model.NewUserID(), submissionID: model.NewSubmissionID(), reviewID: model.NewSubmissionReviewID(),
 		flagID: model.NewIntegrityFlagID(), attemptID: model.NewExamAttemptID(), at: time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)}
 	f.examID, f.sittingID, f.revisionID, f.unitID = model.NewExamID(), model.NewExamSittingID(), model.NewExamRevisionID(), model.NewAcademicUnitID()
 	f.persistence = &reviewStoreFake{f: f}
 	f.control = accesstest.New(t, accesstest.Options{
 		Grants: []accesstest.Grant{{UserID: f.userID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: f.unitID.String(),
-			Actions: []model.Action{model.ActionSubmissionView, model.ActionSubmissionReview, model.ActionSubmissionRelease}}},
+			Actions: actions}},
 		Submissions: reviewSubmissionsFake{f: f},
+		Sittings:    reviewSittingStoreFake{f: f},
+		Exams:       reviewExamAccessFake{f: f},
 		Now:         func() time.Time { return f.at },
 	})
 	f.publisher = &realtimetest.Publisher{}
@@ -108,14 +117,56 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 
 type reviewStoreFake struct {
 	f           *reviewFixture
+	lists       []store.SubmissionListOptions
+	listed      []store.SubmissionListItem
+	releases    []*store.ExamIntegrityReviewRelease
+	liveReads   int
 	decision    *store.ExamIntegrityReviewDecisionMutation
 	replayed    bool
 	mode        string
 	student     *model.StudentResult
 	release     *store.ExamIntegrityReviewRelease
+	reopen      *store.ExamIntegrityReviewReopen
+	reopenErr   error
 	draft       *store.ExamIntegrityReviewDraftMutation
 	idempotency *store.CommandIdempotency
 	prepareErr  error
+	batches     map[[32]byte]reviewBatchFake
+}
+
+type reviewBatchFake struct {
+	fingerprint [32]byte
+	items       []store.ExamResultReleaseBatchItem
+}
+
+func (f *reviewStoreFake) ClaimResultReleaseBatch(ctx context.Context, start *store.ExamResultReleaseBatchStart, command *store.CommandIdempotency) (*store.ExamResultReleaseBatchClaim, error) {
+	if saved, ok := f.batches[command.KeyDigest]; ok {
+		if saved.fingerprint != command.Fingerprint {
+			return nil, &store.ErrIdempotencyConflict{}
+		}
+		return &store.ExamResultReleaseBatchClaim{Items: saved.items}, nil
+	}
+	if _, err := f.f.control.Audits.Save(ctx, start.Audit); err != nil {
+		return nil, err
+	}
+	ids := start.SubmissionIDs
+	if start.AllFinalized {
+		for _, row := range f.listed {
+			if row.Review != nil && row.Review.State == model.SubmissionReviewFinalized &&
+				row.Review.ReleaseState == model.SubmissionReviewWithheld {
+				ids = append(ids, row.SubmissionID)
+			}
+		}
+	}
+	return &store.ExamResultReleaseBatchClaim{Token: model.NewID(), SubmissionIDs: ids}, nil
+}
+
+func (f *reviewStoreFake) CompleteResultReleaseBatch(_ context.Context, completion *store.ExamResultReleaseBatchCompletion, command *store.CommandIdempotency) error {
+	if f.batches == nil {
+		f.batches = make(map[[32]byte]reviewBatchFake)
+	}
+	f.batches[command.KeyDigest] = reviewBatchFake{fingerprint: command.Fingerprint, items: slices.Clone(completion.Items)}
+	return nil
 }
 
 func (f *reviewStoreFake) PrepareRelease(ctx context.Context, input *store.ExamIntegrityReviewReleasePrepare) (*store.ExamIntegrityReviewReleasePreparation, error) {
@@ -125,7 +176,10 @@ func (f *reviewStoreFake) PrepareRelease(ctx context.Context, input *store.ExamI
 	return &store.ExamIntegrityReviewReleasePreparation{Replayed: f.replayed, ReleaseAt: f.f.at.Add(time.Minute)}, nil
 }
 
-func (f *reviewStoreFake) Resolve(context.Context, model.SubmissionID) (*store.ExamIntegrityReviewAuthorization, error) {
+func (f *reviewStoreFake) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamIntegrityReviewAuthorization, error) {
+	if id != f.f.submissionID {
+		return nil, store.NewErrNotFound("submission", id.String())
+	}
 	return &store.ExamIntegrityReviewAuthorization{SubmissionID: f.f.submissionID, ExamID: f.f.examID, SittingID: f.f.sittingID, AttemptID: f.f.attemptID, CandidateUserID: f.f.candidateID, AcademicUnitID: f.f.unitID}, nil
 }
 func (f *reviewStoreFake) Get(context.Context, model.SubmissionID) (*store.ExamSubmissionReviewSnapshot, error) {
@@ -162,8 +216,45 @@ func (f *reviewStoreFake) Finalize(_ context.Context, _ *store.ExamIntegrityRevi
 	_ = review.Finalize(2, f.f.userID, 0, 0, 0, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", f.f.at)
 	return &store.ExamIntegrityReviewMutationResult{Authorization: *mustReviewAuthorization(f), Review: review}, nil
 }
+func (f *reviewStoreFake) ListSubmissions(_ context.Context, options store.SubmissionListOptions) (*store.SubmissionListPage, error) {
+	f.lists = append(f.lists, options)
+	page := &store.SubmissionListPage{Items: []store.SubmissionListItem{}}
+	for _, item := range f.listed {
+		if len(options.SubmissionIDs) == 0 || slices.Contains(options.SubmissionIDs, item.SubmissionID) {
+			page.Items = append(page.Items, item)
+		}
+	}
+	if options.IncludeCounts {
+		page.Counts = &store.SubmissionListCounts{Total: int64(len(f.listed))}
+	}
+	return page, nil
+}
+func (f *reviewStoreFake) ResolveLiveEvidence(_ context.Context, attemptID model.ExamAttemptID) (*store.LiveEvidenceScope, error) {
+	if attemptID != f.f.attemptID {
+		return nil, store.NewErrNotFound("exam_attempt", attemptID.String())
+	}
+	return &store.LiveEvidenceScope{AttemptID: attemptID, ExamID: f.f.examID, SittingID: f.f.sittingID,
+		CandidateUserID: f.f.candidateID, AsOf: f.f.at}, nil
+}
+func (f *reviewStoreFake) ListLiveFlags(_ context.Context, options store.LiveFlagListOptions) (*store.ExamIntegrityFlagPage, error) {
+	f.liveReads++
+	return &store.ExamIntegrityFlagPage{Items: []store.ExamIntegrityFlagSummary{}}, nil
+}
+func (f *reviewStoreFake) ListLiveEvidence(context.Context, store.LiveEvidenceListOptions) (*store.ExamIntegrityEvidencePage, error) {
+	f.liveReads++
+	return &store.ExamIntegrityEvidencePage{Items: []model.IntegrityEvidence{}}, nil
+}
+func (f *reviewStoreFake) ListLiveNativeConditions(context.Context, store.LiveNativeConditionListOptions) (*store.NativeConditionPage, error) {
+	f.liveReads++
+	return &store.NativeConditionPage{Items: []model.NativeConditionEvidence{}}, nil
+}
+func (f *reviewStoreFake) ListLiveTimeline(context.Context, store.LiveTimelineListOptions) (*store.LiveTimelinePage, error) {
+	f.liveReads++
+	return &store.LiveTimelinePage{Items: []store.LiveTimelineItem{}}, nil
+}
 func (f *reviewStoreFake) Release(_ context.Context, input *store.ExamIntegrityReviewRelease, command *store.CommandIdempotency) (*store.ExamIntegrityReviewMutationResult, error) {
 	f.release, f.idempotency = input, command
+	f.releases = append(f.releases, input)
 	result, _ := f.Finalize(context.Background(), nil, nil)
 	_ = result.Review.Release(3, f.f.userID, f.f.at.Add(time.Minute))
 	result.Replayed = f.replayed
@@ -204,6 +295,13 @@ type reviewExamAccessFake struct {
 	f *reviewFixture
 }
 
+func (s reviewExamAccessFake) Resolve(_ context.Context, examID model.ExamID) (*model.Exam, error) {
+	if examID != s.f.examID {
+		return nil, store.NewErrNotFound("exam", examID.String())
+	}
+	return &model.Exam{ID: examID, AcademicUnitID: s.f.unitID}, nil
+}
+
 func (s reviewExamAccessFake) Access(_ context.Context, examID model.ExamID, userID model.UserID) (*store.ExamAccessSnapshot, error) {
 	if examID != s.f.examID {
 		return nil, store.NewErrNotFound("exam", examID.String())
@@ -230,6 +328,10 @@ func (s reviewMembershipsFake) ListActiveByUser(_ context.Context, userID model.
 type reviewSittingStoreFake struct {
 	store.ExamSittingStore
 	f *reviewFixture
+}
+
+func (s reviewSittingStoreFake) Resolve(_ context.Context, sittingID model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	return s.Get(context.Background(), s.f.examID, sittingID)
 }
 
 func (s reviewSittingStoreFake) Get(_ context.Context, examID model.ExamID, sittingID model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
@@ -325,6 +427,8 @@ func (f *reviewFixture) auditedValue(t *testing.T) map[string]any {
 // reviewFact is the bounded fact a Review event carries for result.
 func reviewFact(result Result) realtime.ExamIntegrityReviewEventFact {
 	return realtime.ExamIntegrityReviewEventFact{
+		ExamID:       result.Authorization.ExamID,
+		SittingID:    result.Authorization.SittingID,
 		SubmissionID: result.Authorization.SubmissionID,
 		AttemptID:    result.Authorization.AttemptID,
 		CandidateID:  result.Authorization.CandidateUserID,
@@ -349,9 +453,12 @@ func reviewCalls(
 	require.NoError(t, err)
 	board, err := realtime.NewManagerSittingBoardChangedEvent(result.Authorization.ExamID, result.Authorization.SittingID)
 	require.NoError(t, err)
+	submissions, err := realtime.NewSittingSubmissionsChangedEvent(result.Authorization.ExamID, result.Authorization.SittingID)
+	require.NoError(t, err)
 	return []realtimetest.Call{
 		{Method: realtimetest.Publish, Event: event},
 		{Method: realtimetest.Publish, Event: board},
+		{Method: realtimetest.Publish, Event: submissions},
 	}
 }
 

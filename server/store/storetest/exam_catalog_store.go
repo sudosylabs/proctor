@@ -43,6 +43,46 @@ func testExamCatalogListAndArchive(t *testing.T, ss store.Store) {
 	require.Equal(t, second.Value.Draft.Title, page[0].Title)
 	require.Equal(t, 1, page[0].ManagerCount)
 	require.False(t, page[0].ArchivedAt.Valid)
+	catalogTotal, err := ss.ExamAuthoring().Count(ctx, store.ExamListOptions{ArchiveFilter: store.ExamArchiveActive, Limit: 1, Visibility: visibility}, 10)
+	require.NoError(t, err)
+	require.Equal(t, 2, catalogTotal, "the count ignores the page limit")
+	capped, err := ss.ExamAuthoring().Count(ctx, store.ExamListOptions{ArchiveFilter: store.ExamArchiveActive, Visibility: visibility}, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, capped, "the count stops at its bound")
+	unscheduled := false
+	withoutSittings, err := ss.ExamAuthoring().List(ctx, store.ExamListOptions{ArchiveFilter: store.ExamArchiveActive, HasSittings: &unscheduled,
+		Limit: 10, Visibility: visibility})
+	require.NoError(t, err)
+	require.Len(t, withoutSittings, 2, "neither exam has a sitting")
+	scheduled := true
+	withSittings, err := ss.ExamAuthoring().Count(ctx, store.ExamListOptions{ArchiveFilter: store.ExamArchiveActive, HasSittings: &scheduled,
+		Visibility: visibility}, 10)
+	require.NoError(t, err)
+	require.Zero(t, withSittings)
+	stranger := saveUser(t, ctx, ss)
+	strangerTotal, err := ss.ExamAuthoring().Count(ctx, store.ExamListOptions{ArchiveFilter: store.ExamArchiveActive,
+		Visibility: store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true}}, 10)
+	require.NoError(t, err)
+	require.Zero(t, strangerTotal, "a viewer who manages no exam counts none")
+	actions, err := ss.ExamAuthoring().CountExamActions(ctx, store.ExamActionCountOptions{
+		ExamIDs: []model.ExamID{first.Value.Exam.ID}, ViewerUserID: creator.ID,
+		SittingVisibility: visibility, ReviewVisibility: visibility, SubmissionVisibility: store.ExamListVisibility{ActorUserID: creator.ID},
+		Maximum: store.MaximumListCount,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, actions[first.Value.Exam.ID].NeedsAttention, "a manager with sitting view gets the attention count")
+	require.Zero(t, *actions[first.Value.Exam.ID].NeedsAttention, "an exam with no open sitting needs no one")
+	require.Nil(t, actions[first.Value.Exam.ID].PendingReview, "no submission view scope, no review count")
+	strangerActions, err := ss.ExamAuthoring().CountExamActions(ctx, store.ExamActionCountOptions{
+		ExamIDs: []model.ExamID{first.Value.Exam.ID}, ViewerUserID: stranger.ID,
+		SittingVisibility:    store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
+		ReviewVisibility:     store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
+		SubmissionVisibility: store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
+		Maximum:              store.MaximumListCount,
+	})
+	require.NoError(t, err)
+	require.Nil(t, strangerActions[first.Value.Exam.ID].NeedsAttention, "a scope can't widen to an exam the viewer doesn't manage")
+	require.Nil(t, strangerActions[first.Value.Exam.ID].PendingReview)
 	next, err := ss.ExamAuthoring().List(ctx, store.ExamListOptions{
 		ArchiveFilter: store.ExamArchiveActive, Limit: 1, Visibility: visibility,
 		BeforeUpdatedAt: page[0].UpdatedAt, BeforeExamID: page[0].ID,

@@ -68,6 +68,9 @@ func NewRetentionRetirementID() RetentionRetirementID { return RetentionRetireme
 // NewExamExportID returns a freshly generated examination export identifier.
 func NewExamExportID() ExamExportID { return ExamExportID(NewID()) }
 
+// NewAuditExportID returns a freshly generated audit export identifier.
+func NewAuditExportID() AuditExportID { return AuditExportID(NewID()) }
+
 // NewAttemptParticipationID returns a freshly generated attempt-participation identifier.
 func NewAttemptParticipationID() AttemptParticipationID { return AttemptParticipationID(NewID()) }
 
@@ -315,6 +318,11 @@ func ParseRetentionRetirementID(value string) (RetentionRetirementID, error) {
 // ParseExamExportID validates and converts the shared identifier representation.
 func ParseExamExportID(value string) (ExamExportID, error) {
 	return parseID[ExamExportID](value, "exam_export_id")
+}
+
+// ParseAuditExportID validates and converts the shared identifier representation.
+func ParseAuditExportID(value string) (AuditExportID, error) {
+	return parseID[AuditExportID](value, "audit_export_id")
 }
 
 // ParseAttemptParticipationID validates and converts the shared identifier representation.
@@ -614,6 +622,9 @@ func (id RetentionRetirementID) IsZero() bool { return id == "" }
 // IsZero reports whether the examination export is the empty zero value.
 func (id ExamExportID) IsZero() bool { return id == "" }
 
+// IsZero reports whether the audit export is the empty zero value.
+func (id AuditExportID) IsZero() bool { return id == "" }
+
 // IsZero reports whether the attempt-participation is the empty zero value.
 func (id AttemptParticipationID) IsZero() bool { return id == "" }
 
@@ -814,6 +825,9 @@ func (id RetentionRetirementID) IsValid() bool { return IsValidOpaqueID(string(i
 
 // IsValid reports whether the examination export is a canonical non-zero ID.
 func (id ExamExportID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the audit export is a canonical non-zero ID.
+func (id AuditExportID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the attempt-participation is a canonical non-zero ID.
 func (id AttemptParticipationID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -1016,6 +1030,9 @@ func (id RetentionRetirementID) String() string { return string(id) }
 // String returns the examination export wire/database representation.
 func (id ExamExportID) String() string { return string(id) }
 
+// String returns the audit export wire/database representation.
+func (id AuditExportID) String() string { return string(id) }
+
 // String returns the attempt-participation wire/database representation.
 func (id AttemptParticipationID) String() string { return string(id) }
 
@@ -1216,6 +1233,9 @@ func (id RetentionRetirementID) MarshalText() ([]byte, error) { return marshalID
 
 // MarshalText encodes the examination export as its canonical string.
 func (id ExamExportID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the audit export as its canonical string.
+func (id AuditExportID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the attempt-participation as its canonical string.
 func (id AttemptParticipationID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1454,6 +1474,11 @@ func (id *RetentionRetirementID) UnmarshalText(data []byte) error {
 // UnmarshalText decodes and validates the examination export when non-empty.
 func (id *ExamExportID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseExamExportID)
+}
+
+// UnmarshalText decodes and validates the audit export when non-empty.
+func (id *AuditExportID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseAuditExportID)
 }
 
 // UnmarshalText decodes and validates the attempt-participation when non-empty.
@@ -1753,6 +1778,9 @@ func (id RetentionRetirementID) MarshalJSON() ([]byte, error) { return marshalID
 // MarshalJSON encodes the examination export as a JSON string.
 func (id ExamExportID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
+// MarshalJSON encodes the audit export as a JSON string.
+func (id AuditExportID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
 // MarshalJSON encodes the attempt-participation as a JSON string.
 func (id AttemptParticipationID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
@@ -1990,6 +2018,11 @@ func (id *RetentionRetirementID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the examination export.
 func (id *ExamExportID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseExamExportID)
+}
+
+// UnmarshalJSON decodes a JSON string into the audit export.
+func (id *AuditExportID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseAuditExportID)
 }
 
 // UnmarshalJSON decodes a JSON string into the attempt-participation.

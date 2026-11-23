@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "exam_id",
     "exam_sitting_id",
     "exam_attempt_id",
     "turn_id",
@@ -14,6 +15,9 @@
     "expires_at"
   ],
   "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
     "exam_sitting_id": {
       "$ref": "id.json"
     },

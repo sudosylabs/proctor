@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -108,7 +109,26 @@ func auditListingService(
 		options.Grants = append(options.Grants, grant(caller.UserID))
 	}
 	fixture := accessWith(t, events, options)
-	return &Service{institutions: anyInstitution(), audits: persistence, authorizer: fixture.Authorizer}, fixture, inv
+	return &Service{institutions: anyInstitution(), audits: persistence, authorizer: fixture.Authorizer,
+		people: people.New(peopleCatalog{}, fixture.Authorizer)}, fixture, inv
+}
+
+// peopleCatalog names nobody: these tests assert what the audit names read,
+// not who acted.
+type peopleCatalog struct{ store.Catalog }
+
+func (peopleCatalog) User() store.UserStore               { return unnamedUsers{} }
+func (peopleCatalog) Audit() store.AuditStore             { return nil }
+func (peopleCatalog) Institution() store.InstitutionStore { return nil }
+
+type unnamedUsers struct{ store.UserStore }
+
+func (unnamedUsers) ListDisplayNames(context.Context, []model.UserID) ([]store.UserDisplayName, error) {
+	return nil, nil
+}
+
+func (unnamedUsers) ListVisibleDisplayNames(context.Context, []model.UserID, store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	return nil, nil
 }
 
 func TestAcademicAuditListingPassesScopeToPersistenceAndRedactsSecurityMetadata(t *testing.T) {
@@ -463,10 +483,11 @@ func TestAuditListingNamesOnlyWhatTheCallerCanSeeInOneRead(t *testing.T) {
 	require.NoError(t, err)
 	// The User visibility reads the caller's grants twice, for user.view and
 	// class.members.view; academic_unit.view and class.view read them once
-	// each.
+	// each. Naming the actors reads the User visibility again, for their
+	// usernames.
 	require.Equal(t, []string{
 		"grants", "decision:audit.view:success", "list-audits", "count-audits",
-		"grants", "grants", "grants", "grants", "list-audit-names",
+		"grants", "grants", "grants", "grants", "list-audit-names", "grants", "grants",
 	}, events, "one name read per page, after the scopes that gate it")
 	require.Equal(t, []store.AuditNameOptions{{
 		UserIDs:             []model.UserID{actor, subject},
@@ -507,4 +528,8 @@ func TestAcademicAuditListingNamesNoSubject(t *testing.T) {
 	require.Len(t, persistence.namesInputs, 1)
 	require.Equal(t, []model.UserID{actor}, persistence.namesInputs[0].UserIDs, "a redacted page never names the subject")
 	require.Empty(t, page.Items[0].Operation(), "a redacted Event keeps no operation to choose a summary by")
+}
+
+func (s *auditListingStoreFake) CountRepeats(context.Context, store.AuditRepeatOptions) ([]store.AuditRepeat, error) {
+	return []store.AuditRepeat{}, nil
 }

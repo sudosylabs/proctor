@@ -105,20 +105,15 @@ func (s SQLAccessPolicyStore) Preflight(
 		result := &store.AccessPolicyPreflightResult{Blockers: blockers}
 		if err := tx.Get(ctx, &result.RoleHoldersWithoutMFACount, `SELECT COUNT(*)
 			FROM users u
-			WHERE `+roleHolderUserPredicate+` AND NOT EXISTS (
-				SELECT 1
-				FROM mfa_credentials mc
-				WHERE mc.user_id = u.id
-					AND mc.archived_at IS NULL
-					AND mc.state = 'active'
-			)`, databaseNow); err != nil {
+			WHERE `+roleHolderWithoutMFAPredicate("u"), databaseNow, databaseNow); err != nil {
 			return nil, fmt.Errorf("count role holders without MFA: %w", err)
 		}
 
 		if err := tx.Get(ctx, &result.RoleHolderSingleFactorSessionCount, `SELECT COUNT(*)
 			FROM sessions s
 			JOIN users u ON u.id = s.user_id
-			WHERE `+roleHolderSingleFactorSessionPredicate+` AND `+roleHolderUserPredicate, databaseNow); err != nil {
+			WHERE `+roleHolderSingleFactorSessionPredicate+` AND `+roleHolderUserPredicate("u"),
+			databaseNow, databaseNow, databaseNow, databaseNow); err != nil {
 			return nil, fmt.Errorf("count role holder single-factor sessions: %w", err)
 		}
 
@@ -126,20 +121,24 @@ func (s SQLAccessPolicyStore) Preflight(
 	})
 }
 
-// roleHolderUserPredicate selects an active user u holding, at the instant bound
-// to $1, a current role binding of an unarchived role whose academic unit or
-// class scope is not archived. A binding at any scope makes a user a role holder.
-const roleHolderUserPredicate = `u.archived_at IS NULL
-		AND u.disabled_at IS NULL
+// roleHolderUserPredicate is the one definition of a role holder: an active
+// user, the alias user, holding at the instant bound to its two placeholders a
+// current role binding of an unarchived role whose academic unit or class
+// scope is not archived. A binding at any scope makes a user a role holder.
+// The access policy and the user directory both read it, so "role holders"
+// means the same people on both.
+func roleHolderUserPredicate(user string) string {
+	return user + `.archived_at IS NULL
+		AND ` + user + `.disabled_at IS NULL
 		AND EXISTS (
 			SELECT 1
 			FROM role_bindings rb
 			JOIN roles r ON r.id = rb.role_id
-			WHERE rb.user_id = u.id
+			WHERE rb.user_id = ` + user + `.id
 				AND rb.archived_at IS NULL
 				AND r.archived_at IS NULL
-				AND rb.start_at <= $1
-				AND (rb.end_at IS NULL OR rb.end_at > $1)
+				AND rb.start_at <= ?
+				AND (rb.end_at IS NULL OR rb.end_at > ?)
 				AND (
 					rb.scope_type = 'institution'
 					OR (
@@ -162,13 +161,38 @@ const roleHolderUserPredicate = `u.archived_at IS NULL
 					)
 				)
 		)`
+}
+
+// activeMFACredentialPredicate is the one definition of an account with
+// two-step verification on: an unarchived, activated Proctor credential of
+// the user whose ID is the userID expression. A pending setup does not count,
+// and neither does a second factor an external provider reports.
+func activeMFACredentialPredicate(userID string) string {
+	return `EXISTS (
+			SELECT 1
+			FROM mfa_credentials mc
+			WHERE mc.user_id = ` + userID + `
+				AND ` + activeMFACondition + `
+		)`
+}
+
+// activeMFACondition selects the active credentials mc.
+const activeMFACondition = `mc.archived_at IS NULL AND mc.state = 'active'`
+
+// roleHolderWithoutMFAPredicate selects the role holders, the alias user,
+// without two-step verification at the instant bound to its two placeholders:
+// the preflight's RoleHoldersWithoutMFACount.
+func roleHolderWithoutMFAPredicate(user string) string {
+	return roleHolderUserPredicate(user) + ` AND NOT ` + activeMFACredentialPredicate(user+".id")
+}
 
 // roleHolderSingleFactorSessionPredicate selects the sessions s that are live at
-// the instant bound to $1 and have not proved a second factor.
+// the instant bound to its two placeholders and have not proved a second
+// factor.
 const roleHolderSingleFactorSessionPredicate = `s.archived_at IS NULL
 		AND s.revoked_at IS NULL
-		AND s.expires_at > $1
-		AND s.idle_expires_at > $1
+		AND s.expires_at > ?
+		AND s.idle_expires_at > ?
 		AND s.authentication_strength <> 'multi_factor'`
 
 // HasRoleHolderMFARequirement reports whether the current access policy requires
@@ -181,10 +205,10 @@ func (s SQLAccessPolicyStore) HasRoleHolderMFARequirement(ctx context.Context, u
 	if err := s.GetMaster().Get(ctx, &required, `SELECT EXISTS (
 			SELECT 1
 			FROM access_policies p
-			JOIN users u ON u.id = $2
+			JOIN users u ON u.id = ?
 			WHERE p.singleton = 1
 				AND p.role_holder_mfa_required
-				AND `+roleHolderUserPredicate+`)`, model.TimeUTC(at), userID.String()); err != nil {
+				AND `+roleHolderUserPredicate("u")+`)`, userID.String(), model.TimeUTC(at), model.TimeUTC(at)); err != nil {
 		return false, fmt.Errorf("check access policy MFA requirement: %w", err)
 	}
 	return required, nil
@@ -723,9 +747,9 @@ func revokeRoleHolderSingleFactorSessions(
 	if err := tx.Select(ctx, &sessionRows, `SELECT s.user_id, s.id AS session_id
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
-		WHERE `+roleHolderSingleFactorSessionPredicate+` AND `+roleHolderUserPredicate+`
+		WHERE `+roleHolderSingleFactorSessionPredicate+` AND `+roleHolderUserPredicate("u")+`
 		ORDER BY s.user_id, s.id
-		FOR UPDATE OF s`, at); err != nil {
+		FOR UPDATE OF s`, at, at, at, at); err != nil {
 		return nil, fmt.Errorf("select role holder single-factor sessions for revocation: %w", err)
 	}
 

@@ -17,7 +17,7 @@ import (
 )
 
 func TestRoleBindingRowRehydrationRejectsInvalidPersistedState(t *testing.T) {
-	valid := roleBindingRow{ID: model.NewRoleBindingID().String(), CreatedAt: time.Unix(10, 0).UTC(), UpdatedAt: time.Unix(11, 0).UTC(), UserID: model.NewUserID().String(), RoleID: model.NewRoleID().String(), ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(), StartAt: time.Unix(10, 0).UTC()}
+	valid := roleBindingRow{ID: model.NewRoleBindingID().String(), CreatedAt: time.Unix(10, 0).UTC(), UpdatedAt: time.Unix(11, 0).UTC(), UserID: model.NewUserID().String(), RoleID: model.NewRoleID().String(), ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(), StartAt: time.Unix(10, 0).UTC(), GrantedVia: string(model.RoleBindingGrantedAtBootstrap)}
 	tests := []struct {
 		name, field string
 		row         roleBindingRow
@@ -27,6 +27,7 @@ func TestRoleBindingRowRehydrationRejectsInvalidPersistedState(t *testing.T) {
 		{name: "role", field: "role_id", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.RoleID = "bad" })},
 		{name: "scope", field: "scope_id", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.ScopeID = "bad" })},
 		{name: "domain", field: "scope_type", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.ScopeType = "unknown" })},
+		{name: "granted via", field: "granted_via", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.GrantedVia = "unknown" })},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

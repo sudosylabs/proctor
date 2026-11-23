@@ -68,7 +68,7 @@ func TestPrepareExamAuthoringCreationRejectsBrokenAggregate(t *testing.T) {
 	at := time.Now().UTC()
 	exam, err := model.NewExam(model.NewExamID(), model.NewAcademicUnitID(), model.NewUserID(), at)
 	require.NoError(t, err)
-	draft, err := model.NewExamDraft(exam.ID, "Test", "", model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(exam.ID, "Test", "", model.DefaultExamPolicySet(), exam.CreatorUserID, at)
 	require.NoError(t, err)
 	manager, err := model.NewExamManager(exam.ID, model.NewUserID(), exam.CreatorUserID, at)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func validExamAuthoringRow(t *testing.T) examAuthoringRow {
 		ID: model.NewID(), AcademicUnitID: model.NewID(), CreatorUserID: model.NewID(), OwnerUserID: model.NewID(),
 		DefaultRevisionID: sql.NullString{}, CreatedAt: at, UpdatedAt: at, ExamRevision: 1,
 		DraftTitle: "Test", Policy: jsonValue(policy), BrowserPolicy: jsonValue(browserPolicy),
-		BaseRevisionID: sql.NullString{}, DraftUpdatedAt: at,
+		BaseRevisionID: sql.NullString{}, DraftUpdatedAt: at, DraftUpdatedBy: model.NewUserID().String(),
 		DraftRevision: 1, ManagerCount: 1, ActorIsManager: true,
 		OwnerIsManager: true,
 	}

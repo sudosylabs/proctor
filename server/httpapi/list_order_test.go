@@ -100,7 +100,7 @@ func TestOnboardingImportListOrderBindsItsCursor(t *testing.T) {
 	newer.ID, newer.CreatedAt = model.NewOnboardingImportID(), at.Add(time.Minute)
 	// The Store reads one past the page, which tells the page another follows.
 	fixture.imports.listed = []*store.OnboardingImport{oldest, &newer}
-	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service))
+	httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), onboardingImportResource(fixture.service, fixture.people))
 	serve := func(query string) *httptest.ResponseRecorder {
 		response := httptest.NewRecorder()
 		httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports?"+query))
@@ -239,7 +239,7 @@ func TestClassListDirectionCountsAndStudentCounts(t *testing.T) {
 	unitPath := "/api/v1/academic-units/" + world.unit.ID.String() + "/classes"
 	levelPath := "/api/v1/programme-levels/" + world.level.ID.String() + "/classes"
 	serveAs := func(principal model.Principal, target string) *httptest.ResponseRecorder {
-		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classResource(fixture.service))
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classResource(fixture.service, fixture.people()))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()

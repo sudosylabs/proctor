@@ -27,6 +27,7 @@ const AssistantApprovalMaximumBytes = 8 << 10
 // AssistantTarget addresses an assistant event to the candidate alone: the
 // conversation is theirs, and no manager watches it live.
 type AssistantTarget struct {
+	ExamID      model.ExamID
 	SittingID   model.ExamSittingID
 	AttemptID   model.ExamAttemptID
 	CandidateID model.UserID
@@ -35,17 +36,18 @@ type AssistantTarget struct {
 }
 
 func (t AssistantTarget) valid() bool {
-	return t.SittingID.IsValid() && t.AttemptID.IsValid() && t.CandidateID.IsValid() && t.SessionID.IsValid() && t.TurnID.IsValid()
+	return t.ExamID.IsValid() && t.SittingID.IsValid() && t.AttemptID.IsValid() && t.CandidateID.IsValid() && t.SessionID.IsValid() && t.TurnID.IsValid()
 }
 
 type assistantEventHeader struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	TurnID        string `json:"turn_id"`
 }
 
 func (t AssistantTarget) header() assistantEventHeader {
-	return assistantEventHeader{ExamSittingID: t.SittingID.String(), ExamAttemptID: t.AttemptID.String(), TurnID: t.TurnID.String()}
+	return assistantEventHeader{ExamID: t.ExamID.String(), ExamSittingID: t.SittingID.String(), ExamAttemptID: t.AttemptID.String(), TurnID: t.TurnID.String()}
 }
 
 func (t AssistantTarget) event(declared message, data any) (Event, error) {
@@ -196,6 +198,7 @@ func truncateUTF8(value string, limit int) string {
 }
 
 type assistantSessionData struct {
+	ExamID    string `json:"exam_id"`
 	SittingID string `json:"exam_sitting_id"`
 	AttemptID string `json:"exam_attempt_id"`
 	Tag       string `json:"tag"`
@@ -205,28 +208,28 @@ type assistantSessionData struct {
 }
 
 // NewAssistantSessionStartedEvent tells the candidate to refresh the session list.
-func NewAssistantSessionStartedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+func NewAssistantSessionStartedEvent(examID model.ExamID, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, tag string, at time.Time) (Event, error) {
-	return assistantSessionEvent(examAttemptAssistantSessionStartedMessage, sittingID, attemptID, candidate,
+	return assistantSessionEvent(examAttemptAssistantSessionStartedMessage, examID, sittingID, attemptID, candidate,
 		assistantSessionData{Tag: tag, StartedAt: model.FormatRFC3339(at)}, at)
 }
 
 // NewAssistantSessionEndedEvent reports a committed session closure to its candidate.
-func NewAssistantSessionEndedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+func NewAssistantSessionEndedEvent(examID model.ExamID, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, tag, outcome string, at time.Time) (Event, error) {
 	if !model.ValidAssistantSessionOutcome(outcome) {
 		return Event{}, errors.New("assistant session end requires a valid outcome")
 	}
-	return assistantSessionEvent(examAttemptAssistantSessionEndedMessage, sittingID, attemptID, candidate,
+	return assistantSessionEvent(examAttemptAssistantSessionEndedMessage, examID, sittingID, attemptID, candidate,
 		assistantSessionData{Tag: tag, Outcome: outcome, EndedAt: model.FormatRFC3339(at)}, at)
 }
 
-func assistantSessionEvent(declared message, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+func assistantSessionEvent(declared message, examID model.ExamID, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, data assistantSessionData, at time.Time) (Event, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidate.IsValid() || !model.ValidAssistantProcessTag(data.Tag) || at.IsZero() {
+	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || !candidate.IsValid() || !model.ValidAssistantProcessTag(data.Tag) || at.IsZero() {
 		return Event{}, errors.New("assistant session event requires valid bounded metadata")
 	}
-	data.SittingID, data.AttemptID = sittingID.String(), attemptID.String()
+	data.ExamID, data.SittingID, data.AttemptID = examID.String(), sittingID.String(), attemptID.String()
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return Event{}, err

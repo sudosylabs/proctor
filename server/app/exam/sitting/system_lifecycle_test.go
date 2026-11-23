@@ -17,6 +17,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -51,7 +53,9 @@ func TestSystemAdvancePublishesOnlyChangedOutcomeAndUsesSystemAudit(t *testing.T
 	require.NotNil(t, fixture.persistence.advance, "AdvanceDue() input")
 	// Contract: the changed outcome publishes the opening to managers, then to
 	// candidates, then invalidates the Sitting board.
-	openedCalls := lifecycleCalls(t, opened, store.ExamSittingTransitionOpened)
+	countChanged, err := realtime.NewDesktopCompatibilityPolicyChangedEvent(fixture.control.Institution.ID)
+	require.NoError(t, err)
+	openedCalls := append(lifecycleCalls(t, opened, store.ExamSittingTransitionOpened), realtimetest.Call{Method: realtimetest.Publish, Event: countChanged})
 	require.Equal(t, openedCalls, fixture.publisher.Calls())
 	require.True(t, fixture.jobs.finalizeAvailableAt.Equal(current.ScheduledEndAt), "system finalize availability = %s, want deadline", fixture.jobs.finalizeAvailableAt)
 
@@ -88,7 +92,10 @@ func TestSystemCloseAndDueListingUseBoundedSystemSeam(t *testing.T) {
 	require.NotNil(t, fixture.persistence.finish, "finish input/effects")
 	// Contract: finishing a Sitting without Attempts publishes its closure to
 	// managers, then to candidates, then invalidates the Sitting board.
-	require.Equal(t, lifecycleCalls(t, closed, store.ExamSittingTransitionClosedNoAttempts), fixture.publisher.Calls(), "finish input/effects")
+	countChanged, err := realtime.NewDesktopCompatibilityPolicyChangedEvent(fixture.control.Institution.ID)
+	require.NoError(t, err)
+	require.Equal(t, append(lifecycleCalls(t, closed, store.ExamSittingTransitionClosedNoAttempts),
+		realtimetest.Call{Method: realtimetest.Publish, Event: countChanged}), fixture.publisher.Calls(), "finish input/effects")
 
 	dueAt := testNow.Add(-time.Minute)
 	fixture.persistence.due = []store.ExamSittingLifecycleDue{{Value: &store.ExamSittingSnapshot{Sitting: closing}, DueAt: dueAt}}

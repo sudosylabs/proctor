@@ -110,5 +110,9 @@ func (r *Records) CompleteExamSittingRecords(
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Exam records completion result is incomplete"))
 	}
 
+	// Completing a Sitting's records starts its retention clock.
+	if !result.Replayed && result.Completion.Revision > command.ExpectedRevision {
+		r.publishRecordsChanged(ctx, command.Scope.ExamID)
+	}
 	return result.Completion, nil
 }

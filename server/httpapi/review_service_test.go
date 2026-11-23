@@ -57,9 +57,12 @@ var reviewActions = append(slices.Clone(sittingActions),
 // reviewFixtureTime is when the seeded Submission was submitted.
 var reviewFixtureTime = time.Date(2026, 8, 15, 18, 0, 0, 0, time.UTC)
 
-func newReviewFixture(t *testing.T) *reviewFixture {
+func newReviewFixture(t *testing.T, actions ...model.Action) *reviewFixture {
 	t.Helper()
-	f := &reviewFixture{sittingFixture: newSittingFixtureWith(t, testExamHTTPPrincipal(), reviewActions...)}
+	if len(actions) == 0 {
+		actions = reviewActions
+	}
+	f := &reviewFixture{sittingFixture: newSittingFixtureWith(t, testExamHTTPPrincipal(), actions...)}
 	at := reviewFixtureTime
 	f.candidate = testExamHTTPPrincipal()
 	f.candidate.UserID = f.submissions.candidateID
@@ -127,7 +130,9 @@ func (f *reviewFixture) AuthenticateDPoP(ctx context.Context, token, _, _, _ str
 func (f *reviewFixture) api(t *testing.T) *route.API {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
-	return newFocusedResourceAPI(t, logger, f, examIntegrityReviewResource(f.service))
+	resolver := testPeople(f.users, f.access.Authorizer)
+	return newFocusedResourceAPI(t, logger, f, examIntegrityReviewResource(f.service, resolver),
+		examLiveEvidenceResource(f.service, resolver))
 }
 
 // request is an authenticated request; the bearer token chooses the caller.
@@ -152,16 +157,70 @@ type reviewLedger struct {
 
 	evidencePage    store.ExamIntegrityEvidencePage
 	attemptEvidence *store.AttemptEvidencePage
+	flagSummaries   []store.ExamIntegrityFlagSummary
+	submissionLists []store.SubmissionListOptions
+	liveTimelines   []store.LiveTimelineListOptions
+	reopeningReason string
 
 	flagLists        []store.ExamIntegrityFlagListOptions
 	evidenceLists    []store.ExamIntegrityEvidenceListOptions
 	discrepancyLists []store.ExamIntegrityDiscrepancyListOptions
 	attemptLists     []store.AttemptEvidenceListOptions
 	decisions        []*store.ExamIntegrityReviewDecisionMutation
+	reopens          []*store.ExamIntegrityReviewReopen
+	batchStarts      []*store.ExamResultReleaseBatchStart
+	batchCompletions []*store.ExamResultReleaseBatchCompletion
 	commands         []*store.CommandIdempotency
 	resultReads      []model.ExamAttemptID
 	previewReads     []model.SubmissionID
 	previewUsage     []model.PreviewUsage
+}
+
+func (s *reviewLedger) ResolveLiveEvidence(_ context.Context, attemptID model.ExamAttemptID) (*store.LiveEvidenceScope, error) {
+	if attemptID != s.f.attemptID {
+		return nil, store.NewErrNotFound("exam_attempt", attemptID.String())
+	}
+	return &store.LiveEvidenceScope{AttemptID: attemptID, ExamID: s.f.examID, SittingID: s.f.sitting.ID,
+		CandidateUserID: s.f.candidate.UserID, AsOf: reviewFixtureTime}, nil
+}
+
+// ListLiveTimeline lists the seeded Flag as the timeline's one entry.
+func (s *reviewLedger) ListLiveTimeline(_ context.Context, options store.LiveTimelineListOptions) (*store.LiveTimelinePage, error) {
+	s.liveTimelines = append(s.liveTimelines, options)
+	return &store.LiveTimelinePage{Items: []store.LiveTimelineItem{{Kind: store.LiveTimelineFlag, At: s.f.flag.CreatedAt,
+		Flag: &store.ExamIntegrityFlagSummary{Flag: *s.f.flag, EvidenceCount: 1}}}}, nil
+}
+
+func (s *reviewLedger) ClaimResultReleaseBatch(_ context.Context, start *store.ExamResultReleaseBatchStart, command *store.CommandIdempotency) (*store.ExamResultReleaseBatchClaim, error) {
+	s.batchStarts = append(s.batchStarts, start)
+	s.commands = append(s.commands, command)
+	return &store.ExamResultReleaseBatchClaim{Token: model.NewID(), SubmissionIDs: slices.Clone(start.SubmissionIDs)}, nil
+}
+
+func (s *reviewLedger) CompleteResultReleaseBatch(_ context.Context, completion *store.ExamResultReleaseBatchCompletion, _ *store.CommandIdempotency) error {
+	s.batchCompletions = append(s.batchCompletions, completion)
+	return nil
+}
+
+// ListSubmissions lists the seeded Submission with its draft review.
+func (s *reviewLedger) ListSubmissions(_ context.Context, options store.SubmissionListOptions) (*store.SubmissionListPage, error) {
+	s.submissionLists = append(s.submissionLists, options)
+	authorization := s.f.authorization()
+	item := store.SubmissionListItem{SubmissionID: s.f.submission.ID, ExamID: authorization.ExamID, ExamTitle: "Algorithms",
+		SittingID: authorization.SittingID, AttemptID: s.f.attemptID,
+		Candidate:   store.SittingCandidateIdentity{UserID: s.f.candidate.UserID, Username: "candidate", DisplayName: "Candidate"},
+		SubmittedAt: s.f.submission.SubmittedAt, ReceiptCode: s.f.submission.ReceiptCode, FlagCount: 1,
+		IntegrityState: model.SubmissionIntegritySettled, ReviewVisible: options.ReviewVisible || options.ReviewVisibility != nil}
+	if item.ReviewVisible {
+		item.Review = &store.SubmissionListReview{ID: s.f.review.ID, State: s.f.review.State,
+			ReleaseState: s.f.review.ReleaseState, Revision: s.f.review.Revision}
+	}
+	page := &store.SubmissionListPage{Items: []store.SubmissionListItem{item}}
+	if options.IncludeCounts {
+		reviewed := int64(0)
+		page.Counts = &store.SubmissionListCounts{Total: 1, Reviewed: &reviewed, Released: &reviewed, FlaggedSubmissions: 1, Flags: 1}
+	}
+	return page, nil
 }
 
 func (s *reviewLedger) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamIntegrityReviewAuthorization, error) {
@@ -178,11 +237,14 @@ func (s *reviewLedger) Get(_ context.Context, id model.SubmissionID) (*store.Exa
 	}
 	return &store.ExamSubmissionReviewSnapshot{NativeConditions: model.NewNativeConditionInventory(),
 		AttemptEvidence: model.NewAttemptEvidenceInventory(), Authorization: s.f.authorization(), Submission: s.f.submission,
-		Review: s.f.review, Decisions: []model.IntegrityReviewDecision{*s.f.decision}}, nil
+		Review: s.f.review, LatestReopeningReason: s.reopeningReason, Decisions: []model.IntegrityReviewDecision{*s.f.decision}}, nil
 }
 
 func (s *reviewLedger) ListFlags(_ context.Context, options store.ExamIntegrityFlagListOptions) (*store.ExamIntegrityFlagPage, error) {
 	s.flagLists = append(s.flagLists, options)
+	if s.flagSummaries != nil {
+		return &store.ExamIntegrityFlagPage{Items: append([]store.ExamIntegrityFlagSummary(nil), s.flagSummaries...)}, nil
+	}
 	return &store.ExamIntegrityFlagPage{Items: []store.ExamIntegrityFlagSummary{{Flag: *s.f.flag, EvidenceCount: 1}}}, nil
 }
 
@@ -208,6 +270,18 @@ func (s *reviewLedger) ListAttemptEvidence(_ context.Context, options store.Atte
 
 // SaveDecision commits the decision against the seeded Review, which the
 // request must name at its current revision.
+func (s *reviewLedger) Reopen(
+	_ context.Context,
+	input *store.ExamIntegrityReviewReopen,
+	command *store.CommandIdempotency,
+) (*store.ExamIntegrityReviewMutationResult, error) {
+	s.reopens = append(s.reopens, input)
+	s.commands = append(s.commands, command)
+	review := *s.f.review
+	review.Revision++
+	return &store.ExamIntegrityReviewMutationResult{Authorization: s.f.authorization(), Review: &review}, nil
+}
+
 func (s *reviewLedger) SaveDecision(
 	_ context.Context,
 	input *store.ExamIntegrityReviewDecisionMutation,
@@ -230,7 +304,7 @@ func (s *reviewLedger) GetReleasedStudentResult(_ context.Context, attemptID mod
 	if attemptID != s.f.attemptID || userID != s.f.candidate.UserID {
 		return nil, store.NewErrNotFound("student_result", attemptID.String())
 	}
-	return &model.StudentResult{ReviewID: s.f.review.ID, SubmissionID: s.f.submission.ID, AttemptID: s.f.attemptID,
+	return &model.StudentResult{ReviewID: s.f.review.ID, SubmissionID: s.f.submission.ID, ReceiptCode: s.f.submission.ReceiptCode, AttemptID: s.f.attemptID,
 		CandidateUserID: s.f.candidate.UserID, StudentRemarksMarkdown: "Approved **remarks**", ReleasedAt: s.f.review.UpdatedAt}, nil
 }
 

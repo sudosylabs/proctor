@@ -9,7 +9,9 @@ package onboarding
 
 import (
 	"context"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -37,27 +39,53 @@ func (s *Service) ListInvitations(
 	}
 
 	targetEmail := strings.ToLower(strings.TrimSpace(query.TargetEmail))
+	search := strings.TrimSpace(query.Query)
+	states := []model.MailDeliveryState{}
+	for _, state := range query.DeliveryStates {
+		if !state.IsValid() {
+			return InvitationAdministrationPage{}, apperror.New("invitation.query.invalid")
+		}
+		if !slices.Contains(states, state) {
+			states = append(states, state)
+		}
+	}
+	order := query.Order
+	if order == "" {
+		order = store.InvitationOrderCreated
+	}
 	if query.Limit < 1 ||
 		query.Limit > 200 ||
 		(query.Purpose != "" && !query.Purpose.IsValid()) ||
 		(query.State != "" && !query.State.IsValid()) ||
 		(targetEmail != "" && !model.IsValidEmail(targetEmail)) ||
 		(query.TargetID != "" && !model.IsValidOpaqueID(query.TargetID)) ||
-		(query.BeforeID.IsValid() != !query.BeforeCreatedAt.IsZero()) {
+		!order.IsValid() ||
+		!utf8.ValidString(search) || utf8.RuneCountInString(search) > store.MaximumInvitationQueryRunes ||
+		(!query.ExpiresAfter.IsZero() && !query.ExpiresBefore.IsZero() && !query.ExpiresBefore.After(query.ExpiresAfter)) ||
+		(query.AfterID.IsValid() != !query.AfterAt.IsZero()) {
 		return InvitationAdministrationPage{}, apperror.New("invitation.query.invalid")
+	}
+	if len(states) == 0 {
+		states = nil
 	}
 
 	options := store.InvitationListOptions{
-		Visibility:      visibility,
-		Purpose:         query.Purpose,
-		State:           query.State,
-		TargetEmail:     targetEmail,
-		TargetID:        strings.TrimSpace(query.TargetID),
-		CreatedAfter:    query.CreatedAfter,
-		CreatedBefore:   query.CreatedBefore,
-		BeforeCreatedAt: query.BeforeCreatedAt,
-		BeforeID:        query.BeforeID,
-		Limit:           query.Limit,
+		Visibility:     visibility,
+		Purpose:        query.Purpose,
+		State:          query.State,
+		TargetEmail:    targetEmail,
+		TargetID:       strings.TrimSpace(query.TargetID),
+		Query:          search,
+		DeliveryStates: states,
+		CreatedAfter:   query.CreatedAfter,
+		CreatedBefore:  query.CreatedBefore,
+		ExpiresAfter:   query.ExpiresAfter,
+		ExpiresBefore:  query.ExpiresBefore,
+		Order:          order,
+		Descending:     query.Descending,
+		AfterAt:        query.AfterAt,
+		AfterID:        query.AfterID,
+		Limit:          query.Limit,
 	}
 	page, err := s.invitations.List(ctx, options)
 	if err != nil {
@@ -69,7 +97,7 @@ func (s *Service) ListInvitations(
 		result.Items = append(result.Items, invitationAdministrationView(item))
 	}
 
-	total, consistent, err := paging.CountFirst(!query.BeforeID.IsValid(), len(result.Items), func(maximum int) (int, error) {
+	total, consistent, err := paging.CountFirst(!query.AfterID.IsValid(), len(result.Items), func(maximum int) (int, error) {
 		return s.invitations.Count(ctx, options, maximum)
 	})
 	if err != nil {

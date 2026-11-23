@@ -65,6 +65,57 @@ func TestIntegrityReviewHTTPMapsStrictDecisionAndPrivateManagerProjection(t *tes
 	require.Len(t, f.reviewStore.decisions, 1, "duplicate JSON reaches no Store write")
 }
 
+func TestIntegrityReviewHTTPReopenSendsTheReasonToTheStore(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	httpAPI := f.api(t)
+	path := "/api/v1/submissions/" + f.submission.ID.String() + "/review/reopen"
+	body := `{"submission_review_id":"` + f.review.ID.String() + `","expected_revision":2,"reason":"The clip needs another look."}`
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer credential")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "reopen-once")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
+	require.Len(t, f.reviewStore.reopens, 1, "the reopen reached the Store once")
+	reopen := f.reviewStore.reopens[0]
+	require.Equal(t, f.review.ID, reopen.ReviewID)
+	require.Equal(t, int64(2), reopen.ExpectedRevision)
+	require.Equal(t, "The clip needs another look.", reopen.Reason)
+	require.Equal(t, f.caller.UserID, reopen.ActorUserID)
+	require.Equal(t, sha256.Sum256([]byte("reopen-once")), f.reviewStore.commands[0].KeyDigest)
+}
+
+func TestIntegrityReviewHTTPShowsTheLatestReopeningReasonOnlyToSittingManagers(t *testing.T) {
+	t.Parallel()
+	const reason = "The clip needs another look."
+	for _, test := range []struct {
+		name    string
+		actions []model.Action
+		want    string
+	}{
+		{name: "sitting manager", actions: []model.Action{model.ActionSubmissionView, model.ActionExamSittingManage}, want: reason},
+		{name: "submission reviewer", actions: []model.Action{model.ActionSubmissionView, model.ActionSubmissionReview}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := newReviewFixture(t, test.actions...)
+			f.reviewStore.reopeningReason = reason
+			response := httptest.NewRecorder()
+			path := "/api/v1/submissions/" + f.submission.ID.String() + "/review"
+			f.api(t).ServeHTTP(response, f.request(t, http.MethodGet, path, "credential"))
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			var body examIntegrityReviewResponse
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			require.Equal(t, test.want, body.LatestReopeningReason)
+			if test.want == "" {
+				require.NotContains(t, response.Body.String(), "latest_reopening_reason")
+			}
+		})
+	}
+}
+
 func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
@@ -89,6 +140,162 @@ func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	unknown := base64.RawURLEncoding.EncodeToString([]byte(`{"kind":"evidence","id":"` + f.evidence.ID.String() + `","path":"private"}`))
 	_, err = decodeExamIntegrityReviewCursor(unknown, "evidence")
 	require.Error(t, err, "cursor accepted an unknown private field")
+}
+
+func TestIntegrityFlagsCarryALocalizedSummaryWithoutApplicationNames(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	flag := func(kind model.IntegrityPolicyKind) model.IntegrityFlag {
+		value := *f.flag
+		value.ID, value.Kind = model.NewIntegrityFlagID(), kind
+		return value
+	}
+	f.reviewStore.flagSummaries = []store.ExamIntegrityFlagSummary{
+		{Flag: flag(model.IntegrityPolicyFocusLoss), EvidenceCount: 2, OverflowCount: 1},
+		{Flag: flag(model.IntegrityPolicyConnectionLoss), EvidenceCount: 1},
+		{Flag: flag(model.IntegrityPolicyBrowserNavigation), EvidenceCount: 4,
+			Browser: &model.BrowserIntegrityGroup{ParticipationID: model.NewAttemptParticipationID(),
+				PolicyRevisionID: model.NewExamRevisionID(), RuleID: "block-search"}},
+		{Flag: flag("native.applications"), EvidenceCount: 1},
+		{Flag: func() model.IntegrityFlag {
+			value := flag("native.display")
+			value.NativeRuleID = "baseline.single_display"
+			return value
+		}(), EvidenceCount: 2},
+		{Flag: flag("example-plugin.gaze"), EvidenceCount: 5},
+	}
+	httpAPI := f.api(t)
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.request(t, http.MethodGet, "/api/v1/submissions/"+f.submission.ID.String()+"/integrity-flags", "credential"))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page examIntegrityFlagListResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	summaries := make([]string, 0, len(page.Items))
+	for _, item := range page.Items {
+		summaries = append(summaries, item.Summary)
+	}
+	require.Equal(t, []string{
+		"The exam window lost focus 3 times",
+		"The secure connection was lost 1 time",
+		"4 pages were blocked by the “block-search” browser rule",
+		"The “applications” desktop check was not met 1 time",
+		"The “baseline.single_display” desktop check was not met 2 times",
+		"The “example-plugin.gaze” check reported this 5 times",
+	}, summaries, "evidence beyond what was kept still counts, and a desktop check is named by its identifier, never by an application")
+}
+
+func TestSittingSubmissionListMapsFiltersAndShowsTheReview(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	httpAPI := f.api(t)
+	base := "/api/v1/exams/" + f.examID.String() + "/sittings/" + f.sitting.ID.String() + "/submissions"
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.request(t, http.MethodGet,
+		base+"?review_state=none&review_state=draft&release_state=withheld&has_flags=true&sort=name&limit=5", "credential"))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Len(t, f.reviewStore.submissionLists, 1)
+	listed := f.reviewStore.submissionLists[0]
+	require.Equal(t, []store.SubmissionListReviewState{store.SubmissionListReviewNone, store.SubmissionListReviewDraft}, listed.Filter.ReviewStates)
+	require.Equal(t, []model.SubmissionReviewReleaseState{model.SubmissionReviewWithheld}, listed.Filter.ReleaseStates)
+	require.NotNil(t, listed.Filter.HasFlags)
+	require.True(t, *listed.Filter.HasFlags)
+	require.Equal(t, store.SubmissionListByName, listed.Sort)
+	require.Equal(t, 6, listed.Limit, "the Store reads one row past the page")
+	require.True(t, listed.IncludeCounts)
+	require.True(t, listed.ReviewVisible)
+	require.Equal(t, f.caller.UserID, listed.ExcludeCandidateUserID)
+
+	var page submissionListResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, f.submission.ReceiptCode.Display(), page.Items[0].ReceiptCode)
+	require.Nil(t, page.Items[0].Exam, "a sitting's list names no exam on each row")
+	require.NotNil(t, page.Items[0].Review)
+	require.Equal(t, "draft", page.Items[0].Review.State)
+	require.NotNil(t, page.Counts)
+	require.NotContains(t, response.Body.String(), "Manager-only", "no notes or rationale reach the list")
+
+	for _, query := range []string{"review_state=open", "review_state=draft&review_state=draft", "has_flags=yes", "sort=oldest", "release_state=hidden"} {
+		refused := httptest.NewRecorder()
+		httpAPI.ServeHTTP(refused, f.request(t, http.MethodGet, base+"?"+query, "credential"))
+		assertHTTPProblem(t, refused, http.StatusBadRequest, "request.invalid")
+	}
+	require.Len(t, f.reviewStore.submissionLists, 1, "a refused query reads nothing")
+
+	across := httptest.NewRecorder()
+	httpAPI.ServeHTTP(across, f.request(t, http.MethodGet, "/api/v1/submissions?review_state=none&review_state=draft", "credential"))
+	require.Equal(t, http.StatusOK, across.Code, across.Body.String())
+	acrossOptions := f.reviewStore.submissionLists[1]
+	require.NotNil(t, acrossOptions.Visibility)
+	require.NotNil(t, acrossOptions.ReviewVisibility)
+	require.False(t, acrossOptions.IncludeCounts, "the list across exams is not counted")
+	require.NoError(t, json.Unmarshal(across.Body.Bytes(), &page))
+	require.NotNil(t, page.Items[0].Exam, "a row across exams names its exam")
+	require.Equal(t, "Algorithms", page.Items[0].Exam.DisplayName)
+}
+
+func TestLiveAttemptTimelineReadsTheWindowAndSaysItIsIncomplete(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	httpAPI := f.api(t)
+	base := "/api/v1/exams/" + f.examID.String() + "/sittings/" + f.sitting.ID.String() + "/attempts/" + f.attemptID.String() + "/timeline"
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.request(t, http.MethodGet, base+"?from=2026-08-15T17:00:00Z&to=2026-08-15T19:00:00Z&limit=10", "credential"))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Len(t, f.reviewStore.liveTimelines, 1)
+	read := f.reviewStore.liveTimelines[0]
+	require.Equal(t, f.attemptID, read.AttemptID)
+	require.Equal(t, 10, read.Limit)
+	require.True(t, read.Window.From.Equal(time.Date(2026, 8, 15, 17, 0, 0, 0, time.UTC)))
+	require.True(t, read.Window.To.Equal(time.Date(2026, 8, 15, 19, 0, 0, 0, time.UTC)))
+	var page liveTimelineListResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.False(t, page.Complete, "a running attempt's evidence is not complete")
+	require.Len(t, page.Items, 1)
+	require.Equal(t, "flag", page.Items[0].Kind)
+	require.NotNil(t, page.Items[0].Flag)
+	require.NotEmpty(t, page.Items[0].Flag.Summary)
+
+	for _, query := range []string{"from=yesterday", "limit=201"} {
+		refused := httptest.NewRecorder()
+		httpAPI.ServeHTTP(refused, f.request(t, http.MethodGet, base+"?"+query, "credential"))
+		assertHTTPProblem(t, refused, http.StatusBadRequest, "request.invalid")
+	}
+	badWindow := httptest.NewRecorder()
+	httpAPI.ServeHTTP(badWindow, f.request(t, http.MethodGet,
+		base+"?from=2026-08-15T19:00:00Z&to=2026-08-15T17:00:00Z", "credential"))
+	assertHTTPProblem(t, badWindow, http.StatusBadRequest, "exam.integrity_review.invalid")
+	require.Len(t, f.reviewStore.liveTimelines, 1, "a refused window reads nothing")
+
+	candidate := httptest.NewRecorder()
+	httpAPI.ServeHTTP(candidate, f.request(t, http.MethodGet, base, "candidate"))
+	require.Equal(t, http.StatusNotFound, candidate.Code, "the candidate never reads evidence about themself")
+	require.Len(t, f.reviewStore.liveTimelines, 1)
+}
+
+func TestBulkResultReleaseReportsEachSubmission(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	httpAPI := f.api(t)
+	path := "/api/v1/exams/" + f.examID.String() + "/sittings/" + f.sitting.ID.String() + "/result-releases"
+	send := func(body string) *httptest.ResponseRecorder {
+		request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer credential")
+		request.Header.Set("Idempotency-Key", "bulk-release")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+	response := send(`{"submission_ids":["` + f.submission.ID.String() + `"]}`)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.JSONEq(t, `{"items":[{"submission_id":"`+f.submission.ID.String()+`","outcome":"not_finalized"}]}`, response.Body.String(),
+		"a draft review is not released")
+	require.Len(t, f.reviewStore.batchStarts, 1)
+	require.Equal(t, []model.SubmissionID{f.submission.ID}, f.reviewStore.batchStarts[0].SubmissionIDs)
+	require.Len(t, f.reviewStore.batchCompletions, 1)
+	require.Equal(t, sha256.Sum256([]byte("bulk-release")), f.reviewStore.commands[0].KeyDigest)
+	assertHTTPProblem(t, send(`{"submission_ids":["`+f.submission.ID.String()+`"],"all_finalized":true}`), http.StatusBadRequest, "request.invalid")
+	assertHTTPProblem(t, send(`{}`), http.StatusBadRequest, "request.invalid")
 }
 
 func TestIntegrityReviewHTTPListsAttemptEvidenceWithItsDetail(t *testing.T) {
@@ -201,6 +408,7 @@ func TestStudentResultHTTPExposesOnlyReleasedSanitizedProjection(t *testing.T) {
 	require.Equal(t, []model.ExamAttemptID{f.attemptID}, f.reviewStore.resultReads, "the candidate's result was read once")
 	payload := response.Body.String()
 	require.Contains(t, payload, "Approved **remarks**")
+	require.Contains(t, payload, `"receipt_code":"`+f.submission.ReceiptCode.Display()+`"`, "the result names the Submission's receipt")
 	for _, forbidden := range []string{"manager_notes", "private_rationale", "integrity_flag", "evidence", "workspace", "candidate_user_id"} {
 		require.NotContains(t, payload, forbidden, "student result exposed")
 	}

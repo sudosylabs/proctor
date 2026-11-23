@@ -834,6 +834,10 @@ func (s *SQLExamAttemptStore) ResolveCandidateAccess(
 		if err != nil {
 			return nil, err
 		}
+		examID, err := model.ParseExamID(guard.ExamID)
+		if err != nil {
+			return nil, invalidPersistedState("exam_attempt", "exam_id", err)
+		}
 		sittingID, err := model.ParseExamSittingID(guard.SittingID)
 		if err != nil {
 			return nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
@@ -847,6 +851,7 @@ func (s *SQLExamAttemptStore) ResolveCandidateAccess(
 			return nil, invalidPersistedState("exam_attempt_participation", "id", err)
 		}
 		return &store.CandidateAttemptAccessTarget{
+			ExamID:          examID,
 			AttemptID:       access.AttemptID,
 			SittingID:       sittingID,
 			ClassID:         classID,

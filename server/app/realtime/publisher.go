@@ -18,6 +18,8 @@ import (
 type Publisher interface {
 	// Publish delivers the event locally first, then to peers.
 	Publish(ctx context.Context, event Event) error
+	// PublishExamChange also coalesces a hint to refetch the affected exam's counts.
+	PublishExamChange(ctx context.Context, event Event, examID model.ExamID) error
 	// UnbindExamAttemptConnection unbinds one attempt connection on every
 	// node and leaves its socket open.
 	UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error

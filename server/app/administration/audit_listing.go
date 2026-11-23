@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -52,7 +53,21 @@ type AuditEventPage struct {
 	paging.Counted[*model.AuditEvent]
 	Names    store.AuditNames
 	Redacted bool
+	// Actors names who did each event. Who acted is part of the record, so
+	// every reader of the event gets their presented name.
+	Actors people.Refs
+	// Repeats holds, for an event repeated more than once in
+	// AuditRepeatWindow up to and including it, how many times, counting only
+	// events the caller can see, capped at MaximumAuditRepeat.
+	Repeats map[model.AuditEventID]int
 }
+
+// AuditRepeatWindow and MaximumAuditRepeat bound an audit event's repeat
+// count: the same actor, action and resource within ten minutes.
+const (
+	AuditRepeatWindow  = 10 * time.Minute
+	MaximumAuditRepeat = 100
+)
 
 // ListAuditEvents returns a page of audit events within the caller's audit
 // visibility; an academic-only reader receives redacted events.
@@ -66,47 +81,21 @@ func (s *Service) ListAuditEvents(
 		return AuditEventPage{}, err
 	}
 
-	validAcademicVisibility := len(visibility.AllowedActions) > 0 &&
-		((visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) == 0) ||
-			(!visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) > 0))
-	if !visibility.InstitutionWide && !validAcademicVisibility {
+	if !validAuditVisibility(visibility) {
 		return AuditEventPage{}, access.DeniedError()
 	}
 	if query.Limit == 0 {
 		query.Limit = 50
 	}
-
-	if query.Limit < 1 ||
-		query.Limit > 200 ||
-		(query.ActorID != "" && !query.ActorID.IsValid()) ||
-		(query.SubjectUserID != "" && !query.SubjectUserID.IsValid()) ||
-		(query.BeforeID != "" && !query.BeforeID.IsValid()) ||
-		(query.Resource != nil && query.Resource.Validate() != nil) ||
-		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) ||
-		(query.Kind != "" && !query.Kind.IsValid()) ||
-		!validAuditListStatus(query.Status) {
+	if query.Limit < 1 || query.Limit > 200 || (query.BeforeID != "" && !query.BeforeID.IsValid()) {
 		return AuditEventPage{}, apperror.New("audit.query.invalid")
 	}
-	actions, err := auditListActions(query.Actions)
+	options, err := auditListFilters(query)
 	if err != nil {
 		return AuditEventPage{}, err
 	}
-
-	options := store.AuditListOptions{
-		ActorID:         model.UserID(strings.TrimSpace(query.ActorID.String())),
-		SubjectUserID:   query.SubjectUserID,
-		Actions:         actions,
-		Kind:            query.Kind,
-		Status:          query.Status,
-		Resource:        query.Resource,
-		Since:           query.Since,
-		Until:           query.Until,
-		Ascending:       query.Ascending,
-		BeforeCreatedAt: query.BeforeCreatedAt,
-		BeforeID:        query.BeforeID,
-		Limit:           query.Limit + 1,
-		Visibility:      visibility,
-	}
+	options.BeforeCreatedAt, options.BeforeID = query.BeforeCreatedAt, query.BeforeID
+	options.Limit, options.Visibility = query.Limit+1, visibility
 	events, err := s.audits.List(ctx, options)
 	if err != nil {
 		return AuditEventPage{}, auditListingError(err)
@@ -130,7 +119,55 @@ func (s *Service) ListAuditEvents(
 	if page.Names, err = s.auditNames(ctx, inv.Principal(), page.Items, page.Redacted); err != nil {
 		return AuditEventPage{}, err
 	}
+	actors := make([]model.UserID, 0, len(page.Items))
+	for _, event := range page.Items {
+		actors = append(actors, event.ActorID)
+	}
+	if page.Actors, err = s.people.Resolve(ctx, inv.Principal(), actors); err != nil {
+		return AuditEventPage{}, auditListingError(err)
+	}
+	// The summary names the actor the same way the actor field does.
+	if page.Names.Users == nil {
+		page.Names.Users = map[model.UserID]string{}
+	}
+	for id, actor := range page.Actors {
+		if actor.Named() {
+			page.Names.Users[id] = actor.DisplayName
+		}
+	}
+	if page.Repeats, err = s.auditRepeats(ctx, page.Items, visibility); err != nil {
+		return AuditEventPage{}, err
+	}
 	return page, nil
+}
+
+func (s *Service) auditRepeats(
+	ctx context.Context,
+	events []*model.AuditEvent,
+	visibility store.AuditVisibilityScope,
+) (map[model.AuditEventID]int, error) {
+	repeats := map[model.AuditEventID]int{}
+	ids := make([]model.AuditEventID, 0, len(events))
+	for _, event := range events {
+		if !event.ActorID.IsZero() {
+			ids = append(ids, event.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return repeats, nil
+	}
+	counted, err := s.audits.CountRepeats(ctx, store.AuditRepeatOptions{
+		EventIDs: ids, Visibility: visibility, Window: AuditRepeatWindow, Maximum: MaximumAuditRepeat,
+	})
+	if err != nil {
+		return nil, auditListingError(err)
+	}
+	for _, repeat := range counted {
+		if repeat.Count > 1 {
+			repeats[repeat.EventID] = repeat.Count
+		}
+	}
+	return repeats, nil
 }
 
 // auditNames names actors, subjects and resources only inside the caller's
@@ -195,6 +232,38 @@ func (s *Service) auditNames(
 		return store.AuditNames{}, auditListingError(err)
 	}
 	return names, nil
+}
+
+// auditListFilters validates the listing's filters, the part of a query an
+// export freezes.
+func auditListFilters(query ListAuditEventsQuery) (store.AuditListOptions, error) {
+	if (query.ActorID != "" && !query.ActorID.IsValid()) ||
+		(query.SubjectUserID != "" && !query.SubjectUserID.IsValid()) ||
+		(query.Resource != nil && query.Resource.Validate() != nil) ||
+		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) ||
+		(query.Kind != "" && !query.Kind.IsValid()) ||
+		!validAuditListStatus(query.Status) {
+		return store.AuditListOptions{}, apperror.New("audit.query.invalid")
+	}
+	actions, err := auditListActions(query.Actions)
+	if err != nil {
+		return store.AuditListOptions{}, err
+	}
+	options := store.AuditListOptions{
+		ActorID:       query.ActorID,
+		SubjectUserID: query.SubjectUserID,
+		Actions:       actions,
+		Kind:          query.Kind,
+		Status:        query.Status,
+		Since:         query.Since,
+		Until:         query.Until,
+		Ascending:     query.Ascending,
+	}
+	if query.Resource != nil {
+		resource := *query.Resource
+		options.Resource = &resource
+	}
+	return options, nil
 }
 
 func validAuditListStatus(status model.AuditStatus) bool {

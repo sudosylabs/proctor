@@ -78,6 +78,10 @@ type ExamStarterWorkspaceStore interface {
 	ClaimObjectsForCleanup(context.Context, *StarterWorkspaceCleanupClaim) ([]model.StarterWorkspaceObject, error)
 	CompleteObjectCleanup(context.Context, *StarterWorkspaceCleanupCompletion) error
 	ReleaseObjectCleanup(context.Context, *StarterWorkspaceCleanupRelease) error
+	// DeleteLapsedExamCopies deletes up to limit exam copies whose
+	// reservation lapsed and whose staged objects are already gone, and
+	// reports how many it deleted.
+	DeleteLapsedExamCopies(context.Context, int) (int, error)
 }
 
 // StarterWorkspaceCleanupClaim is the input to ExamStarterWorkspaceStore.ClaimObjectsForCleanup.

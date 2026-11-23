@@ -23,6 +23,7 @@ import (
 // and lifecycle fields are not inputs.
 type CreateAcademicUnitCommand struct {
 	ParentID       model.AcademicUnitID
+	Kind           model.AcademicUnitKind
 	Name           string
 	DisplayName    string
 	Description    string
@@ -34,6 +35,7 @@ type UpdateAcademicUnitCommand struct {
 	ExpectedRevision *int64
 	ID               model.AcademicUnitID
 	ParentID         *model.AcademicUnitID
+	Kind             *model.AcademicUnitKind
 	Name             *string
 	DisplayName      *string
 	Description      *string
@@ -97,6 +99,7 @@ func (s *Service) CreateAcademicUnit(
 	candidate := &model.AcademicUnit{
 		InstitutionID: institutionID,
 		ParentID:      parentUnitID,
+		Kind:          command.Kind,
 		Name:          command.Name,
 		DisplayName:   command.DisplayName,
 		Description:   command.Description,
@@ -107,8 +110,8 @@ func (s *Service) CreateAcademicUnit(
 	}
 
 	idempotency, err := idempotency.Prepare(inv, "academic_unit.create", command.IdempotencyKey, struct {
-		ParentID, Name, DisplayName, Description string
-	}{command.ParentID.String(), command.Name, command.DisplayName, command.Description})
+		ParentID, Kind, Name, DisplayName, Description string
+	}{command.ParentID.String(), string(candidate.Kind), command.Name, command.DisplayName, command.Description})
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +149,7 @@ func (s *Service) CreateAcademicUnit(
 	// Publication is best effort after commit, so callers never retry work
 	// that already committed.
 	if !saved.Replayed {
-		if err := s.publishAcademicUnitCreated(ctx, saved.Value.ID); err != nil {
+		if err := s.publishAcademicUnitCreated(ctx, saved.Value); err != nil {
 			s.publisher.Report(ctx, "academic_unit_created", err)
 		}
 	}
@@ -197,6 +200,9 @@ func (s *Service) UpdateAcademicUnit(
 		}
 	}
 
+	if command.Kind != nil {
+		candidate.Kind = *command.Kind
+	}
 	if command.Name != nil {
 		candidate.Name = *command.Name
 	}
@@ -252,7 +258,7 @@ func (s *Service) UpdateAcademicUnit(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publishAcademicUnitUpdated(ctx, updated.ID); err != nil {
+	if err := s.publishAcademicUnitUpdated(ctx, updated); err != nil {
 		s.publisher.Report(ctx, "academic_unit_updated", err)
 	}
 
@@ -313,7 +319,7 @@ func (s *Service) ArchiveAcademicUnit(
 	if err != nil {
 		return err
 	}
-	if err := s.publishAcademicUnitArchived(ctx, archived.ID); err != nil {
+	if err := s.publishAcademicUnitArchived(ctx, archived); err != nil {
 		s.publisher.Report(ctx, "academic_unit_archived", err)
 	}
 

@@ -40,7 +40,7 @@ func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	members := fixture.unitMembers
 	firstPage, emptyPage := store.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, HasMore: true}, store.AcademicUnitMemberPage{}
 	members.page, members.total = firstPage, 2
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service, fixture.people()))
 	path := "/api/v1/academic-units/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
@@ -111,10 +111,11 @@ func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 		Now:    func() time.Time { return model.TimeFromMillis(1000) },
 	})
 	fixture.hold(world)
+	fixture.users.add(&model.User{ID: member.UserID, Username: "student", DisplayName: "Student"})
 	members := fixture.classMembers
 	firstPage, emptyPage := store.ClassMemberPage{Members: []*model.ClassMember{member}, HasMore: true}, store.ClassMemberPage{}
 	members.page, members.total = firstPage, 2
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(fixture.service))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(fixture.service, fixture.people()))
 	path := "/api/v1/classes/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)

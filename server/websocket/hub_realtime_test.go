@@ -210,8 +210,8 @@ func TestHubDeliversAScopedEventOnlyToItsScopeSubscribers(t *testing.T) {
 	require.NotNil(t, inScope)
 	require.NotNil(t, outOfScope)
 	unit := model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewAcademicUnitID().String()}
-	subscribeForScopeTest(t, inScope, unit)
-	subscribeForScopeTest(t, outOfScope, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewAcademicUnitID().String()})
+	subscribeForScopeTest(t, inScope, model.ActionOnboardingBatchView, unit)
+	subscribeForScopeTest(t, outOfScope, model.ActionOnboardingBatchView, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewAcademicUnitID().String()})
 
 	event, err := realtime.NewOnboardingImportChangedEvent(model.NewOnboardingImportID(), model.OnboardingImportParsing, unit)
 	require.NoError(t, err)
@@ -222,10 +222,91 @@ func TestHubDeliversAScopedEventOnlyToItsScopeSubscribers(t *testing.T) {
 	require.Empty(t, deliveredEventIDs(outOfScope))
 }
 
-func subscribeForScopeTest(t *testing.T, runtime *connectionRuntime, scope model.Resource) {
+func TestHubDoesNotSendDesktopEventsToOtherActionSubscriptions(t *testing.T) {
+	t.Parallel()
+	hub := newInternalTestHub(t)
+	require.NoError(t, hub.Start(t.Context()))
+	t.Cleanup(func() { require.NoError(t, hub.Close(context.Background())) })
+	examID, sittingID, attemptID := model.NewExamID(), model.NewExamSittingID(), model.NewExamAttemptID()
+	sitting := model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}
+	register := func(action model.Action, resource model.Resource) *connectionRuntime {
+		socket, _ := newSocketPair(t)
+		runtime, _ := hub.register(socket,
+			model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
+		require.NotNil(t, runtime)
+		subscribeForScopeTest(t, runtime, action, resource)
+		return runtime
+	}
+	viewer := register(model.ActionExamSittingView, sitting)
+	submissionViewer := register(model.ActionSubmissionView, sitting)
+	evidenceViewer := register(model.ActionExamSittingManage, sitting)
+	events := []struct {
+		build func() (realtime.Event, error)
+		want  *connectionRuntime
+	}{
+		{build: func() (realtime.Event, error) {
+			return realtime.NewSittingSubmissionsChangedEvent(examID, sittingID)
+		}, want: submissionViewer},
+		{build: func() (realtime.Event, error) {
+			return realtime.NewAttemptEvidenceChangedEvent(examID, sittingID, attemptID, model.NowUTC())
+		}, want: evidenceViewer},
+		{build: func() (realtime.Event, error) {
+			return realtime.NewScreenClipChangedEvent(examID, sittingID, attemptID, model.NewScreenClipID())
+		}, want: evidenceViewer},
+	}
+	for _, test := range events {
+		event, err := test.build()
+		require.NoError(t, err)
+		event.ID = model.NewID()
+		hub.PublishLocal(t.Context(), event)
+		for _, runtime := range []*connectionRuntime{viewer, submissionViewer, evidenceViewer} {
+			if runtime == test.want {
+				require.Contains(t, deliveredEventIDs(runtime), event.ID)
+			} else {
+				require.NotContains(t, deliveredEventIDs(runtime), event.ID)
+			}
+		}
+	}
+}
+
+func TestAuthorizationInvalidationClosesTheUserAndExactUserViewWatchers(t *testing.T) {
+	t.Parallel()
+	hub := newInternalTestHub(t)
+	require.NoError(t, hub.Start(t.Context()))
+	t.Cleanup(func() { require.NoError(t, hub.Close(context.Background())) })
+	subjectID := model.NewUserID()
+	resource := model.Resource{Type: model.ResourceUser, ID: subjectID.String()}
+	register := func(userID model.UserID) *connectionRuntime {
+		socket, peer := newSocketPair(t)
+		peer.listen()
+		connection, _ := hub.register(socket, model.Principal{UserID: userID, SessionID: model.NewSessionID()},
+			model.RequestMetadata{}, "", 0, "")
+		require.NotNil(t, connection)
+		return connection
+	}
+
+	subject := register(subjectID)
+	observer := register(model.NewUserID())
+	unrelated := register(model.NewUserID())
+	subscribeForScopeTest(t, observer, model.ActionUserView, resource)
+	subscribeForScopeTest(t, unrelated, model.ActionUserView,
+		model.Resource{Type: model.ResourceUser, ID: model.NewUserID().String()})
+
+	hub.CloseUser(subjectID.String(), realtime.ConnectionCloseSessionRevoked)
+	require.True(t, subject.closeStarted.Load())
+	require.False(t, observer.closeStarted.Load(), "the subject's ordinary session revocation does not revoke an observer")
+
+	subject = register(subjectID)
+	hub.CloseUser(subjectID.String(), realtime.ConnectionCloseAuthorizationChanged)
+	require.True(t, subject.closeStarted.Load())
+	require.True(t, observer.closeStarted.Load(), "the observer must reauthorize its User subscription")
+	require.False(t, unrelated.closeStarted.Load(), "unrelated observers keep their sockets")
+}
+
+func subscribeForScopeTest(t *testing.T, runtime *connectionRuntime, action model.Action, scope model.Resource) {
 	t.Helper()
-	subscription := Subscription{Action: model.ActionOnboardingBatchView, Resource: resourceFromModel(scope)}
-	require.True(t, subscription.IsValid(), "onboarding_batch.view accepts an Academic Unit scope")
+	subscription := Subscription{Action: action, Resource: resourceFromModel(scope)}
+	require.True(t, subscription.IsValid())
 	runtime.mu.Lock()
 	defer runtime.mu.Unlock()
 	runtime.subscriptions[subscription.Key()] = subscription
@@ -255,7 +336,7 @@ func TestHubAssistantEventsStayWithinTheOriginatingSession(t *testing.T) {
 		connection, _ := hub.register(socket, principal, model.RequestMetadata{}, "", 0, "")
 		require.NotNil(t, connection)
 	}
-	target := realtime.AssistantTarget{CandidateID: user, SessionID: origin.SessionID, SittingID: model.NewExamSittingID(), AttemptID: model.NewExamAttemptID(), TurnID: model.NewAssistantTurnID()}
+	target := realtime.AssistantTarget{ExamID: model.NewExamID(), CandidateID: user, SessionID: origin.SessionID, SittingID: model.NewExamSittingID(), AttemptID: model.NewExamAttemptID(), TurnID: model.NewAssistantTurnID()}
 	event, err := realtime.NewAssistantTextDeltaEvent(target, 0, "A private hint.")
 	require.NoError(t, err)
 	hub.PublishLocal(t.Context(), event)
@@ -263,4 +344,41 @@ func TestHubAssistantEventsStayWithinTheOriginatingSession(t *testing.T) {
 	encoded, err := json.Marshal(eventFromRealtime(event))
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "session_id")
+}
+
+// TestHubDeliversDesktopPolicyChangesOnlyToThePolicyManagers pins that a
+// connection watching another Institution-wide action, such as reading the
+// access policy, never receives desktop_compatibility_policy.changed.
+func TestHubDeliversDesktopPolicyChangesOnlyToThePolicyManagers(t *testing.T) {
+	t.Parallel()
+
+	hub := newInternalTestHub(t)
+	require.NoError(t, hub.Start(context.Background()))
+	defer func() { _ = hub.Close(context.Background()) }()
+	managerSocket, _ := newSocketPair(t)
+	readerSocket, _ := newSocketPair(t)
+	manager, _ := hub.register(managerSocket,
+		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
+	reader, _ := hub.register(readerSocket,
+		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
+	institutionID := model.NewInstitutionID()
+	institution := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}
+	subscribe := func(runtime *connectionRuntime, action model.Action) {
+		t.Helper()
+		subscription := Subscription{Action: action, Resource: resourceFromModel(institution)}
+		require.True(t, subscription.IsValid(), "%s accepts the Institution", action)
+		runtime.mu.Lock()
+		defer runtime.mu.Unlock()
+		runtime.subscriptions[subscription.Key()] = subscription
+	}
+	subscribe(manager, model.ActionDesktopCompatibilityPolicyManage)
+	subscribe(reader, model.ActionAccessPolicyView)
+
+	event, err := realtime.NewDesktopCompatibilityPolicyChangedEvent(institutionID)
+	require.NoError(t, err)
+	event.ID = model.NewID()
+	hub.PublishLocal(context.Background(), event)
+
+	require.Equal(t, []string{event.ID}, deliveredEventIDs(manager))
+	require.Empty(t, deliveredEventIDs(reader), "an access policy reader received the Desktop policy change")
 }

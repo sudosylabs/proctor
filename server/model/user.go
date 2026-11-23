@@ -52,22 +52,26 @@ var restrictedUsernames = map[string]struct{}{
 // relationships. Password hashes and provider subjects live in their own
 // models so an account can use several sign-in methods.
 type User struct {
-	ID                          UserID
-	CreatedAt                   time.Time
-	UpdatedAt                   time.Time
-	ArchivedAt                  OptionalTime
-	Revision                    int64
-	Username                    string
-	Email                       string
-	EmailVerified               bool
-	DisplayName                 string
-	FirstName                   string
-	LastName                    string
-	Locale                      string
-	Timezone                    string
-	LastLoginAt                 OptionalTime
-	LastActivityAt              OptionalTime
-	DisabledAt                  OptionalTime
+	ID             UserID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	ArchivedAt     OptionalTime
+	Revision       int64
+	Username       string
+	Email          string
+	EmailVerified  bool
+	DisplayName    string
+	FirstName      string
+	LastName       string
+	Locale         string
+	Timezone       string
+	LastLoginAt    OptionalTime
+	LastActivityAt OptionalTime
+	DisabledAt     OptionalTime
+	// DisabledByUserID and DisabledReason record the disable in force; both
+	// clear when the account is enabled again.
+	DisabledByUserID            UserID
+	DisabledReason              string
 	DefaultProfilePictureSeed   string
 	DefaultProfilePictureFileID FileEntryID
 	CustomProfilePictureFileID  FileEntryID
@@ -249,6 +253,15 @@ func (u *User) Validate() error {
 	if u.DisabledAt.Valid && u.DisabledAt.Time.Before(u.CreatedAt) {
 		return invalidModelError(where, "user", "disabled_at", "must not precede create_at", details)
 	}
+	if !u.DisabledAt.Valid && (!u.DisabledByUserID.IsZero() || u.DisabledReason != "") {
+		return invalidModelError(where, "user", "disabled_by_user_id", "must be empty while the account is enabled", details)
+	}
+	if !u.DisabledByUserID.IsZero() && !u.DisabledByUserID.IsValid() {
+		return invalidModelError(where, "user", "disabled_by_user_id", "must be a valid identifier when set", details)
+	}
+	if !ValidUserDisableReason(u.DisabledReason) {
+		return invalidModelError(where, "user", "disabled_reason", "has an invalid format", details)
+	}
 	if u.LastLoginAt.Valid && u.LastLoginAt.Time.Before(u.CreatedAt) {
 		return invalidModelError(where, "user", "last_login_at", "must not precede created_at", details)
 	}
@@ -309,6 +322,18 @@ func (u *User) Auditable() map[string]any {
 		"disabled_at":    u.DisabledAt.Millis(),
 		"last_login_at":  u.LastLoginAt.Millis(),
 	}
+}
+
+// UserDisableReasonMaxRunes is the longest reason a disable may record.
+const UserDisableReasonMaxRunes = 500
+
+// ValidUserDisableReason accepts an empty reason, or trimmed single-line text
+// of at most UserDisableReasonMaxRunes runes.
+func ValidUserDisableReason(value string) bool {
+	return value == "" || (strings.TrimSpace(value) == value &&
+		utf8.ValidString(value) &&
+		utf8.RuneCountInString(value) <= UserDisableReasonMaxRunes &&
+		!ContainsControlCharacter(value))
 }
 
 // IsValidUsername reports whether value is a valid normalized public username.

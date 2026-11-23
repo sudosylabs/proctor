@@ -631,6 +631,7 @@ type CandidateAttemptAccess struct {
 // resolves to: the candidate's active attempt, its sitting and class, and the
 // active participation generation the open connection belongs to.
 type CandidateAttemptAccessTarget struct {
+	ExamID          model.ExamID
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID
 	ClassID         model.ClassID
@@ -1077,8 +1078,13 @@ const (
 type CandidateExamAccessState string
 
 const (
-	CandidateExamAccessNotOpen               CandidateExamAccessState = "not_open"
-	CandidateExamAccessJoinable              CandidateExamAccessState = "joinable"
+	CandidateExamAccessNotOpen    CandidateExamAccessState = "not_open"
+	CandidateExamAccessJoinable   CandidateExamAccessState = "joinable"
+	CandidateExamAccessJoinClosed CandidateExamAccessState = "join_closed"
+	// CandidateExamAccessWaiting is the early-join phase: the candidate may
+	// run the readiness checks and read the instructions, and the Attempt
+	// starts when the sitting opens at its scheduled start.
+	CandidateExamAccessWaiting               CandidateExamAccessState = "waiting"
 	CandidateExamAccessResumable             CandidateExamAccessState = "resumable"
 	CandidateExamAccessSittingPaused         CandidateExamAccessState = "sitting_paused"
 	CandidateExamAccessAwaitReallow          CandidateExamAccessState = "await_reallow"
@@ -1107,14 +1113,22 @@ type CandidateExamActivityListOptions struct {
 	Limit                 int
 }
 
+// CandidateExamActivityAttempt is the candidate's own view of their Attempt.
+// SuspendedAt is when the current or latest suspension began and ReallowedAt
+// when the latest one was lifted; who acted and why stay with managers.
+// LastSavedAt is when the workspace last acknowledged a change.
 type CandidateExamActivityAttempt struct {
 	ID                   model.ExamAttemptID
 	State                model.ExamAttemptState
 	SuspensionReasonCode model.AttemptSuspensionCandidateReason
+	SuspendedAt          model.OptionalTime
+	ReallowedAt          model.OptionalTime
+	LastSavedAt          model.OptionalTime
 }
 
 type CandidateExamActivitySubmission struct {
 	ID          model.SubmissionID
+	ReceiptCode model.SubmissionReceiptCode
 	SubmittedAt time.Time
 	Provenance  model.ExamSubmissionProvenance
 }
@@ -1131,6 +1145,7 @@ type CandidateExamActivityItem struct {
 	ClassDisplayName        string
 	ScheduledStartAt        time.Time
 	ScheduledEndAt          time.Time
+	JoinWindow              model.ExamSittingJoinWindow
 	SittingState            model.ExamSittingState
 	SittingReasonCode       string
 	ActivityState           CandidateExamActivityState
@@ -1158,13 +1173,49 @@ const (
 	SittingCandidateSubmitted    SittingCandidatePresenceState = "submitted"
 )
 
+// IsValid reports whether the state is one the board shows.
+func (s SittingCandidatePresenceState) IsValid() bool {
+	switch s {
+	case SittingCandidateNotStarted, SittingCandidateReady, SittingCandidateConnected, SittingCandidateReconnecting,
+		SittingCandidateLeaseExpired, SittingCandidateSuspended, SittingCandidateSubmitted:
+		return true
+	default:
+		return false
+	}
+}
+
+// SittingCandidateStatusFilter narrows a sitting's candidates. PresenceStates
+// keeps any of the states; FailingChecks keeps candidates whose live
+// participation fails an enforced native rule; Attention keeps candidates with
+// unresolved integrity attention; Query matches the display name or username.
+type SittingCandidateStatusFilter struct {
+	PresenceStates []SittingCandidatePresenceState
+	FailingChecks  bool
+	Attention      bool
+	Query          string
+}
+
 type SittingCandidateStatusListOptions struct {
 	ExamID                 model.ExamID
 	SittingID              model.ExamSittingID
 	ExcludeCandidateUserID model.UserID
 	AfterCandidateUserID   model.UserID
 	ReallowAuthorized      bool
-	Limit                  int
+	Filter                 SittingCandidateStatusFilter
+	// IncludeCounts asks for Counts, which ignore Filter.
+	IncludeCounts bool
+	Limit         int
+}
+
+// SittingCandidateStatusCounts counts a sitting's candidates, other than the
+// reader, at one instant. NeedsAttention counts candidates who are suspended,
+// fail a check or have unresolved integrity attention.
+type SittingCandidateStatusCounts struct {
+	Total            int64
+	ByPresenceState  map[SittingCandidatePresenceState]int64
+	WithFailedChecks int64
+	WithAttention    int64
+	NeedsAttention   int64
 }
 
 type SittingCandidateIdentity struct {
@@ -1229,7 +1280,9 @@ type SittingCandidateStatusPage struct {
 	// EnvironmentsWaitingCapacity counts the sitting's environments waiting
 	// for an execution host with room, across every page.
 	EnvironmentsWaitingCapacity int64
-	Items                       []SittingCandidateStatusItem
+	// Counts is set when the options asked for it.
+	Counts *SittingCandidateStatusCounts
+	Items  []SittingCandidateStatusItem
 }
 
 // ConsistentWith reports whether the page is for the given exam and sitting,
@@ -1344,10 +1397,13 @@ type ExamAttemptStore interface {
 	CompleteScreenClipUpload(context.Context, *ExamAttemptScreenClipCompletion) (*ExamAttemptScreenClipView, error)
 	// ListAttemptScreenClips returns, newest first, every clip requested for
 	// an attempt of the exact exam and sitting. Private reasons are cleared.
-	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptScreenClipView, error)
+	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptManagedScreenClip, error)
 	// GetAttemptScreenClip returns one clip of an attempt of the exact exam
 	// and sitting.
 	GetAttemptScreenClip(context.Context, ExamAttemptClips, model.ScreenClipID) (*ExamAttemptScreenClipView, error)
+	// ResolveAttemptSitting returns the exam and sitting of an attempt, or
+	// ErrNotFound.
+	ResolveAttemptSitting(context.Context, model.ExamAttemptID) (*ExamAttemptSitting, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.
@@ -1371,6 +1427,12 @@ type ExamAttemptStore interface {
 	// ListSittingCandidateStatuses returns one page of a sitting's candidates
 	// with each one's attempt, presence, suspension and integrity state.
 	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
+	// ListSittingCandidateDetails reads the board details of one page of
+	// candidates in one query. A candidate with nothing to report is absent.
+	ListSittingCandidateDetails(context.Context, SittingCandidateDetailOptions) ([]SittingCandidateDetail, error)
+	// ListManagerEnds returns, for the given attempts of one sitting, who
+	// ended each one a manager ended. Automatic ends are absent.
+	ListManagerEnds(context.Context, model.ExamSittingID, []model.ExamAttemptID) ([]ExamAttemptManagerEnd, error)
 	// ListSessionRevocationInvalidationTargets returns the exams and sittings
 	// of the candidate's attempts that were suspended through a participation
 	// bound to one of the given sessions.

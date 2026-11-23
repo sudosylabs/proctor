@@ -57,6 +57,8 @@ type retryStores struct {
 	examRecordsOnce                sync.Once
 	examExport                     store.ExamExportStore
 	examExportOnce                 sync.Once
+	auditExport                    store.AuditExportStore
+	auditExportOnce                sync.Once
 	examResource                   store.ExamResourceStore
 	examResourceOnce               sync.Once
 	examCorrection                 store.ExamCorrectionStore
@@ -235,6 +237,11 @@ type examRecordsStore struct {
 
 type examExportStore struct {
 	store.ExamExportStore
+	layer *Layer
+}
+
+type auditExportStore struct {
+	store.AuditExportStore
 	layer *Layer
 }
 
@@ -636,6 +643,16 @@ func (l *Layer) ExamExport() store.ExamExportStore {
 		}
 	})
 	return l.stores.examExport
+}
+
+func (l *Layer) AuditExport() store.AuditExportStore {
+	l.stores.auditExportOnce.Do(func() {
+		next := l.Store.AuditExport()
+		if next != nil {
+			l.stores.auditExport = &auditExportStore{AuditExportStore: next, layer: l}
+		}
+	})
+	return l.stores.auditExport
 }
 
 func (l *Layer) ExamResource() store.ExamResourceStore {
@@ -1205,6 +1222,21 @@ func (s *examAuthoringStore) Create(ctx context.Context, arg1 *store.ExamAuthori
 	})
 }
 
+func (s *examAuthoringStore) FindCopy(ctx context.Context, command *store.CommandIdempotency) (*store.ExamAuthoringSnapshot, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamAuthoringSnapshot, error) {
+		return s.ExamAuthoringStore.FindCopy(ctx, command)
+	})
+}
+
+func (s *examAuthoringStore) CommitCopy(ctx context.Context, arg1 *store.ExamCopyCommit, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	if command == nil {
+		return s.ExamAuthoringStore.CommitCopy(ctx, arg1, command)
+	}
+	return retryCall1(ctx, s.layer, func() (*store.ExamAuthoringCommandResult, error) {
+		return s.ExamAuthoringStore.CommitCopy(ctx, arg1, command)
+	})
+}
+
 func (s *examAuthoringStore) UpdateDraftText(ctx context.Context, arg1 *store.ExamDraftTextUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.UpdateDraftText(ctx, arg1, command)
@@ -1256,6 +1288,18 @@ func (s *examAuthoringStore) List(ctx context.Context, arg1 store.ExamListOption
 	})
 }
 
+func (s *examAuthoringStore) Count(ctx context.Context, arg1 store.ExamListOptions, arg2 int) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) {
+		return s.ExamAuthoringStore.Count(ctx, arg1, arg2)
+	})
+}
+
+func (s *examAuthoringStore) CountExamActions(ctx context.Context, arg1 store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.ExamID]store.ExamActionCounts, error) {
+		return s.ExamAuthoringStore.CountExamActions(ctx, arg1)
+	})
+}
+
 func (s *examAuthoringStore) Archive(ctx context.Context, arg1 *store.ExamArchive, command *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.Archive(ctx, arg1, command)
@@ -1280,6 +1324,12 @@ func (s *examAuthoringStore) Get(ctx context.Context, arg1 model.ExamID, arg2 mo
 func (s *examAuthoringStore) Resolve(ctx context.Context, arg1 model.ExamID) (*model.Exam, error) {
 	return retryCall1(ctx, s.layer, func() (*model.Exam, error) {
 		return s.ExamAuthoringStore.Resolve(ctx, arg1)
+	})
+}
+
+func (s *examRevisionStore) CheckPublication(ctx context.Context, arg1 *store.ExamPublicationCheck) (*store.ExamPublicationCheckResult, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamPublicationCheckResult, error) {
+		return s.ExamRevisionStore.CheckPublication(ctx, arg1)
 	})
 }
 
@@ -1388,6 +1438,30 @@ func (s *examSittingStore) EarlyClose(ctx context.Context, arg1 *store.ExamSitti
 	})
 }
 
+func (s *examSittingStore) ListCandidateBoardTargets(ctx context.Context, arg1 model.UserID, arg2 model.ExamSittingID, arg3 int) ([]store.ExamSittingInvalidationTarget, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamSittingInvalidationTarget, error) {
+		return s.ExamSittingStore.ListCandidateBoardTargets(ctx, arg1, arg2, arg3)
+	})
+}
+
+func (s *examSittingStore) CountCandidates(ctx context.Context, arg1 []model.ExamSittingID, arg2 model.UserID) (map[model.ExamSittingID]int, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.ExamSittingID]int, error) {
+		return s.ExamSittingStore.CountCandidates(ctx, arg1, arg2)
+	})
+}
+
+func (s *examSittingStore) ListHistory(ctx context.Context, arg1 model.ExamSittingID, arg2 int) ([]store.ExamSittingHistoryEntry, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamSittingHistoryEntry, error) {
+		return s.ExamSittingStore.ListHistory(ctx, arg1, arg2)
+	})
+}
+
+func (s *examSittingStore) ListCorrections(ctx context.Context, arg1 model.ExamSittingID) ([]store.ExamSittingCorrectionSummary, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamSittingCorrectionSummary, error) {
+		return s.ExamSittingStore.ListCorrections(ctx, arg1)
+	})
+}
+
 func (s *examAttemptStore) ListCandidateStarterWorkspace(ctx context.Context, arg1 store.CandidateAttemptAccess, arg2 int) ([]store.CandidateStarterWorkspaceFile, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.CandidateStarterWorkspaceFile, error) {
 		return s.ExamAttemptStore.ListCandidateStarterWorkspace(ctx, arg1, arg2)
@@ -1454,6 +1528,18 @@ func (s *examAttemptStore) Get(ctx context.Context, arg1 model.ExamID, arg2 mode
 func (s *examAttemptStore) List(ctx context.Context, arg1 store.ExamAttemptManagerListOptions) ([]store.ExamAttemptManagerSnapshot, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.ExamAttemptManagerSnapshot, error) {
 		return s.ExamAttemptStore.List(ctx, arg1)
+	})
+}
+
+func (s *examAttemptStore) ListSittingCandidateDetails(ctx context.Context, arg1 store.SittingCandidateDetailOptions) ([]store.SittingCandidateDetail, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.SittingCandidateDetail, error) {
+		return s.ExamAttemptStore.ListSittingCandidateDetails(ctx, arg1)
+	})
+}
+
+func (s *examAttemptStore) ListManagerEnds(ctx context.Context, arg1 model.ExamSittingID, arg2 []model.ExamAttemptID) ([]store.ExamAttemptManagerEnd, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamAttemptManagerEnd, error) {
+		return s.ExamAttemptStore.ListManagerEnds(ctx, arg1, arg2)
 	})
 }
 
@@ -1547,6 +1633,18 @@ func (s *examAttemptWorkspaceStore) ApplyBatch(ctx context.Context, arg1 *store.
 	}
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceBatchResult, error) {
 		return s.ExamAttemptWorkspaceStore.ApplyBatch(ctx, arg1, command)
+	})
+}
+
+func (s *auditExportStore) FindCreation(ctx context.Context, command *store.CommandIdempotency) (model.AuditExportID, error) {
+	return retryCall1(ctx, s.layer, func() (model.AuditExportID, error) {
+		return s.AuditExportStore.FindCreation(ctx, command)
+	})
+}
+
+func (s *auditExportStore) TopologyRevision(ctx context.Context) (int64, error) {
+	return retryCall1(ctx, s.layer, func() (int64, error) {
+		return s.AuditExportStore.TopologyRevision(ctx)
 	})
 }
 
@@ -1667,7 +1765,7 @@ func (s *classStore) GetByName(ctx context.Context, arg1 model.ProgrammeLevelID,
 	})
 }
 
-func (s *classStore) ListByProgrammeLevel(ctx context.Context, arg1 model.ProgrammeLevelID, arg2 store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s *classStore) ListByProgrammeLevel(ctx context.Context, arg1 model.ProgrammeLevelID, arg2 store.ClassListOptions) ([]*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) {
 		return s.ClassStore.ListByProgrammeLevel(ctx, arg1, arg2)
 	})
@@ -1679,7 +1777,7 @@ func (s *classStore) ListByAcademicPeriod(ctx context.Context, arg1 model.Academ
 	})
 }
 
-func (s *classStore) SearchByAcademicUnit(ctx context.Context, arg1 model.AcademicUnitID, arg2 store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s *classStore) SearchByAcademicUnit(ctx context.Context, arg1 model.AcademicUnitID, arg2 store.ClassListOptions) ([]*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) {
 		return s.ClassStore.SearchByAcademicUnit(ctx, arg1, arg2)
 	})
@@ -1736,6 +1834,18 @@ func (s *userStore) ListDirectorySummaries(ctx context.Context, arg1 store.UserD
 func (s *userStore) ListIdentities(ctx context.Context, arg1 []model.UserID) ([]store.UserIdentity, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.UserIdentity, error) {
 		return s.UserStore.ListIdentities(ctx, arg1)
+	})
+}
+
+func (s *userStore) ListMFAStates(ctx context.Context, arg1 []model.UserID) ([]store.UserMFAState, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserMFAState, error) {
+		return s.UserStore.ListMFAStates(ctx, arg1)
+	})
+}
+
+func (s *userStore) ListMemberships(ctx context.Context, arg1 store.UserMembershipListOptions) ([]store.UserMembership, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserMembership, error) {
+		return s.UserStore.ListMemberships(ctx, arg1)
 	})
 }
 
@@ -2006,6 +2116,12 @@ func (s *roleStore) List(ctx context.Context) ([]*model.Role, error) {
 	})
 }
 
+func (s *roleBindingStore) ListExpiries(ctx context.Context, arg1 store.RoleBindingExpiryCursor, arg2 int) (store.RoleBindingExpiryPage, error) {
+	return retryCall1(ctx, s.layer, func() (store.RoleBindingExpiryPage, error) {
+		return s.RoleBindingStore.ListExpiries(ctx, arg1, arg2)
+	})
+}
+
 func (s *roleBindingStore) Get(ctx context.Context, arg1 model.RoleBindingID) (*model.RoleBinding, error) {
 	return retryCall1(ctx, s.layer, func() (*model.RoleBinding, error) {
 		return s.RoleBindingStore.Get(ctx, arg1)
@@ -2033,6 +2149,12 @@ func (s *roleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, arg1
 func (s *roleBindingStore) ListByScope(ctx context.Context, arg1 model.RoleScopeType, arg2 string) ([]*model.RoleBinding, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.RoleBinding, error) {
 		return s.RoleBindingStore.ListByScope(ctx, arg1, arg2)
+	})
+}
+
+func (s *roleBindingStore) ListTeachersByClasses(ctx context.Context, arg1 store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ClassTeachers, error) {
+		return s.RoleBindingStore.ListTeachersByClasses(ctx, arg1)
 	})
 }
 
@@ -2207,6 +2329,7 @@ var (
 	_ store.ExamIntegrityReviewStore        = (*examIntegrityReviewStore)(nil)
 	_ store.ExamRecordsStore                = (*examRecordsStore)(nil)
 	_ store.ExamExportStore                 = (*examExportStore)(nil)
+	_ store.AuditExportStore                = (*auditExportStore)(nil)
 	_ store.ExamResourceStore               = (*examResourceStore)(nil)
 	_ store.ExamCorrectionStore             = (*examCorrectionStore)(nil)
 	_ store.ExamStarterWorkspaceStore       = (*examStarterWorkspaceStore)(nil)

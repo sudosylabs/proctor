@@ -582,6 +582,9 @@ components:
         actor_user_id:
           $ref: '#/components/schemas/ID'
           description: The manager who made the current decision.
+        actor:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who made the decision, named.
         private_rationale:
           type: string
           minLength: 1
@@ -646,6 +649,9 @@ components:
         created_by_user_id:
           $ref: '#/components/schemas/ID'
           description: The manager who created the Review.
+        created_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who started the review, named.
         manager_notes:
           type: string
           maxLength: 3000
@@ -689,6 +695,9 @@ components:
         finalized_by_user_id:
           $ref: '#/components/schemas/ID'
           description: The manager who finalized the Review. Present only once it is finalized.
+        finalized_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who finalized the review, named. Omitted until it is finalized.
         released_at:
           type: string
           format: date-time
@@ -696,6 +705,9 @@ components:
         released_by_user_id:
           $ref: '#/components/schemas/ID'
           description: The manager who released the result. Present only once it is released.
+        released_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who released the result, named. Omitted until it is released.
     ExamIntegrityReviewResponse:
       description: A Submission's integrity state, its Review if one exists, and the current decisions.
       type: object
@@ -740,6 +752,11 @@ components:
           format: int64
           minimum: 0
           description: The number of unresolved integrity items. While above 0, they can block finalization.
+        latest_reopening_reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: The latest private reopening reason. Only shown with permission to manage the Sitting.
         review:
           $ref: '#/components/schemas/ExamSubmissionReviewResponse'
           description: The Review. Omitted until a manager creates one.

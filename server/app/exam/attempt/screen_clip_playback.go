@@ -43,28 +43,39 @@ type PlayScreenClipResult struct {
 	Open      func(start, length int64) (io.ReadCloser, error)
 }
 
-// ListScreenClips returns every clip requested for an attempt, without
-// private reasons.
+// ListScreenClips returns every clip requested for an attempt. A manager
+// clip's private reason is kept only for a caller who manages the sitting; a
+// reviewer sees who asked for it, never why.
 func (s *Service) ListScreenClips(
 	ctx context.Context,
 	inv invocation.Invocation,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
-) (_ []store.ExamAttemptScreenClipView, resultErr error) {
+) (_ []store.ExamAttemptManagedScreenClip, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	attempt := store.ExamAttemptClips{ExamID: examID, SittingID: sittingID, AttemptID: attemptID}
 	if !attempt.IsValid() {
 		return nil, apperror.Invalid("exam.attempt.invalid", "screen_clip")
 	}
-	if _, err := s.authorizeScreenClipView(ctx, inv, attempt); err != nil {
+	viewer, err := s.authorizeScreenClipView(ctx, inv, attempt)
+	if err != nil {
 		return nil, err
 	}
 	clips, err := s.attempts.ListAttemptScreenClips(ctx, attempt)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
-	return clips, nil
+	reasons := viewer.Action == model.ActionExamSittingManage || viewer.Action == model.ActionExamSittingManageOverride
+	listed := make([]store.ExamAttemptManagedScreenClip, len(clips))
+	for i, clip := range clips {
+		listed[i] = store.ExamAttemptManagedScreenClip{ExamAttemptScreenClipView: clip.ExamAttemptScreenClipView}
+		listed[i].Upload = clip.Upload.Clone()
+		if reasons && clip.Source == model.ScreenClipSourceManager {
+			listed[i].PrivateReason = clip.PrivateReason
+		}
+	}
+	return listed, nil
 }
 
 // PlayScreenClip authorizes once, so every range read of the result rests on
@@ -163,6 +174,26 @@ func (s *Service) authorizeScreenClipView(
 	}
 	if viewer.ScopeType == model.RoleScopeClass {
 		viewer.ScopeID = sitting.Sitting.ClassID.String()
+		target, err := s.attempts.ResolveAttemptSitting(ctx, query.AttemptID)
+		if err != nil {
+			return ScreenClipViewAuthorization{}, storeError(storeErrors, err)
+		}
+		if target == nil || target.AttemptID != query.AttemptID || !target.CandidateUserID.IsValid() {
+			return ScreenClipViewAuthorization{}, apperror.New("exam.attempt.unavailable")
+		}
+		if target.ExamID != query.ExamID || target.SittingID != query.SittingID {
+			return ScreenClipViewAuthorization{}, apperror.New("exam.attempt.not_found")
+		}
+		if target.CandidateUserID == inv.Principal().UserID {
+			if s.managers.Audit == nil {
+				return ScreenClipViewAuthorization{}, apperror.New("authorization.unavailable")
+			}
+			if err := s.managers.Audit.RecordAuthorizationDecision(ctx, inv.Principal(), viewer.Action, viewer.Resource,
+				viewer.ScopeType, viewer.ScopeID, inv.RequestMetadata(), false); err != nil {
+				return ScreenClipViewAuthorization{}, err
+			}
+			return ScreenClipViewAuthorization{}, apperror.New("exam.attempt.not_found")
+		}
 	}
 	return viewer, nil
 }

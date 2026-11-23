@@ -10,12 +10,15 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type issueStudentClassInvitationRequest struct {
@@ -134,10 +137,11 @@ type invitationBatchItemRequest struct {
 }
 
 type invitationBatchRequest struct {
-	Operation string                       `json:"operation"`
-	ScopeType string                       `json:"scope_type"`
-	ScopeID   string                       `json:"scope_id"`
-	Items     []invitationBatchItemRequest `json:"items"`
+	Operation     string                       `json:"operation"`
+	ScopeType     string                       `json:"scope_type"`
+	ScopeID       string                       `json:"scope_id"`
+	ExpiresInDays *int                         `json:"expires_in_days,omitempty"`
+	Items         []invitationBatchItemRequest `json:"items"`
 }
 
 type invitationBatchItemResponse struct {
@@ -180,6 +184,9 @@ type invitationAdministrationResponse struct {
 	ExpiresAt        string                      `json:"expires_at"`
 	Email            string                      `json:"email"`
 	InviterUserID    string                      `json:"inviter_user_id"`
+	Inviter          *personRefResponse          `json:"inviter,omitempty"`
+	Role             *roleRefResponse            `json:"role,omitempty"`
+	Scope            scopeRefResponse            `json:"scope"`
 	AcceptedUserID   string                      `json:"accepted_user_id,omitempty"`
 	CreatedAt        string                      `json:"created_at"`
 	UpdatedAt        string                      `json:"updated_at"`
@@ -196,15 +203,25 @@ type invitationListResponse struct {
 	TotalIsLowerBound *bool                              `json:"total_is_lower_bound,omitempty"`
 }
 
+// invitationCursor continues one order of the listing: At is the last
+// invitation's creation or expiry instant, as Sort says.
 type invitationCursor struct {
-	CreatedAt string `json:"created_at"`
-	ID        string `json:"id"`
+	Sort string `json:"sort"`
+	Dir  string `json:"dir"`
+	At   string `json:"at"`
+	ID   string `json:"id"`
 }
 
-type invitationHandlers struct{ app *onboarding.Service }
+// invitationSorts is the listing's closed sort set; created is the default.
+var invitationSorts = []string{string(store.InvitationOrderCreated), string(store.InvitationOrderExpires)}
 
-func invitationResource(app *onboarding.Service) route.Resource {
-	h := invitationHandlers{app: app}
+type invitationHandlers struct {
+	app    *onboarding.Service
+	people *people.Resolver
+}
+
+func invitationResource(app *onboarding.Service, resolver *people.Resolver) route.Resource {
+	h := invitationHandlers{app: app, people: resolver}
 	return route.NewResource("invitations",
 		route.Endpoint{
 			Method:      http.MethodPost,
@@ -500,6 +517,7 @@ func (h invitationHandlers) batch(request route.Request) (route.Result, error) {
 		ScopeType:      model.RoleScopeType(body.ScopeType),
 		ScopeID:        body.ScopeID,
 		IdempotencyKey: request.IdempotencyKey,
+		ExpiresInDays:  body.ExpiresInDays,
 		Items:          items,
 	})
 	if err != nil {
@@ -526,7 +544,7 @@ func (h invitationHandlers) batch(request route.Request) (route.Result, error) {
 }
 
 func (h invitationHandlers) list(request route.Request) (route.Result, error) {
-	query, err := invitationListQuery(request.HTTP)
+	query, order, err := invitationListQuery(request.HTTP)
 	if err != nil {
 		return route.Result{}, apperror.Invalid("request.invalid", "query").Wrap(err)
 	}
@@ -536,9 +554,13 @@ func (h invitationHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
+	names, err := nameInvitations(request, h.people, page.Items)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response := invitationListResponse{Items: make([]invitationAdministrationResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, invitationAdministrationResponseFromView(item))
+		response.Items = append(response.Items, invitationAdministrationResponseFromView(request.HTTP, item, names))
 	}
 
 	if page.More && len(page.Items) == 0 {
@@ -547,16 +569,19 @@ func (h invitationHandlers) list(request route.Request) (route.Result, error) {
 
 	if page.More {
 		last := page.Items[len(page.Items)-1]
+		at := last.CreatedAt
+		if query.Order == store.InvitationOrderExpires {
+			at = last.ExpiresAt
+		}
 		response.NextCursor, err = encodeInvitationCursor(invitationCursor{
-			CreatedAt: model.FormatRFC3339(last.CreatedAt),
-			ID:        last.ID.String(),
+			Sort: order.Sort, Dir: order.Dir, At: model.FormatRFC3339(at), ID: last.ID.String(),
 		})
 		if err != nil {
 			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	if response.Total, response.TotalIsLowerBound, err = route.PageTotal(page.Total, query.BeforeID.IsValid()); err != nil {
+	if response.Total, response.TotalIsLowerBound, err = route.PageTotal(page.Total, query.AfterID.IsValid()); err != nil {
 		return route.Result{}, err
 	}
 
@@ -572,7 +597,11 @@ func (h invitationHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, invitationAdministrationResponseFromView(view)).WithHeaders(noStoreHeaders()), nil
+	names, err := nameInvitations(request, h.people, []onboarding.InvitationAdministrationView{view})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, invitationAdministrationResponseFromView(request.HTTP, view, names)).WithHeaders(noStoreHeaders()), nil
 }
 
 func (h invitationHandlers) resend(request route.Request) (route.Result, error) {
@@ -617,7 +646,11 @@ func (h invitationHandlers) mutate(
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, invitationAdministrationResponseFromView(view)).WithHeaders(noStoreHeaders()), nil
+	names, err := nameInvitations(request, h.people, []onboarding.InvitationAdministrationView{view})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, invitationAdministrationResponseFromView(request.HTTP, view, names)).WithHeaders(noStoreHeaders()), nil
 }
 
 func (h invitationHandlers) replace(request route.Request) (route.Result, error) {
@@ -662,60 +695,87 @@ func (h invitationHandlers) replace(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusCreated, invitationAdministrationResponseFromView(view)).WithHeaders(noStoreHeaders()), nil
+	names, err := nameInvitations(request, h.people, []onboarding.InvitationAdministrationView{view})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusCreated, invitationAdministrationResponseFromView(request.HTTP, view, names)).WithHeaders(noStoreHeaders()), nil
 }
 
-func invitationListQuery(request *http.Request) (onboarding.ListInvitationsQuery, error) {
+// invitationListQuery reads the listing's filters, its order and its cursor,
+// which must belong to the same order.
+func invitationListQuery(request *http.Request) (onboarding.ListInvitationsQuery, listOrder, error) {
 	page, err := route.ParsePage(request)
 	if err != nil {
-		return onboarding.ListInvitationsQuery{}, err
+		return onboarding.ListInvitationsQuery{}, listOrder{}, err
 	}
 	values := request.URL.Query()
-	query := onboarding.ListInvitationsQuery{Limit: page.Limit, TargetEmail: values.Get("email"), TargetID: values.Get("target_id")}
+	order, err := parseListOrder(values, invitationSorts, listDescending)
+	if err != nil {
+		return onboarding.ListInvitationsQuery{}, order, err
+	}
+	query := onboarding.ListInvitationsQuery{Limit: page.Limit, TargetEmail: values.Get("email"), TargetID: values.Get("target_id"),
+		Query: values.Get("q"), Order: store.InvitationOrder(order.Sort), Descending: order.Descending()}
 
 	if raw := values.Get("purpose"); raw != "" {
 		query.Purpose = model.InvitationPurpose(raw)
 		if !query.Purpose.IsValid() {
-			return query, errors.New("invalid Invitation purpose")
+			return query, order, errors.New("invalid Invitation purpose")
 		}
 	}
 
 	if raw := values.Get("state"); raw != "" {
 		query.State = model.InvitationState(raw)
 		if !query.State.IsValid() {
-			return query, errors.New("invalid Invitation state")
+			return query, order, errors.New("invalid Invitation state")
 		}
 	}
 
-	if raw := values.Get("created_after"); raw != "" {
-		query.CreatedAfter, err = parseInvitationFilterTime(raw)
-		if err != nil {
-			return query, err
+	for _, raw := range values["delivery_state"] {
+		state := model.MailDeliveryState(raw)
+		if !state.IsValid() {
+			return query, order, errors.New("invalid Invitation delivery state")
 		}
+		query.DeliveryStates = append(query.DeliveryStates, state)
 	}
 
-	if raw := values.Get("created_before"); raw != "" {
-		query.CreatedBefore, err = parseInvitationFilterTime(raw)
-		if err != nil {
-			return query, err
+	for _, bound := range []struct {
+		name   string
+		target *time.Time
+	}{
+		{"created_after", &query.CreatedAfter},
+		{"created_before", &query.CreatedBefore},
+		{"expires_after", &query.ExpiresAfter},
+		{"expires_before", &query.ExpiresBefore},
+	} {
+		if raw := values.Get(bound.name); raw != "" {
+			if *bound.target, err = parseInvitationFilterTime(raw); err != nil {
+				return query, order, err
+			}
 		}
 	}
 
 	if !query.CreatedAfter.IsZero() && !query.CreatedBefore.IsZero() && !query.CreatedBefore.After(query.CreatedAfter) {
-		return query, errors.New("invalid Invitation time range")
+		return query, order, errors.New("invalid Invitation time range")
+	}
+	if !query.ExpiresAfter.IsZero() && !query.ExpiresBefore.IsZero() && !query.ExpiresBefore.After(query.ExpiresAfter) {
+		return query, order, errors.New("invalid Invitation expiry range")
 	}
 
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, err := decodeInvitationCursor(raw)
 		if err != nil {
-			return query, err
+			return query, order, err
+		}
+		if !order.continues(cursor.Sort, cursor.Dir) {
+			return query, order, errors.New("cursor belongs to another order")
 		}
 
-		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
-		query.BeforeID = model.InvitationID(cursor.ID)
+		query.AfterAt, _ = model.ParseRFC3339(cursor.At)
+		query.AfterID = model.InvitationID(cursor.ID)
 	}
 
-	return query, nil
+	return query, order, nil
 }
 
 func parseInvitationFilterTime(raw string) (time.Time, error) {
@@ -738,10 +798,11 @@ func invitationCursorSpec() route.CursorSpec[invitationCursor] {
 	return route.CursorSpec[invitationCursor]{
 		Label:                "Invitation",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"created_at", "id"},
+		Members:              []string{"sort", "dir", "at", "id"},
 		Validate: func(cursor invitationCursor) error {
-			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || createdAt.IsZero() || !model.InvitationID(cursor.ID).IsValid() {
+			at, err := model.ParseRFC3339(cursor.At)
+			if err != nil || at.IsZero() || !model.InvitationID(cursor.ID).IsValid() ||
+				!slices.Contains(invitationSorts, cursor.Sort) || !validListDirection(cursor.Dir) {
 				return errors.New("invalid Invitation keyset")
 			}
 
@@ -1036,9 +1097,83 @@ func invitationResponseFromView(view onboarding.InvitationView) invitationRespon
 	}
 }
 
-func invitationAdministrationResponseFromView(view onboarding.InvitationAdministrationView) invitationAdministrationResponse {
+// invitationNames names what a page of invitations refers to.
+type invitationNames struct {
+	people      people.Refs
+	records     people.RecordNames
+	institution string
+}
+
+// nameInvitations reads the inviters, roles and scopes of invitations the
+// caller was already authorized to read.
+func nameInvitations(
+	request route.Request,
+	resolver *people.Resolver,
+	views []onboarding.InvitationAdministrationView,
+) (invitationNames, error) {
+	inviters := make([]model.UserID, 0, len(views))
+	var records people.Records
+	for _, view := range views {
+		inviters = append(inviters, view.InviterUserID)
+		if !view.RoleID.IsZero() {
+			records.Roles = append(records.Roles, view.RoleID)
+		}
+		switch view.ScopeType {
+		case model.RoleScopeAcademicUnit:
+			records.AcademicUnits = append(records.AcademicUnits, model.AcademicUnitID(view.ScopeID))
+		case model.RoleScopeClass:
+			records.Classes = append(records.Classes, model.ClassID(view.ScopeID))
+		}
+	}
+	refs, err := resolver.Resolve(request.Context, request.Invocation().Principal(), inviters)
+	if err != nil {
+		return invitationNames{}, err
+	}
+	names, err := resolver.NameRecords(request.Context, records)
+	if err != nil {
+		return invitationNames{}, err
+	}
+	result := invitationNames{people: refs, records: names}
+	for _, view := range views {
+		if view.ScopeType == model.RoleScopeInstitution {
+			if result.institution, err = resolver.InstitutionName(request.Context); err != nil {
+				return invitationNames{}, err
+			}
+			break
+		}
+	}
+	return result, nil
+}
+
+func invitationAdministrationResponseFromView(
+	request *http.Request,
+	view onboarding.InvitationAdministrationView,
+	names invitationNames,
+) invitationAdministrationResponse {
 	base := invitationResponseFromView(view.InvitationView)
+	scope := scopeRefResponse{Type: view.ScopeType, ID: view.ScopeID}
+	switch view.ScopeType {
+	case model.RoleScopeInstitution:
+		scope.DisplayName = names.institution
+	case model.RoleScopeAcademicUnit:
+		scope.DisplayName = names.records.AcademicUnits[model.AcademicUnitID(view.ScopeID)]
+	case model.RoleScopeClass:
+		scope.DisplayName = names.records.Classes[model.ClassID(view.ScopeID)]
+	}
+	var role *roleRefResponse
+	if !view.RoleID.IsZero() {
+		role = &roleRefResponse{ID: view.RoleID.String()}
+		if named, ok := names.records.Roles[view.RoleID]; ok {
+			role.DisplayName = named.DisplayName
+			if named.Name == model.SystemAdministratorRoleName {
+				role.DisplayName = route.Translate(request, systemAdministratorRoleNameID, named.DisplayName)
+			}
+		}
+	}
 	response := invitationAdministrationResponse{
+		Inviter:          personRef(names.people, view.InviterUserID),
+		Role:             role,
+		Scope:            scope,
 		ID:               base.ID,
 		Purpose:          base.Purpose,
 		State:            base.State,

@@ -95,7 +95,7 @@ func (s *Service) publishImportChanged(ctx context.Context, value *store.Onboard
 		s.publishCreatorImportChanged(ctx, value)
 		return
 	}
-	scopes, err := s.importAudience(ctx, value.ScopeType, value.ScopeID)
+	scopes, err := s.onboardingAudience(ctx, value.ScopeType, value.ScopeID)
 	for _, scope := range scopes {
 		event, eventErr := realtime.NewOnboardingImportChangedEvent(value.ID, value.State, scope)
 		if eventErr == nil {
@@ -122,7 +122,7 @@ func (s *Service) publishCreatorImportChanged(ctx context.Context, value *store.
 	}
 }
 
-func (s *Service) importAudience(ctx context.Context, scopeType model.RoleScopeType, scopeID string) ([]model.Resource, error) {
+func (s *Service) onboardingAudience(ctx context.Context, scopeType model.RoleScopeType, scopeID string) ([]model.Resource, error) {
 	own := onboardingImportResource(scopeType, scopeID)
 	audience := []model.Resource{own}
 
@@ -155,14 +155,33 @@ func (s *Service) importAudience(ctx context.Context, scopeType model.RoleScopeT
 	return audience, nil
 }
 
-// publishInvitationChanged notifies the inviter, best effort.
+// publishAcceptedRelationships tells the accepting User's viewers that their
+// memberships changed and, when the package granted a Role, the binding's
+// scope that it was granted. Best effort.
+func (s *Service) publishAcceptedRelationships(ctx context.Context, userID model.UserID, binding *model.RoleBinding) {
+	err := realtime.PublishUsersChanged(ctx, s.publisher, userID)
+	if binding != nil {
+		err = errors.Join(err, realtime.PublishRoleBindingChanged(ctx, s.publisher, s.classes, s.academicUnits, binding))
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "invitation.accepted_relationships_changed", err)
+	}
+}
+
+// publishInvitationChanged notifies viewers of the invitation's scope and
+// enclosing scopes. The issuer alone may no longer hold read access.
 func (s *Service) publishInvitationChanged(ctx context.Context, invitation *model.Invitation, operation string) {
-	if invitation == nil || invitation.InviterUserID.IsZero() {
+	if invitation == nil {
 		return
 	}
-	event, err := realtime.NewInvitationChangedEvent(invitation.InviterUserID, invitation.ID, invitation.State)
-	if err == nil {
-		err = s.publisher.Publish(ctx, event)
+	audiences, err := s.onboardingAudience(ctx, invitation.ScopeType, invitation.ScopeID)
+	for _, audience := range audiences {
+		event, eventErr := realtime.NewInvitationChangedEvent(invitation.ID, invitation.State,
+			invitation.ScopeType, invitation.ScopeID, audience)
+		if eventErr == nil {
+			eventErr = s.publisher.Publish(ctx, event)
+		}
+		err = errors.Join(err, eventErr)
 	}
 	if err != nil {
 		s.publisher.Report(ctx, operation, err)

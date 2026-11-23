@@ -19,13 +19,15 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/exam/review"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 type examIntegrityReviewHandlers struct {
-	app *review.Service
+	app    *review.Service
+	people *people.Resolver
 }
 
 type examIntegrityReviewIDCursor struct {
@@ -72,6 +74,12 @@ type updateExamIntegrityReviewRequest struct {
 	ExpectedReviewRevision int64  `json:"expected_revision"`
 	ManagerNotes           string `json:"manager_notes"`
 	StudentRemarksMarkdown string `json:"student_remarks_markdown"`
+}
+
+type reopenExamIntegrityReviewRequest struct {
+	ReviewID               string `json:"submission_review_id"`
+	ExpectedReviewRevision int64  `json:"expected_revision"`
+	Reason                 string `json:"reason"`
 }
 
 type terminalExamIntegrityReviewRequest struct {
@@ -155,35 +163,39 @@ func decodeDuplicateFreeExamIntegrityReviewObject(encoded []byte, target any) er
 }
 
 type examIntegrityReviewDecisionResponse struct {
-	InventoryStale   bool   `json:"inventory_stale"`
-	ID               string `json:"id"`
-	IntegrityFlagID  string `json:"integrity_flag_id"`
-	Outcome          string `json:"outcome"`
-	Revision         int64  `json:"revision"`
-	ActorUserID      string `json:"actor_user_id"`
-	PrivateRationale string `json:"private_rationale"`
-	DecidedAt        string `json:"decided_at"`
+	InventoryStale   bool               `json:"inventory_stale"`
+	ID               string             `json:"id"`
+	IntegrityFlagID  string             `json:"integrity_flag_id"`
+	Outcome          string             `json:"outcome"`
+	Revision         int64              `json:"revision"`
+	ActorUserID      string             `json:"actor_user_id"`
+	Actor            *personRefResponse `json:"actor,omitempty"`
+	PrivateRationale string             `json:"private_rationale"`
+	DecidedAt        string             `json:"decided_at"`
 }
 
 type examSubmissionReviewResponse struct {
-	ID                      string `json:"id"`
-	SubmissionID            string `json:"submission_id"`
-	State                   string `json:"state"`
-	ReleaseState            string `json:"release_state"`
-	Revision                int64  `json:"revision"`
-	CreatedByUserID         string `json:"created_by_user_id"`
-	ManagerNotes            string `json:"manager_notes"`
-	StudentRemarksMarkdown  string `json:"student_remarks_markdown"`
-	FlagCount               int    `json:"flag_count"`
-	EvidenceCount           int    `json:"evidence_count"`
-	DiscrepancyCount        int    `json:"discrepancy_count"`
-	EvidenceInventoryDigest string `json:"evidence_inventory_digest,omitempty"`
-	CreatedAt               string `json:"created_at"`
-	UpdatedAt               string `json:"updated_at"`
-	FinalizedAt             string `json:"finalized_at,omitempty"`
-	FinalizedByUserID       string `json:"finalized_by_user_id,omitempty"`
-	ReleasedAt              string `json:"released_at,omitempty"`
-	ReleasedByUserID        string `json:"released_by_user_id,omitempty"`
+	ID                      string             `json:"id"`
+	SubmissionID            string             `json:"submission_id"`
+	State                   string             `json:"state"`
+	ReleaseState            string             `json:"release_state"`
+	Revision                int64              `json:"revision"`
+	CreatedByUserID         string             `json:"created_by_user_id"`
+	CreatedBy               *personRefResponse `json:"created_by,omitempty"`
+	ManagerNotes            string             `json:"manager_notes"`
+	StudentRemarksMarkdown  string             `json:"student_remarks_markdown"`
+	FlagCount               int                `json:"flag_count"`
+	EvidenceCount           int                `json:"evidence_count"`
+	DiscrepancyCount        int                `json:"discrepancy_count"`
+	EvidenceInventoryDigest string             `json:"evidence_inventory_digest,omitempty"`
+	CreatedAt               string             `json:"created_at"`
+	UpdatedAt               string             `json:"updated_at"`
+	FinalizedAt             string             `json:"finalized_at,omitempty"`
+	FinalizedByUserID       string             `json:"finalized_by_user_id,omitempty"`
+	FinalizedBy             *personRefResponse `json:"finalized_by,omitempty"`
+	ReleasedAt              string             `json:"released_at,omitempty"`
+	ReleasedByUserID        string             `json:"released_by_user_id,omitempty"`
+	ReleasedBy              *personRefResponse `json:"released_by,omitempty"`
 }
 
 type examIntegrityReviewResponse struct {
@@ -199,6 +211,7 @@ type examIntegrityReviewResponse struct {
 	CandidateUserID           string                                `json:"candidate_user_id"`
 	IntegrityState            string                                `json:"integrity_state"`
 	UnresolvedIntegrityCount  int64                                 `json:"unresolved_integrity_count"`
+	LatestReopeningReason     string                                `json:"latest_reopening_reason,omitempty"`
 	Review                    *examSubmissionReviewResponse         `json:"review,omitempty"`
 	Decisions                 []examIntegrityReviewDecisionResponse `json:"decisions"`
 }
@@ -261,6 +274,7 @@ type examIntegrityFlagResponse struct {
 	ExamAttemptID          string                         `json:"exam_attempt_id"`
 	Generation             int64                          `json:"generation"`
 	PolicyKind             string                         `json:"policy_kind"`
+	Summary                string                         `json:"summary"`
 	State                  string                         `json:"state"`
 	CreatedAt              string                         `json:"created_at"`
 	EvidenceCount          int                            `json:"evidence_count"`
@@ -325,13 +339,14 @@ type examIntegrityDiscrepancyListResponse struct {
 type studentExamResultResponse struct {
 	SubmissionReviewID     string `json:"submission_review_id"`
 	SubmissionID           string `json:"submission_id"`
+	ReceiptCode            string `json:"receipt_code"`
 	ExamAttemptID          string `json:"exam_attempt_id"`
 	StudentRemarksMarkdown string `json:"student_remarks_markdown"`
 	ReleasedAt             string `json:"released_at"`
 }
 
-func examIntegrityReviewResource(app *review.Service) route.Resource {
-	h := examIntegrityReviewHandlers{app: app}
+func examIntegrityReviewResource(app *review.Service, resolver *people.Resolver) route.Resource {
+	h := examIntegrityReviewHandlers{app: app, people: resolver}
 	flags := "/submissions/{submission_id}/integrity-flags"
 	discrepancies := "/submissions/{submission_id}/integrity-discrepancies"
 	evidence := "/submissions/{submission_id}/integrity-flags/{integrity_flag_id}/evidence"
@@ -339,6 +354,7 @@ func examIntegrityReviewResource(app *review.Service) route.Resource {
 	decision := "/submissions/{submission_id}/review/decisions/{integrity_flag_id}"
 	finalize := "/submissions/{submission_id}/review/finalize"
 	release := "/submissions/{submission_id}/review/release"
+	reopen := "/submissions/{submission_id}/review/reopen"
 	candidateResult := "/exam-attempts/{exam_attempt_id}/result"
 	studentErrors := personalAccessTokenSessionCodes(
 		"request.invalid",
@@ -346,7 +362,31 @@ func examIntegrityReviewResource(app *review.Service) route.Resource {
 		"exam.integrity_review.invalid",
 		"exam.integrity_review.unavailable",
 	)
+	listErrors := []string{
+		"authorization.request.invalid",
+		"authorization.unavailable",
+		"request.invalid",
+		"resource.not_found",
+		"exam.integrity_review.invalid",
+		"exam.integrity_review.unavailable",
+		"exam.sitting.invalid",
+		"exam.sitting.unavailable",
+	}
 	return route.NewResource("exam-integrity-reviews",
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/exams/{exam_id}/sittings/{exam_sitting_id}/submissions",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: listErrors,
+			Handle: h.listSittingSubmissions,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/submissions",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: listErrors[:len(listErrors)-1],
+			Handle: h.listSubmissions,
+		},
 		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   flags,
@@ -596,6 +636,53 @@ func examIntegrityReviewResource(app *review.Service) route.Resource {
 			Handle: h.release,
 		},
 		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        reopen,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.revision_conflict",
+				"exam.integrity_review.state_conflict",
+				"exam.integrity_review.result_released",
+				"exam.integrity_review.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.reopen,
+		},
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        "/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases",
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.releaseSittingResults,
+		},
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   candidateResult,
 			Auth:   route.AuthSessionRequired,
@@ -617,6 +704,24 @@ func (h examIntegrityReviewHandlers) get(request route.Request) (route.Result, e
 	response, err := examIntegrityReviewSnapshotResponse(snapshot)
 	if err != nil {
 		return route.Result{}, err
+	}
+	ids := make([]model.UserID, 0, 3+len(response.Decisions))
+	if response.Review != nil {
+		ids = append(ids, response.Review.people()...)
+	}
+	for _, decision := range response.Decisions {
+		ids = append(ids, model.UserID(decision.ActorUserID))
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	if response.Review != nil {
+		named := response.Review.named(refs)
+		response.Review = &named
+	}
+	for i := range response.Decisions {
+		response.Decisions[i].Actor = personRef(refs, model.UserID(response.Decisions[i].ActorUserID))
 	}
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
@@ -642,18 +747,7 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 
 	response := examIntegrityFlagListResponse{Items: make([]examIntegrityFlagResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examIntegrityFlagResponse{
-			Browser:                browserIntegrityGroupFrom(item.Browser),
-			ID:                     item.Flag.ID.String(),
-			ExamAttemptID:          item.Flag.AttemptID.String(),
-			Generation:             item.Flag.Generation,
-			PolicyKind:             string(item.Flag.Kind),
-			State:                  string(item.Flag.State),
-			CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
-			EvidenceCount:          item.EvidenceCount,
-			EvidenceOverflowCount:  item.OverflowCount,
-			UnresolvedMissingCount: item.UnresolvedMissingCount,
-		})
+		response.Items = append(response.Items, examIntegrityFlagResponseFrom(request.HTTP, item))
 	}
 
 	if page.HasMore {
@@ -668,6 +762,44 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 	}
 
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+func examIntegrityFlagResponseFrom(request *http.Request, item store.ExamIntegrityFlagSummary) examIntegrityFlagResponse {
+	return examIntegrityFlagResponse{
+		Browser:       browserIntegrityGroupFrom(item.Browser),
+		ID:            item.Flag.ID.String(),
+		ExamAttemptID: item.Flag.AttemptID.String(),
+		Generation:    item.Flag.Generation,
+		PolicyKind:    string(item.Flag.Kind),
+		Summary: integrityFlagSummary(
+			request, item.Flag.Kind, item.Flag.NativeRuleID, item.Browser, item.BrowserRuleLabel, item.EvidenceCount, item.OverflowCount,
+		),
+		State:                  string(item.Flag.State),
+		CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
+		EvidenceCount:          item.EvidenceCount,
+		EvidenceOverflowCount:  item.OverflowCount,
+		UnresolvedMissingCount: item.UnresolvedMissingCount,
+	}
+}
+
+func examIntegrityEvidenceResponseFrom(item model.IntegrityEvidence) examIntegrityEvidenceResponse {
+	return examIntegrityEvidenceResponse{
+		Browser:              item.Browser,
+		ID:                   item.ID.String(),
+		ExamAttemptID:        item.AttemptID.String(),
+		ParticipationID:      item.ParticipationID.String(),
+		IntegrityFlagID:      item.FlagID.String(),
+		Generation:           item.Generation,
+		PolicyKind:           string(item.Kind),
+		SignalID:             item.SignalID.String(),
+		Sequence:             item.Sequence,
+		DurationMilliseconds: item.DurationMilliseconds,
+		Source:               string(item.Source),
+		MissingBefore:        item.MissingBefore,
+		ObservedAt:           model.FormatRFC3339(item.ObservedAt),
+		RecordedAt:           model.FormatRFC3339(item.RecordedAt),
+		Detail:               item.Detail,
+	}
 }
 
 func (h examIntegrityReviewHandlers) listEvidence(request route.Request) (route.Result, error) {
@@ -696,23 +828,7 @@ func (h examIntegrityReviewHandlers) listEvidence(request route.Request) (route.
 
 	response := examIntegrityEvidenceListResponse{Items: make([]examIntegrityEvidenceResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examIntegrityEvidenceResponse{
-			Browser:              item.Browser,
-			ID:                   item.ID.String(),
-			ExamAttemptID:        item.AttemptID.String(),
-			ParticipationID:      item.ParticipationID.String(),
-			IntegrityFlagID:      item.FlagID.String(),
-			Generation:           item.Generation,
-			PolicyKind:           string(item.Kind),
-			SignalID:             item.SignalID.String(),
-			Sequence:             item.Sequence,
-			DurationMilliseconds: item.DurationMilliseconds,
-			Source:               string(item.Source),
-			MissingBefore:        item.MissingBefore,
-			ObservedAt:           model.FormatRFC3339(item.ObservedAt),
-			RecordedAt:           model.FormatRFC3339(item.RecordedAt),
-			Detail:               item.Detail,
-		})
+		response.Items = append(response.Items, examIntegrityEvidenceResponseFrom(item))
 	}
 
 	if page.HasMore {
@@ -828,7 +944,7 @@ func (h examIntegrityReviewHandlers) saveDecision(request route.Request) (route.
 		return route.Result{}, err
 	}
 
-	return reviewMutationResult(result)
+	return h.reviewMutationResult(request, result)
 }
 
 func (h examIntegrityReviewHandlers) update(request route.Request) (route.Result, error) {
@@ -863,7 +979,7 @@ func (h examIntegrityReviewHandlers) update(request route.Request) (route.Result
 		return route.Result{}, err
 	}
 
-	return reviewMutationResult(result)
+	return h.reviewMutationResult(request, result)
 }
 
 type integrityReviewTerminalOperation uint8
@@ -920,7 +1036,37 @@ func (h examIntegrityReviewHandlers) terminal(request route.Request,
 		return route.Result{}, err
 	}
 
-	return reviewMutationResult(result)
+	return h.reviewMutationResult(request, result)
+}
+
+func (h examIntegrityReviewHandlers) reopen(request route.Request) (route.Result, error) {
+	submissionID, err := reviewSubmissionID(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	var body reopenExamIntegrityReviewRequest
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
+	}
+
+	reviewID, err := model.ParseSubmissionReviewID(body.ReviewID)
+	if err != nil {
+		return route.Result{}, route.InvalidRequest(err)
+	}
+
+	result, err := h.app.ReopenExamIntegrityReview(request.Context, request.Invocation(), review.ReopenCommand{
+		SubmissionID:           submissionID,
+		ReviewID:               reviewID,
+		ExpectedReviewRevision: body.ExpectedReviewRevision,
+		Reason:                 body.Reason,
+		IdempotencyKey:         request.IdempotencyKey,
+	})
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	return h.reviewMutationResult(request, result)
 }
 
 func (h examIntegrityReviewHandlers) studentResult(request route.Request) (route.Result, error) {
@@ -937,6 +1083,7 @@ func (h examIntegrityReviewHandlers) studentResult(request route.Request) (route
 	response := studentExamResultResponse{
 		SubmissionReviewID:     result.ReviewID.String(),
 		SubmissionID:           result.SubmissionID.String(),
+		ReceiptCode:            result.ReceiptCode.Display(),
 		ExamAttemptID:          result.AttemptID.String(),
 		StudentRemarksMarkdown: result.StudentRemarksMarkdown,
 		ReleasedAt:             model.FormatRFC3339(result.ReleasedAt),
@@ -944,7 +1091,7 @@ func (h examIntegrityReviewHandlers) studentResult(request route.Request) (route
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func reviewMutationResult(result review.Result) (route.Result, error) {
+func (h examIntegrityReviewHandlers) reviewMutationResult(request route.Request, result review.Result) (route.Result, error) {
 	if result.Review == nil {
 		return route.Result{}, errors.New("Integrity Review application returned an empty Review")
 	}
@@ -955,8 +1102,18 @@ func reviewMutationResult(result review.Result) (route.Result, error) {
 		CandidateUserID: result.Authorization.CandidateUserID.String(),
 		Review:          examSubmissionReviewDTO(*result.Review),
 	}
+	ids := response.Review.people()
+	if result.Decision != nil {
+		ids = append(ids, result.Decision.ActorUserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response.Review = response.Review.named(refs)
 	if result.Decision != nil {
 		decision := examIntegrityReviewDecisionDTO(*result.Decision)
+		decision.Actor = personRef(refs, result.Decision.ActorUserID)
 		response.Decision = &decision
 	}
 
@@ -981,6 +1138,7 @@ func examIntegrityReviewSnapshotResponse(snapshot *store.ExamSubmissionReviewSna
 		CandidateUserID:           snapshot.Authorization.CandidateUserID.String(),
 		IntegrityState:            string(snapshot.Submission.IntegrityState),
 		UnresolvedIntegrityCount:  snapshot.Submission.UnresolvedIntegrityCount,
+		LatestReopeningReason:     snapshot.LatestReopeningReason,
 		Decisions:                 make([]examIntegrityReviewDecisionResponse, 0, len(snapshot.Decisions)),
 	}
 	if snapshot.Review != nil {
@@ -1251,4 +1409,17 @@ func (h examIntegrityReviewHandlers) previewUsage(request route.Request) (route.
 			LastUsedAt: model.FormatRFC3339(entry.LastUsedAt)}
 	}
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+// people lists who created, finalized and released the review.
+func (r examSubmissionReviewResponse) people() []model.UserID {
+	return []model.UserID{model.UserID(r.CreatedByUserID), model.UserID(r.FinalizedByUserID), model.UserID(r.ReleasedByUserID)}
+}
+
+// named fills the review's people from refs.
+func (r examSubmissionReviewResponse) named(refs people.Refs) examSubmissionReviewResponse {
+	r.CreatedBy = personRef(refs, model.UserID(r.CreatedByUserID))
+	r.FinalizedBy = personRef(refs, model.UserID(r.FinalizedByUserID))
+	r.ReleasedBy = personRef(refs, model.UserID(r.ReleasedByUserID))
+	return r
 }

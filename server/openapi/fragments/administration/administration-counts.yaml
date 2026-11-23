@@ -18,8 +18,10 @@ paths:
         days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and
         canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding
         imports that are still uploading, parsing, waiting to be committed or running, not counting student
-        progressions. Each count applies the same permission and visibility checks as its resource's own list, and
-        records the permission decision the same way, so it counts only what the caller could list. A count the
+        progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a
+        holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window
+        would interrupt. The other counts apply the same permission and visibility checks as their resource lists,
+        and record permission decisions the same way. A count the
         caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the
         request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is
         true. Only an interactive Session may read the counts.
@@ -30,6 +32,7 @@ paths:
         - authorization.denied
         - authorization.request.invalid
         - authorization.unavailable
+        - desktop_compatibility_policy.unavailable
         - invitation.unavailable
         - job.query.invalid
         - job.unavailable
@@ -123,3 +126,13 @@ components:
         open_onboarding_imports_is_lower_bound:
           type: boolean
           description: True when `open_onboarding_imports` reached 1,000 and there may be more. Present with `open_onboarding_imports`.
+        open_sittings:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: >-
+            The Institution's Sittings that have opened and not yet closed. Present only for a holder of
+            Institution-wide desktop_compatibility_policy.manage.
+        open_sittings_is_lower_bound:
+          type: boolean
+          description: True when `open_sittings` reached 1,000 and there may be more. Present with `open_sittings`.

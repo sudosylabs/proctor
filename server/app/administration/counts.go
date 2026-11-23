@@ -45,6 +45,9 @@ type CountsResult struct {
 	// OpenOnboardingImports are unexpired imports not yet finished, within
 	// the caller's onboarding_batch.view scopes.
 	OpenOnboardingImports *Count
+	// OpenSittings are the Institution's Sittings under way, for a holder of
+	// Institution-wide desktop_compatibility_policy.manage.
+	OpenSittings *Count
 }
 
 // CountsDependencies are one count per resource, each answered by the service
@@ -55,6 +58,7 @@ type CountsDependencies struct {
 	RecentJobFailures     func(ctx context.Context, inv invocation.Invocation, within time.Duration, maximum int) (int, error)
 	FailedMailDeliveries  func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
 	OpenOnboardingImports func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
+	OpenSittings          func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
 }
 
 // Counts answers the bounded counts behind the administration navigation.
@@ -101,6 +105,12 @@ func (s *Counts) AdministrationCounts(
 
 	if counts.OpenOnboardingImports, err = boundedCount(s.deps.OpenOnboardingImports != nil, func() (int, error) {
 		return s.deps.OpenOnboardingImports(ctx, inv, MaximumCount)
+	}); err != nil {
+		return CountsResult{}, err
+	}
+
+	if counts.OpenSittings, err = boundedCount(s.deps.OpenSittings != nil, func() (int, error) {
+		return s.deps.OpenSittings(ctx, inv, MaximumCount)
 	}); err != nil {
 		return CountsResult{}, err
 	}

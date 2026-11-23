@@ -110,6 +110,8 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, fixture.candidate.ID, authorization.CandidateUserID)
 	require.Equal(t, fixture.unitID, authorization.AcademicUnitID)
 
+	testSubmissionList(t, ctx, reviews, fixture, sealed.Receipt.SubmissionID, nil)
+	testLiveEvidence(t, ctx, reviews, fixture, sealed.Receipt.SubmissionID, connected.Attempt.ID)
 	snapshot, err := reviews.Get(ctx, sealed.Receipt.SubmissionID)
 	require.NoError(t, err)
 	require.True(t, snapshot.Authorization.ConsistentWith(sealed.Receipt.SubmissionID), "Get returned a result inconsistent with its request")
@@ -213,6 +215,21 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, draftInput.StudentRemarksMarkdown, drafted.Review.StudentRemarksMarkdown)
 	assertReviewAuditPrivate(t, ctx, ss, draftInput.AuditEventID, draftInput.ManagerNotes, draftInput.StudentRemarksMarkdown)
 
+	reviewScope := store.ExamListVisibility{ActorUserID: fixture.manager.ID, OverrideInstitutionWide: true}
+	countOptions := store.ExamActionCountOptions{
+		ExamIDs: []model.ExamID{fixture.examID}, ViewerUserID: fixture.manager.ID, Maximum: store.MaximumListCount,
+		SittingVisibility: reviewScope, ReviewVisibility: reviewScope, SubmissionVisibility: reviewScope,
+	}
+	pending, err := ss.ExamAuthoring().CountExamActions(ctx, countOptions)
+	require.NoError(t, err)
+	require.Equal(t, new(1), pending[fixture.examID].PendingReview)
+	ownScope := store.ExamListVisibility{ActorUserID: fixture.candidate.ID, OverrideInstitutionWide: true}
+	countOptions.ViewerUserID = fixture.candidate.ID
+	countOptions.SittingVisibility, countOptions.ReviewVisibility, countOptions.SubmissionVisibility = ownScope, ownScope, ownScope
+	ownPending, err := ss.ExamAuthoring().CountExamActions(ctx, countOptions)
+	require.NoError(t, err)
+	require.Equal(t, new(0), ownPending[fixture.examID].PendingReview, "a viewer's own Submission is excluded")
+
 	finalizeInput := &store.ExamIntegrityReviewFinalize{
 		SubmissionID: sealed.Receipt.SubmissionID, ReviewID: reviewID, ActorUserID: fixture.manager.ID,
 		ExpectedRevision: drafted.Review.Revision, ChangedAt: model.NowUTC().Add(2 * time.Millisecond),
@@ -229,10 +246,29 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State)
 	require.Equal(t, model.SubmissionReviewWithheld, finalized.Review.ReleaseState)
 	require.Equal(t, int64(3), finalized.Review.Revision)
+	testSubmissionList(t, ctx, reviews, fixture, sealed.Receipt.SubmissionID, finalized.Review)
 	require.Equal(t, 1, finalized.Review.FlagCount)
 	require.Equal(t, 1, finalized.Review.EvidenceCount)
 	require.Equal(t, 1, finalized.Review.DiscrepancyCount)
 	require.True(t, validStoretestDigest(finalized.Review.EvidenceInventoryDigest))
+
+	batchStart := &store.ExamResultReleaseBatchStart{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, AllFinalized: true,
+		Audit: &model.AuditEvent{ActorID: fixture.manager.ID, Action: string(model.ActionSubmissionRelease),
+			Resource:  model.Resource{Type: model.ResourceExamSitting, ID: fixture.sitting.ID.String()},
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: fixture.unitID.String(),
+			Status: model.AuditStatusAttempt, NodeID: "test-node"},
+	}
+	batchKey := examCommand(fixture.manager.ID, store.ExamResultReleaseBatchOperation, "review-bulk-release", "all-finalized")
+	batch, err := reviews.ClaimResultReleaseBatch(ctx, batchStart, batchKey)
+	require.NoError(t, err)
+	require.NotEmpty(t, batch.Token)
+	require.Equal(t, []model.SubmissionID{sealed.Receipt.SubmissionID}, batch.SubmissionIDs)
+	_, err = reviews.ClaimResultReleaseBatch(ctx, batchStart, batchKey)
+	require.ErrorAs(t, err, new(*store.ErrIdempotencyInProgress))
+	conflictingBatchKey := examCommand(fixture.manager.ID, store.ExamResultReleaseBatchOperation, "review-bulk-release", "explicit-submissions")
+	_, err = reviews.ClaimResultReleaseBatch(ctx, batchStart, conflictingBatchKey)
+	require.ErrorAs(t, err, new(*store.ErrIdempotencyConflict))
 
 	lateDecision := *decisionInput
 	lateDecision.ExpectedReviewRevision = finalized.Review.Revision
@@ -314,6 +350,16 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, releaseInput.ReviewID, released.Review.ID)
 	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState)
 	require.Equal(t, int64(4), released.Review.Revision)
+	batchItems := []store.ExamResultReleaseBatchItem{{SubmissionID: sealed.Receipt.SubmissionID, Outcome: store.ExamResultReleased}}
+	require.NoError(t, reviews.CompleteResultReleaseBatch(ctx, &store.ExamResultReleaseBatchCompletion{
+		Token: batch.Token, Items: batchItems,
+	}, batchKey))
+	replayedBatch, err := reviews.ClaimResultReleaseBatch(ctx, batchStart, batchKey)
+	require.NoError(t, err)
+	require.Empty(t, replayedBatch.Token)
+	require.Equal(t, batchItems, replayedBatch.Items, "completed all_finalized replays the now released Submission")
+
+	testSubmissionList(t, ctx, reviews, fixture, sealed.Receipt.SubmissionID, released.Review)
 	require.True(t, released.Review.ReleasedAt.Valid)
 	require.True(t, released.Review.ReleasedAt.Time.Equal(releaseInput.Notice.Occurrence.CreatedAt))
 	releaseDelivery, err := ss.Mail().GetDelivery(ctx, releaseInput.Notice.Delivery.ID)
@@ -321,6 +367,9 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, releaseInput.Notice.Occurrence.ID, releaseDelivery.OccurrenceID)
 	require.Equal(t, fixture.candidate.ID, releaseDelivery.TargetUserID)
 	require.Equal(t, model.MailTemplateExamResultReleased, releaseDelivery.TemplateKey)
+	studentResult, err := reviews.GetReleasedStudentResult(ctx, connected.Attempt.ID, fixture.candidate.ID)
+	require.NoError(t, err)
+	require.Equal(t, sealed.Receipt.ReceiptCode, studentResult.ReceiptCode, "the released result names the Submission's receipt")
 	replayPreparation, err := reviews.PrepareRelease(ctx, &store.ExamIntegrityReviewReleasePrepare{SubmissionID: sealed.Receipt.SubmissionID, ReviewID: reviewID, ExpectedRevision: finalized.Review.Revision})
 	require.NoError(t, err)
 	require.NotNil(t, replayPreparation)
@@ -688,5 +737,207 @@ func assertReviewAuditPrivate(t *testing.T, ctx context.Context, ss store.Store,
 			require.False(t, bytes.Contains(audit.Parameters, []byte(value)), "Integrity Review audit exposed private text %q: parameters=%s result=%s", value, audit.Parameters, audit.Result)
 			require.False(t, bytes.Contains(audit.Result, []byte(value)), "Integrity Review audit exposed private text %q: parameters=%s result=%s", value, audit.Parameters, audit.Result)
 		}
+	}
+}
+
+// testSubmissionList checks the sitting's one sealed Submission as the
+// submission lists read it, whose review is review, or none when nil.
+func testSubmissionList(
+	t *testing.T,
+	ctx context.Context,
+	reviews store.ExamIntegrityReviewStore,
+	fixture examAttemptFixture,
+	submissionID model.SubmissionID,
+	review *model.SubmissionReview,
+) {
+	t.Helper()
+	sitting := func(reviewVisible bool, filter store.SubmissionListFilter) *store.SubmissionListPage {
+		t.Helper()
+		page, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+			ExamID: fixture.examID, SittingID: fixture.sitting.ID, ReviewVisible: reviewVisible,
+			ExcludeCandidateUserID: fixture.manager.ID, Filter: filter, Sort: store.SubmissionListBySubmitted,
+			IncludeCounts: true, Limit: 10,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, page.Counts)
+		require.Equal(t, int64(1), page.Counts.Total, "counts ignore the filter")
+		return page
+	}
+
+	page := sitting(true, store.SubmissionListFilter{})
+	require.Len(t, page.Items, 1)
+	item := page.Items[0]
+	require.Equal(t, submissionID, item.SubmissionID)
+	require.Equal(t, fixture.candidate.ID, item.Candidate.UserID)
+	require.True(t, item.ReceiptCode.IsValid())
+	require.Equal(t, fixture.examID, item.ExamID)
+	require.Equal(t, fixture.sitting.ID, item.SittingID)
+	require.Equal(t, item.FlagCount, page.Counts.Flags)
+	require.True(t, item.ReviewVisible)
+	state := store.SubmissionListReviewNone
+	released := int64(0)
+	if review == nil {
+		require.Nil(t, item.Review)
+	} else {
+		require.NotNil(t, item.Review)
+		require.Equal(t, review.ID, item.Review.ID)
+		require.Equal(t, review.State, item.Review.State)
+		require.Equal(t, review.ReleaseState, item.Review.ReleaseState)
+		require.Equal(t, review.Revision, item.Review.Revision)
+		state = store.SubmissionListReviewState(review.State)
+		if review.ReleaseState == model.SubmissionReviewReleased {
+			released = 1
+		}
+	}
+	require.NotNil(t, page.Counts.Released)
+	require.Equal(t, released, *page.Counts.Released)
+	require.Len(t, sitting(true, store.SubmissionListFilter{ReviewStates: []store.SubmissionListReviewState{state}}).Items, 1)
+	other := store.SubmissionListReviewDraft
+	if state == store.SubmissionListReviewDraft {
+		other = store.SubmissionListReviewNone
+	}
+	require.Empty(t, sitting(true, store.SubmissionListFilter{ReviewStates: []store.SubmissionListReviewState{other}}).Items)
+	hasFlags := item.FlagCount > 0
+	require.Len(t, sitting(true, store.SubmissionListFilter{HasFlags: &hasFlags}).Items, 1)
+
+	hidden := sitting(false, store.SubmissionListFilter{})
+	require.Len(t, hidden.Items, 1)
+	require.False(t, hidden.Items[0].ReviewVisible)
+	require.Nil(t, hidden.Items[0].Review, "a reader who may not see reviews gets none")
+	require.Nil(t, hidden.Counts.Reviewed)
+	require.Empty(t, sitting(false, store.SubmissionListFilter{ReviewStates: []store.SubmissionListReviewState{state}}).Items,
+		"a review filter never matches a review the reader may not see")
+
+	namePage, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
+		Sort: store.SubmissionListByName, Limit: 1,
+	})
+	require.NoError(t, err)
+	require.Len(t, namePage.Items, 1)
+	nextNamePage, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
+		Sort: store.SubmissionListByName, Limit: 1, After: &store.SubmissionListCursor{SubmissionID: namePage.Items[0].SubmissionID},
+	})
+	require.NoError(t, err)
+	require.Empty(t, nextNamePage.Items, "the name cursor seeks by the referenced Submission")
+	_, err = reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
+		Sort: store.SubmissionListByName, Limit: 1, After: &store.SubmissionListCursor{SubmissionID: model.NewSubmissionID()},
+	})
+	var staleCursor *store.ErrInvalidInput
+	require.ErrorAs(t, err, &staleCursor, "a stale anchor must not silently end the list")
+	require.Equal(t, "cursor", staleCursor.Field)
+
+	own, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.candidate.ID,
+		Sort: store.SubmissionListByName, Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, own.Items, "a reader never lists their own Submission")
+
+	everyone := store.ExamListVisibility{ActorUserID: fixture.manager.ID, OverrideInstitutionWide: true}
+	nobody := store.ExamListVisibility{ActorUserID: fixture.manager.ID}
+	across := func(view, review store.ExamListVisibility, filter store.SubmissionListFilter) []store.SubmissionListItem {
+		t.Helper()
+		page, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+			Visibility: &view, ReviewVisibility: &review, ExcludeCandidateUserID: fixture.manager.ID,
+			Filter: filter, Sort: store.SubmissionListBySubmitted, Limit: 200,
+		})
+		require.NoError(t, err)
+		require.Nil(t, page.Counts)
+		var mine []store.SubmissionListItem
+		for _, item := range page.Items {
+			if item.SittingID == fixture.sitting.ID {
+				mine = append(mine, item)
+			}
+		}
+		return mine
+	}
+	listed := across(everyone, everyone, store.SubmissionListFilter{})
+	require.Len(t, listed, 1)
+	require.NotEmpty(t, listed[0].ExamTitle)
+	require.True(t, listed[0].ReviewVisible)
+	require.Empty(t, across(nobody, everyone, store.SubmissionListFilter{}), "a scoped viewer sees nothing outside their scopes")
+	viewOnly := across(everyone, nobody, store.SubmissionListFilter{})
+	require.Len(t, viewOnly, 1)
+	require.False(t, viewOnly[0].ReviewVisible)
+	require.Nil(t, viewOnly[0].Review)
+	require.Empty(t, across(everyone, nobody, store.SubmissionListFilter{ReviewStates: []store.SubmissionListReviewState{state}}),
+		"review filters reach only rows whose review the reader may see")
+}
+
+// testLiveEvidence reads a sealed attempt's evidence through the live,
+// attempt-scoped reads, which agree with the Submission's reads.
+func testLiveEvidence(
+	t *testing.T,
+	ctx context.Context,
+	reviews store.ExamIntegrityReviewStore,
+	fixture examAttemptFixture,
+	submissionID model.SubmissionID,
+	attemptID model.ExamAttemptID,
+) {
+	t.Helper()
+	scope, err := reviews.ResolveLiveEvidence(ctx, attemptID)
+	require.NoError(t, err)
+	require.Equal(t, fixture.examID, scope.ExamID)
+	require.Equal(t, fixture.sitting.ID, scope.SittingID)
+	require.Equal(t, fixture.candidate.ID, scope.CandidateUserID)
+	require.True(t, scope.Submitted)
+	require.False(t, scope.Retired)
+	require.False(t, scope.AsOf.IsZero())
+	_, err = reviews.ResolveLiveEvidence(ctx, model.NewExamAttemptID())
+	require.True(t, store.IsNotFound(err))
+
+	sealedFlags, err := reviews.ListFlags(ctx, store.ExamIntegrityFlagListOptions{SubmissionID: submissionID, Limit: 100})
+	require.NoError(t, err)
+	live, err := reviews.ListLiveFlags(ctx, store.LiveFlagListOptions{AttemptID: attemptID, Limit: 100})
+	require.NoError(t, err)
+	require.Equal(t, sealedFlags.Items, live.Items, "the live read shows what the Submission's read shows")
+	require.NotEmpty(t, live.Items)
+
+	future := store.LiveEvidenceWindow{From: model.NowUTC().Add(time.Hour)}
+	none, err := reviews.ListLiveFlags(ctx, store.LiveFlagListOptions{AttemptID: attemptID, Window: future, Limit: 100})
+	require.NoError(t, err)
+	require.Empty(t, none.Items, "the window keeps only records inside it")
+
+	evidence, err := reviews.ListLiveEvidence(ctx, store.LiveEvidenceListOptions{AttemptID: attemptID,
+		FlagID: live.Items[0].Flag.ID, Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, evidence.Items, live.Items[0].EvidenceCount)
+
+	conditions, err := reviews.ListLiveNativeConditions(ctx, store.LiveNativeConditionListOptions{AttemptID: attemptID, Limit: 100})
+	require.NoError(t, err)
+	require.NotNil(t, conditions.Items)
+
+	timeline, err := reviews.ListLiveTimeline(ctx, store.LiveTimelineListOptions{AttemptID: attemptID, Limit: 100})
+	require.NoError(t, err)
+	flags := 0
+	for i, item := range timeline.Items {
+		if i > 0 {
+			require.False(t, item.At.Before(timeline.Items[i-1].At), "the timeline is in time order")
+		}
+		if item.Kind == store.LiveTimelineFlag {
+			flags++
+			require.NotNil(t, item.Flag)
+		}
+	}
+	require.Equal(t, len(live.Items), flags)
+	if len(timeline.Items) > 1 {
+		first, err := reviews.ListLiveTimeline(ctx, store.LiveTimelineListOptions{AttemptID: attemptID, Limit: 1})
+		require.NoError(t, err)
+		require.True(t, first.HasMore)
+		id := ""
+		switch head := first.Items[0]; {
+		case head.Flag != nil:
+			id = head.Flag.Flag.ID.String()
+		case head.Evidence != nil:
+			id = head.Evidence.ID.String()
+		default:
+			id = head.NativeCondition.ID.String()
+		}
+		rest, err := reviews.ListLiveTimeline(ctx, store.LiveTimelineListOptions{AttemptID: attemptID, Limit: 100,
+			After: &store.LiveTimelineCursor{At: first.Items[0].At, Kind: first.Items[0].Kind, ID: id}})
+		require.NoError(t, err)
+		require.Len(t, rest.Items, len(timeline.Items)-1, "the keyset resumes after the last entry")
 	}
 }

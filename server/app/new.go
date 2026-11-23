@@ -16,10 +16,12 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
+	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -88,7 +90,7 @@ func New(deps Dependencies) (*App, error) {
 	}
 
 	acceptor.accept = onboardingPorts.AcceptExternalIdentity
-	runtime, err := newJobRuntime(deps, shared, authorizer, exams, users, defaultPictureJobs, onboardingPorts, wake)
+	runtime, err := newJobRuntime(deps, shared, authorizer, exams, administrations, users, defaultPictureJobs, onboardingPorts, wake)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +107,7 @@ func New(deps Dependencies) (*App, error) {
 		ClassAuthorization: authorizer,
 		Classes:            deps.Store.Class(),
 	})
-	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, runtime))
+	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, runtime, identities))
 	terminals, err := newTerminals(deps, exams.attempts)
 	if err != nil {
 		return nil, err
@@ -121,31 +123,46 @@ func New(deps Dependencies) (*App, error) {
 	}
 
 	return &App{
-		Terminals:         terminals,
-		Previews:          environment.NewPreviews(terminals),
-		Assistant:         assistants,
-		Identity:          identities,
-		Onboarding:        onboardings,
-		Administration:    administrations,
-		Academic:          academics,
-		ExamAuthoring:     exams.authoring,
-		ExamPublication:   exams.publication,
-		Sittings:          exams.sittings,
-		Attempts:          exams.attempts,
-		Reviews:           exams.reviews,
-		ExamRecords:       exams.records,
-		ExamExports:       exams.exports,
-		Resources:         exams.resources,
-		Corrections:       exams.corrections,
-		StarterWorkspaces: exams.starterWorkspaces,
-		Users:             users,
-		Search:            searches,
-		Counts:            counts,
-		Realtime:          shared.realtime,
+		ExamPeople:           people.New(deps.Store, authorizer).Reporting("exam.unavailable"),
+		ReviewPeople:         people.New(deps.Store, authorizer).Reporting("exam.integrity_review.unavailable"),
+		SittingPeople:        people.New(deps.Store, authorizer).Reporting("exam.sitting.unavailable"),
+		AttemptPeople:        people.New(deps.Store, authorizer).Reporting("exam.attempt.unavailable"),
+		InvitationPeople:     people.New(deps.Store, authorizer).Reporting("invitation.unavailable"),
+		AdministrationPeople: people.New(deps.Store, authorizer).Reporting("administration.unavailable"),
+		DesktopPolicyPeople:  people.New(deps.Store, authorizer).Reporting("desktop_compatibility_policy.unavailable"),
+		OnboardingPeople:     people.New(deps.Store, authorizer).Reporting("onboarding_import.unavailable"),
+		ProgressionPeople:    people.New(deps.Store, authorizer).Reporting("student_progression.unavailable"),
+		Terminals:            terminals,
+		Previews:             environment.NewPreviews(terminals),
+		Assistant:            assistants,
+		Identity:             identities,
+		Onboarding:           onboardings,
+		Administration:       administrations,
+		Academic:             academics,
+		ExamAuthoring:        exams.authoring,
+		ExamCopies:           exams.copies,
+		ExamPublication:      exams.publication,
+		Sittings:             exams.sittings,
+		Attempts:             exams.attempts,
+		Reviews:              exams.reviews,
+		ExamRecords:          exams.records,
+		ExamExports:          exams.exports,
+		Resources:            exams.resources,
+		Corrections:          exams.corrections,
+		StarterWorkspaces:    exams.starterWorkspaces,
+		Users:                users,
+		Search:               searches,
+		Counts:               counts,
+		Realtime:             shared.realtime,
 		RealtimeAdmission: NewRealtimeAdmission(RealtimeAdmissionDependencies{
-			Principals:  identities,
-			Exams:       exams.authoring,
-			Sittings:    exams.sittings,
+			Principals: identities,
+			Exams:      exams.authoring,
+			Sittings:   exams.sittings,
+			Reviews: review.SittingManagerAuthorizer{
+				Reviews:  deps.Store.ExamIntegrityReview(),
+				Sittings: exams.sittings,
+				Audit:    shared.audit,
+			},
 			Authorizer:  authorizer,
 			Operational: deps.OperationalRecorder,
 		}),
@@ -315,6 +332,7 @@ func newAdministration(
 	capabilities *identity.DeploymentCapabilities,
 ) (*administration.Service, error) {
 	return administration.New(administration.Dependencies{
+		AcademicUnits:           deps.Store.AcademicUnit(),
 		Store:                   deps.Store,
 		Authorizer:              authorizer,
 		Auditor:                 shared.audit,
@@ -328,6 +346,7 @@ func newAdministration(
 		Sessions:                deps.Sessions,
 		Plugins:                 deps.Plugins,
 		AssistantProviders:      deps.AssistantProviders,
+		AuditExportContent:      deps.FileContent,
 		Now:                     time.Now,
 	})
 }
@@ -384,6 +403,7 @@ func newIdentity(
 ) (*identity.Service, error) {
 	return identity.New(identity.Dependencies{
 		Store:                     deps.Store,
+		Sittings:                  deps.Store.ExamSitting(),
 		Cache:                     deps.Cache,
 		Registry:                  deps.Registry,
 		Authorizer:                authorizer,

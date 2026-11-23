@@ -16,9 +16,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/lib/pq"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -784,6 +786,17 @@ func filterAcademicUnitMemberPage(query sq.SelectBuilder, options store.Academic
 		query = query.Where(sq.LtOrEq{"academic_unit_members.start_at": at}).
 			Where("(academic_unit_members.end_at IS NULL OR academic_unit_members.end_at > ?)", at)
 	}
+	if len(options.Affiliations) > 0 {
+		at := model.TimeUTC(options.AffiliationsAt)
+		query = query.Where(`EXISTS (
+			SELECT 1 FROM affiliations
+			WHERE affiliations.user_id = academic_unit_members.user_id
+				AND affiliations.kind = ANY(?)
+				AND affiliations.archived_at IS NULL
+				AND affiliations.start_at <= ?
+				AND (affiliations.end_at IS NULL OR affiliations.end_at > ?)
+		)`, pq.Array(idStrings(options.Affiliations)), at, at)
+	}
 	return query
 }
 
@@ -792,5 +805,21 @@ func validAcademicUnitMemberPageOptions(options store.AcademicUnitMemberPageOpti
 		options.Limit >= 1 &&
 		options.Limit <= 200 &&
 		(options.AfterID.IsZero() || options.AfterID.IsValid()) &&
-		validMembershipPageKeyset(options.MembershipPageKeyset, !options.AfterID.IsZero())
+		validMembershipPageKeyset(options.MembershipPageKeyset, !options.AfterID.IsZero()) &&
+		validAffiliationFilter(options.Affiliations, options.AffiliationsAt)
+}
+
+func validAffiliationFilter(kinds []model.AffiliationKind, at time.Time) bool {
+	if len(kinds) == 0 {
+		return true
+	}
+	if at.IsZero() || len(kinds) > len(store.CountedAffiliationKinds) {
+		return false
+	}
+	for _, kind := range kinds {
+		if !slices.Contains(store.CountedAffiliationKinds, kind) {
+			return false
+		}
+	}
+	return true
 }

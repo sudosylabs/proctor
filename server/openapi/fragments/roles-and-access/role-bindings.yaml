@@ -245,6 +245,17 @@ components:
                 scope_type: academic_unit
                 scope_id: 14j8umgczgrdp95w77zuxmxfu9
                 start_at: '2026-08-01T09:30:00Z'
+                role:
+                  id: 1asb7sk89dp1ex339fkh3te5t4
+                  display_name: Teacher
+                scope:
+                  type: academic_unit
+                  id: 14j8umgczgrdp95w77zuxmxfu9
+                  display_name: Mathematics
+                granted_by:
+                  id: sjebyge5cpbop1xwo4eds74ejb
+                  display_name: Priya Raman
+                granted_via: manual
               - id: 889766ufjgio6kbpzjbufozksq
                 created_at: '2026-02-10T08:00:00Z'
                 updated_at: '2026-07-31T17:00:00Z'
@@ -254,6 +265,17 @@ components:
                 scope_id: fotnmte5o3j9wftdm5rtbfofqr
                 start_at: '2026-02-10T08:00:00Z'
                 end_at: '2026-07-31T17:00:00Z'
+                role:
+                  id: iqcx3qc9sbbt6ocshszfqgq6ci
+                  display_name: Teacher
+                scope:
+                  type: class
+                  id: fotnmte5o3j9wftdm5rtbfofqr
+                  display_name: Year 2 Statistics
+                granted_by:
+                  id: sjebyge5cpbop1xwo4eds74ejb
+                  display_name: Priya Raman
+                granted_via: manual
             total: 2
             total_is_lower_bound: false
     RoleBindingCreated:
@@ -271,6 +293,17 @@ components:
             scope_type: academic_unit
             scope_id: 14j8umgczgrdp95w77zuxmxfu9
             start_at: '2026-08-01T00:00:00Z'
+            role:
+              id: 1asb7sk89dp1ex339fkh3te5t4
+              display_name: Teacher
+            scope:
+              type: academic_unit
+              id: 14j8umgczgrdp95w77zuxmxfu9
+              display_name: Mathematics
+            granted_by:
+              id: sjebyge5cpbop1xwo4eds74ejb
+              display_name: Priya Raman
+            granted_via: manual
     RoleBindingEnded:
       description: Role Binding ended
       content:
@@ -287,6 +320,17 @@ components:
             scope_id: 14j8umgczgrdp95w77zuxmxfu9
             start_at: '2026-08-01T00:00:00Z'
             end_at: '2026-09-30T12:00:00Z'
+            role:
+              id: 1asb7sk89dp1ex339fkh3te5t4
+              display_name: Teacher
+            scope:
+              type: academic_unit
+              id: 14j8umgczgrdp95w77zuxmxfu9
+              display_name: Mathematics
+            granted_by:
+              id: sjebyge5cpbop1xwo4eds74ejb
+              display_name: Priya Raman
+            granted_via: manual
   schemas:
     RoleBindingListResponse:
       description: A page of current and past Role Bindings you can see.

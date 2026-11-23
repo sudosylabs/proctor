@@ -32,7 +32,7 @@ func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 
 	body := []byte(`{"academic_unit_id":"` + f.unitID.String() + `","title":"Systems","instructions_markdown":"Use **Go**."}`)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams", bytes.NewReader(body))
@@ -70,7 +70,9 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 		ID: examID, AcademicUnitID: unitID, CreatorUserID: principal.UserID, OwnerUserID: principal.UserID,
 		Title: "Systems", UpdatedAt: time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC), Revision: 2, ManagerCount: 1,
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	waiting := 3
+	f.exams.actionCounts = map[model.ExamID]store.ExamActionCounts{examID: {NeedsAttention: &waiting}}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?academic_unit_id="+unitID.String()+"&q=systems+design&archive_state=all&limit=25", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
@@ -82,6 +84,9 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	require.Equal(t, store.ExamArchiveAll, f.exams.lists[0].ArchiveFilter)
 	require.Equal(t, 26, f.exams.lists[0].Limit, "the catalog reads one past the limit")
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"title":"Systems"`)))
+	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"needs_attention_count":3,"needs_attention_count_is_lower_bound":false`)))
+	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("pending_review_count")), "a count the viewer can't see is left out")
+	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"total":1,"total_is_lower_bound":false`)))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("instructions_markdown")))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("policy")))
 	before := time.Date(2026, 8, 13, 7, 6, 5, 432123789, time.UTC)
@@ -137,7 +142,7 @@ func TestExamManagerHTTPListAndMutationsUseStrictBoundedContracts(t *testing.T) 
 	manager, err := model.NewExamManager(examID, target, principal.UserID, grantedAt)
 	require.NoError(t, err)
 	f.exams.managersListed = []store.ExamManagerSummary{{Manager: *manager}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 
 	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+examID.String()+"/managers?limit=1", nil)
 	list.Header.Set("Authorization", "Bearer credential")
@@ -147,7 +152,10 @@ func TestExamManagerHTTPListAndMutationsUseStrictBoundedContracts(t *testing.T) 
 	require.Len(t, f.exams.managerLists, 1, "the Manager listing never reached the Exam Store")
 	require.Equal(t, 2, f.exams.managerLists[0].Limit, "the Manager listing reads one past the limit")
 	require.True(t, bytes.Contains(listed.Body.Bytes(), []byte(target.String())), "list = %d body=%s", listed.Code, listed.Body.String())
-	require.False(t, bytes.Contains(listed.Body.Bytes(), []byte("display_name")), "list = %d body=%s", listed.Code, listed.Body.String())
+	// Who manages an exam is part of its record, so managers are named; the
+	// caller cannot see them in the directory, so no username or picture.
+	require.True(t, bytes.Contains(listed.Body.Bytes(), []byte(`"display_name":"target"`)), "list = %d body=%s", listed.Code, listed.Body.String())
+	require.False(t, bytes.Contains(listed.Body.Bytes(), []byte("username")), "list = %d body=%s", listed.Code, listed.Body.String())
 	cursor, err := encodeExamManagerCursor(examManagerCursor{GrantedAt: grantedAt.Format(time.RFC3339Nano), UserID: target.String()})
 	require.NoError(t, err)
 	second := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+examID.String()+"/managers?cursor="+url.QueryEscape(cursor), nil)
@@ -205,7 +213,7 @@ func TestExamHTTPArchiveUsesRequiredIdempotentApplicationCommand(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/archive", bytes.NewReader([]byte(`{"expected_revision":1}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -224,7 +232,7 @@ func TestExamHTTPCreateRequiresIdempotencyKey(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams", bytes.NewReader([]byte(`{"academic_unit_id":"`+f.unitID.String()+`","title":"Systems"}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -240,7 +248,7 @@ func TestExamHTTPPatchDraftPreservesOmittedAndExplicitEmptyFields(t *testing.T) 
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+f.examID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"instructions_markdown":""}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -263,7 +271,7 @@ func TestExamHTTPPatchDraftTreatsNullAsUnchangedAndRequiresAValue(t *testing.T) 
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+f.examID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"title":null,"instructions_markdown":null}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -280,7 +288,7 @@ func TestExamHTTPPatchDraftRequiresIdempotencyKey(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/exams/"+f.examID.String()+"/draft", bytes.NewReader([]byte(`{"expected_revision":1,"title":"Algorithms"}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -296,7 +304,7 @@ func TestExamHTTPConfigureDraftFocusLossUsesTypedApplicationCommand(t *testing.T
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+f.examID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(`{"expected_revision":1,"enabled":false,"minimum_duration_milliseconds":500,"incident_count":1,"window_milliseconds":10000,"outcome":"flag"}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -329,7 +337,7 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 			t.Parallel()
 			logger, _ := routetest.NewLogger(t)
 			f := newExamFixture(t, principal)
-			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+f.examID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(body)))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", "application/json")
@@ -346,7 +354,8 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 
 func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	t.Parallel()
-	view := testExamHTTPView(t, model.NewUserID())
+	editorID := model.NewUserID()
+	view := testExamHTTPView(t, editorID)
 	encoded, err := json.Marshal(examResponseFromView(view))
 	require.NoError(t, err)
 	var document map[string]any
@@ -375,6 +384,7 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	require.Equal(t, float64(1), document["manager_count"])
 	require.Equal(t, float64(0), draft["resource_count"])
 	require.Equal(t, false, draft["has_starter_workspace"])
+	require.Equal(t, editorID.String(), draft["updated_by_user_id"], "the draft names its last editor")
 	require.Equal(t, float64(model.ExamResourceDefaultMaximumCount), capacity["resource_maximum_count"])
 	require.Equal(t, float64(model.ExamWorkspaceDefaultMaximumEntries), capacity["workspace_maximum_entries"])
 }
@@ -384,7 +394,7 @@ func testExamHTTPView(t *testing.T, userID model.UserID) exam.View {
 	at := time.Now().UTC()
 	examRecord, err := model.NewExam(model.NewExamID(), model.NewAcademicUnitID(), userID, at)
 	require.NoError(t, err)
-	draft, err := model.NewExamDraft(examRecord.ID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(examRecord.ID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), userID, at)
 	require.NoError(t, err)
 	return exam.View{Exam: *examRecord, Draft: *draft, OwnerUserID: userID, ManagerCount: 1}
 }
@@ -405,7 +415,7 @@ func TestExamOpenAPIDocument(t *testing.T) {
 	document := readOpenAPIDocument(t)
 	var listOperation openAPIOperation
 	require.NoError(t, json.Unmarshal(document.Paths[model.APIURLSuffix+"/exams"]["get"], &listOperation))
-	require.Equal(t, []string{"academic_unit_id", "archive_state", "cursor", "ends_after", "limit", "q", "sitting_state", "starts_before"}, academicStructureQueryParameterNames(listOperation.Parameters))
+	require.Equal(t, []string{"academic_unit_id", "archive_state", "cursor", "ends_after", "has_sittings", "limit", "q", "sitting_state", "starts_before"}, academicStructureQueryParameterNames(listOperation.Parameters))
 }
 
 func TestEditExamDraftTextOpenAPISchemaRequiresANonNullAuthoredValue(t *testing.T) {

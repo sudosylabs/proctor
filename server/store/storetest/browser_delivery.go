@@ -51,12 +51,14 @@ func testBrowserDeliveryRecovery(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Equal(t, int64(0), gapped.Status.HighestContiguous)
 	require.Equal(t, int64(2), gapped.Status.SettledThrough)
+	require.True(t, gapped.Status.InterpretationAdvanced, "settled browser activity ought to refresh evidence")
 	require.Equal(t, int64(4), gapped.Status.AllocatedThrough)
 	require.Equal(t, int64(1), gapped.Receipt.DeclarationRevision)
 	gapInput.AuditEventID = browserDeliveryAuditFixture(t, ctx, ss, selector)
 	replay, err := ss.BrowserDelivery().DeclareBrowserDeliveryGaps(ctx, gapInput, gapCommand)
 	require.NoError(t, err)
 	require.Equal(t, gapped.Receipt, replay.Receipt)
+	require.False(t, replay.Status.InterpretationAdvanced, "replayed declarations do not refresh evidence")
 	_, err = appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source, Events: []model.BrowserActivityEvent{browserActivityEvent(1, model.BrowserActivityOpened, fixture.revisionID)}})
 	requireConflictConstraint(t, err, "declaration_conflict")
 	page, err := ss.BrowserDelivery().BrowserDeliveryReceipts(ctx, selector, 1, 1)
@@ -92,6 +94,7 @@ func testBrowserDeliveryRecovery(t *testing.T, ss store.Store) {
 	repeated, err := ss.BrowserDelivery().AppendHistoricalBrowserDelivery(ctx, batch, appendCommand)
 	require.NoError(t, err)
 	require.Len(t, repeated.Receipts, len(ack.Receipts), "HTTP replay lost receipts")
+	require.False(t, repeated.InterpretationAdvanced)
 	for i := range ack.Receipts {
 		require.Equal(t, ack.Receipts[i], repeated.Receipts[i], "HTTP replay changed receipt")
 	}

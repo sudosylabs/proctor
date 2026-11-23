@@ -26,8 +26,10 @@ import (
 )
 
 func TestRoleBindingStore(t *testing.T, ss store.Store) {
+	t.Run("ExpiryDeadlines", func(t *testing.T) { testRoleBindingExpiryDeadlines(t, ss) })
 	t.Run("ActiveIntervalPrecision", func(t *testing.T) { testRoleBindingActiveIntervalPrecision(t, ss) })
 	t.Run("VisibleSummariesByUsers", func(t *testing.T) { testRoleBindingVisibleSummariesByUsers(t, ss) })
+	t.Run("TeachersByClasses", func(t *testing.T) { testRoleBindingTeachersByClasses(t, ss) })
 	t.Run("CurrentByRoles", func(t *testing.T) { testRoleBindingCurrentByRoles(t, ss) })
 	t.Run("HoldersByRoles", func(t *testing.T) { testRoleBindingHoldersByRoles(t, ss) })
 	t.Run("AuditedMutations", func(t *testing.T) {
@@ -41,6 +43,7 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 			Binding: &model.RoleBinding{
 				UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 				ScopeID: institution.ID.String(), StartsAt: model.TimeUTC(at),
+				GrantedByUserID: user.ID, GrantedVia: model.RoleBindingGrantedManually,
 			},
 			AuditEventID: model.NewAuditEventID(), AuditAt: at,
 		})
@@ -61,6 +64,7 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 			Binding: &model.RoleBinding{
 				UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 				ScopeID: institution.ID.String(), StartsAt: model.TimeUTC(at),
+				GrantedByUserID: user.ID, GrantedVia: model.RoleBindingGrantedManually,
 			},
 			ExpectedRoleUpdatedAt: staleUpdatedAt, ExpectedRolePermissions: stalePermissions,
 			AuditEventID: attempt.ID, AuditAt: at,
@@ -77,12 +81,15 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 			Binding: &model.RoleBinding{
 				UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 				ScopeID: institution.ID.String(), StartsAt: model.TimeUTC(at),
+				GrantedByUserID: user.ID, GrantedVia: model.RoleBindingGrantedManually,
 			},
 			ExpectedRoleUpdatedAt: role.UpdatedAt, ExpectedRolePermissions: append([]string(nil), role.Permissions...),
 			Recipient: new(*user), Notice: createNotice,
 			AuditEventID: attempt.ID, AuditAt: at,
 		})
 		require.NoError(t, err)
+		require.Equal(t, model.RoleBindingGrantedManually, saved.GrantedVia, "the grant keeps how it was made")
+		require.Equal(t, user.ID, saved.GrantedByUserID, "the grant keeps who made it")
 		require.NoError(t, requireClassMemberMail(t, ctx, ss, createNotice, model.MailTemplateAuthorizationInstitutionRoleAssigned))
 		endAttempt, err := ss.Audit().Save(ctx, &model.AuditEvent{
 			Action:    string(model.ActionRoleManage),
@@ -287,6 +294,98 @@ func testRoleBindingActiveIntervalPrecision(t *testing.T, ss store.Store) {
 	}
 }
 
+// testRoleBindingTeachersByClasses pins that a Class's teachers are the
+// distinct current holders of an unarchived role bound at the Class itself,
+// by name, counted past the limit, for a whole page in one read.
+func testRoleBindingTeachersByClasses(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := model.NewID()[:12]
+	institution := saveInstitution(t, ctx, ss)
+	unit := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "teachers-unit-"+token)
+	programme := saveProgramme(t, ctx, ss, unit.ID.String(), "teachers-programme-"+token)
+	level := saveProgrammeLevel(t, ctx, ss, programme.ID.String(), "teachers-level-"+token)
+	period := saveAcademicPeriod(t, ctx, ss, institution.ID.String(), "teachers-period-"+token, 1_800_000_000_000)
+	class := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "teachers-class-"+token)
+	other := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "teachers-other-"+token)
+	empty := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "teachers-empty-"+token)
+	role := func(name string, permission model.Action) *model.Role {
+		saved, err := SaveRole(ctx, ss, &model.Role{Name: "teachers-" + name + "-" + strings.ToLower(token), DisplayName: name, Permissions: []string{string(permission)}})
+		require.NoError(t, err)
+		return saved
+	}
+	teaching := role("teaching", model.ActionExamManage)
+	marking := role("marking", model.ActionSubmissionReview)
+	retired := role("retired", model.ActionExamManage)
+	observer := role("observer", model.ActionClassView)
+	named := func(name string) *model.User {
+		user := newUser()
+		user.DisplayName = name + " " + token
+		saved, err := createUser(t, ctx, ss, user)
+		require.NoError(t, err)
+		return saved
+	}
+	ada, brook, cleo, dev, eli := named("Ada"), named("Brook"), named("Cleo"), named("Dev"), named("Eli")
+	start := model.NowUTC().Add(-time.Second)
+	bind := func(user *model.User, role *model.Role, scopeType model.RoleScopeType, scopeID string) *model.RoleBinding {
+		saved, err := SaveRoleBinding(ctx, ss, &model.RoleBinding{
+			UserID: user.ID, RoleID: role.ID, ScopeType: scopeType, ScopeID: scopeID, StartsAt: model.TimeUTC(start),
+		})
+		require.NoError(t, err)
+		return saved
+	}
+	// Dev holds two roles at the Class and is one teacher.
+	bind(dev, teaching, model.RoleScopeClass, class.ID.String())
+	bind(dev, marking, model.RoleScopeClass, class.ID.String())
+	bind(brook, teaching, model.RoleScopeClass, class.ID.String())
+	bind(cleo, marking, model.RoleScopeClass, class.ID.String())
+	bind(ada, teaching, model.RoleScopeClass, class.ID.String())
+	// Not teachers of the Class: an ended binding, an archived role, a
+	// binding at the Class's unit, and a binding at another Class.
+	ended := bind(eli, teaching, model.RoleScopeClass, class.ID.String())
+	_, err := EndRoleBinding(ctx, ss, ended.ID, start.Add(10*time.Millisecond))
+	require.NoError(t, err)
+	bind(eli, retired, model.RoleScopeClass, class.ID.String())
+	bind(eli, observer, model.RoleScopeClass, class.ID.String())
+	_, err = ArchiveRole(ctx, ss, retired.ID, model.NowUTC())
+	require.NoError(t, err)
+	bind(eli, teaching, model.RoleScopeAcademicUnit, unit.ID.String())
+	bind(eli, teaching, model.RoleScopeClass, other.ID.String())
+
+	read := func(limit int) []store.ClassTeachers {
+		t.Helper()
+		teachers, readErr := ss.RoleBinding().ListTeachersByClasses(ctx, store.ClassTeacherOptions{
+			ClassIDs: []model.ClassID{class.ID, other.ID, empty.ID}, ActiveAt: model.NowUTC(), Limit: limit,
+		})
+		require.NoError(t, readErr)
+		return teachers
+	}
+	got := read(3)
+	byClass := map[model.ClassID]store.ClassTeachers{}
+	for _, teachers := range got {
+		byClass[teachers.ClassID] = teachers
+	}
+	require.Len(t, got, 2, "a Class with no teacher is omitted")
+	require.Equal(t, store.ClassTeachers{ClassID: class.ID, UserIDs: []model.UserID{ada.ID, brook.ID, cleo.ID}, More: 1}, byClass[class.ID],
+		"the first three distinct current teachers by name, and the one past them")
+	require.Equal(t, store.ClassTeachers{ClassID: other.ID, UserIDs: []model.UserID{eli.ID}}, byClass[other.ID])
+
+	none, err := ss.RoleBinding().ListTeachersByClasses(ctx, store.ClassTeacherOptions{ActiveAt: model.NowUTC(), Limit: 3})
+	require.NoError(t, err)
+	require.Empty(t, none)
+
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.ClassTeacherOptions{
+		"missing clock": {ClassIDs: []model.ClassID{class.ID}, Limit: 3},
+		"zero limit":    {ClassIDs: []model.ClassID{class.ID}, ActiveAt: model.NowUTC()},
+		"invalid class": {ClassIDs: []model.ClassID{"not-an-id"}, ActiveAt: model.NowUTC(), Limit: 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, readErr := ss.RoleBinding().ListTeachersByClasses(ctx, options)
+			require.ErrorAs(t, readErr, &invalid)
+		})
+	}
+}
+
 func testRoleBindingVisibleSummariesByUsers(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	token := model.NewID()[:12]
@@ -376,4 +475,46 @@ func testRoleBindingVisibleSummariesByUsers(t *testing.T, ss store.Store) {
 			require.ErrorAs(t, readErr, &invalid)
 		})
 	}
+}
+
+func testRoleBindingExpiryDeadlines(t *testing.T, ss store.Store) {
+	ctx := t.Context()
+	institution := saveInstitution(t, ctx, ss)
+	role, err := SaveRole(ctx, ss, &model.Role{
+		Name: "expiry-reader", DisplayName: "Expiry Reader", Permissions: []string{string(model.ActionClassView)},
+	})
+	require.NoError(t, err)
+	bindings := ss.RoleBinding()
+	page, err := bindings.ListExpiries(ctx, store.RoleBindingExpiryCursor{}, 1)
+	require.NoError(t, err)
+	// Use the same database clock as the scanner, with no timing wait.
+	deadline := page.CheckedAt.Add(-time.Second)
+	var expired []model.RoleBindingID
+	for _, end := range []time.Time{deadline, deadline, page.CheckedAt.Add(time.Hour)} {
+		user := saveUser(t, ctx, ss)
+		binding, saveErr := SaveRoleBinding(ctx, ss, &model.RoleBinding{
+			UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
+			ScopeID: institution.ID.String(), StartsAt: deadline.Add(-time.Hour), EndsAt: model.OptionalTimeFrom(end),
+		})
+		require.NoError(t, saveErr)
+		if end.Equal(deadline) {
+			expired = append(expired, binding.ID)
+		}
+	}
+
+	page, err = bindings.ListExpiries(ctx, store.RoleBindingExpiryCursor{At: deadline.Add(-time.Microsecond)}, 1)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	first := page.Items[0]
+	page, err = bindings.ListExpiries(ctx, first.Cursor, 1)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	second := page.Items[0]
+	require.ElementsMatch(t, expired, []model.RoleBindingID{first.Cursor.ID, second.Cursor.ID})
+	require.True(t, first.Cursor.At.Equal(second.Cursor.At))
+	require.NotEqual(t, first.UserID, second.UserID)
+
+	page, err = bindings.ListExpiries(ctx, store.RoleBindingExpiryCursor{At: deadline}, 5)
+	require.NoError(t, err)
+	require.Empty(t, page.Items, "scanned time and the future deadlines do not reappear")
 }

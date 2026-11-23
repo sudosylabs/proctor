@@ -54,7 +54,7 @@ func (s *Service) GetProgrammeLevel(
 	ctx context.Context,
 	inv invocation.Invocation,
 	id model.ProgrammeLevelID,
-) (*model.ProgrammeLevel, error) {
+) (*ProgrammeLevelView, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}
@@ -73,7 +73,11 @@ func (s *Service) GetProgrammeLevel(
 		return nil, programmeLevelStoreErrors.Translate(err)
 	}
 
-	return level, nil
+	counts, err := s.levelCounts(ctx, inv, []*model.ProgrammeLevel{level})
+	if err != nil {
+		return nil, err
+	}
+	return &ProgrammeLevelView{Level: level, StructureCounts: counts}, nil
 }
 
 // ListProgrammeLevels lists a programme's levels; it needs
@@ -82,15 +86,15 @@ func (s *Service) ListProgrammeLevels(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListProgrammeLevelsQuery,
-) (paging.Counted[*model.ProgrammeLevel], error) {
+) (ProgrammeLevelPage, error) {
 	programmeID := query.ProgrammeID
 	if !programmeID.IsValid() {
-		return paging.Counted[*model.ProgrammeLevel]{}, apperror.New("request.invalid").WithField("field", "programme_id")
+		return ProgrammeLevelPage{}, apperror.New("request.invalid").WithField("field", "programme_id")
 	}
 
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Counted[*model.ProgrammeLevel]{}, err
+		return ProgrammeLevelPage{}, err
 	}
 
 	if err = s.authorizer.Authorize(
@@ -99,7 +103,7 @@ func (s *Service) ListProgrammeLevels(
 		model.ActionProgrammeLevelView,
 		model.Resource{Type: model.ResourceProgramme, ID: programmeID.String()},
 	); err != nil {
-		return paging.Counted[*model.ProgrammeLevel]{}, err
+		return ProgrammeLevelPage{}, err
 	}
 
 	options := store.AcademicNameListOptions{
@@ -110,7 +114,7 @@ func (s *Service) ListProgrammeLevels(
 	}
 	levels, err := s.programmeLevels.SearchByProgramme(ctx, programmeID, options)
 	if err != nil {
-		return paging.Counted[*model.ProgrammeLevel]{}, programmeLevelStoreErrors.Translate(err)
+		return ProgrammeLevelPage{}, programmeLevelStoreErrors.Translate(err)
 	}
 
 	page := paging.Counted[*model.ProgrammeLevel]{Page: paging.New(levels, limit)}
@@ -118,14 +122,18 @@ func (s *Service) ListProgrammeLevels(
 		return s.programmeLevels.CountByProgramme(ctx, programmeID, options, maximum)
 	})
 	if err != nil {
-		return paging.Counted[*model.ProgrammeLevel]{}, programmeLevelStoreErrors.Translate(err)
+		return ProgrammeLevelPage{}, programmeLevelStoreErrors.Translate(err)
 	}
 	if !consistent {
-		return paging.Counted[*model.ProgrammeLevel]{}, apperror.New("administration.unavailable").WithField("resource", "programme_level")
+		return ProgrammeLevelPage{}, apperror.New("administration.unavailable").WithField("resource", "programme_level")
 	}
 
 	page.Total = total
-	return page, nil
+	counts, err := s.levelCounts(ctx, inv, page.Items)
+	if err != nil {
+		return ProgrammeLevelPage{}, err
+	}
+	return ProgrammeLevelPage{Counted: page, StructureCounts: counts}, nil
 }
 
 // CreateProgrammeLevel needs programme_level.manage.

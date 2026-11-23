@@ -186,7 +186,7 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		var row roleRow
 		if getErr := tx.Get(ctx, &row, `
 			SELECT id, created_at, updated_at, archived_at, name, display_name, description,
-				permissions, built_in
+				permissions, built_in, updated_by_user_id
 			FROM roles
 			WHERE name = ?
 			FOR UPDATE`, model.SystemAdministratorRoleName); getErr != nil {
@@ -475,6 +475,8 @@ func prepareBootstrapRoleBinding(
 	binding.RoleID = roleID
 	binding.ScopeType = model.RoleScopeInstitution
 	binding.ScopeID = institutionID.String()
+	binding.GrantedByUserID = ""
+	binding.GrantedVia = model.RoleBindingGrantedAtBootstrap
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	if err := binding.Validate(); err != nil {
 		return nil, err
@@ -585,14 +587,14 @@ func insertInitialDesktopCompatibilityPolicy(
 		policy.Validate() != nil ||
 		policy.Revision != 1 ||
 		policy.MinimumDesktopRelease != "" ||
-		len(policy.RevokedDesktopBuildIDs) != 0 ||
+		len(policy.RevokedDesktopBuilds) != 0 ||
 		policy.AdministratorMessage != "" ||
 		policy.Availability != model.DesktopAvailabilityReady ||
 		policy.RetryAt.Valid {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "initial", nil)
 	}
 
-	revokedBuildIDs, err := json.Marshal(policy.RevokedDesktopBuildIDs)
+	revokedBuildIDs, err := json.Marshal(desktopBuildRevocationDocuments(policy.RevokedDesktopBuilds))
 	if err != nil {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "revoked_build_ids", nil).Wrap(err)
 	}
@@ -601,7 +603,7 @@ func insertInitialDesktopCompatibilityPolicy(
 		ctx,
 		`
 		INSERT INTO desktop_compatibility_policies (
-			singleton, institution_id, revision, minimum_desktop_release, revoked_desktop_build_ids,
+			singleton, institution_id, revision, minimum_desktop_release, revoked_desktop_builds,
 			administrator_message, availability, retry_at, created_at, updated_at
 		)
 		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -757,11 +759,11 @@ func insertInstallationRoleBinding(
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO role_bindings (
 			id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
-			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		)
 		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :user_id, :role_id, :origin_invitation_id,
-			:origin_academic_unit_member_id, :scope_type, :scope_id, :start_at, :end_at
+			:origin_academic_unit_member_id, :scope_type, :scope_id, :start_at, :end_at, :granted_by_user_id, :granted_via
 		)`, &row); err != nil {
 		return fmt.Errorf(
 			"save bootstrap role binding: %w",

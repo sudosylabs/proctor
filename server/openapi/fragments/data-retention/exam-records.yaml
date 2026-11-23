@@ -497,6 +497,7 @@ components:
           schema:
             $ref: '#/components/schemas/CreateRetentionHoldRequest'
           example:
+            until: '2027-09-01T00:00:00Z'
             reason_code: institution_request
             private_reason: Preserve records until the institution concludes its review.
     ReleaseRetentionHold:
@@ -588,6 +589,7 @@ components:
             revision: 2
             created_at: '2026-09-01T10:00:00Z'
             created_by_user_id: dpbj4ddm3hw8fkicm7nuazihkg
+            due_for_review: false
             reason_code: institution_request
             private_reason: Preserve records until the institution concludes its review.
             released_at: '2026-10-15T09:00:00Z'
@@ -612,6 +614,7 @@ components:
             revision: 1
             created_at: '2026-09-01T10:00:00Z'
             created_by_user_id: dpbj4ddm3hw8fkicm7nuazihkg
+            due_for_review: false
             reason_code: institution_request
             private_reason: Preserve records until the institution concludes its review.
             work_retired_submission_count: 0
@@ -633,6 +636,8 @@ components:
                 revision: 1
                 created_at: '2026-09-01T10:00:00Z'
                 created_by_user_id: dpbj4ddm3hw8fkicm7nuazihkg
+                until: '2027-09-01T00:00:00Z'
+                due_for_review: false
                 reason_code: institution_request
                 private_reason: Preserve records until the institution concludes its review.
                 work_retired_submission_count: 0
@@ -761,6 +766,9 @@ components:
         actor_user_id:
           $ref: '#/components/schemas/ID'
           description: User who recorded the waiver.
+        actor:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who recorded the waiver, named.
         recorded_at:
           type: string
           format: date-time
@@ -814,6 +822,7 @@ components:
         - revision
         - created_at
         - created_by_user_id
+        - due_for_review
         - reason_code
         - private_reason
         - work_retired_submission_count
@@ -843,6 +852,18 @@ components:
         created_by_user_id:
           $ref: '#/components/schemas/ID'
           description: User who created the hold.
+        created_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who placed the hold, named.
+        until:
+          type: string
+          format: date-time
+          description: >-
+            When the hold is due for review. Omitted when none was set. It never releases the hold: only a person
+            does.
+        due_for_review:
+          type: boolean
+          description: True when the hold is unreleased and `until` has passed. The hold still protects its records.
         reason_code:
           type: string
           enum:
@@ -868,6 +889,9 @@ components:
         released_by_user_id:
           $ref: '#/components/schemas/ID'
           description: User who released the hold. Omitted while it is active.
+        released_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who released the hold, named. Omitted while it is held.
         release_reason_code:
           type: string
           enum:
@@ -1004,6 +1028,12 @@ components:
         submission_id:
           $ref: '#/components/schemas/ID'
           description: Submission to hold. Needs `exam_sitting_id`.
+        until:
+          type: string
+          format: date-time
+          description: >-
+            Optional. When the hold is due for review, which must be in the future. When it passes the hold shows
+            `due_for_review: true` and stays in force until a person releases it. Null is rejected.
         reason_code:
           type: string
           enum:

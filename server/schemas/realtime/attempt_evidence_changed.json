@@ -1,0 +1,31 @@
+{
+  "title": "Attempt evidence changed",
+  "description": "Names an Attempt that gained integrity Flags, evidence or native conditions, and the time the change is current as of. No evidence is included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "exam_id",
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "as_of"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "as_of": {
+      "$ref": "instant.json"
+    }
+  }
+}

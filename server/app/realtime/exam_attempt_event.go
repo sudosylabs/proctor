@@ -19,6 +19,7 @@ import (
 )
 
 type examAttemptConnectionChangedData struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	CandidateID   string `json:"candidate_user_id"`
@@ -29,6 +30,7 @@ type examAttemptConnectionChangedData struct {
 }
 
 type candidateExamAttemptAccessChangedData struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	State         string `json:"state"`
@@ -37,6 +39,7 @@ type candidateExamAttemptAccessChangedData struct {
 }
 
 type managerExamAttemptSuspendedData struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	CandidateID   string `json:"candidate_user_id"`
@@ -48,6 +51,7 @@ type managerExamAttemptSuspendedData struct {
 }
 
 type managerExamAttemptReallowedData struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	CandidateID   string `json:"candidate_user_id"`
@@ -57,6 +61,7 @@ type managerExamAttemptReallowedData struct {
 }
 
 type candidateExamAttemptWorkspaceChangedData struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	FirstCursor   int64  `json:"first_workspace_cursor"`
@@ -65,12 +70,14 @@ type candidateExamAttemptWorkspaceChangedData struct {
 }
 
 type candidateScreenClipsRequestedData struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	ChangedAt     string `json:"changed_at"`
 }
 
 type candidateExamAttemptFocusLossWarningData struct {
+	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
 	WarningCode   string `json:"warning_code"`
@@ -78,6 +85,7 @@ type candidateExamAttemptFocusLossWarningData struct {
 }
 
 type managerExamAttemptIntegrityFlaggedData struct {
+	ExamID            string `json:"exam_id"`
 	ExamSittingID     string `json:"exam_sitting_id"`
 	ExamAttemptID     string `json:"exam_attempt_id"`
 	CandidateID       string `json:"candidate_user_id"`
@@ -91,6 +99,7 @@ type managerExamAttemptIntegrityFlaggedData struct {
 }
 
 type managerExamAttemptSubmittedData struct {
+	ExamID                    string `json:"exam_id"`
 	ExamSittingID             string `json:"exam_sitting_id"`
 	ExamAttemptID             string `json:"exam_attempt_id"`
 	CandidateID               string `json:"candidate_user_id"`
@@ -104,6 +113,7 @@ type managerExamAttemptSubmittedData struct {
 }
 
 type candidateExamAttemptSubmittedData struct {
+	ExamID                    string `json:"exam_id"`
 	ExamSittingID             string `json:"exam_sitting_id"`
 	ExamAttemptID             string `json:"exam_attempt_id"`
 	SubmissionID              string `json:"submission_id"`
@@ -119,6 +129,7 @@ type candidateExamAttemptSubmittedData struct {
 // submitted. Unlike the candidate event of the same wire name, its payload
 // identifies the candidate. manifestDigest must be a lowercase hex SHA-256.
 func NewExamAttemptSubmittedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -129,7 +140,8 @@ func NewExamAttemptSubmittedEvent(
 	provenance model.ExamSubmissionProvenance,
 	submittedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!submissionID.IsValid() ||
@@ -142,6 +154,7 @@ func NewExamAttemptSubmittedEvent(
 	}
 
 	data, err := json.Marshal(managerExamAttemptSubmittedData{
+		ExamID:                    examID.String(),
 		ExamSittingID:             sittingID.String(),
 		ExamAttemptID:             attemptID.String(),
 		CandidateID:               candidateID.String(),
@@ -169,6 +182,7 @@ func NewExamAttemptSubmittedEvent(
 // under the participation action rather than view, with no candidate identity
 // in the payload.
 func NewCandidateExamAttemptSubmittedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -179,7 +193,8 @@ func NewCandidateExamAttemptSubmittedEvent(
 	provenance model.ExamSubmissionProvenance,
 	submittedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!submissionID.IsValid() ||
@@ -192,6 +207,7 @@ func NewCandidateExamAttemptSubmittedEvent(
 	}
 
 	data, err := json.Marshal(candidateExamAttemptSubmittedData{
+		ExamID:                    examID.String(),
 		ExamSittingID:             sittingID.String(),
 		ExamAttemptID:             attemptID.String(),
 		SubmissionID:              submissionID.String(),
@@ -226,16 +242,18 @@ func validEventSHA256(value string) bool {
 // NewCandidateExamAttemptFocusLossWarningEvent carries a fixed warning code and
 // no counts, thresholds or evidence.
 func NewCandidateExamAttemptFocusLossWarningEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() {
+	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() {
 		return Event{}, errors.New("candidate Exam Attempt Focus Loss warning requires valid bounded metadata")
 	}
 
 	data, err := json.Marshal(candidateExamAttemptFocusLossWarningData{
+		ExamID:        examID.String(),
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
 		WarningCode:   "focus_loss_policy_warning",
@@ -257,16 +275,18 @@ func NewCandidateExamAttemptFocusLossWarningEvent(
 // NewCandidateScreenClipsRequestedEvent carries no requests: Desktop lists
 // them, and only its live participation may see them.
 func NewCandidateScreenClipsRequestedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() {
+	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() {
 		return Event{}, errors.New("candidate screen clip request hint requires valid bounded metadata")
 	}
 
 	data, err := json.Marshal(candidateScreenClipsRequestedData{
+		ExamID:        examID.String(),
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
 		ChangedAt:     model.FormatRFC3339(changedAt),
@@ -287,6 +307,7 @@ func NewCandidateScreenClipsRequestedEvent(
 // NewExamAttemptIntegrityFlaggedEvent gives the policy, outcome and evidence
 // episode counts, never the evidence itself.
 func NewExamAttemptIntegrityFlaggedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -297,7 +318,8 @@ func NewExamAttemptIntegrityFlaggedEvent(
 	evidenceOverflow int64,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!flagID.IsValid() ||
@@ -315,6 +337,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 	}
 
 	data, err := json.Marshal(managerExamAttemptIntegrityFlaggedData{
+		ExamID:            examID.String(),
 		ExamSittingID:     sittingID.String(),
 		ExamAttemptID:     attemptID.String(),
 		CandidateID:       candidateID.String(),
@@ -342,13 +365,15 @@ func NewExamAttemptIntegrityFlaggedEvent(
 // committed batch, naming only its cursors. Paths, metadata and bodies stay in
 // the authorized HTTP responses.
 func NewCandidateExamAttemptWorkspaceChangedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	firstCursor, lastCursor int64,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		firstCursor < 1 ||
@@ -358,6 +383,7 @@ func NewCandidateExamAttemptWorkspaceChangedEvent(
 	}
 
 	data, err := json.Marshal(candidateExamAttemptWorkspaceChangedData{
+		ExamID:        examID.String(),
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
 		FirstCursor:   firstCursor,
@@ -380,6 +406,7 @@ func NewCandidateExamAttemptWorkspaceChangedEvent(
 // NewCandidateExamAttemptSuspendedEvent gives a policy reason for automatic
 // enforcement and manager_suspended for a kick.
 func NewCandidateExamAttemptSuspendedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -396,6 +423,7 @@ func NewCandidateExamAttemptSuspendedEvent(
 
 	return newCandidateExamAttemptAccessEvent(
 		examAttemptAccessSuspendedMessage.name,
+		examID,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -408,6 +436,7 @@ func NewCandidateExamAttemptSuspendedEvent(
 // NewCandidateExamAttemptReallowedEvent carries no reason code, unlike the
 // suspension event.
 func NewCandidateExamAttemptReallowedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -415,6 +444,7 @@ func NewCandidateExamAttemptReallowedEvent(
 ) (Event, error) {
 	return newCandidateExamAttemptAccessEvent(
 		examAttemptAccessReallowedMessage.name,
+		examID,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -426,6 +456,7 @@ func NewCandidateExamAttemptReallowedEvent(
 
 func newCandidateExamAttemptAccessEvent(
 	name string,
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -433,7 +464,8 @@ func newCandidateExamAttemptAccessEvent(
 	reason string,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		changedAt.IsZero() ||
@@ -442,6 +474,7 @@ func newCandidateExamAttemptAccessEvent(
 	}
 
 	data, err := json.Marshal(candidateExamAttemptAccessChangedData{
+		ExamID:        examID.String(),
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
 		State:         string(state),
@@ -464,6 +497,7 @@ func newCandidateExamAttemptAccessEvent(
 // NewExamAttemptPolicySuspendedEvent requires both the integrity flag and the
 // connection, because policy enforcement always links them.
 func NewExamAttemptPolicySuspendedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -476,13 +510,14 @@ func NewExamAttemptPolicySuspendedEvent(
 	if !connectionID.IsValid() || !flagID.IsValid() {
 		return Event{}, errors.New("policy Exam Attempt suspension event requires its Connection and Integrity Flag")
 	}
-	return newExamAttemptSuspendedEvent(sittingID, attemptID, candidateID, connectionID, flagID, suspensionID, revision, changedAt)
+	return newExamAttemptSuspendedEvent(examID, sittingID, attemptID, candidateID, connectionID, flagID, suspensionID, revision, changedAt)
 }
 
 // NewExamAttemptKickedEvent links no integrity flag, because a kick is a
 // manager control, not suspicion. connectionID is zero when the candidate had
 // no open connection.
 func NewExamAttemptKickedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -494,12 +529,13 @@ func NewExamAttemptKickedEvent(
 	if !connectionID.IsValid() && !connectionID.IsZero() {
 		return Event{}, errors.New("manual Exam Attempt suspension event requires a valid Connection when present")
 	}
-	return newExamAttemptSuspendedEvent(sittingID, attemptID, candidateID, connectionID, "", suspensionID, revision, changedAt)
+	return newExamAttemptSuspendedEvent(examID, sittingID, attemptID, candidateID, connectionID, "", suspensionID, revision, changedAt)
 }
 
 // newExamAttemptSuspendedEvent omits attempt_connection_id and
 // integrity_flag_id when absent.
 func newExamAttemptSuspendedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -509,7 +545,8 @@ func newExamAttemptSuspendedEvent(
 	revision int64,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!suspensionID.IsValid() ||
@@ -519,6 +556,7 @@ func newExamAttemptSuspendedEvent(
 	}
 
 	data, err := json.Marshal(managerExamAttemptSuspendedData{
+		ExamID:        examID.String(),
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
 		CandidateID:   candidateID.String(),
@@ -543,6 +581,7 @@ func newExamAttemptSuspendedEvent(
 // NewExamAttemptReallowedEvent names the closed suspension and the attempt's
 // new revision, never the manager's private reason.
 func NewExamAttemptReallowedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -550,7 +589,8 @@ func NewExamAttemptReallowedEvent(
 	revision int64,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!suspensionID.IsValid() ||
@@ -560,6 +600,7 @@ func NewExamAttemptReallowedEvent(
 	}
 
 	data, err := json.Marshal(managerExamAttemptReallowedData{
+		ExamID:        examID.String(),
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
 		CandidateID:   candidateID.String(),
@@ -582,6 +623,7 @@ func NewExamAttemptReallowedEvent(
 // NewExamAttemptConnectionOpenedEvent is for sitting viewers, not the
 // candidate.
 func NewExamAttemptConnectionOpenedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -590,6 +632,7 @@ func NewExamAttemptConnectionOpenedEvent(
 ) (Event, error) {
 	return newExamAttemptConnectionChangedEvent(
 		examAttemptConnectionOpenedMessage.name,
+		examID,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -603,6 +646,7 @@ func NewExamAttemptConnectionOpenedEvent(
 // NewExamAttemptConnectionClosedEvent is for sitting viewers, not the
 // candidate; reason says why the connection closed.
 func NewExamAttemptConnectionClosedEvent(
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -615,6 +659,7 @@ func NewExamAttemptConnectionClosedEvent(
 	}
 	return newExamAttemptConnectionChangedEvent(
 		examAttemptConnectionClosedMessage.name,
+		examID,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -627,6 +672,7 @@ func NewExamAttemptConnectionClosedEvent(
 
 func newExamAttemptConnectionChangedEvent(
 	name string,
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -635,7 +681,8 @@ func newExamAttemptConnectionChangedEvent(
 	reason model.AttemptConnectionCloseReason,
 	changedAt time.Time,
 ) (Event, error) {
-	if !sittingID.IsValid() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!connectionID.IsValid() ||
@@ -645,6 +692,7 @@ func newExamAttemptConnectionChangedEvent(
 	}
 
 	data, err := json.Marshal(examAttemptConnectionChangedData{
+		ExamID:        examID.String(),
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
 		CandidateID:   candidateID.String(),

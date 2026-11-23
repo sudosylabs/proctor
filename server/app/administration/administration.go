@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -28,12 +29,13 @@ import (
 
 // Dependencies are the collaborators New distributes to the Service.
 type Dependencies struct {
-	Store        store.Catalog
-	Authorizer   *access.Authorizer
-	Auditor      *access.Auditor
-	Capabilities *identity.DeploymentCapabilities
-	Mail         *mail.Composer
-	Publisher    realtime.Publisher
+	AcademicUnits store.AcademicUnitStore
+	Store         store.Catalog
+	Authorizer    *access.Authorizer
+	Auditor       *access.Auditor
+	Capabilities  *identity.DeploymentCapabilities
+	Mail          *mail.Composer
+	Publisher     realtime.Publisher
 	// CanonicalOrigin, SupportAddress and PasswordMinimumLength are published
 	// by access discovery unchanged.
 	CanonicalOrigin         string
@@ -46,6 +48,8 @@ type Dependencies struct {
 	// Plugins nil makes plugin administration unavailable.
 	Plugins            PluginCatalog
 	AssistantProviders []string
+	// AuditExportContent nil makes audit exports unavailable.
+	AuditExportContent AuditExportContent
 	Now                func() time.Time
 }
 
@@ -59,14 +63,21 @@ type Service struct {
 	accessPolicies    store.AccessPolicyStore
 	retentionPolicies store.RetentionPolicyStore
 	retention         store.RetentionStore
-	pluginSettings    store.PluginSettingsStore
+	// classes names the unit of a Class whose teachers a binding changed.
+	classes        store.ClassStore
+	academicUnits  store.AcademicUnitStore
+	pluginSettings store.PluginSettingsStore
 	// environmentProfiles is nil without persistence, which makes profile
 	// administration unavailable.
 	environmentProfiles store.EnvironmentProfileStore
 	assistantProfiles   store.AssistantProfileStore
 	assistantProviders  []string
+	// auditExports and auditExportContent are both needed for audit exports.
+	auditExports       store.AuditExportStore
+	auditExportContent AuditExportContent
 
 	authorizer *access.Authorizer
+	people     *people.Resolver
 	// auditor fails the attempt of a mutation that does not commit; the store
 	// completes a committed one.
 	auditor      access.MutationAuditAdapter
@@ -131,8 +142,13 @@ func New(deps Dependencies) (*Service, error) {
 		environmentProfiles:     catalog.EnvironmentProfile(),
 		assistantProfiles:       catalog.AssistantProfile(),
 		assistantProviders:      append([]string(nil), deps.AssistantProviders...),
+		auditExports:            catalog.AuditExport(),
+		auditExportContent:      deps.AuditExportContent,
 		retention:               catalog.Retention(),
+		classes:                 catalog.Class(),
+		academicUnits:           deps.AcademicUnits,
 		authorizer:              deps.Authorizer,
+		people:                  people.New(catalog, deps.Authorizer),
 		auditor:                 deps.Auditor.MutationAudit(),
 		publisher:               deps.Publisher,
 		mail:                    deps.Mail,

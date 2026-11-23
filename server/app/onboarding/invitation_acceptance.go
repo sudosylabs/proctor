@@ -160,6 +160,7 @@ func (s *Service) acceptStudentClassByClaimHash(
 			ctx,
 			s.publisher,
 			s.sittings,
+			s.classes,
 			result.ClassMember.UserID,
 			[]model.ClassID{result.ClassMember.ClassID},
 		); effectErr != nil {
@@ -273,6 +274,8 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 		ScopeID:                    invitation.AcademicUnitID.String(),
 		StartsAt:                   effectiveStart,
 		EndsAt:                     invitation.IntendedEndsAt,
+		GrantedByUserID:            invitation.InviterUserID,
+		GrantedVia:                 model.RoleBindingGrantedByInvitation,
 	}
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	prepared, err := s.mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: account, At: at})
@@ -321,6 +324,7 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 	}
 	if !result.Replayed && result.User != nil {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
+		s.publishAcceptedRelationships(ctx, result.User.ID, result.RoleBinding)
 	}
 
 	return &InvitationAcceptanceView{
@@ -402,6 +406,8 @@ func (s *Service) acceptScopedRoleByClaimHash(
 		ScopeID:            invitation.ScopeID,
 		StartsAt:           invitation.EffectiveStartsAt(at),
 		EndsAt:             invitation.IntendedEndsAt,
+		GrantedByUserID:    invitation.InviterUserID,
+		GrantedVia:         model.RoleBindingGrantedByInvitation,
 	}
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	if err = binding.Validate(); err != nil {
@@ -442,6 +448,7 @@ func (s *Service) acceptScopedRoleByClaimHash(
 	}
 	if !result.Replayed && result.User != nil {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
+		s.publishAcceptedRelationships(ctx, result.User.ID, result.RoleBinding)
 	}
 
 	return &InvitationAcceptanceView{

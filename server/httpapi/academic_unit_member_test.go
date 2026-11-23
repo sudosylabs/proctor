@@ -60,7 +60,7 @@ func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 		inAcademicUnit(principal.UserID, unitID, model.ActionAcademicUnitMembersManage, model.ActionAcademicUnitMembersView),
 	}})
 	fixture.users.add(member)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service, fixture.people()))
 
 	create := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-units/"+unitID.String()+"/members", strings.NewReader(`{"user_id":"`+member.ID.String()+`","start_at":"1970-01-01T00:00:00.1Z"}`))
 	create.Header.Set("Authorization", "Bearer credential")
@@ -115,7 +115,7 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 		fixture.bindings.summaries = []store.UserRoleBindingSummary{{UserID: user.ID, More: 2, Bindings: []store.RoleBindingSummary{{
 			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
 		}}}}
-		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service, fixture.people()))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members", nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()
@@ -130,7 +130,9 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	}
 
 	item, fixture := list(false)
-	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina"}`, string(item["user"]), "no email without Institution-wide user.view")
+	require.JSONEq(t, `{"id":"`+user.ID.String()+`","display_name":"Amina Diallo"}`, string(item["user"]),
+		"no username without directory visibility")
+	require.NotContains(t, item, "email", "no email without Institution-wide user.view")
 	_, rolesShown := item["roles_here"]
 	require.False(t, rolesShown, "no roles_here without role_binding.view on the unit")
 	_, moreShown := item["roles_here_more"]
@@ -138,7 +140,8 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	require.Empty(t, fixture.bindings.options, "the Role Bindings are not read without role_binding.view")
 
 	item, fixture = list(true)
-	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina","email":"amina@example.edu"}`, string(item["user"]))
+	require.JSONEq(t, `{"id":"`+user.ID.String()+`","display_name":"Amina Diallo","username":"amina","profile_picture_url":"/api/v1/users/`+user.ID.String()+`/profile-picture"}`, string(item["user"]))
+	require.JSONEq(t, `"amina@example.edu"`, string(item["email"]))
 	require.JSONEq(t, `[{"role_id":"`+roleID.String()+`","display_name":"Reviewer"}]`, string(item["roles_here"]))
 	require.JSONEq(t, `2`, string(item["roles_here_more"]))
 	require.Len(t, fixture.bindings.options, 1)
@@ -151,7 +154,7 @@ func TestAcademicUnitMemberResourceRejectsInvalidQueryAndMissingPrincipal(t *tes
 	principal := academicCaller()
 	unitID := model.NewAcademicUnitID()
 	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unitID, model.ActionAcademicUnitMembersView)}})
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service, fixture.people()))
 
 	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members?history=invalid", nil)
 	invalid.Header.Set("Authorization", "Bearer credential")

@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // academicNameCursor continues an academic listing ordered by name then
@@ -123,13 +124,21 @@ type academicPeriodCursor struct {
 	StartAt string `json:"start_at"`
 	Name    string `json:"name"`
 	ID      string `json:"id"`
+	Sort    string `json:"sort"`
+	Dir     string `json:"dir"`
 }
+
+// The keys an Academic Period page may be ordered by.
+const (
+	academicPeriodSortStart = "start"
+	academicPeriodSortName  = "name"
+)
 
 func academicPeriodCursorSpec() route.CursorSpec[academicPeriodCursor] {
 	return route.CursorSpec[academicPeriodCursor]{
 		Label:                "academic period",
 		MaximumEncodedLength: 1024,
-		Members:              []string{"start_at", "name", "id"},
+		Members:              []string{"start_at", "name", "id", "sort", "dir"},
 		Validate: func(cursor academicPeriodCursor) error {
 			startAt, err := model.ParseRFC3339(cursor.StartAt)
 			if err != nil ||
@@ -137,7 +146,9 @@ func academicPeriodCursorSpec() route.CursorSpec[academicPeriodCursor] {
 				cursor.Name == "" ||
 				len(cursor.Name) > 256 ||
 				!utf8.ValidString(cursor.Name) ||
-				!model.AcademicPeriodID(cursor.ID).IsValid() {
+				!model.AcademicPeriodID(cursor.ID).IsValid() ||
+				(cursor.Sort != academicPeriodSortStart && cursor.Sort != academicPeriodSortName) ||
+				!validListDirection(cursor.Dir) {
 				return errors.New("invalid academic period keyset")
 			}
 
@@ -149,4 +160,15 @@ func academicPeriodCursorSpec() route.CursorSpec[academicPeriodCursor] {
 func academicPeriodCursorStart(cursor academicPeriodCursor) time.Time {
 	startAt, _ := model.ParseRFC3339(cursor.StartAt)
 	return startAt
+}
+
+// cappedCount presents a count that stopped at store.MaximumListCount with
+// its lower-bound flag; a count the caller may not see stays absent.
+func cappedCount(counts map[string]int, id string) (*int, *bool) {
+	count, counted := counts[id]
+	if !counted {
+		return nil, nil
+	}
+	lowerBound := count >= store.MaximumListCount
+	return &count, &lowerBound
 }

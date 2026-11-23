@@ -33,7 +33,7 @@ func TestExamNativePolicyHTTPStrictBoundary(t *testing.T) {
 			// valid request sends is a change the use case accepts.
 			f.seeded().draft.Policy.Native = clipboardObservingNativePolicy(t)
 			require.NoError(t, f.seeded().draft.Validate())
-			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+f.examID.String()+"/draft/policies/native", bytes.NewBufferString(body))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", "application/json")

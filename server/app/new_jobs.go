@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -40,6 +41,7 @@ func newJobRuntime(
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
 	exams examServices,
+	administrations *administration.Service,
 	users *user.Service,
 	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
@@ -70,7 +72,7 @@ func newJobRuntime(
 	if err != nil {
 		return jobRuntime{}, err
 	}
-	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth, domainEvents)
+	definitions := buildApplicationJobDefinitions(deps, shared, exams, administrations, users, defaultPictureJobs, onboardingPorts, mailHealth, domainEvents)
 	engine, err := job.New(job.Dependencies{
 		Store:         deps.Store.Job(),
 		Descriptors:   definitions.descriptors,
@@ -186,6 +188,7 @@ func buildApplicationJobDefinitions(
 	deps Dependencies,
 	shared sharedMechanics,
 	exams examServices,
+	administrations *administration.Service,
 	users *user.Service,
 	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
@@ -197,6 +200,7 @@ func buildApplicationJobDefinitions(
 	}
 
 	mailDelivery := jobs.MailDeliveryDependencies{
+		Changes:    mailDeliveryChanges(deps, shared),
 		Deliveries: deps.Store.Mail(),
 		Sender:     deps.MailDeliverySender,
 		Sealer:     deps.MailSecretSealer,
@@ -207,6 +211,11 @@ func buildApplicationJobDefinitions(
 	}
 	retentionJobs := administration.NewRetentionJobs(shared.audit, deps.Store.Retention(), deps.Store.User(), shared.mail, time.Now)
 	jobStore, now := deps.Store.Job(), time.Now
+	// A nil service must reach the handler as a nil interface, which it refuses.
+	var auditExports jobs.AuditExportBuilder
+	if administrations != nil {
+		auditExports = administrations
+	}
 	// The one list of every enabled job.
 	registrations := []job.Registration{
 		jobs.NewDefaultProfilePicture(users),
@@ -236,6 +245,8 @@ func buildApplicationJobDefinitions(
 		jobs.NewExamSittingLifecycleRecovery(exams.sittings, jobStore, now),
 		jobs.NewExamExportBuild(exams.exports),
 		jobs.NewExamExportCleanup(deps.Store.ExamExport(), deps.FileContent, jobStore, now),
+		jobs.NewAuditExportBuild(auditExports),
+		jobs.NewAuditExportCleanup(deps.Store.AuditExport(), deps.FileContent, jobStore, now),
 		jobs.NewDomainEventDispatch(deps.Store.DomainEvent(), domainEvents),
 		jobs.NewRetentionExpiry(deps.Store.Retention(), retentionJobs.ExpiryAudit, jobStore, now),
 		jobs.NewRetentionReconcile(deps.Store.Retention(), retentionJobs.Audit, jobStore, now),
@@ -261,6 +272,12 @@ func buildApplicationJobDefinitions(
 
 	periodicTasks := []job.PeriodicTask{jobs.NewExamAttemptExpiryTask(exams.attempts)}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
+	if shared.realtime != nil && deps.Store.RoleBinding() != nil {
+		periodicTasks = append(periodicTasks, shared.realtime.NewRoleBindingExpiryTask(deps.Store.RoleBinding()))
+	}
+	if administrations != nil && deps.Store.Retention() != nil {
+		periodicTasks = append(periodicTasks, administrations.RetentionHoldReviewTask())
+	}
 	periodicTasks = append(periodicTasks, jobs.NewSittingMailReconciliationTask(deps.Store.ExamSitting(), exams.sittingMailPreparation))
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil {
 		periodicTasks = append(periodicTasks, job.PeriodicTask{
@@ -281,10 +298,13 @@ func buildApplicationJobDefinitions(
 
 // administrationCountsDependencies leaves out the counts of services a
 // reduced test graph lacks.
-func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime jobRuntime) administration.CountsDependencies {
+func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime jobRuntime, identities *identity.Service) administration.CountsDependencies {
 	deps := administration.CountsDependencies{
 		PendingInvitations:    onboardingPorts.CountPendingInvitations,
 		OpenOnboardingImports: onboardingPorts.CountOpenImports,
+	}
+	if identities != nil {
+		deps.OpenSittings = identities.CountOpenSittings
 	}
 	if runtime.operations != nil {
 		deps.RecentJobFailures = runtime.operations.CountRecentJobFailures
@@ -311,4 +331,13 @@ func domainEventSubscriptions(deps Dependencies) []events.Subscription {
 		subscriptions[index] = events.Subscription{Key: "attempt_environment:" + string(topic), Topic: topic, Handle: facts.HandleEvent}
 	}
 	return subscriptions
+}
+
+// mailDeliveryChanges announces delivery state changes to Institution mail
+// viewers; without an Institution store there is no one to tell.
+func mailDeliveryChanges(deps Dependencies, shared sharedMechanics) jobs.MailDeliveryChanges {
+	if deps.Store.Institution() == nil {
+		return nil
+	}
+	return realtime.NewJobChangePublisher(shared.realtime, deps.Store.Institution())
 }

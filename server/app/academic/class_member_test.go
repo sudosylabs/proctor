@@ -139,16 +139,14 @@ func TestClassMemberEnrollUsesDestinationPeriodAndAtomicStore(t *testing.T) {
 	// begins before the durable write. The first get-class resolves the
 	// Class's scope for the decision.
 	require.Equal(t, []string{"get-class", "grants", "decision:class.members.manage:success", "get-class", "list-active", "get-user", "render-mail", "audit-begin:class.members.manage", "store-enroll"}, events)
-	candidateEvent, err := realtime.NewCandidateExamActivityChangedEvent(model.UserID(userID))
-	require.NoError(t, err)
 	boardEvent, err := realtime.NewManagerSittingBoardChangedEvent(sitting.ExamID, sitting.SittingID)
 	require.NoError(t, err)
-	// Contract: the enrolled candidate is told first that their Exam activity
-	// and current-user context changed, then the managers of each Sitting of
-	// the Class are told to refresh their board; nothing is reported.
+	// The commit invalidates the candidate's socket permissions before
+	// viewers receive the Class and Sitting board changes.
 	require.Equal(t, []realtimetest.Call{
-		{Method: realtimetest.Publish, Event: candidateEvent},
-		{Method: realtimetest.InvalidateCurrentUserContext, UserID: model.UserID(userID)},
+		{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)},
+		userChangedCall(t, model.UserID(userID)),
+		classChangedCall(t, model.ClassID(classID), world.unitID),
 		{Method: realtimetest.Publish, Event: boardEvent},
 	}, publisher.Calls())
 	require.Equal(t, []model.ClassID{model.ClassID(classID)}, sittings.listed)

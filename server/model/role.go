@@ -40,6 +40,9 @@ type Role struct {
 	Description string
 	Permissions []string
 	BuiltIn     bool
+	// UpdatedByUserID is who last created, changed or archived a custom
+	// role; it is empty for a built-in role.
+	UpdatedByUserID UserID
 }
 
 // RolePatch holds the mutable fields of a custom role. Names are stable IDs,

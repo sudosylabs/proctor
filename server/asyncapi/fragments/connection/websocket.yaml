@@ -27,6 +27,8 @@ channels:
         $ref: '#/components/messages/user_profile_picture_changed'
       access_policy_changed:
         $ref: '#/components/messages/access_policy_changed'
+      desktop_compatibility_policy.changed:
+        $ref: '#/components/messages/desktop_compatibility_policy.changed'
       plugin_settings_changed:
         $ref: '#/components/messages/plugin_settings_changed'
       job.changed:
@@ -37,6 +39,20 @@ channels:
         $ref: '#/components/messages/onboarding_import.changed_for_creator'
       invitation.changed:
         $ref: '#/components/messages/invitation.changed'
+      user.changed:
+        $ref: '#/components/messages/user.changed'
+      class.changed:
+        $ref: '#/components/messages/class.changed'
+      academic_period.changed:
+        $ref: '#/components/messages/academic_period.changed'
+      role.changed:
+        $ref: '#/components/messages/role.changed'
+      role_binding.changed:
+        $ref: '#/components/messages/role_binding.changed'
+      retention.changed:
+        $ref: '#/components/messages/retention.changed'
+      mail_delivery.changed:
+        $ref: '#/components/messages/mail_delivery.changed'
       academic_unit_created:
         $ref: '#/components/messages/academic_unit_created'
       academic_unit_updated:
@@ -45,6 +61,8 @@ channels:
         $ref: '#/components/messages/academic_unit_archived'
       exam_created:
         $ref: '#/components/messages/exam_created'
+      exam.counts.changed:
+        $ref: '#/components/messages/exam.counts.changed'
       exam_draft_updated:
         $ref: '#/components/messages/exam_draft_updated'
       exam_starter_workspace_changed:
@@ -73,6 +91,12 @@ channels:
         $ref: '#/components/messages/exam_sitting_content_corrected_for_candidate'
       manager.sitting_board.changed:
         $ref: '#/components/messages/manager.sitting_board.changed'
+      exam_sitting.submissions.changed:
+        $ref: '#/components/messages/exam_sitting.submissions.changed'
+      exam_attempt.screen_clip.changed:
+        $ref: '#/components/messages/exam_attempt.screen_clip.changed'
+      exam_attempt.evidence.changed:
+        $ref: '#/components/messages/exam_attempt.evidence.changed'
       candidate.exam_activity.changed:
         $ref: '#/components/messages/candidate.exam_activity.changed'
       exam_attempt_connection_opened:
@@ -193,15 +217,24 @@ operations:
       - $ref: '#/channels/websocket/messages/user_settings_changed'
       - $ref: '#/channels/websocket/messages/user_profile_picture_changed'
       - $ref: '#/channels/websocket/messages/access_policy_changed'
+      - $ref: '#/channels/websocket/messages/desktop_compatibility_policy.changed'
       - $ref: '#/channels/websocket/messages/plugin_settings_changed'
       - $ref: '#/channels/websocket/messages/job.changed'
       - $ref: '#/channels/websocket/messages/onboarding_import.changed'
       - $ref: '#/channels/websocket/messages/onboarding_import.changed_for_creator'
       - $ref: '#/channels/websocket/messages/invitation.changed'
+      - $ref: '#/channels/websocket/messages/user.changed'
+      - $ref: '#/channels/websocket/messages/class.changed'
+      - $ref: '#/channels/websocket/messages/academic_period.changed'
+      - $ref: '#/channels/websocket/messages/role.changed'
+      - $ref: '#/channels/websocket/messages/role_binding.changed'
+      - $ref: '#/channels/websocket/messages/retention.changed'
+      - $ref: '#/channels/websocket/messages/mail_delivery.changed'
       - $ref: '#/channels/websocket/messages/academic_unit_created'
       - $ref: '#/channels/websocket/messages/academic_unit_updated'
       - $ref: '#/channels/websocket/messages/academic_unit_archived'
       - $ref: '#/channels/websocket/messages/exam_created'
+      - $ref: '#/channels/websocket/messages/exam.counts.changed'
       - $ref: '#/channels/websocket/messages/exam_draft_updated'
       - $ref: '#/channels/websocket/messages/exam_starter_workspace_changed'
       - $ref: '#/channels/websocket/messages/exam_archived'
@@ -216,6 +249,9 @@ operations:
       - $ref: '#/channels/websocket/messages/exam_sitting_content_corrected'
       - $ref: '#/channels/websocket/messages/exam_sitting_content_corrected_for_candidate'
       - $ref: '#/channels/websocket/messages/manager.sitting_board.changed'
+      - $ref: '#/channels/websocket/messages/exam_sitting.submissions.changed'
+      - $ref: '#/channels/websocket/messages/exam_attempt.screen_clip.changed'
+      - $ref: '#/channels/websocket/messages/exam_attempt.evidence.changed'
       - $ref: '#/channels/websocket/messages/candidate.exam_activity.changed'
       - $ref: '#/channels/websocket/messages/exam_attempt_connection_opened'
       - $ref: '#/channels/websocket/messages/exam_attempt_connection_closed'
@@ -279,6 +315,7 @@ operations:
       - exam.attempt.already_connected
       - exam.attempt.unavailable
       - exam.attempt.sitting_not_open
+      - exam.attempt.join_closed
       - exam.attempt.state_conflict
       - exam.delivery.metadata_capacity
       - exam.security.attempt_not_ready

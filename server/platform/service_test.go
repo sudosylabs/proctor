@@ -415,6 +415,7 @@ func (testStore) ExamAuthoring() store.ExamAuthoringStore               { return
 func (testStore) ExamCorrection() store.ExamCorrectionStore             { return nil }
 func (testStore) ExamRecords() store.ExamRecordsStore                   { return nil }
 func (testStore) ExamExport() store.ExamExportStore                     { return nil }
+func (testStore) AuditExport() store.AuditExportStore                   { return nil }
 func (testStore) ExamAttempt() store.ExamAttemptStore                   { return nil }
 func (testStore) ExamFocusLoss() store.ExamFocusLossStore               { return nil }
 func (testStore) SecurityPreflight() store.SecurityPreflightStore       { return nil }

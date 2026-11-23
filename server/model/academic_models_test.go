@@ -97,7 +97,7 @@ func TestProgrammeAndProgrammeLevelTypedLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	programmeID, err := ParseProgrammeID(NewID())
 	require.NoError(t, err)
-	programme := &Programme{ID: programmeID, CreatedAt: at, UpdatedAt: at, Revision: 1,
+	programme := &Programme{ID: programmeID, CreatedAt: at, UpdatedAt: at, Revision: 1, Kind: ProgrammeKindOther,
 		AcademicUnitID: unitID, Name: "computer-science", DisplayName: "Bachelor of Computer Science"}
 	require.NoError(t, programme.Validate())
 	audit := programme.Auditable()

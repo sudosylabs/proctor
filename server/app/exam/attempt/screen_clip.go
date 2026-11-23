@@ -116,7 +116,8 @@ func (s *Service) RequestScreenClip(
 		return RequestScreenClipResult{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
 	if !stored.Replayed {
-		s.publishScreenClipsRequested(ctx, stored.SittingID, stored.Clip.AttemptID, stored.CandidateUserID, stored.Clip.RequestedAt)
+		s.publishScreenClipsRequested(ctx, command.ExamID, stored.SittingID, stored.Clip.AttemptID, stored.CandidateUserID, stored.Clip.RequestedAt)
+		s.publishScreenClipChanged(ctx, stored.ExamID, stored.SittingID, stored.Clip.AttemptID, stored.Clip.ID)
 	}
 	return RequestScreenClipResult{Clip: stored.Clip, Replayed: stored.Replayed}, nil
 }
@@ -125,18 +126,49 @@ func (s *Service) RequestScreenClip(
 // hint delays the request, and a hint with nothing pending is harmless.
 func (s *Service) publishScreenClipsRequested(
 	ctx context.Context,
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	at time.Time,
 ) {
-	event, err := realtime.NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+	event, err := realtime.NewCandidateScreenClipsRequestedEvent(examID, sittingID, attemptID, candidateID, at)
 	if err == nil {
 		err = s.publisher.Publish(ctx, event)
 	}
 	if err != nil {
 		s.publisher.Report(ctx, "exam_attempt_screen_clips_requested", err)
 	}
+}
+
+// publishScreenClipChanged tells the sitting's managers to refetch the
+// attempt's clips. Like every hint, a lost one only delays the refresh.
+func (s *Service) publishScreenClipChanged(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	clipID model.ScreenClipID,
+) {
+	event, err := realtime.NewScreenClipChangedEvent(examID, sittingID, attemptID, clipID)
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "exam_attempt.screen_clip.changed", err)
+	}
+}
+
+// publishCandidateScreenClipChanged follows a candidate's clip transition,
+// which names only the attempt, so it first reads the attempt's sitting. A
+// repeated transition changes nothing and its hint is harmless.
+func (s *Service) publishCandidateScreenClipChanged(ctx context.Context, clip store.ExamAttemptScreenClipView) {
+	target, err := s.attempts.ResolveAttemptSitting(ctx, clip.AttemptID)
+	if err != nil {
+		s.publisher.Report(ctx, "exam_attempt.screen_clip.changed", err)
+		return
+	}
+	s.publishScreenClipChanged(ctx, target.ExamID, target.SittingID, clip.AttemptID, clip.ID)
 }
 
 // PendingScreenClips returns the requests Desktop has not taken yet.
@@ -177,6 +209,7 @@ func (s *Service) TakeScreenClip(
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, storeError(storeErrors, err)
 	}
+	s.publishCandidateScreenClipChanged(ctx, *clip)
 	return *clip, nil
 }
 

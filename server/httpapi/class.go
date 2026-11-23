@@ -11,7 +11,9 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -37,6 +39,21 @@ type classListItemResponse struct {
 	classResponse
 	StudentCount             *int  `json:"student_count,omitempty"`
 	StudentCountIsLowerBound *bool `json:"student_count_is_lower_bound,omitempty"`
+	classTeachersResponse
+}
+
+// classDetailResponse is one class with its teachers, present only for a
+// caller who may view the class's members.
+type classDetailResponse struct {
+	classResponse
+	classTeachersResponse
+}
+
+// classTeachersResponse names a class's first teachers and counts the rest.
+// Both members are absent together.
+type classTeachersResponse struct {
+	Teachers     *[]personRefResponse `json:"teachers,omitempty"`
+	TeachersMore *int                 `json:"teachers_more,omitempty"`
 }
 
 type createClassRequest struct {
@@ -55,11 +72,12 @@ type updateClassRequest struct {
 }
 
 type classHandlers struct {
-	app *academic.Service
+	app    *academic.Service
+	people *people.Resolver
 }
 
-func classResource(app *academic.Service) route.Resource {
-	h := classHandlers{app: app}
+func classResource(app *academic.Service, resolver *people.Resolver) route.Resource {
+	h := classHandlers{app: app, people: resolver}
 	return route.NewResource(
 		"classes",
 		route.Endpoint{
@@ -140,19 +158,24 @@ func (h classHandlers) search(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
+	periodID, err := classPeriodFilter(request)
+	if err != nil {
+		return route.Result{}, err
+	}
 	page, err := h.app.SearchClasses(
 		request.Context,
 		request.Invocation(),
 		academic.SearchClassesQuery{
-			AcademicUnitID: academicUnitID,
-			Query:          request.HTTP.URL.Query().Get("q"),
-			NameQuery:      pageQuery,
+			AcademicUnitID:   academicUnitID,
+			AcademicPeriodID: periodID,
+			Query:            request.HTTP.URL.Query().Get("q"),
+			NameQuery:        pageQuery,
 		},
 	)
 	if err != nil {
 		return route.Result{}, err
 	}
-	return classListResult(page, pageQuery)
+	return h.classListResult(request, page, pageQuery)
 }
 
 func (h classHandlers) list(request route.Request) (route.Result, error) {
@@ -164,26 +187,54 @@ func (h classHandlers) list(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
+	periodID, err := classPeriodFilter(request)
+	if err != nil {
+		return route.Result{}, err
+	}
 	page, err := h.app.ListClasses(
 		request.Context,
 		request.Invocation(),
-		academic.ListClassesQuery{ProgrammeLevelID: programmeLevelID, NameQuery: pageQuery},
+		academic.ListClassesQuery{ProgrammeLevelID: programmeLevelID, AcademicPeriodID: periodID, NameQuery: pageQuery},
 	)
 	if err != nil {
 		return route.Result{}, err
 	}
-	return classListResult(page, pageQuery)
+	return h.classListResult(request, page, pageQuery)
+}
+
+// classPeriodFilter reads the optional single academic_period_id filter. A
+// cursor doesn't record it, so a caller repeats it on every page.
+func classPeriodFilter(request route.Request) (model.AcademicPeriodID, error) {
+	raw, present, err := singleQueryValue(request.HTTP.URL.Query(), "academic_period_id")
+	if err != nil || !present {
+		return "", err
+	}
+	id, parseErr := model.ParseAcademicPeriodID(raw)
+	if parseErr != nil {
+		return "", apperror.Invalid("request.invalid", "academic_period_id")
+	}
+	return id, nil
 }
 
 // classListResult presents one name-ordered class page with its first-page
-// total and the student count of each class the application counted.
-func classListResult(page academic.ClassPage, query paging.NameQuery) (route.Result, error) {
+// total and the student count and teachers of each class the application
+// counted. The page's teachers are named in one read.
+func (h classHandlers) classListResult(request route.Request, page academic.ClassPage, query paging.NameQuery) (route.Result, error) {
+	var teacherIDs []model.UserID
+	for _, teachers := range page.Teachers {
+		teacherIDs = append(teacherIDs, teachers.UserIDs...)
+	}
+	refs, err := namePeople(request, h.people, teacherIDs...)
+	if err != nil {
+		return route.Result{}, err
+	}
 	present := func(class *model.Class) classListItemResponse {
 		item := classListItemResponse{classResponse: classResponseFromModel(class)}
 		if count, counted := page.StudentCounts[class.ID]; counted {
 			lowerBound := count >= store.MaximumListCount
 			item.StudentCount, item.StudentCountIsLowerBound = &count, &lowerBound
 		}
+		item.classTeachersResponse = classTeachers(refs, page.Teachers[class.ID])
 		return item
 	}
 	return academicNameCountedResult(page.Counted, query, present, func(class *model.Class) (string, string) {
@@ -222,7 +273,7 @@ func (h classHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	class, err := h.app.GetClass(
+	detail, err := h.app.GetClass(
 		request.Context,
 		request.Invocation(),
 		id,
@@ -230,7 +281,33 @@ func (h classHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, classResponseFromModel(class)), nil
+	var teacherIDs []model.UserID
+	if detail.Teachers != nil {
+		teacherIDs = detail.Teachers.UserIDs
+	}
+	refs, err := namePeople(request, h.people, teacherIDs...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, classDetailResponse{
+		classResponse:         classResponseFromModel(detail.Class),
+		classTeachersResponse: classTeachers(refs, detail.Teachers),
+	}), nil
+}
+
+// classTeachers is empty when the caller may not see the class's teachers.
+func classTeachers(refs people.Refs, teachers *store.ClassTeachers) classTeachersResponse {
+	if teachers == nil {
+		return classTeachersResponse{}
+	}
+	named := make([]personRefResponse, 0, len(teachers.UserIDs))
+	for _, id := range teachers.UserIDs {
+		if ref := personRef(refs, id); ref != nil {
+			named = append(named, *ref)
+		}
+	}
+	more := teachers.More
+	return classTeachersResponse{Teachers: &named, TeachersMore: &more}
 }
 
 func (h classHandlers) patch(request route.Request) (route.Result, error) {

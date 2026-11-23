@@ -104,24 +104,27 @@ func TestOnboardingImportChangedEventRefusesInvalidInput(t *testing.T) {
 	}
 }
 
-func TestInvitationChangedEventIsAddressedToTheInviter(t *testing.T) {
+func TestInvitationChangedEventAddressesInvitationViewers(t *testing.T) {
 	t.Parallel()
-
-	inviterID, invitationID := model.NewUserID(), model.NewInvitationID()
-	event, err := NewInvitationChangedEvent(inviterID, invitationID, model.InvitationAccepted)
+	invitationID, classID := model.NewInvitationID(), model.NewClassID()
+	audience := model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewAcademicUnitID().String()}
+	event, err := NewInvitationChangedEvent(invitationID, model.InvitationAccepted, model.RoleScopeClass, classID.String(), audience)
 	require.NoError(t, err)
 	require.Equal(t, "invitation.changed", event.Name)
-	require.Equal(t, inviterID, event.UserID)
-	require.Empty(t, event.Action)
-	require.Equal(t, model.Resource{}, event.Resource)
-	require.JSONEq(t, `{"schema_version":1,"invitation_id":"`+invitationID.String()+`","state":"accepted"}`, string(event.Data))
+	require.Equal(t, model.ActionInvitationView, event.Action)
+	require.Equal(t, audience, event.Resource)
+	require.Empty(t, event.UserID)
+	require.JSONEq(t, `{"schema_version":1,"invitation_id":"`+invitationID.String()+`","state":"accepted","scope_type":"class","scope_id":"`+classID.String()+`"}`, string(event.Data))
+	require.NoError(t, event.ValidateForPublish())
 
-	_, err = NewInvitationChangedEvent("", invitationID, model.InvitationAccepted)
-	require.Error(t, err, "missing inviter")
-	_, err = NewInvitationChangedEvent(inviterID, "", model.InvitationAccepted)
-	require.Error(t, err, "missing Invitation")
-	_, err = NewInvitationChangedEvent(inviterID, invitationID, "used")
-	require.Error(t, err, "unknown state")
+	_, err = NewInvitationChangedEvent("", model.InvitationAccepted, model.RoleScopeClass, classID.String(), audience)
+	require.Error(t, err)
+	_, err = NewInvitationChangedEvent(invitationID, "used", model.RoleScopeClass, classID.String(), audience)
+	require.Error(t, err)
+	_, err = NewInvitationChangedEvent(invitationID, model.InvitationAccepted, "", classID.String(), audience)
+	require.Error(t, err)
+	_, err = NewInvitationChangedEvent(invitationID, model.InvitationAccepted, model.RoleScopeClass, classID.String(), model.Resource{})
+	require.Error(t, err)
 }
 
 func TestCurrentUserSessionsChangedEventIsAddressedToTheUser(t *testing.T) {

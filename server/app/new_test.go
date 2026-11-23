@@ -155,6 +155,7 @@ func TestJobRecipePreservesLifecycleOnlyGraphs(t *testing.T) {
 		examServices{},
 		nil,
 		nil,
+		nil,
 		onboarding.Ports{},
 		nil,
 	)
@@ -197,8 +198,9 @@ func (constructionCatalogWithJobs) Retention() store.RetentionStore { return nil
 func (constructionCatalogWithJobs) ExamExport() store.ExamExportStore {
 	return constructionExamExportStoreStub{}
 }
-func (c constructionCatalogWithJobs) User() store.UserStore { return c.users }
-func (c constructionCatalogWithJobs) File() store.FileStore { return c.files }
+func (constructionCatalogWithJobs) AuditExport() store.AuditExportStore { return nil }
+func (c constructionCatalogWithJobs) User() store.UserStore             { return c.users }
+func (c constructionCatalogWithJobs) File() store.FileStore             { return c.files }
 func (constructionCatalogWithJobs) ExamStarterWorkspace() store.ExamStarterWorkspaceStore {
 	return nil
 }
@@ -283,6 +285,7 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 		control.Authorizer,
 		examServices{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
 		nil,
+		nil,
 		defaultJobs,
 		onboarding.Ports{},
 		wake,
@@ -353,6 +356,7 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 		},
 		sharedMechanics{},
 		examServices{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
+		nil,
 		nil,
 		jobs.NewDefaultProfilePictureJobs(jobs.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
 		onboarding.Ports{ImportJobs: constructionOnboardingImportJobsStub{}},

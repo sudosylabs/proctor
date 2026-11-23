@@ -72,7 +72,8 @@ func testCommandAuthorityFollowsActionInheritance(t *testing.T, ss store.Store) 
 			Actions:          []model.Action{model.ActionOnboardingBatchManage, model.ActionRoleBindingManage},
 			DelegatedActions: delegated}
 		_, err = ss.RoleBinding().Save(ctx, &store.RoleBindingCreation{
-			Binding:               &model.RoleBinding{UserID: grantee.ID, RoleID: role.ID, ScopeType: scopeType, ScopeID: scopeID, StartsAt: at},
+			Binding: &model.RoleBinding{UserID: grantee.ID, RoleID: role.ID, ScopeType: scopeType, ScopeID: scopeID, StartsAt: at,
+				GrantedByUserID: actor.ID, GrantedVia: model.RoleBindingGrantedManually},
 			ExpectedRoleUpdatedAt: role.UpdatedAt, ExpectedRolePermissions: append([]string(nil), role.Permissions...),
 			AuditEventID: audit.ID, AuditAt: at, Command: command,
 		})

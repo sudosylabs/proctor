@@ -340,6 +340,31 @@ components:
       type: string
       pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
       description: A Proctor identifier, 26 lowercase z-base-32 characters. Compare it as an exact string.
+    PersonRef:
+      description: >-
+        A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the
+        record gets the person's display name when one is set. A username can fill in for an unset display name
+        only when the reader can see that User in the directory. The same visibility controls the username and
+        profile picture fields.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+          description: The User's ID. It is kept after the account is removed.
+        display_name:
+          type: string
+          maxLength: 512
+          description: The person's presented name, if the account has a visible one.
+        username:
+          type: string
+          maxLength: 64
+          description: The username. Omitted unless the reader can see this User in the directory.
+        profile_picture_url:
+          type: string
+          description: Same-origin path of the User's profile picture. Omitted unless the reader can see this User.
     ExamResourceMediaType:
       type: string
       description: The media type of an Exam Resource file.
@@ -520,6 +545,20 @@ components:
           type: string
           format: date-time
           description: Time the account was disabled. Omitted while it is enabled.
+        disabled_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Who disabled the account, for the disable in force. Present only while the account is disabled, when the
+            disable named a person, and only for readers of the full profile: the User themselves or an
+            institution-wide user.view holder. `GET /users/{user_id}` answers only for an active account, so a
+            disabled account is read through the User directory.
+        disabled_reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: >-
+            The reason given when the account was disabled. Present with the same rule as `disabled_by`, and only
+            when a reason was given.
         profile_picture_url:
           type: string
           description: >-
@@ -533,6 +572,8 @@ components:
             `profile_picture_kind` for that.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
+        mfa:
+          $ref: '#/components/schemas/UserMFAResponse'
     ProfilePictureKind:
       type: string
       enum:
@@ -588,6 +629,9 @@ components:
         built_in:
           type: boolean
           description: True for a Role that ships with Proctor. Built-in Roles can't be edited or deleted.
+        updated_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who last created, changed or archived this custom Role. Omitted for a built-in Role.
         holders:
           $ref: '#/components/schemas/RoleHolders'
           description: Who holds the Role now. Present only if you hold role_binding.view somewhere.
@@ -632,6 +676,52 @@ components:
         scopes_is_lower_bound:
           type: boolean
           description: True when `scopes` may be higher than reported, because counting stopped at 10,000 Bindings.
+    RoleRef:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          maxLength: 512
+          description: The Role's display name, localized for the protected System Administrator role.
+    ScopeRef:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [institution, academic_unit, class]
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          maxLength: 512
+          description: The scope's display name, if available.
+    ExamRef:
+      type: object
+      additionalProperties: false
+      required: [id, display_name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          description: The Exam title.
+    ClassRef:
+      type: object
+      additionalProperties: false
+      required: [id, display_name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          maxLength: 512
+          description: The Class's display name.
     RoleBindingResponse:
       description: >-
         A grant of one Role to one User at one scope: the Institution, an Academic Unit or a Class. It is in effect
@@ -647,6 +737,9 @@ components:
         - scope_type
         - scope_id
         - start_at
+        - role
+        - scope
+        - granted_via
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -682,6 +775,28 @@ components:
           type: string
           format: date-time
           description: Time the grant stops. Omitted for a grant with no end.
+        role:
+          $ref: '#/components/schemas/RoleRef'
+          description: The Role granted, with its display name.
+        scope:
+          $ref: '#/components/schemas/ScopeRef'
+          description: Where the grant applies.
+        granted_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is
+            the importer for an imported invitation. For a direct CSV grant, this is the importer.
+            Omitted only for the grant made at installation.
+        granted_via:
+          type: string
+          enum:
+            - manual
+            - invitation
+            - import
+            - bootstrap
+          description: >-
+            How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`),
+            through a CSV import (`import`), or at installation (`bootstrap`).
     JobStatus:
       type: string
       description: >-
@@ -822,8 +937,8 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        One row of an import: where it sits, what it does and how it ended. It never repeats the email address or
-        names the row holds.
+        One row of an import: where it sits, what it does, how it ended and who it is about. It never repeats the
+        email address the row holds: `person` shows only a masked form of it.
       required:
         - row
         - reference
@@ -896,6 +1011,28 @@ components:
         resource_id:
           $ref: '#/components/schemas/ID'
           description: The ID of the record the row created or changed, when the operation reports one.
+        person:
+          $ref: '#/components/schemas/OnboardingImportPerson'
+        user:
+          $ref: '#/components/schemas/PersonRef'
+          description: The account the row was matched to. Omitted until the row is matched to one.
+    OnboardingImportPerson:
+      type: object
+      additionalProperties: false
+      description: >-
+        The person as the file named them, read from the row's own values. Omitted when the row holds no name or
+        address, as for a student progression.
+      properties:
+        display_name:
+          type: string
+          maxLength: 513
+          description: The file's display name, or its first and last names. Omitted when the file gave none.
+        email_masked:
+          type: string
+          maxLength: 256
+          description: >-
+            The file's email address masked the way mail deliveries mask a recipient, such as `a***@example.edu`.
+            Omitted when the row holds no address.
     OnboardingImportResponse:
       type: object
       additionalProperties: false
@@ -1081,6 +1218,9 @@ components:
           description: >-
             Base name of the uploaded file as the uploader gave it, omitted when none was given and for student
             progressions.
+        created_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who uploaded the import or started the student progression.
     ExternalAuthenticationProviderResponse:
       type: object
       additionalProperties: false
@@ -1131,6 +1271,12 @@ components:
         - assistant_profile.name_in_use
         - assistant_profile.not_found
         - assistant_profile.unavailable
+        - audit.export.expired
+        - audit.export.limit
+        - audit.export.not_found
+        - audit.export.not_ready
+        - audit.export.policy_unconfigured
+        - audit.export.unavailable
         - audit.internal
         - audit.query.invalid
         - audit.unavailable
@@ -1248,6 +1394,7 @@ components:
         - exam.attempt.environment_unavailable
         - exam.attempt.focus_loss_conflict
         - exam.attempt.invalid
+        - exam.attempt.join_closed
         - exam.attempt.management_authority_conflict
         - exam.attempt.not_found
         - exam.attempt.preview_connection_ended
@@ -1307,6 +1454,7 @@ components:
         - exam.integrity_review.incomplete
         - exam.integrity_review.invalid
         - exam.integrity_review.not_found
+        - exam.integrity_review.result_released
         - exam.integrity_review.revision_conflict
         - exam.integrity_review.state_conflict
         - exam.integrity_review.too_large
@@ -1608,6 +1756,7 @@ components:
         - academic_unit
         - class
         - exam
+        - exam_attempt
         - exam_sitting
         - institution
         - mail_delivery

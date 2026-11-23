@@ -47,7 +47,7 @@ func TestInitialDesktopCompatibilityPolicyIsValid(t *testing.T) {
 	require.NoError(t, policy.Validate())
 	require.Equal(t, int64(1), policy.Revision)
 	require.Empty(t, policy.MinimumDesktopRelease)
-	require.Empty(t, policy.RevokedDesktopBuildIDs)
+	require.Empty(t, policy.RevokedDesktopBuilds)
 	require.Empty(t, policy.AdministratorMessage)
 	require.Equal(t, DesktopAvailabilityReady, policy.Availability)
 	require.False(t, policy.RetryAt.Valid)
@@ -58,9 +58,9 @@ func TestDesktopCompatibilityPolicyReplacementCanonicalizesEmptyBuildSet(t *test
 	at := time.Unix(100, 0)
 	policy := NewInitialDesktopCompatibilityPolicy(NewInstitutionID(), at)
 	settings := DesktopCompatibilityPolicySettings{MinimumDesktopRelease: "1.2.0", Availability: DesktopAvailabilityReady}
-	require.NoError(t, policy.Replace(1, settings, at.Add(time.Second)))
-	require.NotNil(t, policy.RevokedDesktopBuildIDs, "empty revoked build set must remain an array for persistence and HTTP")
-	require.Empty(t, policy.RevokedDesktopBuildIDs, "empty revoked build set must remain an array for persistence and HTTP")
+	require.NoError(t, policy.Replace(1, settings, NewUserID(), at.Add(time.Second)))
+	require.NotNil(t, policy.RevokedDesktopBuilds, "empty revoked build set must remain an array for persistence and HTTP")
+	require.Empty(t, policy.RevokedDesktopBuilds, "empty revoked build set must remain an array for persistence and HTTP")
 }
 
 func TestDesktopCompatibilityPolicySettingsRejectInvalidValues(t *testing.T) {
@@ -78,10 +78,10 @@ func TestDesktopCompatibilityPolicySettingsRejectInvalidValues(t *testing.T) {
 		}},
 		{name: "noncanonical release", settings: DesktopCompatibilityPolicySettings{MinimumDesktopRelease: "v1.2.3"}},
 		{name: "invalid release", settings: DesktopCompatibilityPolicySettings{MinimumDesktopRelease: "1.2"}},
-		{name: "invalid build id", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuildIDs: []string{"build/id"}}},
-		{name: "duplicate build id", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuildIDs: []string{"build-1", "build-1"}}},
-		{name: "unordered build ids", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuildIDs: []string{"build-2", "build-1"}}},
-		{name: "too many build ids", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuildIDs: make([]string, DesktopCompatibilityPolicyRevokedBuildMaxCount+1)}},
+		{name: "invalid build id", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuilds: []DesktopBuildRevocationRequest{{BuildID: "build/id", Reason: "Revoked"}}}},
+		{name: "duplicate build id", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuilds: []DesktopBuildRevocationRequest{{BuildID: "build-1", Reason: "Revoked"}, {BuildID: "build-1", Reason: "Revoked"}}}},
+		{name: "unordered build ids", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuilds: []DesktopBuildRevocationRequest{{BuildID: "build-2", Reason: "Revoked"}, {BuildID: "build-1", Reason: "Revoked"}}}},
+		{name: "too many build ids", settings: DesktopCompatibilityPolicySettings{RevokedDesktopBuilds: make([]DesktopBuildRevocationRequest, DesktopCompatibilityPolicyRevokedBuildMaxCount+1)}},
 		{name: "untrimmed message", settings: DesktopCompatibilityPolicySettings{AdministratorMessage: " maintenance"}},
 		{name: "control in message", settings: DesktopCompatibilityPolicySettings{AdministratorMessage: "maintenance\nnow"}},
 		{name: "too many message characters", settings: DesktopCompatibilityPolicySettings{AdministratorMessage: strings.Repeat("a", DesktopCompatibilityPolicyMessageMaxRunes+1)}},
@@ -105,22 +105,22 @@ func TestDesktopCompatibilityPolicyReplaceIsRevisionFencedAndDefensive(t *testin
 
 	policy := NewInitialDesktopCompatibilityPolicy(NewInstitutionID(), time.UnixMilli(100))
 	settings := DesktopCompatibilityPolicySettings{
-		MinimumDesktopRelease:  "1.2.3",
-		RevokedDesktopBuildIDs: []string{"build-1", "build-2"},
-		AdministratorMessage:   "Update Proctor Desktop before your next exam.",
-		Availability:           DesktopAvailabilityMaintenance,
-		RetryAt:                OptionalTimeFrom(time.UnixMilli(500)),
+		MinimumDesktopRelease: "1.2.3",
+		RevokedDesktopBuilds:  []DesktopBuildRevocationRequest{{BuildID: "build-1", Reason: "Revoked"}, {BuildID: "build-2", Reason: "Revoked"}},
+		AdministratorMessage:  "Update Proctor Desktop before your next exam.",
+		Availability:          DesktopAvailabilityMaintenance,
+		RetryAt:               OptionalTimeFrom(time.UnixMilli(500)),
 	}
-	require.NoError(t, policy.Replace(1, settings, time.UnixMilli(200)))
-	settings.RevokedDesktopBuildIDs[0] = "mutated"
+	require.NoError(t, policy.Replace(1, settings, NewUserID(), time.UnixMilli(200)))
+	settings.RevokedDesktopBuilds[0].BuildID = "mutated"
 	require.Equal(t, int64(2), policy.Revision)
-	require.Equal(t, "build-1", policy.RevokedDesktopBuildIDs[0])
+	require.Equal(t, "build-1", policy.RevokedDesktopBuilds[0].BuildID)
 	require.Equal(t, DesktopAvailabilityMaintenance, policy.Availability)
 	require.True(t, policy.RetryAt.Valid)
-	require.Equal(t, ErrDesktopCompatibilityPolicyRevisionConflict, policy.Replace(1, policy.Settings(), time.UnixMilli(300)))
+	require.Equal(t, ErrDesktopCompatibilityPolicyRevisionConflict, policy.Replace(1, policy.Settings(), NewUserID(), time.UnixMilli(300)))
 	staleRetry := settings
 	staleRetry.RetryAt = OptionalTimeFrom(time.UnixMilli(300))
-	require.Error(t, policy.Replace(policy.Revision, staleRetry, time.UnixMilli(300)), "Replace() accepted a retry time at the policy decision time")
+	require.Error(t, policy.Replace(policy.Revision, staleRetry, NewUserID(), time.UnixMilli(300)), "Replace() accepted a retry time at the policy decision time")
 	malformed := policy.Clone()
 	malformed.RetryAt = OptionalTimeFrom(malformed.UpdatedAt)
 	require.Error(t, malformed.Validate(), "Validate() accepted a nonfuture persisted retry time")

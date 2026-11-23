@@ -66,25 +66,54 @@ func (a DesktopAvailability) IsValid() bool {
 
 // DesktopCompatibilityPolicy is the institution's revisioned policy that can
 // narrow the build catalog embedded in this server release, never widen it.
+// RevokedDesktopBuilds is ordered by build ID.
 type DesktopCompatibilityPolicy struct {
-	InstitutionID          InstitutionID
-	Revision               int64
-	MinimumDesktopRelease  string
-	RevokedDesktopBuildIDs []string
-	AdministratorMessage   string
-	Availability           DesktopAvailability
-	RetryAt                OptionalTime
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	InstitutionID         InstitutionID
+	Revision              int64
+	MinimumDesktopRelease string
+	RevokedDesktopBuilds  []DesktopBuildRevocation
+	AdministratorMessage  string
+	Availability          DesktopAvailability
+	RetryAt               OptionalTime
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+// DesktopBuildRevocation is one revoked build: why, when and by whom. The
+// stamp is the revocation's, so a later edit of other builds keeps it.
+type DesktopBuildRevocation struct {
+	BuildID         string
+	Reason          string
+	RevokedAt       time.Time
+	RevokedByUserID UserID
+}
+
+// DesktopBuildRevocationRequest is one build an administrator asks to revoke.
+type DesktopBuildRevocationRequest struct {
+	BuildID string
+	Reason  string
 }
 
 // DesktopCompatibilityPolicySettings is the whole replaceable policy.
+// RevokedDesktopBuilds is ordered by build ID with no repeats.
 type DesktopCompatibilityPolicySettings struct {
-	MinimumDesktopRelease  string
-	RevokedDesktopBuildIDs []string
-	AdministratorMessage   string
-	Availability           DesktopAvailability
-	RetryAt                OptionalTime
+	MinimumDesktopRelease string
+	RevokedDesktopBuilds  []DesktopBuildRevocationRequest
+	AdministratorMessage  string
+	Availability          DesktopAvailability
+	RetryAt               OptionalTime
+}
+
+// RevokedBuildIDs returns the revoked build IDs, in order.
+func (p *DesktopCompatibilityPolicy) RevokedBuildIDs() []string {
+	if p == nil {
+		return []string{}
+	}
+	ids := make([]string, 0, len(p.RevokedDesktopBuilds))
+	for _, revocation := range p.RevokedDesktopBuilds {
+		ids = append(ids, revocation.BuildID)
+	}
+	return ids
 }
 
 // NewInitialDesktopCompatibilityPolicy returns the policy that narrows nothing,
@@ -92,12 +121,12 @@ type DesktopCompatibilityPolicySettings struct {
 func NewInitialDesktopCompatibilityPolicy(institutionID InstitutionID, at time.Time) *DesktopCompatibilityPolicy {
 	at = TimeUTC(at)
 	return &DesktopCompatibilityPolicy{
-		InstitutionID:          institutionID,
-		Revision:               1,
-		RevokedDesktopBuildIDs: []string{},
-		Availability:           DesktopAvailabilityReady,
-		CreatedAt:              at,
-		UpdatedAt:              at,
+		InstitutionID:        institutionID,
+		Revision:             1,
+		RevokedDesktopBuilds: []DesktopBuildRevocation{},
+		Availability:         DesktopAvailabilityReady,
+		CreatedAt:            at,
+		UpdatedAt:            at,
 	}
 }
 
@@ -112,6 +141,11 @@ func (p *DesktopCompatibilityPolicy) Validate() error {
 		(p.RetryAt.Valid && !p.RetryAt.Time.After(p.UpdatedAt)) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
+	for _, revocation := range p.RevokedDesktopBuilds {
+		if revocation.RevokedAt.IsZero() || revocation.RevokedAt.After(p.UpdatedAt) || !revocation.RevokedByUserID.IsValid() {
+			return errDesktopCompatibilityPolicyInvalid
+		}
+	}
 
 	return p.Settings().Validate()
 }
@@ -120,16 +154,20 @@ func (p *DesktopCompatibilityPolicy) Validate() error {
 func (p *DesktopCompatibilityPolicy) Settings() DesktopCompatibilityPolicySettings {
 	if p == nil {
 		return DesktopCompatibilityPolicySettings{
-			RevokedDesktopBuildIDs: []string{},
-			Availability:           DesktopAvailabilityReady,
+			RevokedDesktopBuilds: []DesktopBuildRevocationRequest{},
+			Availability:         DesktopAvailabilityReady,
 		}
 	}
+	revoked := make([]DesktopBuildRevocationRequest, 0, len(p.RevokedDesktopBuilds))
+	for _, revocation := range p.RevokedDesktopBuilds {
+		revoked = append(revoked, DesktopBuildRevocationRequest{BuildID: revocation.BuildID, Reason: revocation.Reason})
+	}
 	return DesktopCompatibilityPolicySettings{
-		MinimumDesktopRelease:  p.MinimumDesktopRelease,
-		RevokedDesktopBuildIDs: slices.Clone(p.RevokedDesktopBuildIDs),
-		AdministratorMessage:   p.AdministratorMessage,
-		Availability:           p.Availability,
-		RetryAt:                p.RetryAt,
+		MinimumDesktopRelease: p.MinimumDesktopRelease,
+		RevokedDesktopBuilds:  revoked,
+		AdministratorMessage:  p.AdministratorMessage,
+		Availability:          p.Availability,
+		RetryAt:               p.RetryAt,
 	}
 }
 
@@ -145,44 +183,54 @@ func (s DesktopCompatibilityPolicySettings) Validate() error {
 	if s.MinimumDesktopRelease != "" && !IsValidDesktopRelease(s.MinimumDesktopRelease) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
-	if len(s.RevokedDesktopBuildIDs) > DesktopCompatibilityPolicyRevokedBuildMaxCount {
+	if len(s.RevokedDesktopBuilds) > DesktopCompatibilityPolicyRevokedBuildMaxCount {
 		return errDesktopCompatibilityPolicyInvalid
 	}
 
 	previous := ""
-	for _, buildID := range s.RevokedDesktopBuildIDs {
-		if !IsValidDesktopBuildID(buildID) || buildID <= previous {
+	for _, revocation := range s.RevokedDesktopBuilds {
+		if !IsValidDesktopBuildID(revocation.BuildID) || revocation.BuildID <= previous ||
+			revocation.Reason == "" || !validDesktopPolicyText(revocation.Reason) {
 			return errDesktopCompatibilityPolicyInvalid
 		}
 
-		previous = buildID
+		previous = revocation.BuildID
 	}
 
-	message := s.AdministratorMessage
-	if message != strings.TrimSpace(message) ||
-		len(message) > DesktopCompatibilityPolicyMessageMaxBytes ||
-		utf8.RuneCountInString(message) > DesktopCompatibilityPolicyMessageMaxRunes ||
-		!utf8.ValidString(message) {
+	if !validDesktopPolicyText(s.AdministratorMessage) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
-
-	for _, value := range message {
-		if unicode.IsControl(value) {
-			return errDesktopCompatibilityPolicyInvalid
-		}
-	}
-
 	return nil
 }
 
-// Replace applies a complete replacement fenced on the expected revision. An
-// exact no-op keeps the current revision.
+// validDesktopPolicyText bounds the free text an administrator writes into
+// the policy: trimmed, valid UTF-8, without control characters.
+func validDesktopPolicyText(text string) bool {
+	if text != strings.TrimSpace(text) ||
+		len(text) > DesktopCompatibilityPolicyMessageMaxBytes ||
+		utf8.RuneCountInString(text) > DesktopCompatibilityPolicyMessageMaxRunes ||
+		!utf8.ValidString(text) {
+		return false
+	}
+	for _, value := range text {
+		if unicode.IsControl(value) {
+			return false
+		}
+	}
+	return true
+}
+
+// Replace applies a complete replacement by actor fenced on the expected
+// revision. An exact no-op keeps the current revision. A build already revoked
+// for the same reason keeps its stamp; a new revocation, or a new reason, is
+// stamped with actor and at.
 func (p *DesktopCompatibilityPolicy) Replace(
 	expectedRevision int64,
 	settings DesktopCompatibilityPolicySettings,
+	actor UserID,
 	at time.Time,
 ) error {
-	if p == nil || p.Validate() != nil || settings.Validate() != nil || at.IsZero() {
+	if p == nil || p.Validate() != nil || settings.Validate() != nil || at.IsZero() || !actor.IsValid() {
 		return errDesktopCompatibilityPolicyInvalid
 	}
 	if expectedRevision != p.Revision {
@@ -195,7 +243,7 @@ func (p *DesktopCompatibilityPolicy) Replace(
 	}
 
 	if p.MinimumDesktopRelease == settings.MinimumDesktopRelease &&
-		slices.Equal(p.RevokedDesktopBuildIDs, settings.RevokedDesktopBuildIDs) &&
+		slices.Equal(p.Settings().RevokedDesktopBuilds, settings.RevokedDesktopBuilds) &&
 		p.AdministratorMessage == settings.AdministratorMessage &&
 		p.Availability == settings.Availability &&
 		p.RetryAt.Valid == settings.RetryAt.Valid &&
@@ -204,8 +252,19 @@ func (p *DesktopCompatibilityPolicy) Replace(
 	}
 
 	p.MinimumDesktopRelease = settings.MinimumDesktopRelease
+	previous := make(map[string]DesktopBuildRevocation, len(p.RevokedDesktopBuilds))
+	for _, revocation := range p.RevokedDesktopBuilds {
+		previous[revocation.BuildID] = revocation
+	}
 	// An empty set is always stored and sent as an array, never null.
-	p.RevokedDesktopBuildIDs = append([]string{}, settings.RevokedDesktopBuildIDs...)
+	p.RevokedDesktopBuilds = make([]DesktopBuildRevocation, 0, len(settings.RevokedDesktopBuilds))
+	for _, requested := range settings.RevokedDesktopBuilds {
+		revocation, kept := previous[requested.BuildID]
+		if !kept || revocation.Reason != requested.Reason {
+			revocation = DesktopBuildRevocation{BuildID: requested.BuildID, Reason: requested.Reason, RevokedAt: at, RevokedByUserID: actor}
+		}
+		p.RevokedDesktopBuilds = append(p.RevokedDesktopBuilds, revocation)
+	}
 	p.AdministratorMessage = settings.AdministratorMessage
 	p.Availability = settings.Availability
 	p.RetryAt = settings.RetryAt.UTC()
@@ -220,7 +279,7 @@ func (p *DesktopCompatibilityPolicy) Clone() *DesktopCompatibilityPolicy {
 		return nil
 	}
 	clone := *p
-	clone.RevokedDesktopBuildIDs = slices.Clone(p.RevokedDesktopBuildIDs)
+	clone.RevokedDesktopBuilds = slices.Clone(p.RevokedDesktopBuilds)
 	return &clone
 }
 
@@ -234,7 +293,7 @@ func (p *DesktopCompatibilityPolicy) Auditable() map[string]any {
 		"institution_id":            p.InstitutionID.String(),
 		"revision":                  p.Revision,
 		"minimum_desktop_release":   p.MinimumDesktopRelease,
-		"revoked_build_count":       len(p.RevokedDesktopBuildIDs),
+		"revoked_build_count":       len(p.RevokedDesktopBuilds),
 		"administrator_message_set": p.AdministratorMessage != "",
 		"availability":              p.Availability,
 		"retry_at_set":              p.RetryAt.Valid,
@@ -244,7 +303,10 @@ func (p *DesktopCompatibilityPolicy) Auditable() map[string]any {
 // DesktopBuildTuple is one verified target and capability-matrix identity
 // embedded in a server release. Institution policy never supplies it.
 type DesktopBuildTuple struct {
-	DesktopRelease                          string
+	DesktopRelease string
+	// ReleasedAt is when the release was published, from its compiled
+	// expectation.
+	ReleasedAt                              time.Time
 	DesktopBuildID                          string
 	Platform                                DesktopPlatform
 	Architecture                            DesktopArchitecture

@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -116,6 +117,14 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 	stored, err := s.attempts.AcknowledgeCorrection(ctx, &input, commandIdempotency)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
+	}
+
+	// The board counts acknowledgements, so its managers refetch after a new
+	// one commits.
+	if !stored.Replayed && !stored.Duplicate {
+		if effectErr := realtime.PublishSittingBoardChanged(ctx, s.publisher, target.ExamID, target.SittingID); effectErr != nil {
+			s.publisher.Report(ctx, "manager.sitting_board.changed", effectErr)
+		}
 	}
 
 	// The receipt is immutable; the gates are freshly resolved after commit,

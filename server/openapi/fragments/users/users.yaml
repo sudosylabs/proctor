@@ -106,6 +106,29 @@ paths:
             enum:
               - active
               - disabled
+        - name: mfa
+          in: query
+          required: false
+          description: >-
+            Keeps Users whose account has two-step verification on (`enabled`) or off (`disabled`). On means
+            an active Proctor authenticator app; a second factor an external sign-in provider checks does not
+            count. Only callers who can see two-step verification (Institution-wide user.view, or
+            user.mfa.reset) can use it; anyone else gets `request.invalid` on `mfa`.
+          schema:
+            type: string
+            enum:
+              - enabled
+              - disabled
+        - name: role_holder
+          in: query
+          required: false
+          description: >-
+            With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with
+            `mfa=disabled` it lists exactly the role holders the access policy preflight counts in
+            `role_holders_without_mfa_count`. Using `true` requires Institution-wide `user.view`. Omit the
+            filter or send `false` to leave the list unfiltered.
+          schema:
+            type: boolean
         - name: never_signed_in
           in: query
           required: false
@@ -415,6 +438,10 @@ components:
                 last_name: Berg
                 profile_picture_url: /api/v1/users/ih1r84kij94nrwis97rft6rduh/profile-picture
                 profile_picture_kind: default
+                mfa:
+                  enabled: true
+                  method: authenticator_app
+                  enabled_at: '2026-03-14T10:22:00Z'
                 summary:
                   affiliations:
                     - kind: teacher
@@ -654,6 +681,20 @@ components:
           type: string
           format: date-time
           description: Time the account was disabled. Omitted while it is enabled.
+        disabled_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Who disabled the account, for the disable in force. Present only while the account is disabled, when the
+            disable named a person, and only for readers of the full profile: the User themselves or an
+            institution-wide user.view holder. `GET /users/{user_id}` answers only for an active account, so a
+            disabled account is read through the User directory.
+        disabled_reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: >-
+            The reason given when the account was disabled. Present with the same rule as `disabled_by`, and only
+            when a reason was given.
         profile_picture_url:
           type: string
           description: Relative URL of the User's profile picture.
@@ -665,8 +706,36 @@ components:
             `profile_picture_kind` for that.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
+        mfa:
+          $ref: '#/components/schemas/UserMFAResponse'
         summary:
           $ref: '#/components/schemas/UserDirectorySummary'
+    UserMFAResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        Whether the User's account has two-step verification on: an active Proctor authenticator app. It belongs
+        to the account; how strongly a sign-in was proved belongs to each Session. A second factor an external
+        sign-in provider checks does not turn it on. It is present only if you hold Institution-wide user.view or
+        user.mfa.reset, and never says "off" to anyone else: for them it is left out. It never shows recovery
+        codes or a setup that has not been finished.
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: True while the account has an active Proctor authenticator app.
+        method:
+          type: string
+          anyOf:
+            - type: string
+              enum: [authenticator_app]
+            - type: string
+          description: The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later.
+        enabled_at:
+          type: string
+          format: date-time
+          description: When two-step verification was turned on. Present only while `enabled` is true.
     UserDirectorySummary:
       type: object
       additionalProperties: false

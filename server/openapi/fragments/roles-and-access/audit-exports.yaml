@@ -1,0 +1,420 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/audits/exports:
+    post:
+      operationId: createAuditExport
+      summary: Export the audit history to a file
+      tags:
+        - Roles and access
+      description: >-
+        Queues a CSV or JSON Lines file of the audit Events the audit listing would show you for the same filters.
+        Your audit visibility is frozen when you ask: with Institution-wide `audit.view` the file has every matching
+        Event, and an Academic Unit auditor's file has the same redacted Events their listing shows. Events written
+        after the request aren't included. The file has the listing's fields under the listing's names, except
+        `summary`, `actor` and `repeat`. Both formats flatten `resource` into `resource_type` and `resource_id`.
+        It never has raw request parameters, earlier state or results. At most
+        100,000 Events fit in one export, and a larger selection is refused, so narrow the filters. The policy's
+        export lifetime must be set to 1 to 7 days, and the expiry counts from the request. The request is audited.
+        Poll the export to see when it is ready. Job viewers can also observe `job.changed` for `job_id`.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.internal
+        - audit.query.invalid
+        - audit.unavailable
+        - audit.export.limit
+        - audit.export.not_found
+        - audit.export.policy_unconfigured
+        - audit.export.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/CreateAuditExport'
+      responses:
+        '202':
+          $ref: '#/components/responses/AuditExportAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/audits/exports/{audit_export_id}:
+    get:
+      operationId: getAuditExport
+      summary: Get an audit export
+      tags:
+        - Roles and access
+      description: >-
+        Only the User who asked for the export can read it, and only while they still hold the audit visibility it
+        was made with. Another User's export is not found. The state is `queued`, `ready`, `failed` or `expired`.
+        An expired export never returns its hash. The expiry stays fixed even if the policy changes later.
+        A change to the academic ownership hierarchy invalidates exports made with academic subtree visibility.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - audit.export.not_found
+        - audit.export.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AuditExportID'
+      responses:
+        '200':
+          $ref: '#/components/responses/AuditExportOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/audits/exports/{audit_export_id}/download:
+    get:
+      operationId: downloadAuditExport
+      summary: Download an audit export
+      tags:
+        - Roles and access
+      description: >-
+        Only the User who asked for the export can download it, while it is ready and unexpired and they still hold
+        the audit visibility it was made with. The response is a `text/csv` or `application/jsonl` attachment with
+        private, no-store caching and a file name that carries only the export ID. CSV cells a spreadsheet would
+        read as a formula start with an apostrophe. The `ETag` header and the `sha256` field give the file's
+        SHA-256. Expiry blocks new downloads but doesn't cut off one already in progress.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - audit.export.not_found
+        - audit.export.unavailable
+        - request.invalid
+        - resource.not_found
+        - audit.export.expired
+        - audit.export.not_ready
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AuditExportID'
+      responses:
+        '200':
+          $ref: '#/components/responses/AuditExportFile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/AuditExportGone'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  parameters:
+    AuditExportID:
+      name: audit_export_id
+      in: path
+      required: true
+      description: ID of the audit export.
+      schema:
+        $ref: '#/components/schemas/ID'
+  requestBodies:
+    CreateAuditExport:
+      description: >-
+        The audit listing's filters, under its query parameter names, and the file format. Every filter is
+        optional and narrows the same way it narrows the listing.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CreateAuditExportRequest'
+          example:
+            format: csv
+            action:
+              - role_binding.manage
+            created_after: '2026-09-01T00:00:00Z'
+  responses:
+    AuditExportAccepted:
+      description: The export was queued with a fixed expiry.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuditExportResponse'
+          example:
+            id: rpn96r4g3jfk3t41u4dus44bzc
+            format: csv
+            redacted: false
+            state: queued
+            job_id: wj3drgzdpnf54rxf5d8qd3dqne
+            event_count: 1280
+            created_at: '2026-09-01T12:00:00Z'
+            expires_at: '2026-09-04T12:00:00Z'
+    AuditExportOK:
+      description: The export's details. Only the User who asked for it sees them.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuditExportResponse'
+          example:
+            id: rpn96r4g3jfk3t41u4dus44bzc
+            format: csv
+            redacted: false
+            state: ready
+            job_id: wj3drgzdpnf54rxf5d8qd3dqne
+            event_count: 1280
+            created_at: '2026-09-01T12:00:00Z'
+            expires_at: '2026-09-04T12:00:00Z'
+            size_bytes: 412044
+            sha256: 5d41a2b8c9e0f17263a4b5c6d7e8f9011a2b3c4d5e6f708192a3b4c5d6e7f809
+            ready_at: '2026-09-01T12:00:09Z'
+    AuditExportFile:
+      description: The export file, checked against its hash.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+        ETag:
+          description: SHA-256 of the file, in double quotes.
+          schema:
+            type: string
+        Content-Disposition:
+          description: Marks the response as an attachment, with a safe file name chosen by the server.
+          schema:
+            type: string
+        X-Content-Type-Options:
+          description: Always `nosniff`, so browsers don't guess a different content type.
+          schema:
+            type: string
+            const: nosniff
+      content:
+        text/csv:
+          schema:
+            type: string
+            format: binary
+        application/jsonl:
+          schema:
+            type: string
+            format: binary
+    AuditExportGone:
+      description: The export's fixed expiry has passed, so new downloads are refused.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://docs.example.edu/problems/audit.export.expired
+            title: Export expired
+            status: 410
+            detail: The audit export has expired.
+            code: audit.export.expired
+            request_id: req_docs_audit_export_expired
+  schemas:
+    CreateAuditExportRequest:
+      description: Filters for a new audit export, and its format.
+      type: object
+      additionalProperties: false
+      required:
+        - format
+      properties:
+        format:
+          type: string
+          enum:
+            - csv
+            - jsonl
+          description: '`csv` for a spreadsheet, with a header row, or `jsonl` for one JSON object per line.'
+        actor_id:
+          $ref: '#/components/schemas/ID'
+          description: Include only Events where this User performed the action.
+        subject_user_id:
+          $ref: '#/components/schemas/ID'
+          description: Include only Events about this User.
+        action:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/AuditAction'
+          description: Include only Events with one of these actions.
+        kind:
+          type: string
+          enum:
+            - read
+            - change
+          description: Include only reads or only changes.
+        status:
+          type: string
+          enum:
+            - attempt
+            - success
+            - fail
+          description: Include only Events with this status.
+        resource_type:
+          type: string
+          description: Include only Events on this resource. Send it with `resource_id`.
+        resource_id:
+          type: string
+          description: Include only Events on this resource. Send it with `resource_type`.
+        created_after:
+          type: string
+          format: date-time
+          description: Include only Events at or after this time.
+        created_before:
+          type: string
+          format: date-time
+          description: Include only Events before this time. A later time, or none, means the time of the request.
+        order:
+          type: string
+          enum:
+            - asc
+            - desc
+          default: desc
+          description: Order of the Events in the file, newest first unless `asc`.
+    AuditExportResponse:
+      description: A request for a temporary file of audit Events, and its state.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - format
+        - redacted
+        - state
+        - job_id
+        - event_count
+        - created_at
+        - expires_at
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+          description: ID of the export.
+        format:
+          type: string
+          enum:
+            - csv
+            - jsonl
+          description: Format of the file.
+        redacted:
+          type: boolean
+          description: >-
+            True for an Academic Unit auditor's export, whose Events carry the same redacted fields as their
+            listing.
+        state:
+          type: string
+          enum:
+            - queued
+            - ready
+            - failed
+            - expired
+          description: >-
+            `queued` while the file is being built, `ready` when it can be downloaded, `failed` if building
+            failed, and `expired` after `expires_at`.
+        job_id:
+          $ref: '#/components/schemas/ID'
+          description: The background Job that builds the file. Job viewers can observe its `job.changed` events.
+        event_count:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          description: >-
+            Number of Events matched when the export was requested, and once it is ready, the number in the file.
+        created_at:
+          type: string
+          format: date-time
+          description: Time the export was requested. The expiry counts from this time.
+        expires_at:
+          type: string
+          format: date-time
+          description: Time after which the file can't be downloaded. It is fixed when the export is requested.
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 536870912
+          description: Size of the file, in bytes. Present only while the export is ready.
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: SHA-256 of the file, in lowercase hexadecimal. Present only while the export is ready.
+        ready_at:
+          type: string
+          format: date-time
+          description: Time the file became ready. Present only while the export is ready.

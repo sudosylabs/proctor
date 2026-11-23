@@ -325,6 +325,11 @@ func SaveRoleBinding(ctx context.Context, ss store.Store, binding *model.RoleBin
 	if binding == nil {
 		return nil, store.NewErrInvalidInput("role_binding", "value", nil)
 	}
+	if binding.GrantedVia == "" {
+		// A fixture grant stands for a manual grant the user made themself.
+		binding.GrantedVia = model.RoleBindingGrantedManually
+		binding.GrantedByUserID = binding.UserID
+	}
 	role, err := ss.Role().Get(ctx, binding.RoleID)
 	if err != nil {
 		return nil, err

@@ -45,6 +45,16 @@ paths:
         - dpopAuth: []
         - sessionCookie: []
       parameters:
+        - name: q
+          in: query
+          required: false
+          description: >-
+            Keeps students whose username, display name, first or last name contains this text, matched literally and
+            ignoring case, as the User directory matches. Their email address is matched too only if you hold
+            Institution-wide user.view. It also narrows `total`. A cursor doesn't remember it, so repeat it on every
+            page.
+          schema:
+            type: string
         - name: active_at
           in: query
           required: false
@@ -188,6 +198,11 @@ components:
                 academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
                 user_id: 5ebqfbnezgahdbx9oy7rfr6oro
                 start_at: '2026-09-01T00:00:00Z'
+                user:
+                  id: 5ebqfbnezgahdbx9oy7rfr6oro
+                  display_name: Amara Okafor
+                  username: aokafor
+                email: amara.okafor@example.edu
               - id: xpq79ar61ncrjiouey6d9tgp91
                 created_at: '2026-07-28T10:00:02Z'
                 updated_at: '2026-07-28T10:00:02Z'
@@ -195,7 +210,17 @@ components:
                 academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
                 user_id: 17778cuf6b17rhtapprfjozet8
                 start_at: '2026-09-01T00:00:00Z'
-                end_at: '2027-07-01T00:00:00Z'
+                end_at: '2027-01-11T00:00:00Z'
+                user:
+                  id: 17778cuf6b17rhtapprfjozet8
+                  display_name: Tomas Lindqvist
+                  username: tlindqvist
+                email: tomas.lindqvist@example.edu
+                transfer:
+                  to_class:
+                    id: 8kpous3h9nfemqtwz47ydgjcx1
+                    display_name: Year 1, Group B
+                  at: '2027-01-11T00:00:00Z'
             next_cursor: eyJhZnRlciI6InhwcTc5YXI2MW5jcmppb3VleTZkOXRncDkxIn0
             total: 28
             total_is_lower_bound: false
@@ -235,7 +260,7 @@ components:
           type: array
           description: The enrollments on this page.
           items:
-            $ref: '#/components/schemas/ClassMemberResponse'
+            $ref: '#/components/schemas/ClassMemberListItemResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
         total:
@@ -248,6 +273,79 @@ components:
         total_is_lower_bound:
           type: boolean
           description: True when counting stopped at 10,000 and there may be more. Present with `total`.
+    ClassMemberListItemResponse:
+      description: >-
+        One enrollment, who the student is, and, when its end moves the student to another Class, that transfer.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - created_at
+        - updated_at
+        - class_id
+        - academic_period_id
+        - user_id
+        - start_at
+        - user
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+          description: The ID of the enrollment.
+        created_at:
+          type: string
+          format: date-time
+          description: When the enrollment was created.
+        updated_at:
+          type: string
+          format: date-time
+          description: When the enrollment last changed, for example when it was ended.
+        archived_at:
+          type: string
+          format: date-time
+          description: When the enrollment was archived. Omitted unless archived.
+        class_id:
+          $ref: '#/components/schemas/ID'
+          description: The Class the student is enrolled in.
+        academic_period_id:
+          $ref: '#/components/schemas/ID'
+          description: The Academic Period of the Class, which the enrollment belongs to.
+        user_id:
+          $ref: '#/components/schemas/ID'
+          description: The enrolled student.
+        start_at:
+          type: string
+          format: date-time
+          description: When the enrollment takes effect.
+        end_at:
+          type: string
+          format: date-time
+          description: When the enrollment stops being in effect. Omitted while it has no end.
+        user:
+          $ref: '#/components/schemas/PersonRef'
+          description: The enrolled student. Directory visibility controls the username and profile picture.
+        email:
+          type: string
+          format: email
+          description: The student email, present with Institution-wide user.view.
+        transfer:
+          $ref: '#/components/schemas/ClassMemberTransfer'
+    ClassMemberTransfer:
+      description: >-
+        The transfer that ends this enrollment: the student's enrollment in another Class starts exactly when this one
+        ends. Omitted when the end is not a transfer.
+      type: object
+      additionalProperties: false
+      required:
+        - to_class
+        - at
+      properties:
+        to_class:
+          $ref: '#/components/schemas/ClassRef'
+          description: The Class the student moves to, when visible to the reader.
+        at:
+          type: string
+          format: date-time
+          description: When the student moves, which is this enrollment's `end_at`.
     ClassEnrollmentResponse:
       type: object
       additionalProperties: false

@@ -80,13 +80,21 @@ func TestRoleAndRoleBindingTypedLifecycle(t *testing.T) {
 		ScopeID:   NewID(),
 	}
 	binding.PrepareCreate(NewRoleBindingID(), at)
+	require.Error(t, binding.Validate(), "a binding must say how it was granted")
+	binding.GrantedVia = RoleBindingGrantedManually
+	require.Error(t, binding.Validate(), "a manual grant names who made it")
+	binding.GrantedByUserID = NewUserID()
 	require.NoError(t, binding.Validate())
+	bootstrap := *binding
+	bootstrap.GrantedVia = RoleBindingGrantedAtBootstrap
+	require.Error(t, bootstrap.Validate(), "the bootstrap grant has no person behind it")
 	require.True(t, binding.IsActiveAt(at), "binding should be active at create time")
 	require.NoError(t, binding.End(at.Add(time.Hour)))
 	require.False(t, binding.IsActiveAt(at.Add(time.Hour)), "binding should not be active at exclusive end time")
 
 	invitationBinding := &RoleBinding{UserID: NewUserID(), RoleID: role.ID, ScopeType: RoleScopeAcademicUnit,
-		ScopeID: NewAcademicUnitID().String(), OriginInvitationID: NewInvitationID(), OriginAcademicUnitMemberID: NewAcademicUnitMemberID()}
+		ScopeID: NewAcademicUnitID().String(), OriginInvitationID: NewInvitationID(), OriginAcademicUnitMemberID: NewAcademicUnitMemberID(),
+		GrantedByUserID: NewUserID(), GrantedVia: RoleBindingGrantedByInvitation}
 	invitationBinding.PrepareCreate(NewRoleBindingID(), at)
 	require.NoError(t, invitationBinding.Validate())
 	require.Equal(t, invitationBinding.OriginInvitationID.String(), invitationBinding.Auditable()["origin_invitation_id"])

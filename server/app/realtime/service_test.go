@@ -61,15 +61,18 @@ func TestSessionRevocationPublishesAttemptProjectionInvalidations(t *testing.T) 
 	require.Equal(t, candidateID, attempts.candidateID, "attempt invalidation query = candidate")
 	require.Len(t, attempts.sessionIDs, 1, "attempt invalidation query = candidate")
 	require.Equal(t, sessionID, attempts.sessionIDs[0], "attempt invalidation query = candidate")
-	require.Len(t, sink.events, 4)
+	// The board change is followed by its exam's counts event.
+	require.Len(t, sink.events, 5)
 	require.Equal(t, "current_user.sessions.changed", sink.events[0].Name)
 	require.Equal(t, candidateID, sink.events[0].UserID)
 	require.Equal(t, "candidate.exam_activity.changed", sink.events[1].Name)
 	require.Equal(t, candidateID, sink.events[1].UserID)
 	require.Equal(t, "manager.sitting_board.changed", sink.events[2].Name)
 	require.Equal(t, target.SittingID.String(), sink.events[2].Resource.ID)
-	require.Equal(t, "current_user.context.changed", sink.events[3].Name)
-	require.Equal(t, candidateID, sink.events[3].UserID)
+	require.Equal(t, "exam.counts.changed", sink.events[3].Name)
+	require.Equal(t, target.ExamID.String(), sink.events[3].Resource.ID)
+	require.Equal(t, "current_user.context.changed", sink.events[4].Name)
+	require.Equal(t, candidateID, sink.events[4].UserID)
 }
 
 func TestSessionRevocationTellsOnlyTheUserTheirSessionsChanged(t *testing.T) {

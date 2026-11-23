@@ -57,7 +57,7 @@ type sittingFixture struct {
 func (f sittingFixture) sitting(t *testing.T) *model.ExamSitting {
 	t.Helper()
 	sitting, err := model.NewExamSitting(f.sittingID, f.examID, f.revisionID, f.classID,
-		testNow.Add(time.Hour), testNow.Add(3*time.Hour), testNow)
+		testNow.Add(time.Hour), testNow.Add(3*time.Hour), model.ExamSittingJoinWindow{}, testNow)
 	require.NoError(t, err)
 	return sitting
 }
@@ -74,8 +74,13 @@ var sittingActions = []model.Action{
 	model.ActionSubmissionRelease, model.ActionSubmissionReleaseOverride,
 }
 
-func newFixture(t *testing.T) sittingFixture {
+// newFixture grants the caller every Sitting action unless actions names
+// fewer.
+func newFixture(t *testing.T, actions ...model.Action) sittingFixture {
 	t.Helper()
+	if len(actions) == 0 {
+		actions = sittingActions
+	}
 	userID, unitID := model.NewUserID(), model.NewAcademicUnitID()
 	examID, revisionID := model.NewExamID(), model.NewExamRevisionID()
 	classID, sittingID := model.NewClassID(), model.NewExamSittingID()
@@ -86,7 +91,7 @@ func newFixture(t *testing.T) sittingFixture {
 	memberships := &membershipsFake{items: []*model.AcademicUnitMember{{AcademicUnitID: unitID}}}
 	control := accesstest.New(t, accesstest.Options{
 		Grants: []accesstest.Grant{{
-			UserID: userID, Actions: sittingActions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
+			UserID: userID, Actions: actions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
 		}},
 		Exams:       accessStore,
 		Sittings:    sittingOwnershipFake{sittingID: sittingID, examID: examID},
@@ -195,6 +200,18 @@ type sittingStoreFake struct {
 	items         []store.ExamSittingSnapshot
 	err           error
 	getErr        error
+	// The read extras.
+	candidateCount int
+	history        []store.ExamSittingHistoryEntry
+	historyRead    bool
+	corrections    []store.ExamSittingCorrectionSummary
+	acrossOptions  []store.ExamSittingAcrossListOptions
+	across         []store.ExamSittingAcrossItem
+}
+
+func (s *sittingStoreFake) ListAcrossExams(_ context.Context, options store.ExamSittingAcrossListOptions) (*store.ExamSittingAcrossPage, error) {
+	s.acrossOptions = append(s.acrossOptions, options)
+	return &store.ExamSittingAcrossPage{ServerTime: testNow, Items: append([]store.ExamSittingAcrossItem{}, s.across...)}, nil
 }
 
 // scheduleMailWorld is the mail a Sitting schedule change prepares through

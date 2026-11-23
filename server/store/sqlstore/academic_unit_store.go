@@ -37,6 +37,7 @@ type academicUnitRow struct {
 	Revision      int64          `db:"revision"`
 	InstitutionID string         `db:"institution_id"`
 	ParentID      sql.NullString `db:"parent_id"`
+	Kind          string         `db:"kind"`
 	Name          string         `db:"name"`
 	DisplayName   string         `db:"display_name"`
 	Description   string         `db:"description"`
@@ -51,6 +52,7 @@ type academicUnitOutcome struct {
 	Revision      int64              `json:"revision"`
 	InstitutionID string             `json:"institution_id"`
 	ParentID      string             `json:"parent_id,omitempty"`
+	Kind          string             `json:"kind"`
 	Name          string             `json:"name"`
 	DisplayName   string             `json:"display_name"`
 	Description   string             `json:"description"`
@@ -68,6 +70,7 @@ func newAcademicUnitOutcome(unit *model.AcademicUnit) academicUnitOutcome {
 		Revision:      row.Revision,
 		InstitutionID: row.InstitutionID,
 		ParentID:      outcomeString(row.ParentID),
+		Kind:          row.Kind,
 		Name:          row.Name,
 		DisplayName:   row.DisplayName,
 		Description:   row.Description,
@@ -83,6 +86,7 @@ func (o academicUnitOutcome) model() (*model.AcademicUnit, error) {
 		Revision:      o.Revision,
 		InstitutionID: o.InstitutionID,
 		ParentID:      outcomeNullString(o.ParentID),
+		Kind:          o.Kind,
 		Name:          o.Name,
 		DisplayName:   o.DisplayName,
 		Description:   o.Description,
@@ -98,6 +102,7 @@ func academicUnitSliceColumns() []string {
 		"academic_units.revision",
 		"academic_units.institution_id",
 		"academic_units.parent_id",
+		"academic_units.kind",
 		"academic_units.name",
 		"academic_units.display_name",
 		"academic_units.description",
@@ -216,12 +221,12 @@ func createAcademicUnit(
 	row := newAcademicUnitRow(candidate)
 	if _, err := tx.NamedExec(ctx, `
 		INSERT INTO academic_units (
-			id, created_at, updated_at, archived_at, revision, institution_id, parent_id, name,
-			display_name, description
+			id, created_at, updated_at, archived_at, revision, institution_id, parent_id, kind,
+			name, display_name, description
 		)
 		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :revision, :institution_id, :parent_id,
-			:name, :display_name, :description
+			:kind, :name, :display_name, :description
 		)`, &row); err != nil {
 		return nil, fmt.Errorf(
 			"create academic unit: %w",
@@ -257,20 +262,20 @@ func (s SQLAcademicUnitStore) ListAncestors(ctx context.Context, id model.Academ
 	if err := s.GetMaster().Select(ctx, &rows, `
 		WITH RECURSIVE ancestors AS (
 			SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id,
-				name, display_name, description, 0 AS depth
+				kind, name, display_name, description, 0 AS depth
 			FROM academic_units
 			WHERE id = ?
 				AND archived_at IS NULL
 			UNION ALL
 			SELECT parent.id, parent.created_at, parent.updated_at, parent.archived_at,
-				parent.revision, parent.institution_id, parent.parent_id, parent.name,
+				parent.revision, parent.institution_id, parent.parent_id, parent.kind, parent.name,
 				parent.display_name, parent.description, ancestors.depth + 1
 			FROM academic_units parent
 			JOIN ancestors ON parent.id = ancestors.parent_id
 			WHERE parent.archived_at IS NULL
 		)
-		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id, name,
-			display_name, description
+		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id, kind,
+			name, display_name, description
 		FROM ancestors
 		ORDER BY depth`, id); err != nil {
 		return nil, fmt.Errorf("list academic unit ancestors: %w", err)
@@ -435,7 +440,7 @@ func (s SQLAcademicUnitStore) updateAcademicUnit(
 		result, err := tx.NamedExec(ctx, `
 			UPDATE academic_units
 			SET updated_at = :updated_at, revision = :revision, parent_id = :parent_id,
-				name = :name, display_name = :display_name, description = :description
+				kind = :kind, name = :name, display_name = :display_name, description = :description
 			WHERE id = :id
 				AND institution_id = :institution_id
 				AND archived_at IS NULL
@@ -445,6 +450,7 @@ func (s SQLAcademicUnitStore) updateAcademicUnit(
 			"revision":          candidate.Revision,
 			"institution_id":    row.InstitutionID,
 			"parent_id":         row.ParentID,
+			"kind":              row.Kind,
 			"name":              row.Name,
 			"display_name":      row.DisplayName,
 			"description":       row.Description,
@@ -597,8 +603,8 @@ func academicUnitFromExecutor(
 ) (*model.AcademicUnit, error) {
 	var row academicUnitRow
 	if err := executor.Get(ctx, &row, `
-		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id, name,
-			display_name, description
+		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id, kind,
+			name, display_name, description
 		FROM academic_units
 		WHERE id = ?
 			AND archived_at IS NULL
@@ -682,6 +688,7 @@ func newAcademicUnitRow(unit *model.AcademicUnit) academicUnitRow {
 		Revision:      unit.Revision,
 		InstitutionID: unit.InstitutionID.String(),
 		ParentID:      nullableString(unit.ParentID.String()),
+		Kind:          string(unit.Kind),
 		Name:          unit.Name,
 		DisplayName:   unit.DisplayName,
 		Description:   unit.Description,
@@ -709,6 +716,7 @@ func (row academicUnitRow) model() (*model.AcademicUnit, error) {
 		Revision:      row.Revision,
 		InstitutionID: institutionID,
 		ParentID:      parentID,
+		Kind:          model.AcademicUnitKind(row.Kind),
 		Name:          row.Name,
 		DisplayName:   row.DisplayName,
 		Description:   row.Description,

@@ -127,7 +127,8 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	userID := model.NewID()
 	// The Role grants class.view, so the delegation check reads the caller's
 	// grants between loading the Role and the audit.
-	created := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: model.UserID(userID), RoleID: model.NewRoleID()}
+	created := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: model.UserID(userID), RoleID: model.NewRoleID(),
+		ScopeType: model.RoleScopeInstitution, ScopeID: model.NewID()}
 	role := &model.Role{ID: created.RoleID, Name: "teacher", Permissions: []string{string(model.ActionClassView)}}
 	caller, inv := newCaller()
 	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleBindingManage, model.ActionClassView))
@@ -147,8 +148,10 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
-	// Contract: the one realtime effect drops the bound User's cached authorization.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)}}, publisher.Calls())
+	// Contract: the realtime effects drop the bound User's cached authorization,
+	// then tell the binding's scope it was granted.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)},
+		roleBindingChangedCall(t, created)}, publisher.Calls())
 	require.Equal(t, model.UserID(userID), onlyAttempt(t, fixture).SubjectUserID, "the grant names the bound User as its subject")
 }
 
@@ -191,8 +194,10 @@ func TestRoleBindingRetainedCreateUsesArchivedRoleForCurrentDelegation(t *testin
 	// The grants read after the archived Role is the delegation check of its
 	// class.members.manage.
 	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role-including-archived", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
-	// Contract: the one realtime effect drops the bound User's cached authorization.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: userID}}, publisher.Calls())
+	// Contract: the realtime effects drop the bound User's cached authorization,
+	// then tell the binding's scope it was granted.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: userID},
+		roleBindingChangedCall(t, created)}, publisher.Calls())
 }
 
 func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {

@@ -17,6 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -31,6 +33,7 @@ type academicPeriodStoreFake struct {
 	updateInput  *store.AcademicPeriodUpdate
 	idempotency  *store.CommandIdempotency
 	createErr    error
+	listOptions  store.AcademicPeriodListOptions
 }
 
 func (s *academicPeriodStoreFake) CreateIdempotently(_ context.Context, input *store.AcademicPeriodCreation, command *store.CommandIdempotency) (*store.AcademicPeriodCommandResult, error) {
@@ -42,8 +45,12 @@ func (s *academicPeriodStoreFake) Get(context.Context, model.AcademicPeriodID) (
 	*s.events = append(*s.events, "get-period")
 	return s.current, nil
 }
-func (*academicPeriodStoreFake) ListVisible(context.Context, store.AcademicPeriodVisibilityScope, store.AcademicPeriodListOptions) ([]*model.AcademicPeriod, error) {
-	return nil, nil
+func (s *academicPeriodStoreFake) ListVisible(_ context.Context, _ store.AcademicPeriodVisibilityScope, options store.AcademicPeriodListOptions) ([]*model.AcademicPeriod, error) {
+	s.listOptions = options
+	if s.current == nil {
+		return nil, nil
+	}
+	return []*model.AcademicPeriod{s.current}, nil
 }
 func (s *academicPeriodStoreFake) Create(_ context.Context, input *store.AcademicPeriodCreation) (*model.AcademicPeriod, error) {
 	*s.events = append(*s.events, "store-create")
@@ -97,12 +104,17 @@ func TestAcademicPeriodUpdatePreservesInstitutionOwnership(t *testing.T) {
 	}
 	persistence := &academicPeriodStoreFake{events: &events, current: period}
 	access := academicPeriodAccess(t, &events, persistence, nil, institutionGrant(principal.UserID, model.ActionAcademicPeriodManage))
-	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+	publisher := &realtimetest.Publisher{}
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Publisher: publisher, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	name := "2026-revised"
 	updated, err := service.UpdateAcademicPeriod(context.Background(), caller, UpdateAcademicPeriodCommand{ID: period.ID, Name: &name})
 	require.NoError(t, err)
 	require.Equal(t, period.Owner, updated.Owner)
 	require.Equal(t, period.Owner, persistence.updateInput.Period.Owner)
+	changed, err := realtime.NewAcademicPeriodChangedEvent(period.ID, period.Owner)
+	require.NoError(t, err)
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: changed}}, publisher.Calls(),
+		"the period's viewers are told to refetch it after commit")
 }
 
 func TestAcademicPeriodCreateAuthorizationDenialStopsBeforeAuditAndStore(t *testing.T) {
@@ -233,4 +245,71 @@ func TestAcademicPeriodCreateIdempotencyBindsCanonicalOwner(t *testing.T) {
 	require.NotNil(t, unit.idempotency, "owner fingerprints")
 	require.Equal(t, canonical.idempotency.Fingerprint, institution.idempotency.Fingerprint, "owner fingerprints")
 	require.NotEqual(t, unit.idempotency.Fingerprint, institution.idempotency.Fingerprint, "owner fingerprints")
+}
+
+type periodTallyClasses struct {
+	store.ClassStore
+	unitID   model.AcademicUnitID
+	periodID model.AcademicPeriodID
+	tallies  []store.ClassTallyOptions
+}
+
+func (s *periodTallyClasses) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
+	return &model.Class{ID: id, AcademicPeriodID: s.periodID}, nil
+}
+
+func (s *periodTallyClasses) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {
+	return s.unitID, nil
+}
+
+func (s *periodTallyClasses) Tally(_ context.Context, options store.ClassTallyOptions) ([]store.ClassTally, error) {
+	s.tallies = append(s.tallies, options)
+	return []store.ClassTally{{ContainerID: options.ContainerIDs[0], Count: 1}}, nil
+}
+
+func TestAcademicPeriodListCountsOnlyTheClassesTheCallerSees(t *testing.T) {
+	t.Parallel()
+
+	principal, caller := newCaller()
+	period := &model.AcademicPeriod{ID: model.NewAcademicPeriodID(), Name: "2026"}
+	periods := &academicPeriodStoreFake{events: &[]string{}, current: period}
+	classID := model.NewClassID()
+	classes := &periodTallyClasses{unitID: model.NewAcademicUnitID(), periodID: period.ID}
+	access := accessWith(t, nil, accesstest.Options{AcademicPeriods: periods, Classes: classes,
+		Units: []*model.AcademicUnit{{ID: classes.unitID, Name: "computing"}}, Grants: []accesstest.Grant{
+			institutionGrant(principal.UserID, model.ActionAcademicPeriodView),
+			{UserID: principal.UserID, Actions: []model.Action{model.ActionClassView}, ScopeType: model.RoleScopeClass, ScopeID: classID.String()},
+		}})
+	period.Owner = model.NewInstitutionAcademicPeriodOwner(access.Institution.ID)
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: periods, class: classes}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+
+	got, err := service.ListAcademicPeriods(context.Background(), caller, ListAcademicPeriodsQuery{
+		OwnerType: "academic_unit", OwnerID: model.NewAcademicUnitID().String(), Order: store.AcademicPeriodOrderName, Descending: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, model.ResourceAcademicUnit, periods.listOptions.OwnerType)
+	require.Equal(t, store.AcademicPeriodOrderName, periods.listOptions.Order)
+	require.True(t, periods.listOptions.Descending)
+	require.Len(t, classes.tallies, 1, "one tally for the page")
+	require.Equal(t, store.ClassVisibilityScope{ClassIDs: []model.ClassID{classID}}, classes.tallies[0].Visibility,
+		"a Class-scoped grant counts only that Class")
+	require.True(t, classes.tallies[0].StudentsAt.IsZero(), "a period counts classes, not students")
+	require.Equal(t, 1, got.Classes[period.ID.String()])
+
+	_, err = service.ListAcademicPeriods(context.Background(), caller, ListAcademicPeriodsQuery{OwnerID: model.NewAcademicUnitID().String()})
+	require.True(t, apperror.Is(err, "request.invalid"), "an owner needs its type: %v", err)
+	_, err = service.ListAcademicPeriods(context.Background(), caller, ListAcademicPeriodsQuery{OwnerType: "class"})
+	require.True(t, apperror.Is(err, "request.invalid"), "only an Institution or a unit owns periods: %v", err)
+}
+
+func TestAcademicPeriodListWithoutClassViewHasNoCount(t *testing.T) {
+	t.Parallel()
+
+	principal, caller := newCaller()
+	periods := &academicPeriodStoreFake{events: &[]string{}, current: &model.AcademicPeriod{ID: model.NewAcademicPeriodID(), Name: "2026"}}
+	access := academicPeriodAccess(t, nil, periods, nil, institutionGrant(principal.UserID, model.ActionAcademicPeriodView))
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: periods, class: &periodTallyClasses{}}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	got, err := service.ListAcademicPeriods(context.Background(), caller, ListAcademicPeriodsQuery{})
+	require.NoError(t, err)
+	require.Nil(t, got.Classes)
 }

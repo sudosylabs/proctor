@@ -10,6 +10,42 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: data for the Desktop Administration, Exams and Activity boards.
+  - Administration adds a permission catalogue, user memberships, bulk
+    disable reasons, invitation filters and batch expiry, unit and programme
+    kinds, structure counts, and Class teachers and transfers. Import rows
+    show names from the uploaded file and a masked email. Import and
+    progression results name the matched User.
+  - Two-step status and filtering are available to readers with
+    `user.mfa.reset` or Institution-wide `user.view`. Role grants,
+    invitations, exams, reviews, holds and other readable records name the
+    people involved. Audit entries name the actor even for redacted readers.
+    Usernames and profile pictures follow the reader's directory visibility.
+  - Administration also lists Desktop releases, includes open Sitting counts,
+    shows when mail keys came into use and summarizes Access Policy history.
+    Audit entries include repeat counts. Auditors can queue CSV and JSON Lines
+    exports of their own audit view.
+  - Retention adds an Institution-wide hold list, hold review dates,
+    per-Exam summaries, a records CSV and previews of proposed policies.
+  - Staff can copy an Exam, check all draft problems before publishing, read
+    older revisions, and see Exam attention and review counts. Sittings add
+    candidate counts, Desktop setup, filters, corrections with acknowledgement
+    counts, and no-show details. Staff can list Submissions across Exams,
+    release results in bulk and reopen finalized reviews before release.
+  - Sitting managers can read private Sitting, Attempt-end and clip reasons
+    and see who acted. The live evidence surface also requires
+    `submission.view`. Candidate responses, mail and realtime events omit
+    those private reasons.
+  - Candidates can join a Sitting early to complete readiness checks and read
+    `instructions_markdown` before the scheduled start. Their activity includes
+    receipt codes, suspension and reallow times, the focus-loss rule, allowed
+    browser sites, and the last acknowledged save time.
+  - Realtime adds `user.changed`, `class.changed`, `academic_period.changed`,
+    `role.changed`, `role_binding.changed`, `retention.changed`,
+    `mail_delivery.changed`, `desktop_compatibility_policy.changed`,
+    `exam.counts.changed`, `exam_sitting.submissions.changed`,
+    `exam_attempt.screen_clip.changed` and `exam_attempt.evidence.changed`.
+
 - Server: web and Desktop sign-in can use a Proctor authenticator or recovery code as the second factor after sign-in through an external provider. Desktop reauthentication can also raise the strength of an existing Session.
 
 - Server: native capabilities decided on the server. The release's capability
@@ -117,6 +153,25 @@ module when a change is not server-only. No module has been released yet.
   part of the core (see Added) (**breaking**).
 
 ### Changed
+
+- Server (**breaking**): Desktop compatibility policy replaces
+  `revoked_desktop_build_ids` with `revoked_desktop_builds`. The PUT accepts
+  `{build_id, reason}` entries.
+- Server (**breaking**): `GET /classes/{id}` uses `ClassDetailResponse`. Class
+  member lists use `ClassMemberListItemResponse` with the embedded person.
+- Server (**breaking**): the Administration and Exams board references use
+  `display_name` for named records. Candidate references use `PersonRef`,
+  with directory visibility for usernames and profile pictures. An authorized
+  Class or Academic Unit member email is a separate field. Mail keys expose `in_use_since`.
+- Server (**breaking**): the managed clip list uses the `ManagedScreenClip*`
+  schemas. Sitting and candidate activity responses use
+  `join_window {opens_at, closes_at}`. Sitting history uses
+  `actor_user_id` and `actor`.
+- Server (**breaking**): candidate activity adds `waiting` and `join_closed`.
+  New Attempt admission after the join window returns
+  `exam.attempt.join_closed`.
+- Server (**breaking**): existing realtime hints carry entity and container
+  IDs. Academic Unit events and `exam_created` require their `data` object.
 
 - Server: enrolled users signing in through an external provider that confirms only one factor must enter their Proctor code before sign-in completes.
 

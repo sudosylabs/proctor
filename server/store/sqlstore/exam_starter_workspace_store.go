@@ -899,6 +899,7 @@ func lockStarterWorkspaceDraft(
 		FROM exams e
 		JOIN exam_drafts d ON d.exam_id = e.id
 		WHERE e.id = ?
+			AND e.copying_until IS NULL
 		FOR UPDATE OF e, d`, actorID.String(), examID.String())
 	if err != nil {
 		return nil, translateError("exam", examID.String(), err)
@@ -1117,10 +1118,11 @@ func completeStarterWorkspaceMutation(
 		ctx,
 		&revision,
 		`UPDATE exam_drafts
-		SET revision = revision + 1, updated_at = ?
+		SET revision = revision + 1, updated_at = ?, updated_by_user_id = ?
 		WHERE exam_id = ?
 		RETURNING revision`,
 		input.ChangedAt,
+		input.ActorUserID.String(),
 		input.ExamID.String(),
 	); err != nil {
 		return nil, fmt.Errorf("advance Starter Workspace Draft revision: %w", err)

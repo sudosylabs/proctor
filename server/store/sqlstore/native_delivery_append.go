@@ -84,8 +84,8 @@ type nativeAppendOutcome struct {
 	Receipt  *model.NativeBatchReceipt
 	Refusal  string
 	Progress model.NativeDeliveryProgress
-	// Flagged and StatusDiscrepancies are never persisted: a replay raises
-	// and counts nothing.
+	// Accepted, Flagged and StatusDiscrepancies are fresh effects only.
+	Accepted            bool
 	Flagged             []store.NativeIntegrityFlagged
 	StatusDiscrepancies int64
 }
@@ -167,6 +167,7 @@ func (s *SQLNativeDeliveryStore) AppendNativeDelivery(
 	return &store.NativeDeliveryAppended{
 		Acknowledgement:     &model.NativeSecurityAcknowledgement{Receipt: *result.Value.Receipt, NativeDeliveryProgress: result.Value.Progress},
 		Flagged:             result.Value.Flagged,
+		Accepted:            result.Value.Accepted,
 		StatusDiscrepancies: result.Value.StatusDiscrepancies,
 	}, nil
 }
@@ -521,7 +522,7 @@ func retainNativeAppendBatch(
 		return nil, err
 	}
 
-	return &nativeAppendOutcome{Receipt: &batch.receipt, Flagged: effects.Flagged, StatusDiscrepancies: effects.StatusDiscrepancies}, nil
+	return &nativeAppendOutcome{Receipt: &batch.receipt, Accepted: true, Flagged: effects.Flagged, StatusDiscrepancies: effects.StatusDiscrepancies}, nil
 }
 
 // storeNativeAppendBatch inserts the batch and its records and writes the

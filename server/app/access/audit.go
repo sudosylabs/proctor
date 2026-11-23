@@ -14,6 +14,7 @@ package access
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -756,7 +757,31 @@ func (s *Auditor) RecordAuthorizationDecision(
 	metadata model.RequestMetadata,
 	allowed bool,
 ) error {
-	return s.recordDecision(ctx, principal, string(action), resource, scopeType, scopeID, metadata, allowed)
+	return s.recordDecision(ctx, principal, string(action), resource, scopeType, scopeID, metadata, allowed, "", nil)
+}
+
+// RecordAttemptEvidenceDecision ties an evidence read to its candidate and
+// attempt. A flag-specific read also identifies the requested flag in the audit.
+func (s *Auditor) RecordAttemptEvidenceDecision(
+	ctx context.Context,
+	inv invocation.Invocation,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	unitID model.AcademicUnitID,
+	flagID model.IntegrityFlagID,
+	allowed bool,
+) error {
+	var parameters json.RawMessage
+	if !flagID.IsZero() {
+		var err error
+		parameters, err = model.EncodeAuditData(map[string]string{"integrity_flag_id": flagID.String()})
+		if err != nil {
+			return apperror.New("authorization.unavailable").Wrap(err)
+		}
+	}
+	return s.recordDecision(ctx, inv.Principal(), string(model.ActionSubmissionView),
+		model.Resource{Type: model.ResourceExamAttempt, ID: attemptID.String()},
+		model.RoleScopeAcademicUnit, unitID.String(), inv.RequestMetadata(), allowed, candidateID, parameters)
 }
 
 // RecordUserSearchDecision records a directory search without a permission
@@ -779,6 +804,8 @@ func (s *Auditor) RecordUserSearchDecision(
 		scopeID,
 		metadata,
 		allowed,
+		"",
+		nil,
 	)
 }
 
@@ -791,6 +818,8 @@ func (s *Auditor) recordDecision(
 	scopeID string,
 	metadata model.RequestMetadata,
 	allowed bool,
+	subject model.UserID,
+	parameters json.RawMessage,
 ) error {
 	status := model.AuditStatusFail
 	errorCode := "authorization.denied"
@@ -800,20 +829,22 @@ func (s *Auditor) recordDecision(
 	}
 
 	event := &model.AuditEvent{
-		ActorID:    principal.UserID,
-		SessionID:  principal.SessionID,
-		Action:     action,
-		Resource:   resource,
-		ScopeType:  scopeType,
-		ScopeID:    scopeID,
-		Status:     status,
-		RequestID:  metadata.RequestID,
-		NodeID:     s.deps.NodeID,
-		ClientType: string(principal.ClientType),
-		AuthMethod: principal.AuthenticationMethod,
-		IPAddress:  metadata.IPAddress,
-		UserAgent:  metadata.UserAgent,
-		ErrorCode:  errorCode,
+		ActorID:       principal.UserID,
+		SubjectUserID: subject,
+		Parameters:    parameters,
+		SessionID:     principal.SessionID,
+		Action:        action,
+		Resource:      resource,
+		ScopeType:     scopeType,
+		ScopeID:       scopeID,
+		Status:        status,
+		RequestID:     metadata.RequestID,
+		NodeID:        s.deps.NodeID,
+		ClientType:    string(principal.ClientType),
+		AuthMethod:    principal.AuthenticationMethod,
+		IPAddress:     metadata.IPAddress,
+		UserAgent:     metadata.UserAgent,
+		ErrorCode:     errorCode,
 	}
 	// A decision that cannot be recorded leaves the request unauthorized, so it
 	// fails as the authorization step.

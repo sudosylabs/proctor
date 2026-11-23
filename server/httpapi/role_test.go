@@ -36,7 +36,7 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
 	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
-		academicUnitResource(academics), institutionResource(academics), roleResource(fixture.service))
+		academicUnitResource(academics, nil), institutionResource(academics), roleResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	body, _ := json.Marshal(map[string]any{
@@ -74,7 +74,7 @@ func TestRoleResponsePreservesExistingWireShape(t *testing.T) {
 		Permissions: []string{string(model.ActionClassView)}, BuiltIn: false,
 	})
 	require.NoError(t, err)
-	got, err := json.Marshal(roleResponseFromModel(nil, role))
+	got, err := json.Marshal(roleResponseFromModel(nil, role, nil))
 	require.NoError(t, err)
 	require.Equal(t, string(want), string(got), "response")
 }

@@ -16,11 +16,15 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type studentProgressionHandlers struct{ app *onboarding.Service }
+type studentProgressionHandlers struct {
+	app    *onboarding.Service
+	people *people.Resolver
+}
 
 type studentProgressionDryRunRequest struct {
 	SourcePeriodID      string `json:"source_period_id"`
@@ -35,8 +39,8 @@ type studentProgressionCommitRequest struct {
 	PreviewDigest    string `json:"preview_digest"`
 }
 
-func studentProgressionResource(app *onboarding.Service) route.Resource {
-	h := studentProgressionHandlers{app: app}
+func studentProgressionResource(app *onboarding.Service, resolver *people.Resolver) route.Resource {
+	h := studentProgressionHandlers{app: app, people: resolver}
 	return route.NewResource("student-progressions",
 		route.Endpoint{
 			Method: http.MethodPost,
@@ -180,7 +184,7 @@ func (h studentProgressionHandlers) dryRun(request route.Request) (route.Result,
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
+	return namedOnboardingImport(request, h.people, http.StatusAccepted, view, nil)
 }
 
 // studentProgressionCursor is the keyset of the last listed progression:
@@ -267,8 +271,12 @@ func (h studentProgressionHandlers) list(request route.Request) (route.Result, e
 		return route.Result{}, route.ErrUnpresentable
 	}
 
+	refs, err := nameOnboardingImportPeople(request, h.people, result.Items, nil)
+	if err != nil {
+		return route.Result{}, err
+	}
 	envelope, err := route.NewList(result.Items, result.HasMore, func(view onboarding.OnboardingImportView) onboardingImportResponse {
-		return onboardingImportResponseFromView(view, nil)
+		return onboardingImportResponseFromView(view, nil, refs)
 	}, func(last onboarding.OnboardingImportView) (string, error) {
 		return route.EncodeCursor(
 			studentProgressionCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()},
@@ -296,7 +304,7 @@ func (h studentProgressionHandlers) get(request route.Request) (route.Result, er
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, rows)).WithHeaders(noStoreHeaders()), nil
+	return namedOnboardingImport(request, h.people, http.StatusOK, view, rows)
 }
 
 func (h studentProgressionHandlers) commit(request route.Request) (route.Result, error) {
@@ -320,7 +328,7 @@ func (h studentProgressionHandlers) commit(request route.Request) (route.Result,
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
+	return namedOnboardingImport(request, h.people, http.StatusAccepted, view, nil)
 }
 
 func (h studentProgressionHandlers) cancel(request route.Request) (route.Result, error) {
@@ -332,7 +340,7 @@ func (h studentProgressionHandlers) cancel(request route.Request) (route.Result,
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
+	return namedOnboardingImport(request, h.people, http.StatusOK, view, nil)
 }
 
 func (h studentProgressionHandlers) report(request route.Request) (route.ProtocolResult, error) {

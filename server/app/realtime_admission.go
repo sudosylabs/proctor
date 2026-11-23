@@ -13,6 +13,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -23,22 +24,24 @@ import (
 // RealtimeAdmission admits long-lived WebSocket clients. It lives in app
 // rather than app/realtime because it needs identity and exam services that
 // realtime cannot import without a cycle. Subscriptions are authorized
-// against current state, concealing exams and sittings the caller may not
-// see.
+// against current state, concealing exams, sittings, and submissions outside
+// the caller's visibility.
 type RealtimeAdmission struct {
 	principals    *identity.Service
 	exams         *exam.Authoring
 	sittings      *sitting.Service
+	reviews       review.SittingManagerAuthorizer
 	authorization *access.Authorizer
 	operational   operational.Recorder
 }
 
-// RealtimeAdmissionDependencies may leave Exams and Sittings nil when the
-// caller never subscribes to those resources.
+// RealtimeAdmissionDependencies may omit the exam services when the caller
+// never subscribes to their resources.
 type RealtimeAdmissionDependencies struct {
 	Principals  *identity.Service
 	Exams       *exam.Authoring
 	Sittings    *sitting.Service
+	Reviews     review.SittingManagerAuthorizer
 	Authorizer  *access.Authorizer
 	Operational operational.Recorder
 }
@@ -49,6 +52,7 @@ func NewRealtimeAdmission(deps RealtimeAdmissionDependencies) *RealtimeAdmission
 		principals:    deps.Principals,
 		exams:         deps.Exams,
 		sittings:      deps.Sittings,
+		reviews:       deps.Reviews,
 		authorization: deps.Authorizer,
 		operational:   deps.Operational,
 	}
@@ -63,10 +67,14 @@ var (
 		Unavailable: "exam.sitting.unavailable",
 		Concealed:   []apperror.Code{"exam.sitting.not_found"},
 	}
+	realtimeSubmissionFailures = apperror.Concealment{
+		Unavailable: "exam.integrity_review.unavailable",
+		Concealed:   []apperror.Code{"exam.integrity_review.not_found"},
+	}
 )
 
 // AuthorizeWebSocketSubscription uses the relationship gates for exams and
-// sittings and the audited access decision for every other resource.
+// sittings and submissions, plus the audited access decision for other resources.
 func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -91,6 +99,38 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 			return invalidRealtimeRequest("subscription")
 		}
 		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, inv, sittingID))
+	}
+	if resource.Type == model.ResourceExamSitting && (action == model.ActionSubmissionView || action == model.ActionExamSittingManage) {
+		sittingID, err := model.ParseExamSittingID(resource.ID)
+		if err != nil {
+			return invalidRealtimeRequest("subscription")
+		}
+		if action == model.ActionExamSittingManage {
+			// Clip and evidence subscriptions need the same two permissions
+			// as the reads they announce.
+			if _, err = s.sittings.AuthorizeSittingManage(ctx, inv, sittingID); err != nil {
+				return realtimeSittingFailures.Conceal(err)
+			}
+		}
+		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingSubmissionView(ctx, inv, sittingID))
+	}
+	if action == model.ActionSubmissionView && resource.Type == model.ResourceSubmission {
+		submissionID, err := model.ParseSubmissionID(resource.ID)
+		if err != nil {
+			return invalidRealtimeRequest("subscription")
+		}
+		return realtimeSubmissionFailures.Conceal(s.reviews.AuthorizeSubmissionView(ctx, inv, submissionID))
+	}
+	// A User is read through the caller's user visibility, which a
+	// unit-scoped grant reaches only through relationships in its subtree.
+	if action == model.ActionUserView && resource.Type == model.ResourceUser {
+		userID, err := model.ParseUserID(resource.ID)
+		if err != nil {
+			return invalidRealtimeRequest("subscription")
+		}
+		err = s.authorization.AuthorizeUserRead(ctx, inv, userID)
+		operational.Record(s.operational, "authorization", "decision", err)
+		return err
 	}
 	err := s.authorization.Authorize(ctx, inv, action, resource)
 	operational.Record(s.operational, "authorization", "decision", err)

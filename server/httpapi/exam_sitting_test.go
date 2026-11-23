@@ -34,7 +34,7 @@ func newSittingAPI(t *testing.T) (*sittingFixture, http.Handler) {
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newSittingFixture(t, principal)
-	return f, newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examSittingResource(f.sittingService))
+	return f, newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examSittingResource(f.sittingService, f.people))
 }
 
 func TestExamSittingHTTPScheduleUsesStrictIdempotentCommandAndSafeResponse(t *testing.T) {
@@ -70,6 +70,70 @@ func TestExamSittingHTTPScheduleUsesStrictIdempotentCommandAndSafeResponse(t *te
 		_, ok := payload[forbidden]
 		assert.False(t, ok, "response exposed %q", forbidden)
 	}
+}
+
+func TestExamSittingHTTPJoinWindowIsSetShownAndCleared(t *testing.T) {
+	t.Parallel()
+	f, httpAPI := newSittingAPI(t)
+	body := `{"exam_revision_id":"` + f.sitting.ExamRevisionID.String() + `","class_id":"` + f.sitting.ClassID.String() +
+		`","scheduled_start_at":"2026-08-15T10:30:00Z","scheduled_end_at":"2026-08-15T12:30:00Z",` +
+		`"join_window":{"opens_at":"2026-08-15T12:20:00+02:00","closes_at":"2026-08-15T11:00:00Z"}}`
+	request := newJSONRequest(http.MethodPost, examSittingCollectionPath(f.examID), strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer credential")
+	request.Header.Set("Idempotency-Key", "schedule-joined")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusCreated, response.Code, "status = %d, body = %s", response.Code, response.Body.String())
+	require.Len(t, f.sittingStore.schedules, 1)
+	window := f.sittingStore.schedules[0].Sitting.JoinWindow
+	require.Equal(t, model.OptionalTimeFrom(time.Date(2026, 8, 15, 10, 20, 0, 0, time.UTC)), window.OpensAt)
+	require.Equal(t, model.OptionalTimeFrom(time.Date(2026, 8, 15, 11, 0, 0, 0, time.UTC)), window.ClosesAt)
+	var created map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &created))
+	assert.Equal(t, map[string]any{
+		"opens_at": "2026-08-15T10:20:00Z", "closes_at": "2026-08-15T11:00:00Z",
+	}, created["join_window"])
+	assert.NotContains(t, created, "join_opens_at")
+	assert.NotContains(t, created, "join_closes_at")
+
+	path := examSittingMemberPath(f.examID, f.sitting.ID)
+	patch := newJSONRequest(http.MethodPatch, path, strings.NewReader(`{"expected_revision":1,"join_window":{"closes_at":"2026-08-15T11:00:00Z"}}`))
+	patch.Header.Set("Authorization", "Bearer credential")
+	patch.Header.Set("Idempotency-Key", "join-once")
+	patched := httptest.NewRecorder()
+	httpAPI.ServeHTTP(patched, patch)
+	require.Equal(t, http.StatusOK, patched.Code, "status = %d body = %s", patched.Code, patched.Body.String())
+	require.Len(t, f.sittingStore.updates, 1, "a join-only patch is a change")
+	update := f.sittingStore.updates[0]
+	require.False(t, update.JoinWindow.OpensAt.Valid, "the window is replaced whole, so its opening goes")
+	require.Equal(t, model.OptionalTimeFrom(time.Date(2026, 8, 15, 11, 0, 0, 0, time.UTC)), update.JoinWindow.ClosesAt)
+	var updated map[string]any
+	require.NoError(t, json.Unmarshal(patched.Body.Bytes(), &updated))
+	assert.Equal(t, map[string]any{"closes_at": "2026-08-15T11:00:00Z"}, updated["join_window"],
+		"an absent bound is omitted, never null")
+
+	for name, body := range map[string]string{
+		"malformed bound": `{"expected_revision":2,"join_window":{"closes_at":"later"}}`,
+		"null window":     `{"expected_revision":2,"join_window":null}`,
+		"null bound":      `{"expected_revision":2,"join_window":{"opens_at":null}}`,
+		"unknown member":  `{"expected_revision":2,"join_window":{"starts_at":"2026-08-15T11:00:00Z"}}`,
+	} {
+		bad := newJSONRequest(http.MethodPatch, path, strings.NewReader(body))
+		bad.Header = patch.Header.Clone()
+		rejected := httptest.NewRecorder()
+		httpAPI.ServeHTTP(rejected, bad)
+		require.Equal(t, http.StatusBadRequest, rejected.Code, "%s: status = %d body = %s", name, rejected.Code, rejected.Body.String())
+	}
+	require.Len(t, f.sittingStore.updates, 1, "a rejected join window reached the Sitting Store")
+
+	clear := newJSONRequest(http.MethodPatch, path, strings.NewReader(`{"expected_revision":2,"join_window":{}}`))
+	clear.Header = patch.Header.Clone()
+	clear.Header.Set("Idempotency-Key", "join-clear")
+	cleared := httptest.NewRecorder()
+	httpAPI.ServeHTTP(cleared, clear)
+	require.Equal(t, http.StatusOK, cleared.Code, "status = %d body = %s", cleared.Code, cleared.Body.String())
+	require.Equal(t, model.ExamSittingJoinWindow{}, f.sittingStore.updates[1].JoinWindow, "an empty window removes it")
 }
 
 func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *testing.T) {
@@ -315,6 +379,7 @@ func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d reads = %#v body = %s", response.Code, f.sittingStore.gets, response.Body.String())
 	require.Equal(t, []sittingIdentity{{ExamID: f.examID, SittingID: f.sitting.ID}}, f.sittingStore.gets)
+	require.Contains(t, response.Body.String(), `"candidate_count":0,"candidate_count_is_lower_bound":false`, "a read counts the candidates")
 }
 
 func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {

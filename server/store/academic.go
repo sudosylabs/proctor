@@ -78,15 +78,34 @@ type AcademicNameListOptions struct {
 	Limit      int
 }
 
-// AcademicPeriodListOptions pages periods by start, name, then ID, with the
-// Term, continuation and Limit rules of AcademicNameListOptions.
+// AcademicPeriodListOptions pages periods by start, name, then ID (the
+// default order) or by name then ID, reversed when Descending, with the Term,
+// continuation and Limit rules of AcademicNameListOptions. A start-order
+// continuation sets AfterStartAt, AfterName and AfterID; a name-order one
+// sets AfterName and AfterID.
+//
+// OwnerType keeps the periods of one kind of owner, and OwnerID, when set, of
+// that owner; a non-zero ActiveAt keeps the periods covering that instant.
 type AcademicPeriodListOptions struct {
 	Term         string
+	OwnerType    model.ResourceType
+	OwnerID      string
+	ActiveAt     time.Time
+	Order        AcademicPeriodOrder
+	Descending   bool
 	AfterStartAt time.Time
 	AfterName    string
 	AfterID      model.AcademicPeriodID
 	Limit        int
 }
+
+// AcademicPeriodOrder is the order of a period page; the zero value is start.
+type AcademicPeriodOrder string
+
+const (
+	AcademicPeriodOrderStart AcademicPeriodOrder = "start"
+	AcademicPeriodOrderName  AcademicPeriodOrder = "name"
+)
 
 // AcademicUnitStore persists nodes in the institution's academic-unit tree.
 type AcademicUnitStore interface {
@@ -99,6 +118,10 @@ type AcademicUnitStore interface {
 	ListChildren(context.Context, model.InstitutionID, model.AcademicUnitID, AcademicNameListOptions) ([]*model.AcademicUnit, error)
 	ListAncestors(context.Context, model.AcademicUnitID) ([]*model.AcademicUnit, error)
 	Search(context.Context, model.InstitutionID, AcademicNameListOptions) ([]*model.AcademicUnit, error)
+	// ListWithinSubtrees returns the listed units that are, or lie beneath,
+	// one of the unarchived roots, in no particular order. It reads at most
+	// MaximumAcademicUnitCountUnits units.
+	ListWithinSubtrees(ctx context.Context, ids, roots []model.AcademicUnitID) ([]model.AcademicUnitID, error)
 }
 
 type ProgrammeCreation struct {
@@ -162,6 +185,12 @@ type ProgrammeLevelArchive struct {
 }
 
 // ProgrammeLevelStore persists reusable curriculum stages owned by programmes.
+// ProgrammeLevelCount is one programme's number of unarchived levels.
+type ProgrammeLevelCount struct {
+	ProgrammeID model.ProgrammeID
+	Count       int
+}
+
 type ProgrammeLevelStore interface {
 	Create(context.Context, *ProgrammeLevelCreation) (*model.ProgrammeLevel, error)
 	Update(context.Context, *ProgrammeLevelUpdate) (*model.ProgrammeLevel, error)
@@ -174,6 +203,9 @@ type ProgrammeLevelStore interface {
 	// every page, ignoring the continuation, order and limit, capped at
 	// maximum (see MaximumListCount).
 	CountByProgramme(ctx context.Context, programmeID model.ProgrammeID, options AcademicNameListOptions, maximum int) (int, error)
+	// CountByProgrammes counts each listed programme's unarchived levels in
+	// one read, capped at maximum; every listed programme has an entry.
+	CountByProgrammes(ctx context.Context, programmeIDs []model.ProgrammeID, maximum int) ([]ProgrammeLevelCount, error)
 	// SeedUpdate is an unaudited test fixture write; production code never
 	// calls it.
 	SeedUpdate(context.Context, *model.ProgrammeLevel) (*model.ProgrammeLevel, error)
@@ -268,16 +300,55 @@ type ClassStore interface {
 	Archive(context.Context, *ClassArchive) (*model.Class, error)
 	Get(context.Context, model.ClassID) (*model.Class, error)
 	GetByName(context.Context, model.ProgrammeLevelID, model.AcademicPeriodID, string) (*model.Class, error)
-	ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, AcademicNameListOptions) ([]*model.Class, error)
+	ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, ClassListOptions) ([]*model.Class, error)
 	ListByAcademicPeriod(context.Context, model.AcademicPeriodID) ([]*model.Class, error)
-	SearchByAcademicUnit(context.Context, model.AcademicUnitID, AcademicNameListOptions) ([]*model.Class, error)
+	SearchByAcademicUnit(context.Context, model.AcademicUnitID, ClassListOptions) ([]*model.Class, error)
 	// CountByProgrammeLevel and CountByAcademicUnit count what the matching
 	// listing would return across every page, ignoring the continuation, order
 	// and limit, capped at maximum (see MaximumListCount).
-	CountByProgrammeLevel(ctx context.Context, programmeLevelID model.ProgrammeLevelID, options AcademicNameListOptions, maximum int) (int, error)
-	CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options AcademicNameListOptions, maximum int) (int, error)
+	CountByProgrammeLevel(ctx context.Context, programmeLevelID model.ProgrammeLevelID, options ClassListOptions, maximum int) (int, error)
+	CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options ClassListOptions, maximum int) (int, error)
 	SearchVisible(context.Context, ClassSearchOptions) ([]*model.Class, error)
 	GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error)
+	// Tally counts, for each listed container, its classes or their current
+	// students inside the visibility, in one read. Every listed container has
+	// an entry, zero when nothing counts.
+	Tally(context.Context, ClassTallyOptions) ([]ClassTally, error)
+}
+
+// ClassListOptions is a name page of classes, narrowed to one Academic Period
+// when AcademicPeriodID is set.
+type ClassListOptions struct {
+	AcademicNameListOptions
+	AcademicPeriodID model.AcademicPeriodID
+}
+
+// ClassTallyContainer is what a tally groups classes by.
+type ClassTallyContainer string
+
+const (
+	ClassTallyByProgramme      ClassTallyContainer = "programme"
+	ClassTallyByProgrammeLevel ClassTallyContainer = "programme_level"
+	ClassTallyByAcademicPeriod ClassTallyContainer = "academic_period"
+)
+
+// ClassTallyOptions counts the unarchived classes, under unarchived levels
+// and programmes, of up to MaximumAcademicUnitCountUnits containers, keeping
+// only the classes inside Visibility. A non-zero StudentsAt counts the
+// distinct students current at that instant in those classes instead. Each
+// count stops at Maximum.
+type ClassTallyOptions struct {
+	By           ClassTallyContainer
+	ContainerIDs []string
+	Visibility   ClassVisibilityScope
+	StudentsAt   time.Time
+	Maximum      int
+}
+
+// ClassTally is one container's count.
+type ClassTally struct {
+	ContainerID string
+	Count       int
 }
 
 // InstitutionArchive is the input to InstitutionStore.Archive.

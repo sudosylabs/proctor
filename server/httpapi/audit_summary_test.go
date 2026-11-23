@@ -310,3 +310,75 @@ func TestAuditResourceWritesSummariesFromThePageNames(t *testing.T) {
 	require.ElementsMatch(t, []model.UserID{actor, subject}, fixture.audits.nameReads[0].UserIDs)
 	require.Equal(t, []model.ClassID{classID}, fixture.audits.nameReads[0].ClassIDs)
 }
+
+// TestAuditResourceNamesTheActorForEveryReader pins the owner's rule that who
+// acted is part of the record: an auditor who cannot see the actor in the
+// directory still reads their name, but not their username.
+func TestAuditResourceNamesTheActorForEveryReader(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := operatorTestPrincipal()
+	actor := &model.User{ID: model.NewUserID(), Username: "ada", DisplayName: "Ada Admin"}
+	classID := model.NewClassID()
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionAuditView))
+	fixture.users.add(actor)
+	fixture.audits.events = []*model.AuditEvent{{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), ActorID: actor.ID,
+		Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()},
+		Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`),
+	}}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, auditResource(fixture.service))
+
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits", "", true)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page route.List[auditEventResponse]
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	require.NotNil(t, page.Items[0].Actor)
+	require.Equal(t, personRefResponse{ID: actor.ID.String(), DisplayName: "Ada Admin"}, *page.Items[0].Actor,
+		"the reader has no user.view, so no username or picture")
+	require.True(t, strings.HasPrefix(page.Items[0].Summary, "Ada Admin "), page.Items[0].Summary)
+}
+
+func TestAuditResourceShowsRepeatsCountedInTheCallersVisibility(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := operatorTestPrincipal()
+	actor := model.NewUserID()
+	repeated, single := model.NewAuditEventID(), model.NewAuditEventID()
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionAuditView))
+	event := func(id model.AuditEventID) *model.AuditEvent {
+		return &model.AuditEvent{ID: id, CreatedAt: model.TimeFromMillis(100), ActorID: actor,
+			Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: model.NewClassID().String()},
+			Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`)}
+	}
+	fixture.audits.events = []*model.AuditEvent{event(repeated), event(single)}
+	fixture.audits.repeats = map[model.AuditEventID]int{repeated: 3, single: 1}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, auditResource(fixture.service))
+
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits", "", true)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page route.List[auditEventResponse]
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 2)
+	require.Equal(t, &auditRepeatResponse{Count: 3, WindowSeconds: 600}, page.Items[0].Repeat)
+	require.Nil(t, page.Items[1].Repeat, "an event seen once has no repeat")
+	require.Len(t, fixture.audits.repeatReads, 1, "one read for the page")
+	require.True(t, fixture.audits.repeatReads[0].Visibility.InstitutionWide, "the repeat read uses the listing's visibility")
+}
+
+func TestRoleAuditSummaryNamesOnlyKnownChangedFields(t *testing.T) {
+	t.Parallel()
+	request := auditSummaryRequest(t, "en")
+	actor := model.NewUserID()
+	event := &model.AuditEvent{
+		ActorID: actor, Action: string(model.ActionRoleManage), Status: model.AuditStatusSuccess,
+		Resource:   model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
+		Parameters: []byte(`{"operation":"patch"}`),
+		Result:     []byte(`{"display_name":"Teacher","changed_fields":["description","unexpected","permissions"]}`),
+	}
+	names := store.AuditNames{Users: map[model.UserID]string{actor: "Ada Admin"}}
+	require.Equal(t, "Ada Admin changed the role “Teacher” (description, permissions)", auditSummary(request, event, names))
+	event.Parameters, event.Result = nil, nil
+	require.Equal(t, "Ada Admin managed roles", auditSummary(request, event, names))
+}

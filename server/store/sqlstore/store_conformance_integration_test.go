@@ -91,6 +91,10 @@ func runLayerConformance(
 		{"Institution", storetest.TestInstitutionStore},
 		{"AssistantProfile", storetest.TestAssistantProfileStore},
 		{"AcademicUnit", storetest.TestAcademicUnitStore},
+		{"AcademicUnitSummary", storetest.TestAcademicUnitSummaryStore},
+		{"StructureCount", storetest.TestStructureCountStore},
+		{"ClassMemberListing", storetest.TestClassMemberListingStore},
+		{"AuditRepeat", storetest.TestAuditRepeatStore},
 		{"Programme", storetest.TestProgrammeStore},
 		{"ProgrammeLevel", storetest.TestProgrammeLevelStore},
 		{"AcademicPeriod", storetest.TestAcademicPeriodStore},
@@ -130,7 +134,7 @@ func runLayerConformance(
 			storetest.TestRetentionStore(t, decorated, retentionSQLProbe(sqlStore))
 		}},
 		{"ExamRecords", func(t *testing.T, decorated store.Store) {
-			storetest.TestExamRecordsStore(t, decorated, storetest.ExamRecordsSQLProbe{ConcurrentPeer: newSQLExamRecordsStore(sqlStore)})
+			storetest.TestExamRecordsStore(t, decorated, examRecordsSQLProbe(sqlStore, sqlStore))
 		}},
 		{"ExamResource", storetest.TestExamResourceStore},
 		{"ExamCorrection", func(t *testing.T, decorated store.Store) {
@@ -235,6 +239,22 @@ func TestInstitutionStore(t *testing.T) {
 
 func TestAcademicUnitStore(t *testing.T) {
 	StoreTest(t, storetest.TestAcademicUnitStore)
+}
+
+func TestAcademicUnitSummaryStore(t *testing.T) {
+	StoreTest(t, storetest.TestAcademicUnitSummaryStore)
+}
+
+func TestStructureCountStore(t *testing.T) {
+	StoreTest(t, storetest.TestStructureCountStore)
+}
+
+func TestClassMemberListingStore(t *testing.T) {
+	StoreTest(t, storetest.TestClassMemberListingStore)
+}
+
+func TestAuditRepeatStore(t *testing.T) {
+	StoreTest(t, storetest.TestAuditRepeatStore)
 }
 
 func TestProgrammeStore(t *testing.T) {
@@ -374,11 +394,50 @@ func TestExamIntegrityReviewStore(t *testing.T) {
 		storetest.ExamIntegrityReviewSQLProbe{ConcurrentPeer: NewSQLExamIntegrityReviewStore(peerPersistence)})
 }
 
+func TestExamCopyStore(t *testing.T) {
+	persistence := openTestStore(t)
+	resetTestStore(t, persistence)
+	storetest.TestExamCopyStore(t, persistence, func(t *testing.T, ctx context.Context, examID model.ExamID) {
+		t.Helper()
+		_, err := persistence.GetMaster().Exec(ctx, `UPDATE exams
+			SET created_at = statement_timestamp() - interval '2 days', updated_at = statement_timestamp() - interval '2 days',
+				copying_until = statement_timestamp() - interval '1 day'
+			WHERE id = ?`, examID.String())
+		require.NoError(t, err)
+		_, err = persistence.GetMaster().Exec(ctx, `UPDATE exam_starter_workspace_objects
+			SET created_at = statement_timestamp() - interval '2 days', updated_at = statement_timestamp() - interval '2 days',
+				expires_at = statement_timestamp() - interval '1 day'
+			WHERE exam_id = ?`, examID.String())
+		require.NoError(t, err)
+	})
+}
+
+func TestExamIntegrityReviewReopen(t *testing.T) {
+	persistence := openTestStore(t)
+	resetTestStore(t, persistence)
+	storetest.TestExamIntegrityReviewReopen(t, persistence)
+}
+
+func examRecordsSQLProbe(persistence, peer *SQLStore) storetest.ExamRecordsSQLProbe {
+	return storetest.ExamRecordsSQLProbe{
+		ConcurrentPeer: newSQLExamRecordsStore(peer),
+		AgeHoldReview: func(t testing.TB, ctx context.Context, id model.RetentionHoldID) {
+			t.Helper()
+			_, err := persistence.GetMaster().Exec(ctx, `
+				UPDATE retention_holds
+				SET created_at = statement_timestamp() - interval '1 hour',
+					until = statement_timestamp() - interval '1 minute'
+				WHERE id = ?`, id)
+			require.NoError(t, err)
+		},
+	}
+}
+
 func TestExamRecordsStore(t *testing.T) {
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	storetest.TestExamRecordsStore(t, persistence, storetest.ExamRecordsSQLProbe{ConcurrentPeer: newSQLExamRecordsStore(peerPersistence)})
+	storetest.TestExamRecordsStore(t, persistence, examRecordsSQLProbe(persistence, peerPersistence))
 }
 
 func examSubmissionSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamSubmissionSQLProbe {

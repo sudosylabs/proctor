@@ -121,6 +121,7 @@ func evaluateDTOSchemaAgreement(
 			slices.Contains(exception.NonNullable, name),
 			nestedAgreementPaths(exception.Nullable, name),
 			nestedAgreementPaths(exception.NonNullable, name),
+			nestedAgreementPaths(exception.Required, name)...,
 		)
 	}
 	return violations
@@ -171,6 +172,7 @@ func evaluateOpenAPIShapeAgreement(
 	forceNonNullable bool,
 	nullablePaths []string,
 	nonNullablePaths []string,
+	requiredPaths ...string,
 ) []openAPIAgreementViolation {
 	if name := agreementTargetField(target); isWireTimestampName(name) {
 		violations = evaluateWireTimestampAgreement(violations, target, name, shape, goType, requestSchema)
@@ -317,6 +319,13 @@ func evaluateOpenAPIShapeAgreement(
 	}
 	gotRequired := sortedStrings(shape.Required)
 	wantRequired := requiredJSONFieldNames(goType, requestSchema)
+	for _, member := range jsonMembers(goType) {
+		name := jsonFieldName(member.StructField)
+		if slices.Contains(requiredPaths, name) && !slices.Contains(wantRequired, name) {
+			wantRequired = append(wantRequired, name)
+		}
+	}
+	sort.Strings(wantRequired)
 	if !slices.Equal(gotRequired, wantRequired) {
 		violations = appendAgreementViolation(violations, target, "required fields", fmt.Sprintf("got %v, Go JSON tags require %v", gotRequired, wantRequired))
 	}
@@ -338,11 +347,12 @@ func evaluateOpenAPIShapeAgreement(
 			property,
 			member.Type,
 			requestSchema,
-			!jsonFieldRequired(member, requestSchema),
+			!slices.Contains(wantRequired, name),
 			slices.Contains(nullablePaths, name),
 			slices.Contains(nonNullablePaths, name),
 			nestedAgreementPaths(nullablePaths, name),
 			nestedAgreementPaths(nonNullablePaths, name),
+			nestedAgreementPaths(requiredPaths, name)...,
 		)
 	}
 	return violations

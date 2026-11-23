@@ -81,7 +81,7 @@ func roleService(t *testing.T, events *[]string, roles *roleStoreFake, actions .
 	return service, fixture, inv
 }
 
-func TestRoleCreateCommitsWithoutSideEffects(t *testing.T) {
+func TestRoleCreateCommitsBeforeAnnouncingTheRole(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	created := &model.Role{ID: model.NewRoleID(), Name: "teacher", DisplayName: "Teacher", Permissions: []string{string(model.ActionClassView)}}
@@ -93,6 +93,7 @@ func TestRoleCreateCommitsWithoutSideEffects(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, created.ID.String(), got.ID.String(), "result/input = %#v / %#v", got, persistence.createInput)
 	require.NotEmpty(t, persistence.createInput.AuditEventID, "result/input = %#v / %#v", got, persistence.createInput)
+	require.Equal(t, inv.Principal().UserID, persistence.createInput.Role.UpdatedByUserID, "the creator is the Role's last editor")
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The second grants read is the
 	// delegation check of class.view.
@@ -102,6 +103,9 @@ func TestRoleCreateCommitsWithoutSideEffects(t *testing.T) {
 		action: model.ActionRoleManage, resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID},
 		scopeType: model.RoleScopeInstitution, scopeID: institutionID, allowed: true,
 	}}, recordedDecisions(fixture), "the delegation check records no decision of its own")
+	// Contract: the one realtime effect tells role.view holders of the new Role.
+	require.Equal(t, []realtimetest.Call{roleChangedCall(t, model.InstitutionID(institutionID), created.ID)},
+		service.publisher.(*realtimetest.Publisher).Calls())
 }
 
 func TestRoleCreateAndUpdateRejectUndelegablePermissionsBeforeAudit(t *testing.T) {
@@ -162,11 +166,14 @@ func TestRoleUpdateCommitsBeforeInvalidation(t *testing.T) {
 	got, err := service.UpdateRole(context.Background(), inv, UpdateRoleCommand{ID: role.ID, DisplayName: &displayName})
 	require.NoError(t, err)
 	require.Equal(t, "Lead Teacher", got.DisplayName)
+	require.Equal(t, inv.Principal().UserID, persistence.updateInput.Role.UpdatedByUserID, "the caller becomes the Role's last editor")
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-update", "invalidate-authorization"}, events)
-	// Contract: the one realtime effect drops every User's cached authorization.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization}}, publisher.Calls())
+	// Contract: the realtime effects drop every User's cached authorization,
+	// then tell role.view holders the Role changed.
+	institutionID := service.institutions.(*institutionStoreFake).institution.ID
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization}, roleChangedCall(t, institutionID, role.ID)}, publisher.Calls())
 }
 
 func TestRoleUpdateFailurePublishesNoInvalidation(t *testing.T) {
@@ -197,14 +204,18 @@ func TestRoleArchiveCommitsBeforeInvalidation(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	role := &model.Role{ID: model.NewRoleID(), Name: "teacher", DisplayName: "Teacher"}
-	service, _, inv := roleService(t, &events, &roleStoreFake{events: &events, role: role, archiveResult: role}, model.ActionRoleManage)
+	persistence := &roleStoreFake{events: &events, role: role, archiveResult: role}
+	service, _, inv := roleService(t, &events, persistence, model.ActionRoleManage)
 	publisher := service.publisher.(*realtimetest.Publisher)
 	require.NoError(t, service.ArchiveRole(context.Background(), inv, role.ID))
+	require.Equal(t, inv.Principal().UserID, persistence.archiveInput.ArchivedBy, "the archiver is the Role's last editor")
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-archive", "invalidate-authorization"}, events)
-	// Contract: the one realtime effect drops every User's cached authorization.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization}}, publisher.Calls())
+	// Contract: the realtime effects drop every User's cached authorization,
+	// then tell role.view holders the Role changed.
+	institutionID := service.institutions.(*institutionStoreFake).institution.ID
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization}, roleChangedCall(t, institutionID, role.ID)}, publisher.Calls())
 }
 
 func TestValidatePatchedPermissionsPreservesButDoesNotIntroduceUnknownActions(t *testing.T) {

@@ -157,6 +157,14 @@ components:
               scope_type: institution
               scope_id: p6y6sf8ac6m5if373fkkebj7j6
               start_at: '2026-08-01T09:00:00Z'
+              role:
+                id: hmyjmj68dw6gdxctnghbrhwcth
+                display_name: System Administrator
+              scope:
+                type: institution
+                id: p6y6sf8ac6m5if373fkkebj7j6
+                display_name: Northbridge Institute
+              granted_via: bootstrap
             access_policy:
               id: 39kqk53i4cswfzbi7hbai1r8qg
               revision: 1

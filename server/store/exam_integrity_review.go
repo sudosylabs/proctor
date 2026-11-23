@@ -19,6 +19,7 @@ const (
 	ExamIntegrityReviewDraftOperation         = "exam.integrity_review.draft"
 	ExamIntegrityReviewFinalizeOperation      = "exam.integrity_review.finalize"
 	ExamIntegrityReviewReleaseOperation       = "exam.integrity_review.release"
+	ExamIntegrityReviewReopenOperation        = "exam.integrity_review.reopen"
 	ExamIntegrityReviewEvidenceReadMaximum    = 100
 	ExamIntegrityReviewDiscrepancyReadMaximum = 100
 	ExamIntegrityReviewFlagReadMaximum        = 200
@@ -51,6 +52,7 @@ func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.Sub
 // evidence detail or private candidate-authored material.
 type ExamIntegrityFlagSummary struct {
 	Browser                *model.BrowserIntegrityGroup
+	BrowserRuleLabel       string
 	Flag                   model.IntegrityFlag
 	EvidenceCount          int
 	OverflowCount          int64
@@ -103,7 +105,9 @@ type ExamSubmissionReviewSnapshot struct {
 	Authorization             ExamIntegrityReviewAuthorization
 	Submission                *model.ExamSubmission
 	Review                    *model.SubmissionReview
-	Decisions                 []model.IntegrityReviewDecision
+	// LatestReopeningReason is private to managers of the sitting.
+	LatestReopeningReason string
+	Decisions             []model.IntegrityReviewDecision
 }
 
 type ExamIntegrityReviewDecisionMutation struct {
@@ -141,6 +145,21 @@ type ExamIntegrityReviewFinalize struct {
 	ActorUserID      model.UserID
 	ManagerOverride  bool
 	ExpectedRevision int64
+	ChangedAt        time.Time
+	AuditEventID     model.AuditEventID
+	AuditAt          time.Time
+}
+
+// ExamIntegrityReviewReopen returns a finalized, unreleased review to draft.
+// Reason is the manager's private explanation, kept with the review and never
+// shown to the candidate.
+type ExamIntegrityReviewReopen struct {
+	SubmissionID     model.SubmissionID
+	ReviewID         model.SubmissionReviewID
+	ActorUserID      model.UserID
+	ManagerOverride  bool
+	ExpectedRevision int64
+	Reason           string
 	ChangedAt        time.Time
 	AuditEventID     model.AuditEventID
 	AuditAt          time.Time
@@ -225,7 +244,26 @@ type ExamIntegrityReviewStore interface {
 	Finalize(context.Context, *ExamIntegrityReviewFinalize, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
 	PrepareRelease(context.Context, *ExamIntegrityReviewReleasePrepare) (*ExamIntegrityReviewReleasePreparation, error)
 	Release(context.Context, *ExamIntegrityReviewRelease, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
+	// ClaimResultReleaseBatch replays the retained outcome or reserves the
+	// original selection; CompleteResultReleaseBatch keeps the item outcomes
+	// and completes the batch's audit together.
+	ClaimResultReleaseBatch(context.Context, *ExamResultReleaseBatchStart, *CommandIdempotency) (*ExamResultReleaseBatchClaim, error)
+	CompleteResultReleaseBatch(context.Context, *ExamResultReleaseBatchCompletion, *CommandIdempotency) error
+	// Reopen returns a finalized review to draft, keeping its decisions, and
+	// refuses one whose result is released (integrity_review_released). It
+	// reopens the sitting's records completion like late evidence does.
+	Reopen(context.Context, *ExamIntegrityReviewReopen, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
 	GetReleasedStudentResult(context.Context, model.ExamAttemptID, model.UserID) (*model.StudentResult, error)
+	// ListSubmissions returns one page of sealed submissions with their
+	// candidates, flag counts and reviews.
+	ListSubmissions(context.Context, SubmissionListOptions) (*SubmissionListPage, error)
+	// ResolveLiveEvidence names an attempt for the live evidence reads, which
+	// page its flags, evidence and native conditions while it runs.
+	ResolveLiveEvidence(context.Context, model.ExamAttemptID) (*LiveEvidenceScope, error)
+	ListLiveFlags(context.Context, LiveFlagListOptions) (*ExamIntegrityFlagPage, error)
+	ListLiveEvidence(context.Context, LiveEvidenceListOptions) (*ExamIntegrityEvidencePage, error)
+	ListLiveNativeConditions(context.Context, LiveNativeConditionListOptions) (*NativeConditionPage, error)
+	ListLiveTimeline(context.Context, LiveTimelineListOptions) (*LiveTimelinePage, error)
 }
 
 // NativeConditionListOptions pages native condition records, which are

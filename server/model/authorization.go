@@ -123,6 +123,7 @@ const (
 	ResourceClass          ResourceType = "class"
 	ResourceUser           ResourceType = "user"
 	ResourceExam           ResourceType = "exam"
+	ResourceExamAttempt    ResourceType = "exam_attempt"
 	ResourceExamSitting    ResourceType = "exam_sitting"
 	ResourceSubmission     ResourceType = "submission"
 	ResourceMailDelivery   ResourceType = "mail_delivery"
@@ -139,6 +140,7 @@ var resourceTypes = []ResourceType{
 	ResourceAcademicUnit,
 	ResourceClass,
 	ResourceExam,
+	ResourceExamAttempt,
 	ResourceExamSitting,
 	ResourceInstitution,
 	ResourceMailDelivery,
@@ -413,36 +415,42 @@ var actionDefinitions = map[Action]ActionDefinition{
 	ActionSubmissionView: {
 		Action:                    ActionSubmissionView,
 		ResourceType:              ResourceSubmission,
+		CompatibleResourceTypes:   []ResourceType{ResourceExamSitting},
 		InheritInstitutionScope:   true,
 		InheritAcademicUnitScopes: true,
 	},
 	ActionSubmissionViewOverride: {
 		Action:                    ActionSubmissionViewOverride,
 		ResourceType:              ResourceSubmission,
+		CompatibleResourceTypes:   []ResourceType{ResourceExamSitting},
 		InheritInstitutionScope:   true,
 		InheritAcademicUnitScopes: true,
 	},
 	ActionSubmissionReview: {
 		Action:                    ActionSubmissionReview,
 		ResourceType:              ResourceSubmission,
+		CompatibleResourceTypes:   []ResourceType{ResourceExamSitting},
 		InheritInstitutionScope:   true,
 		InheritAcademicUnitScopes: true,
 	},
 	ActionSubmissionReviewOverride: {
 		Action:                    ActionSubmissionReviewOverride,
 		ResourceType:              ResourceSubmission,
+		CompatibleResourceTypes:   []ResourceType{ResourceExamSitting},
 		InheritInstitutionScope:   true,
 		InheritAcademicUnitScopes: true,
 	},
 	ActionSubmissionRelease: {
 		Action:                    ActionSubmissionRelease,
 		ResourceType:              ResourceSubmission,
+		CompatibleResourceTypes:   []ResourceType{ResourceExamSitting},
 		InheritInstitutionScope:   true,
 		InheritAcademicUnitScopes: true,
 	},
 	ActionSubmissionReleaseOverride: {
 		Action:                    ActionSubmissionReleaseOverride,
 		ResourceType:              ResourceSubmission,
+		CompatibleResourceTypes:   []ResourceType{ResourceExamSitting},
 		InheritInstitutionScope:   true,
 		InheritAcademicUnitScopes: true,
 	},

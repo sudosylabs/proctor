@@ -444,6 +444,7 @@ func (s *Service) AppendNativeDelivery(
 
 	for _, flagged := range value.Flagged {
 		effects := integrityEffects{
+			ExamID:          target.ExamID,
 			SittingID:       target.SittingID,
 			AttemptID:       deliveryAccess.Access.AttemptID,
 			CandidateUserID: deliveryAccess.Access.CandidateUserID,
@@ -478,8 +479,14 @@ func (s *Service) AppendNativeDelivery(
 			s.publisher.Report(ctx, "exam_attempt_native_flagged", effectErr)
 		}
 	}
+	// A newly retained batch may add native conditions when a missing
+	// position is repaired. Retained receipts on replay announce nothing.
+	if value.Accepted {
+		s.publishEvidenceChanged(ctx, target.ExamID, target.SittingID, deliveryAccess.Access.AttemptID,
+			value.Acknowledgement.Receipt.ReceivedAt)
+	}
 	if slices.ContainsFunc(value.Flagged, func(f store.NativeIntegrityFlagged) bool { return f.ScreenClipRequested }) {
-		s.publishScreenClipsRequested(ctx, target.SittingID, deliveryAccess.Access.AttemptID,
+		s.publishScreenClipsRequested(ctx, target.ExamID, target.SittingID, deliveryAccess.Access.AttemptID,
 			deliveryAccess.Access.CandidateUserID, value.Acknowledgement.Receipt.ReceivedAt)
 	}
 

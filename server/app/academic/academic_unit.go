@@ -37,7 +37,7 @@ func (s *Service) GetAcademicUnit(
 	ctx context.Context,
 	inv invocation.Invocation,
 	id model.AcademicUnitID,
-) (*model.AcademicUnit, error) {
+) (*AcademicUnitView, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
@@ -54,7 +54,11 @@ func (s *Service) GetAcademicUnit(
 	if err != nil {
 		return nil, academicUnitStoreErrors.Translate(err)
 	}
-	return unit, nil
+	summaries, err := s.summarizeAcademicUnits(ctx, inv, []*model.AcademicUnit{unit})
+	if err != nil {
+		return nil, err
+	}
+	return &AcademicUnitView{Unit: unit, AcademicUnitSummaries: summaries}, nil
 }
 
 // ListAcademicUnits lists the direct children of ParentID, or the root units
@@ -63,15 +67,15 @@ func (s *Service) ListAcademicUnits(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListAcademicUnitsQuery,
-) (paging.Page[*model.AcademicUnit], error) {
+) (AcademicUnitPage, error) {
 	parentID := query.ParentID
 	if parentID != "" && !parentID.IsValid() {
-		return paging.Page[*model.AcademicUnit]{}, apperror.New("request.invalid").WithField("field", "parent_id")
+		return AcademicUnitPage{}, apperror.New("request.invalid").WithField("field", "parent_id")
 	}
 
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Page[*model.AcademicUnit]{}, err
+		return AcademicUnitPage{}, err
 	}
 
 	if parentID != "" {
@@ -82,7 +86,7 @@ func (s *Service) ListAcademicUnits(
 			model.ActionAcademicUnitView,
 			resource,
 		); err != nil {
-			return paging.Page[*model.AcademicUnit]{}, err
+			return AcademicUnitPage{}, err
 		}
 	}
 
@@ -98,7 +102,7 @@ func (s *Service) ListAcademicUnits(
 	}
 
 	if err != nil {
-		return paging.Page[*model.AcademicUnit]{}, err
+		return AcademicUnitPage{}, err
 	}
 
 	units, err := s.academicUnits.ListChildren(ctx, model.InstitutionID(institution.ID), parentID, store.AcademicNameListOptions{
@@ -107,10 +111,10 @@ func (s *Service) ListAcademicUnits(
 		Limit:     probe,
 	})
 	if err != nil {
-		return paging.Page[*model.AcademicUnit]{}, academicUnitStoreErrors.Translate(err)
+		return AcademicUnitPage{}, academicUnitStoreErrors.Translate(err)
 	}
 
-	return paging.New(units, limit), nil
+	return s.academicUnitPage(ctx, inv, paging.New(units, limit))
 }
 
 // SearchAcademicUnits needs institution-wide academic_unit.view.
@@ -118,10 +122,10 @@ func (s *Service) SearchAcademicUnits(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query SearchAcademicUnitsQuery,
-) (paging.Page[*model.AcademicUnit], error) {
+) (AcademicUnitPage, error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Page[*model.AcademicUnit]{}, err
+		return AcademicUnitPage{}, err
 	}
 
 	institution, err := s.authorizer.AuthorizeInstitution(
@@ -130,7 +134,7 @@ func (s *Service) SearchAcademicUnits(
 		model.ActionAcademicUnitView,
 	)
 	if err != nil {
-		return paging.Page[*model.AcademicUnit]{}, err
+		return AcademicUnitPage{}, err
 	}
 
 	units, err := s.academicUnits.Search(ctx, model.InstitutionID(institution.ID), store.AcademicNameListOptions{
@@ -140,10 +144,22 @@ func (s *Service) SearchAcademicUnits(
 		Limit:     probe,
 	})
 	if err != nil {
-		return paging.Page[*model.AcademicUnit]{}, academicUnitStoreErrors.Translate(err)
+		return AcademicUnitPage{}, academicUnitStoreErrors.Translate(err)
 	}
 
-	return paging.New(units, limit), nil
+	return s.academicUnitPage(ctx, inv, paging.New(units, limit))
+}
+
+func (s *Service) academicUnitPage(
+	ctx context.Context,
+	inv invocation.Invocation,
+	page paging.Page[*model.AcademicUnit],
+) (AcademicUnitPage, error) {
+	summaries, err := s.summarizeAcademicUnits(ctx, inv, page.Items)
+	if err != nil {
+		return AcademicUnitPage{}, err
+	}
+	return AcademicUnitPage{Page: page, AcademicUnitSummaries: summaries}, nil
 }
 
 var academicUnitStoreErrors = apperror.AdministrationStoreTable("academic_unit", "academic_unit.conflict", "academic_unit.invalid", nil)

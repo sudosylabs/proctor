@@ -9,8 +9,11 @@ package httpapi
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -31,16 +34,9 @@ type academicUnitMemberResponse struct {
 // member's current role bindings scoped exactly to it.
 type academicUnitMemberListItemResponse struct {
 	academicUnitMemberResponse
-	User academicUnitMemberUserResponse `json:"user"`
+	User  personRefResponse `json:"user"`
+	Email string            `json:"email,omitempty"`
 	*academicUnitMemberRolesHereResponse
-}
-
-// academicUnitMemberUserResponse names the member; email is present only for
-// institution-wide user.view.
-type academicUnitMemberUserResponse struct {
-	DisplayName string `json:"display_name"`
-	Username    string `json:"username"`
-	Email       string `json:"email,omitempty"`
 }
 
 type academicUnitMemberRolesHereResponse struct {
@@ -59,11 +55,12 @@ type createAcademicUnitMemberRequest struct {
 }
 
 type academicUnitMemberHandlers struct {
-	app *academic.Service
+	app    *academic.Service
+	people *people.Resolver
 }
 
-func academicUnitMemberResource(app *academic.Service) route.Resource {
-	h := academicUnitMemberHandlers{app: app}
+func academicUnitMemberResource(app *academic.Service, resolver *people.Resolver) route.Resource {
+	h := academicUnitMemberHandlers{app: app, people: resolver}
 	return route.NewResource(
 		"academic-unit-members",
 		route.Endpoint{
@@ -123,9 +120,19 @@ func (h academicUnitMemberHandlers) list(request route.Request) (route.Result, e
 		return route.Result{}, err
 	}
 
+	var affiliations []model.AffiliationKind
+	for _, raw := range request.HTTP.URL.Query()["affiliation"] {
+		kind := model.AffiliationKind(raw)
+		if !kind.IsValid() || slices.Contains(affiliations, kind) {
+			return route.Result{}, apperror.Invalid("request.invalid", "affiliation")
+		}
+		affiliations = append(affiliations, kind)
+	}
+
 	afterStartAt, afterUserID := after.after()
 	page, err := h.app.ListAcademicUnitMembersPage(request.Context, request.Invocation(), academic.ListAcademicUnitMembersPageQuery{
 		AcademicUnitID:      unitID,
+		Affiliations:        affiliations,
 		MembershipPageQuery: query,
 		AfterStartAt:        afterStartAt,
 		AfterUserID:         afterUserID,
@@ -135,8 +142,19 @@ func (h academicUnitMemberHandlers) list(request route.Request) (route.Result, e
 		return route.Result{}, err
 	}
 
+	ids := make([]model.UserID, 0, len(page.Members))
+	for _, member := range page.Members {
+		if member == nil || !member.UserID.IsValid() {
+			return route.Result{}, route.ErrUnpresentable
+		}
+		ids = append(ids, member.UserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
 	present := func(member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
-		return academicUnitMemberListItemResponseFromPage(page, member)
+		return academicUnitMemberListItemResponseFromPage(page, member, refs)
 	}
 	return membershipListResult(
 		scope,
@@ -212,15 +230,13 @@ func academicUnitMemberResponseFromModel(member *model.AcademicUnitMember) acade
 func academicUnitMemberListItemResponseFromPage(
 	page *academic.AcademicUnitMemberPage,
 	member *model.AcademicUnitMember,
+	refs people.Refs,
 ) academicUnitMemberListItemResponse {
 	identity := page.Users[member.UserID]
 	item := academicUnitMemberListItemResponse{
 		academicUnitMemberResponse: academicUnitMemberResponseFromModel(member),
-		User: academicUnitMemberUserResponse{
-			DisplayName: identity.DisplayName,
-			Username:    identity.Username,
-			Email:       identity.Email,
-		},
+		User:                       *personRef(refs, member.UserID),
+		Email:                      identity.Email,
 	}
 	if page.RolesHere == nil {
 		return item

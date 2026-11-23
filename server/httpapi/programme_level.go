@@ -25,6 +25,12 @@ type programmeLevelResponse struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
+	// The counts are present only for a caller who may see them; see
+	// academic.StructureCounts.
+	ClassCount               *int  `json:"class_count,omitempty"`
+	ClassCountIsLowerBound   *bool `json:"class_count_is_lower_bound,omitempty"`
+	StudentCount             *int  `json:"student_count,omitempty"`
+	StudentCountIsLowerBound *bool `json:"student_count_is_lower_bound,omitempty"`
 }
 
 type createProgrammeLevelRequest struct {
@@ -121,7 +127,10 @@ func (h programmeLevelHandlers) list(request route.Request) (route.Result, error
 	if err != nil {
 		return route.Result{}, err
 	}
-	return academicNameCountedResult(page, pageQuery, programmeLevelResponseFromModel, func(level *model.ProgrammeLevel) (string, string) {
+	present := func(level *model.ProgrammeLevel) programmeLevelResponse {
+		return countedProgrammeLevelResponse(level, page.StructureCounts)
+	}
+	return academicNameCountedResult(page.Counted, pageQuery, present, func(level *model.ProgrammeLevel) (string, string) {
 		return level.Name, level.ID.String()
 	})
 }
@@ -156,13 +165,13 @@ func (h programmeLevelHandlers) get(request route.Request) (route.Result, error)
 	if err != nil {
 		return route.Result{}, err
 	}
-	level, err := h.app.GetProgrammeLevel(
+	view, err := h.app.GetProgrammeLevel(
 		request.Context, request.Invocation(), id,
 	)
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, programmeLevelResponseFromModel(level)), nil
+	return route.JSON(http.StatusOK, countedProgrammeLevelResponse(view.Level, view.StructureCounts)), nil
 }
 
 func (h programmeLevelHandlers) patch(request route.Request) (route.Result, error) {
@@ -226,4 +235,12 @@ func programmeLevelResponseFromModel(level *model.ProgrammeLevel) programmeLevel
 		DisplayName: level.DisplayName,
 		Description: level.Description,
 	}
+}
+
+func countedProgrammeLevelResponse(level *model.ProgrammeLevel, counts academic.StructureCounts) programmeLevelResponse {
+	response := programmeLevelResponseFromModel(level)
+	id := level.ID.String()
+	response.ClassCount, response.ClassCountIsLowerBound = cappedCount(counts.Classes, id)
+	response.StudentCount, response.StudentCountIsLowerBound = cappedCount(counts.Students, id)
+	return response
 }

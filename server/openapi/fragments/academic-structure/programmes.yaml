@@ -184,6 +184,7 @@ components:
             created_at: '2026-08-02T09:30:00Z'
             updated_at: '2026-08-09T15:00:00Z'
             academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+            kind: undergraduate
             name: bsc-computer-science
             display_name: Bachelor of Science in Computer Science
             description: Undergraduate computer science programme.
@@ -208,6 +209,16 @@ components:
             Optional. The `revision` from your last read. If the Programme has changed since, the request fails
             with `programme.conflict` and nothing changes. Without it, the change applies whatever the current
             revision. Null is rejected.
+        kind:
+          type:
+            - string
+            - "null"
+          enum:
+            - undergraduate
+            - postgraduate
+            - other
+            - null
+          description: The new kind of Programme. Omitted or null leaves it unchanged.
         name:
           type:
             - string

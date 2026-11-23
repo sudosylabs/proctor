@@ -11,6 +11,7 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 const (
@@ -39,16 +40,24 @@ func resourceLocalizationDefinitions() []localization.Definition {
 			Origin: localizationOrigin,
 		})
 	}
-	for _, action := range model.PersonalAccessTokenActions() {
+	for _, action := range model.GrantableActions() {
 		definitions = append(definitions,
-			localization.Definition{ID: accessActionTitleLocalizationID(model.Action(action)), Origin: localizationOrigin},
-			localization.Definition{ID: accessActionDescriptionLocalizationID(model.Action(action)), Origin: localizationOrigin},
+			localization.Definition{ID: accessActionTitleLocalizationID(action), Origin: localizationOrigin},
+			localization.Definition{ID: accessActionDescriptionLocalizationID(action), Origin: localizationOrigin},
 		)
+	}
+	for _, area := range model.ActionAreas() {
+		definitions = append(definitions, localization.Definition{ID: accessAreaTitleLocalizationID(area), Origin: localizationOrigin})
 	}
 	definitions = append(definitions,
 		localization.Definition{ID: systemAdministratorRoleNameID, Origin: localizationOrigin},
 		localization.Definition{ID: systemAdministratorRoleDescriptionID, Origin: localizationOrigin},
 	)
+	for _, reason := range store.ExamPublicationProblemReasons() {
+		definitions = append(definitions, localization.Definition{ID: examDraftProblemLocalizationID(reason), Origin: localizationOrigin})
+	}
+	definitions = append(definitions, accessPolicyLocalizationDefinitions()...)
+	definitions = append(definitions, integrityFlagSummaryLocalizationDefinitions()...)
 	return append(definitions, auditSummaryLocalizationDefinitions()...)
 }
 
@@ -56,14 +65,19 @@ func sessionRevocationLocalizationID(reason model.SessionRevocationReason) strin
 	return "session.revocation." + string(reason)
 }
 
-// accessActionTitleLocalizationID names the short title of an action offered
-// as a personal access token scope.
+// accessActionTitleLocalizationID names the short title of a grantable
+// action, shown in the role editor and as a personal access token scope.
 func accessActionTitleLocalizationID(action model.Action) string {
 	return "access.action." + string(action) + ".title"
 }
 
 // accessActionDescriptionLocalizationID names the one-sentence explanation of
-// an action offered as a personal access token scope.
+// a grantable action.
 func accessActionDescriptionLocalizationID(action model.Action) string {
 	return "access.action." + string(action) + ".description"
+}
+
+// accessAreaTitleLocalizationID names a group of actions in the role editor.
+func accessAreaTitleLocalizationID(area model.ActionArea) string {
+	return "access.area." + string(area) + ".title"
 }

@@ -34,6 +34,9 @@ type RetentionPreviewCreation struct {
 	RetentionMutation
 	PreviewID              model.RetentionPreviewID
 	ExpectedPolicyRevision int64
+	// Proposed, when set, counts these unsaved settings instead of the saved
+	// policy; the preview is then marked proposed and cannot approve cleanup.
+	Proposed *model.RetentionPolicySettings
 }
 
 type RetentionControlChange struct {
@@ -65,6 +68,56 @@ type RetentionRecordPage struct {
 	AsOf           time.Time
 	Items          []RetentionRecordItem
 	HasMore        bool
+	// ExamTitles names each listed record's Exam by its draft title.
+	ExamTitles map[model.ExamID]string
+}
+
+// RetentionExamSummaryOptions pages the Exams that have sealed records, by
+// Exam ID.
+type RetentionExamSummaryOptions struct {
+	AfterExamID model.ExamID
+	Limit       int
+}
+
+// RetentionExamSummary counts one Exam's records by category and blocker, as
+// a preview counts the whole Institution.
+type RetentionExamSummary struct {
+	ExamID              model.ExamID
+	Title               string
+	Work                model.RetentionPreviewCounts
+	Integrity           model.RetentionPreviewCounts
+	BrowserActivity     model.RetentionPreviewCounts
+	SecurityOperational model.RetentionPreviewCounts
+}
+
+type RetentionExamSummaryPage struct {
+	PolicyRevision int64
+	AsOf           time.Time
+	Items          []RetentionExamSummary
+	HasMore        bool
+}
+
+// RetentionHoldListOptions pages the Institution's holds by ID. ExamID and
+// ReasonCode narrow it; released holds are left out unless IncludeReleased.
+type RetentionHoldListOptions struct {
+	ExamID          model.ExamID
+	ReasonCode      string
+	IncludeReleased bool
+	After           model.RetentionHoldID
+	Limit           int
+}
+
+// RetentionHoldPage is one page of holds with each Exam's draft title.
+type RetentionHoldPage struct {
+	Holds      []model.RetentionHold
+	ExamTitles map[model.ExamID]string
+	HasMore    bool
+}
+
+// RetentionHoldDue identifies a hold and its containing exam for notification.
+type RetentionHoldDue struct {
+	ID     model.RetentionHoldID
+	ExamID model.ExamID
 }
 
 // RetentionReconciliation is one idempotent unit of approved retention work.
@@ -134,6 +187,13 @@ type RetentionStore interface {
 	GetPreview(context.Context, model.RetentionPreviewID) (*model.RetentionPreview, error)
 	ChangeControl(context.Context, *RetentionControlChange, *CommandIdempotency) (*RetentionControlResult, error)
 	ListRecords(context.Context, RetentionRecordListOptions) (*RetentionRecordPage, error)
+	// SummarizeRecordsByExam counts a page of Exams' records in one snapshot.
+	SummarizeRecordsByExam(context.Context, RetentionExamSummaryOptions) (*RetentionExamSummaryPage, error)
+	// ListHolds pages every hold of the Institution.
+	ListHolds(context.Context, RetentionHoldListOptions) (*RetentionHoldPage, error)
+	// ClaimDueHoldNotifications marks a bounded batch due for review. The
+	// claim coordinates nodes and does not change the hold's lifecycle.
+	ClaimDueHoldNotifications(context.Context) ([]RetentionHoldDue, error)
 	ReconcileSubmission(context.Context, *RetentionReconciliation) (*RetentionReconciliationResult, error)
 	// BeginPurgeBatch selects up to limit due keys, oldest first, and defers
 	// each for one hour before any I/O, so concurrent callers skip them. A lost

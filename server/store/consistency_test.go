@@ -120,6 +120,7 @@ func sittingFixture(t *testing.T) *model.ExamSitting {
 		model.NewClassID(),
 		consistencyAt.Add(time.Hour),
 		consistencyAt.Add(2*time.Hour),
+		model.ExamSittingJoinWindow{},
 		consistencyAt,
 	)
 	require.NoError(t, err)

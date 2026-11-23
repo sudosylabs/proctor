@@ -129,6 +129,11 @@ components:
                 workspace_maximum_total_bytes: 52428800
               base_revision_id: t1oekp5dqa7nwrzhcx3by9mug4
               updated_at: "2026-08-03T14:20:00Z"
+              updated_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+              updated_by:
+                id: c9me3tsk7oyhx1bwuadgz5nqrf
+                display_name: Owen Hughes
+                username: ohughes
               revision: 9
               resource_count: 2
               has_starter_workspace: true
@@ -174,9 +179,15 @@ components:
         user_id:
           $ref: "#/components/schemas/ID"
           description: The User who manages the Exam.
+        user:
+          $ref: '#/components/schemas/PersonRef'
+          description: The manager, named.
         granted_by_user_id:
           $ref: "#/components/schemas/ID"
           description: The User who made this person a Manager. For the creator, this is the creator.
+        granted_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who added this manager, named.
         granted_at:
           type: string
           format: date-time
@@ -252,11 +263,17 @@ components:
         creator_user_id:
           $ref: "#/components/schemas/ID"
           description: The User who created the Exam. This never changes.
+        creator:
+          $ref: '#/components/schemas/PersonRef'
+          description: The User who created the Exam, named.
         owner_user_id:
           $ref: "#/components/schemas/ID"
           description: >-
             The User who currently owns the Exam. It starts as the creator and changes only by an ownership
             transfer.
+        owner:
+          $ref: '#/components/schemas/PersonRef'
+          description: The Exam's owner, named.
         default_revision_id:
           $ref: "#/components/schemas/ID"
           description: The most recently published Revision of this Exam. Omitted until the Exam is first published.
@@ -293,6 +310,7 @@ components:
         - browser_policy
         - capacity
         - updated_at
+        - updated_by_user_id
         - revision
         - resource_count
         - has_starter_workspace
@@ -324,6 +342,14 @@ components:
           type: string
           format: date-time
           description: When the Draft last changed.
+        updated_by_user_id:
+          $ref: "#/components/schemas/ID"
+          description: >-
+            The User who made the Draft's latest change, including a Resource or Starter Workspace change and
+            publishing.
+        updated_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: The User who made the Draft's latest change, named.
         revision:
           type: integer
           format: int64
@@ -403,6 +429,15 @@ components:
           maxLength: 64
           pattern: ^[a-z0-9_-]{1,64}$
           description: Your name for this rule, unique within the policy. Lowercase letters, digits, hyphens and underscores.
+        label:
+          type: string
+          minLength: 1
+          maxLength: 400
+          description: >-
+            An optional short name for the site that staff and candidates read in place of the origin, such as
+            "PostgreSQL documentation". Plain text of at most 400 characters. Surrounding spaces and invisible or
+            bidirectional characters are removed when you save, and a label that is then empty is left out. Control
+            characters are rejected. It is frozen with the revision and plays no part in matching.
         origin:
           type: string
           format: uri

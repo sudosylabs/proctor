@@ -24,7 +24,9 @@ import (
 // AcademicUnitID (which includes descendants) narrow, never widen, the
 // caller's visibility. An empty Order sorts by username; the After fields
 // carry the previous page's last key, as store.UserListOptions describes.
-// Only institution-wide user.view may sort or filter by last activity.
+// Only institution-wide user.view may sort or filter by last activity or
+// keep only role holders, and only a caller who may see two-step
+// verification (see access.Authorizer.CanViewUserMFA) may filter by it.
 type SearchUsersQuery struct {
 	Query               string
 	Order               store.UserOrder
@@ -42,6 +44,24 @@ type SearchUsersQuery struct {
 	NeverSignedIn       bool
 	LastActiveAfter     time.Time
 	LastActiveBefore    time.Time
+	MFA                 store.UserMFAFilter
+	RoleHolder          bool
+}
+
+// UserMFA is an account's two-step verification state: whether it has an
+// active Proctor credential, its method and when it was turned on. How a
+// sign-in was proved belongs to each Session, not here.
+type UserMFA struct {
+	Enabled   bool
+	Method    string
+	EnabledAt model.OptionalTime
+}
+
+// UserProfile is a profile read. MFA is nil unless the caller may see
+// two-step verification, so an absent state never reads as off.
+type UserProfile struct {
+	User *model.User
+	MFA  *UserMFA
 }
 
 // AccountState narrows the directory to active or disabled accounts; the zero
@@ -134,11 +154,13 @@ const (
 
 // UserDirectoryEntry is one directory row. Memberships holds only academic
 // units the caller's visibility reaches. Roles is nil when the caller holds
-// role_binding.view nowhere.
+// role_binding.view nowhere, and MFA when the caller may not see two-step
+// verification.
 type UserDirectoryEntry struct {
 	User        *model.User
 	Memberships store.UserDirectorySummary
 	Roles       *store.UserRoleBindingSummary
+	MFA         *UserMFA
 }
 
 // SearchUsers counts the total only on the first page, read without a keyset.
@@ -229,6 +251,11 @@ func (s *Service) summarizeUsers(
 		}
 	}
 
+	mfaByUser, err := s.userMFAStates(ctx, inv, userIDs, visibility.InstitutionWide)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, user := range users {
 		entry := UserDirectoryEntry{User: user, Memberships: membershipsByUser[user.ID]}
 		entry.Memberships.UserID = user.ID
@@ -237,11 +264,46 @@ func (s *Service) summarizeUsers(
 			roles.UserID = user.ID
 			entry.Roles = &roles
 		}
+		if mfaByUser != nil {
+			entry.MFA = mfaByUser[user.ID]
+		}
 
 		entries = append(entries, entry)
 	}
 
 	return entries, nil
+}
+
+// userMFAStates returns every listed user's two-step verification state, or
+// nil when the caller may not see it; institutionWide reports user.view the
+// caller is already known to hold Institution-wide. It never reads a pending
+// setup or recovery codes.
+func (s *Service) userMFAStates(
+	ctx context.Context,
+	inv invocation.Invocation,
+	userIDs []model.UserID,
+	institutionWide bool,
+) (map[model.UserID]*UserMFA, error) {
+	if !institutionWide {
+		visible, err := s.authorizer.CanResetUserMFA(ctx, inv)
+		if err != nil || !visible {
+			return nil, err
+		}
+	}
+	states, err := s.users.ListMFAStates(ctx, userIDs)
+	if err != nil {
+		return nil, StoreErrors.Translate(err)
+	}
+	result := make(map[model.UserID]*UserMFA, len(userIDs))
+	for _, id := range userIDs {
+		result[id] = &UserMFA{}
+	}
+	for _, state := range states {
+		if mfa, listed := result[state.UserID]; listed {
+			*mfa = UserMFA{Enabled: true, Method: model.MFAMethodAuthenticatorApp, EnabledAt: state.EnabledAt}
+		}
+	}
+	return result, nil
 }
 
 // SearchUserPage is the uncounted read that global search composes.
@@ -284,6 +346,9 @@ func (s *Service) listUsers(
 	if (query.State != "" && !query.State.IsValid()) || (query.State != "" && query.IncludeDisabled) {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "state")
 	}
+	if query.MFA != "" && !query.MFA.IsValid() {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "mfa")
+	}
 
 	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, inv)
 	if err != nil {
@@ -302,11 +367,28 @@ func (s *Service) listUsers(
 	if activityField != "" && !visibility.InstitutionWide {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", activityField)
 	}
+	// Role holders are named only to institution-wide user.view; anyone else
+	// sees the preflight's count alone.
+	if query.RoleHolder && !visibility.InstitutionWide {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "role_holder")
+	}
+	if query.MFA != "" {
+		mfaVisible := visibility.InstitutionWide
+		if !mfaVisible {
+			var mfaErr error
+			if mfaVisible, mfaErr = s.authorizer.CanResetUserMFA(ctx, inv); mfaErr != nil {
+				return paging.Page[*model.User]{}, store.UserListOptions{}, mfaErr
+			}
+		}
+		if !mfaVisible {
+			return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "mfa")
+		}
+	}
 
 	// A scoped viewer cannot see disablement, so it neither reaches disabled
 	// users nor learns of them from an error.
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
-	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "" || len(roleIDs) > 0) {
+	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "" || len(roleIDs) > 0 || query.RoleHolder) {
 		visibility.ActiveAt = model.TimeUTC(s.now())
 	}
 	roleScope, err := s.userDirectoryRoleScope(ctx, inv, roleIDs, visibility.ActiveAt)
@@ -332,6 +414,8 @@ func (s *Service) listUsers(
 		NeverSignedIn:         query.NeverSignedIn,
 		LastActivityAfter:     query.LastActiveAfter,
 		LastActivityBefore:    query.LastActiveBefore,
+		MFA:                   query.MFA,
+		RoleHolder:            query.RoleHolder,
 		Visibility:            visibility,
 	}
 	users, err := s.users.List(ctx, options)
@@ -348,8 +432,11 @@ func (s *Service) listUsers(
 }
 
 // GetUserProfile gives a scoped grant the limited projection, without the
-// email address and account metadata.
-func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation, id model.UserID) (*model.User, error) {
+// email address and account metadata, and adds two-step verification for a
+// caller who may see it. Who disabled the account, and why, is account
+// metadata: it reaches only institution-wide readers, the same readers who
+// see the disable's reason in its audit.
+func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation, id model.UserID) (*UserProfile, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
@@ -357,15 +444,29 @@ func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation,
 	if err != nil {
 		return nil, err
 	}
-	fullProfile := read.FullProfile
 	user, err := s.users.Get(ctx, id)
 	if err != nil {
 		return nil, StoreErrors.Translate(err)
 	}
-	if fullProfile {
-		return user, nil
+	if !read.FullProfile {
+		if !user.IsActive() {
+			return nil, apperror.New("resource.not_found").WithField("resource", "user")
+		}
+		user = scopedUserProjection(user)
 	}
-	return scopedUserProjection(user), nil
+	// One's own profile is a full read without Institution-wide user.view, so
+	// only another person's full profile settles that question.
+	institutionWide := read.FullProfile
+	if inv.Principal().UserID == id {
+		if institutionWide, err = s.authorizer.CanViewInstitutionUsers(ctx, inv); err != nil {
+			return nil, err
+		}
+	}
+	mfa, err := s.userMFAStates(ctx, inv, []model.UserID{id}, institutionWide)
+	if err != nil {
+		return nil, err
+	}
+	return &UserProfile{User: user, MFA: mfa[id]}, nil
 }
 
 func userDirectoryAffiliations(kinds []model.AffiliationKind) ([]model.AffiliationKind, error) {
@@ -468,6 +569,8 @@ func scopedUserProjection(user *model.User) *model.User {
 	projected.LastLoginAt = model.OptionalTime{}
 	projected.LastActivityAt = model.OptionalTime{}
 	projected.DisabledAt = model.OptionalTime{}
+	projected.DisabledByUserID = ""
+	projected.DisabledReason = ""
 	projected.DefaultProfilePictureSeed = ""
 	projected.DefaultProfilePictureFileID = model.FileEntryID("")
 	projected.CustomProfilePictureFileID = model.FileEntryID("")
@@ -518,7 +621,7 @@ func (s *Service) UpdateUserProfile(
 	}
 
 	resource := model.Resource{Type: model.ResourceUser, ID: id.String()}
-	return access.RunAudited(
+	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -541,4 +644,10 @@ func (s *Service) UpdateUserProfile(
 		},
 		StoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishUserChanged(ctx, id)
+	return updated, nil
 }

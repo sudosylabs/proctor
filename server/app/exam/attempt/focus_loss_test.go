@@ -69,10 +69,11 @@ func TestEvaluateFocusLossHashesCredentialAuditsSafeScopeAndPublishesCommittedWa
 	// Contract: managers learn of the Integrity Flag before the candidate is
 	// warned, and the Sitting board is invalidated after both.
 	require.Equal(t, []realtimetest.Call{
-		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
+		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
-		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
+		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, result.ReceivedAt)),
 	}, f.publisher.Calls())
 	principal := f.inv.Principal()
 	focusAccess := f.persistence.focusAccess
@@ -279,17 +280,18 @@ func TestEvaluateFocusLossProjectsCommittedPolicySuspensionAndPublishesOnce(t *t
 	// board and the candidate's Exam activity are invalidated next, and the
 	// closed Connection is unbound last.
 	require.Equal(t, []realtimetest.Call{
-		pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
+		pub(realtime.NewExamAttemptConnectionClosedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			result.Connection.CloseReason, result.Connection.ClosedAt.Time)),
-		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
+		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
-		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
+		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			result.Flag.ID, result.Suspension.ID, result.Attempt.Revision, result.ReceivedAt)),
-		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID,
+		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID,
 			result.Suspension.Source, result.Suspension.CandidateReason, result.ReceivedAt)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 		pub(realtime.NewCandidateExamActivityChangedEvent(result.CandidateUserID)),
 		{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.Connection.ID},
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, result.ReceivedAt)),
 	}, f.publisher.Calls())
 }
 
@@ -465,9 +467,10 @@ func TestEvaluateFocusLossAsksDesktopForTheFlagsScreenClip(t *testing.T) {
 	require.True(t, result.ScreenClipRequested)
 	pub := published(t)
 	require.Equal(t, []realtimetest.Call{
-		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
+		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
-		pub(realtime.NewCandidateScreenClipsRequestedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, result.ReceivedAt)),
+		pub(realtime.NewCandidateScreenClipsRequestedEvent(result.ExamID, result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
 	}, f.publisher.Calls(), "the Flag is announced, then Desktop is told to read its clip requests")
 }

@@ -220,10 +220,15 @@ func (s *Service) CreateRoleBinding(
 	}
 
 	candidate := &model.RoleBinding{
-		UserID:    userID,
-		RoleID:    roleID,
-		ScopeType: command.ScopeType,
-		ScopeID:   scopeID,
+		UserID:          userID,
+		RoleID:          roleID,
+		ScopeType:       command.ScopeType,
+		ScopeID:         scopeID,
+		GrantedByUserID: inv.Principal().UserID,
+		GrantedVia:      model.RoleBindingGrantedManually,
+	}
+	if command.Batch.Fields().OnboardingImportID.IsValid() {
+		candidate.GrantedVia = model.RoleBindingGrantedByImport
 	}
 	if command.StartAt > 0 {
 		candidate.StartsAt = model.TimeFromMillis(command.StartAt)
@@ -305,6 +310,7 @@ func (s *Service) CreateRoleBinding(
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, saved.UserID)
+	s.publishRoleBindingChanged(ctx, saved)
 	return saved, nil
 }
 
@@ -499,6 +505,7 @@ func (s *Service) EndRoleBinding(
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, ended.UserID)
+	s.publishRoleBindingChanged(ctx, ended)
 	return ended, nil
 }
 

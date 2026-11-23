@@ -31,7 +31,7 @@ func TestExamRecordsHTTPRequiresExplicitAcknowledgementAndIdempotency(t *testing
 	logger, _ := routetest.NewLogger(t)
 	principal := recordsHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records, f.people))
 	examID, sittingID := f.examID, model.NewExamSittingID()
 	path := "/api/v1/exams/" + examID.String() + "/sittings/" + sittingID.String() + "/records-completion"
 	serve := func(body, key string) *httptest.ResponseRecorder {
@@ -73,7 +73,7 @@ func TestExamRecordsHTTPHoldScopeAndPartialRetirementDisclosure(t *testing.T) {
 	principal := recordsHTTPPrincipal()
 	f := newExamFixture(t, principal)
 	f.ledger.workRetired, f.ledger.integrityRetired = 1, 2
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records, f.people))
 	examID := f.examID
 	path := "/api/v1/exams/" + examID.String() + "/retention-holds"
 	serve := func(body string) *httptest.ResponseRecorder {
@@ -114,7 +114,7 @@ func TestExamRecordsHTTPCursorBindsScopeAndReleaseFilter(t *testing.T) {
 	hold := model.RetentionHold{ID: model.NewRetentionHoldID(), Scope: scope, Revision: 1, CreatedAt: time.Now(), CreatedByUserID: model.NewUserID(), ReasonCode: "other", PrivateReason: "Preserve."}
 	logger, _ := routetest.NewLogger(t)
 	f.ledger.holds, f.ledger.more = []model.RetentionHold{hold}, true
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records, f.people))
 	path := "/api/v1/exams/" + examID.String() + "/retention-holds?exam_sitting_id=" + sittingID.String() + "&limit=1"
 	serve := func(path string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
@@ -149,7 +149,7 @@ func TestExamRecordsHTTPReleaseRequiresStrongRecentSession(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := recordsHTTPPrincipal()
 	f := newExamFixture(t, principal)
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRecordsResource(f.records, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/retention-holds/"+model.NewRetentionHoldID().String()+"/release", strings.NewReader(`{"expected_revision":1,"reason_code":"case_closed","private_reason":"Resolved."}`))
 	request.Header.Set("Authorization", "Bearer session")
 	request.Header.Set("Content-Type", "application/json")

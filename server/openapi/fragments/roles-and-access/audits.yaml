@@ -161,6 +161,9 @@ components:
                 created_at: '2026-08-01T09:30:00Z'
                 updated_at: '2026-08-01T09:30:00Z'
                 actor_id: ybndrfg8ejkmcpqxot1uwisza4
+                actor:
+                  id: ybndrfg8ejkmcpqxot1uwisza4
+                  display_name: Ada Admin
                 action: class.members.manage
                 resource:
                   type: class
@@ -172,6 +175,25 @@ components:
             total: 1
             total_is_lower_bound: false
   schemas:
+    AuditRepeat:
+      description: >-
+        Present when the same actor did the same action to the same resource more than once in the ten minutes up to
+        and including this event. It counts only events you can see in this listing, this one included, and stops at
+        100.
+      type: object
+      additionalProperties: false
+      required:
+        - count
+        - window_seconds
+      properties:
+        count:
+          type: integer
+          minimum: 2
+          maximum: 100
+        window_seconds:
+          type: integer
+          enum:
+            - 600
     AuditEventResponse:
       description: One audit record you can see, without sensitive detail.
       type: object
@@ -185,6 +207,8 @@ components:
         - status
         - summary
       properties:
+        repeat:
+          $ref: '#/components/schemas/AuditRepeat'
         id:
           $ref: '#/components/schemas/ID'
         created_at:
@@ -198,6 +222,10 @@ components:
         actor_id:
           type: string
           description: The User who performed the action. Omitted for actions the system took on its own.
+        actor:
+          $ref: '#/components/schemas/PersonRef'
+          description: >-
+            The User who performed the action, named for every reader of the Event. Omitted with `actor_id`.
         session_id:
           type: string
           description: >-

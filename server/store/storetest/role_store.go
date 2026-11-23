@@ -26,12 +26,17 @@ import (
 func TestRoleStore(t *testing.T, ss store.Store) {
 	t.Run("LifecycleAndQueries", func(t *testing.T) {
 		ctx := context.Background()
+		editor := saveUser(t, ctx, ss)
 		input := &model.Role{
 			Name: "department-teacher", DisplayName: "Department Teacher",
-			Permissions: []string{string(model.ActionClassView)},
+			Permissions:     []string{string(model.ActionClassView)},
+			UpdatedByUserID: editor.ID,
 		}
 		saved, err := SaveRole(ctx, ss, input)
 		require.NoError(t, err)
+		stored, err := ss.Role().Get(ctx, saved.ID)
+		require.NoError(t, err)
+		require.Equal(t, editor.ID, stored.UpdatedByUserID, "the Role keeps who last changed it")
 		require.True(t, saved.ID.IsValid(), "Save() = %#v, input = %#v", saved, input)
 		require.True(t, input.ID.IsZero(), "Save() = %#v, input = %#v", saved, input)
 		byID, err := ss.Role().Get(ctx, saved.ID)

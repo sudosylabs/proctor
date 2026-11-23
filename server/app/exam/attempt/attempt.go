@@ -82,6 +82,8 @@ type NativeDeliveryBuildIdentity struct {
 type DesktopBuildResolver interface {
 	ResolveNativeDeliveryBuild(context.Context, NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error)
 	ResolveAttemptDesktopBuild(context.Context, model.Principal) (DesktopBuildResolution, error)
+	// AssessDesktopBuilds reports whether each build would be admitted now.
+	AssessDesktopBuilds(context.Context, []model.DesktopBuildTuple) ([]bool, error)
 }
 
 // Dependencies are the collaborators New validates once.
@@ -175,6 +177,9 @@ type Service struct {
 	// workspace names that candidate. Neither manufactures a user principal.
 	systemAuditor access.SystemAuditAdapter
 	publisher     realtime.Publisher
+	// evidenceHints sends exam_attempt.evidence.changed at most once per
+	// attempt per evidenceHintWindow.
+	evidenceHints *realtime.ThrottledPublisher
 	content       Content
 	mail          SubmissionReceiptMail
 	desktopBuilds DesktopBuildResolver
@@ -247,8 +252,13 @@ func New(deps Dependencies) (*Service, error) {
 		deps.NewJob == nil {
 		return nil, errors.New("Exam Attempt dependencies are required")
 	}
+	evidenceHints, err := realtime.NewThrottledPublisher(deps.Publisher, evidenceHintWindow, nil, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Service{
+		evidenceHints:               evidenceHints,
 		killSealedAssistantSessions: deps.KillSealedAssistantSessions,
 
 		assistantSessions:    deps.AssistantSessions,

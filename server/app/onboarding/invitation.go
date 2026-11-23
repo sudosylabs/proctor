@@ -128,6 +128,10 @@ type InvitationView struct {
 	AcademicUnitID   model.AcademicUnitID
 	RoleID           model.RoleID
 	RoleActions      []string
+	// ScopeType and ScopeID are where the invitation admits the person: the
+	// Class, Academic Unit or Institution.
+	ScopeType        model.RoleScopeType
+	ScopeID          string
 	IntendedStartsAt time.Time
 	IntendedEndsAt   model.OptionalTime
 	ExpiresAt        time.Time
@@ -181,16 +185,24 @@ type InvitationAdministrationPage struct {
 	paging.Total
 }
 
+// ListInvitationsQuery filters and pages the invitations the caller may view,
+// as store.InvitationListOptions describes; the zero Order sorts by creation.
 type ListInvitationsQuery struct {
-	Purpose         model.InvitationPurpose
-	State           model.InvitationState
-	TargetEmail     string
-	TargetID        string
-	CreatedAfter    time.Time
-	CreatedBefore   time.Time
-	BeforeCreatedAt time.Time
-	BeforeID        model.InvitationID
-	Limit           int
+	Purpose        model.InvitationPurpose
+	State          model.InvitationState
+	TargetEmail    string
+	TargetID       string
+	Query          string
+	DeliveryStates []model.MailDeliveryState
+	CreatedAfter   time.Time
+	CreatedBefore  time.Time
+	ExpiresAfter   time.Time
+	ExpiresBefore  time.Time
+	Order          store.InvitationOrder
+	Descending     bool
+	AfterAt        time.Time
+	AfterID        model.InvitationID
+	Limit          int
 }
 
 type ResendInvitationCommand struct {
@@ -280,11 +292,16 @@ type InvitationBatchItemCommand struct {
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
 }
 
+// RunInvitationBatchCommand applies one operation to every item.
+// ExpiresInDays, given once for the batch and only to an issuing operation,
+// is every new invitation's whole-day lifetime; nil selects
+// model.InvitationLifetime.
 type RunInvitationBatchCommand struct {
 	Operation                 InvitationBatchOperation
 	ScopeType                 model.RoleScopeType
 	ScopeID                   string
 	IdempotencyKey            string
+	ExpiresInDays             *int
 	Items                     []InvitationBatchItemCommand
 	onboardingImportID        model.OnboardingImportID
 	onboardingImportRowNumber int
@@ -382,6 +399,8 @@ func invitationView(invitation *model.Invitation) InvitationView {
 		AcademicUnitID:   invitation.AcademicUnitID,
 		RoleID:           invitation.RoleID,
 		RoleActions:      append([]string(nil), invitation.RoleActions...),
+		ScopeType:        invitation.ScopeType,
+		ScopeID:          invitation.ScopeID,
 		IntendedStartsAt: invitation.IntendedStartsAt,
 		IntendedEndsAt:   invitation.IntendedEndsAt,
 		ExpiresAt:        invitation.ExpiresAt,

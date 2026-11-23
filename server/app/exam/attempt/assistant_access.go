@@ -20,6 +20,7 @@ import (
 // carries it for a whole turn and the store rechecks it on every step, so the
 // assistant acts only while the candidate could act themselves.
 type AssistantCandidate struct {
+	ExamID    model.ExamID
 	Editor    store.ExamAttemptWorkspaceEditorAccess
 	SittingID model.ExamSittingID
 	ClassID   model.ClassID
@@ -43,7 +44,7 @@ func (s *Service) VerifyAssistantCandidate(
 	if err != nil {
 		return AssistantCandidate{}, err
 	}
-	return AssistantCandidate{Editor: editor, SittingID: verified.SittingID, ClassID: verified.ClassID}, nil
+	return AssistantCandidate{ExamID: verified.ExamID, Editor: editor, SittingID: verified.SittingID, ClassID: verified.ClassID}, nil
 }
 
 // AssistantWorkspaceBatchCommand is an assistant edit. The candidate's live

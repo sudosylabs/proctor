@@ -65,6 +65,7 @@ components:
           example:
             submission_review_id: 5ebqfbnezgahdbx9oy7rfr6oro
             submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+            receipt_code: 7QXR-4M2K-HV9D-3JNP
             exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
             student_remarks_markdown: Your submission was reviewed and no further action is needed.
             released_at: '2026-12-18T15:20:00Z'
@@ -76,6 +77,7 @@ components:
       required:
         - submission_review_id
         - submission_id
+        - receipt_code
         - exam_attempt_id
         - student_remarks_markdown
         - released_at
@@ -86,6 +88,12 @@ components:
         submission_id:
           $ref: '#/components/schemas/ID'
           description: The Submission that was reviewed.
+        receipt_code:
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$
+          description: >-
+            The Submission's receipt code, the same value the candidate got when they submitted, in groups of four
+            separated by hyphens.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
           description: The candidate's Attempt.

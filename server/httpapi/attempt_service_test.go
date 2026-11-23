@@ -246,6 +246,9 @@ type attemptLedger struct {
 	// clip is the one screen clip the Attempt has, once requested.
 	clip     *store.ExamAttemptScreenClipView
 	received []int
+	// activity is the candidate's exam activity page.
+	activity      []store.CandidateExamActivityItem
+	activityLists []store.CandidateExamActivityListOptions
 
 	accesses         []store.CandidateAttemptAccess
 	gets             []attemptRead
@@ -259,6 +262,8 @@ type attemptLedger struct {
 	clipCompletions  []*store.ExamAttemptScreenClipCompletion
 	clipReads        int
 	commands         []*store.CommandIdempotency
+	statusLists      []store.SittingCandidateStatusListOptions
+	clipReason       string
 }
 
 func newAttemptLedger(t *testing.T, f *attemptFixture) *attemptLedger {
@@ -300,7 +305,7 @@ func (s *attemptLedger) ResolveCandidateAccess(_ context.Context, access store.C
 	if err := s.prove(access); err != nil {
 		return nil, err
 	}
-	return &store.CandidateAttemptAccessTarget{AttemptID: s.f.attempt.ID, SittingID: s.f.sitting.ID, ClassID: s.f.sitting.ClassID,
+	return &store.CandidateAttemptAccessTarget{ExamID: s.f.examID, AttemptID: s.f.attempt.ID, SittingID: s.f.sitting.ID, ClassID: s.f.sitting.ClassID,
 		CandidateUserID: s.f.candidate.UserID, ParticipationID: s.f.participation.ID, Generation: s.f.participation.Generation}, nil
 }
 
@@ -342,8 +347,20 @@ func (s *attemptLedger) List(_ context.Context, options store.ExamAttemptManager
 	return rows[:min(len(rows), options.Limit)], nil
 }
 
-func (s *attemptLedger) ListSittingCandidateStatuses(context.Context, store.SittingCandidateStatusListOptions) (*store.SittingCandidateStatusPage, error) {
-	return &store.SittingCandidateStatusPage{}, nil
+func (s *attemptLedger) ListSittingCandidateStatuses(
+	_ context.Context,
+	options store.SittingCandidateStatusListOptions,
+) (*store.SittingCandidateStatusPage, error) {
+	s.statusLists = append(s.statusLists, options)
+	page := &store.SittingCandidateStatusPage{ServerTime: attemptFixtureTime, ExamID: s.f.examID, SittingID: s.f.sitting.ID,
+		SittingState: model.ExamSittingOpen, SittingRevision: 1, Items: []store.SittingCandidateStatusItem{}}
+	if options.IncludeCounts {
+		page.Counts = &store.SittingCandidateStatusCounts{Total: 4, WithFailedChecks: 1, WithAttention: 2,
+			ByPresenceState: map[store.SittingCandidatePresenceState]int64{
+				store.SittingCandidateConnected: 3, store.SittingCandidateSuspended: 1,
+			}}
+	}
+	return page, nil
 }
 
 func (s *attemptLedger) currentRevision() model.ExamRevisionID {
@@ -488,11 +505,15 @@ func (s *attemptLedger) CompleteScreenClipUpload(_ context.Context, input *store
 	return &value, nil
 }
 
-func (s *attemptLedger) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
+func (s *attemptLedger) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptManagedScreenClip, error) {
 	if s.clip == nil {
-		return []store.ExamAttemptScreenClipView{}, nil
+		return []store.ExamAttemptManagedScreenClip{}, nil
 	}
-	return []store.ExamAttemptScreenClipView{*s.clip}, nil
+	return []store.ExamAttemptManagedScreenClip{{ExamAttemptScreenClipView: *s.clip, PrivateReason: s.clipReason}}, nil
+}
+
+func (s *attemptLedger) ResolveAttemptSitting(_ context.Context, attemptID model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: s.f.examID, SittingID: s.f.sitting.ID, CandidateUserID: s.f.attempt.CandidateUserID}, nil
 }
 
 func (s *attemptLedger) GetAttemptScreenClip(_ context.Context, clips store.ExamAttemptClips, id model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {
@@ -1098,6 +1119,15 @@ type attemptDesktopBuilds struct{ f *attemptFixture }
 
 func (d attemptDesktopBuilds) ResolveAttemptDesktopBuild(context.Context, model.Principal) (attempt.DesktopBuildResolution, error) {
 	return attempt.DesktopBuildResolution{Build: d.f.build, CompatibilityPolicyRevision: 1}, nil
+}
+
+// AssessDesktopBuilds admits the fixture's build and nothing else.
+func (d attemptDesktopBuilds) AssessDesktopBuilds(_ context.Context, builds []model.DesktopBuildTuple) ([]bool, error) {
+	admitted := make([]bool, len(builds))
+	for index, build := range builds {
+		admitted[index] = build.DesktopBuildID == d.f.build.DesktopBuildID
+	}
+	return admitted, nil
 }
 
 func (d attemptDesktopBuilds) ResolveNativeDeliveryBuild(context.Context, attempt.NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {

@@ -60,7 +60,7 @@ func (s *desktopCompatibilityPolicies) Replace(
 	defer s.mu.Unlock()
 	s.replacements = append(s.replacements, *input)
 	s.commands = append(s.commands, command)
-	if err := s.policy.Replace(input.ExpectedRevision, input.Settings, input.AuditAt); err != nil {
+	if err := s.policy.Replace(input.ExpectedRevision, input.Settings, input.ActorID, input.AuditAt); err != nil {
 		return nil, err
 	}
 	return &store.DesktopCompatibilityPolicyReplacementResult{Policy: s.policy.Clone()}, nil
@@ -103,7 +103,7 @@ func desktopCompatibilityPolicy(t *testing.T, settings *model.DesktopCompatibili
 	t.Helper()
 	policy := model.NewInitialDesktopCompatibilityPolicy(model.NewInstitutionID(), time.Now())
 	if settings != nil {
-		require.NoError(t, policy.Replace(policy.Revision, *settings, time.Now()))
+		require.NoError(t, policy.Replace(policy.Revision, *settings, model.NewUserID(), time.Now()))
 	}
 	return &desktopCompatibilityPolicies{policy: policy}
 }
@@ -124,7 +124,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.August, 28, 10, 11, 12, 345_000_000, time.UTC)
 	policies := desktopCompatibilityPolicy(t, &model.DesktopCompatibilityPolicySettings{
-		RevokedDesktopBuildIDs: []string{}, AdministratorMessage: "Scheduled maintenance is complete.",
+		RevokedDesktopBuilds: []model.DesktopBuildRevocationRequest{}, AdministratorMessage: "Scheduled maintenance is complete.",
 		Availability: model.DesktopAvailabilityReady,
 	})
 	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return now })
@@ -171,7 +171,7 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 	retryAt := time.Now().Add(time.Hour).Truncate(time.Millisecond).UTC()
 	serverTime := retryAt.Add(-time.Minute)
 	policies := desktopCompatibilityPolicy(t, &model.DesktopCompatibilityPolicySettings{
-		RevokedDesktopBuildIDs: []string{}, AdministratorMessage: "Scheduled maintenance is in progress.",
+		RevokedDesktopBuilds: []model.DesktopBuildRevocationRequest{}, AdministratorMessage: "Scheduled maintenance is in progress.",
 		Availability: model.DesktopAvailabilityMaintenance, RetryAt: model.OptionalTimeFrom(retryAt),
 	})
 	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return serverTime })
@@ -197,7 +197,7 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 	// but not ahead of the ping's own server time.
 	serverTime := time.Now().Add(time.Hour).Truncate(time.Millisecond).UTC()
 	policies := desktopCompatibilityPolicy(t, &model.DesktopCompatibilityPolicySettings{
-		RevokedDesktopBuildIDs: []string{}, Availability: model.DesktopAvailabilityMaintenance,
+		RevokedDesktopBuilds: []model.DesktopBuildRevocationRequest{}, Availability: model.DesktopAvailabilityMaintenance,
 		RetryAt: model.OptionalTimeFrom(serverTime),
 	})
 	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return serverTime })
@@ -288,12 +288,12 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		desktopCompatibilityPolicyResource(fixture.service),
+		desktopCompatibilityPolicyResource(fixture.service, testPeople(&directoryUserStore{byID: map[model.UserID]*model.User{}}, fixture.access.Authorizer)),
 	)
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPut,
 		"/api/v1/desktop-compatibility-policy",
-		strings.NewReader(`{"expected_revision":1,"minimum_desktop_release":"1.2.0","revoked_desktop_build_ids":["build-7"],"administrator_message":"Update before the exam.","availability":"ready"}`),
+		strings.NewReader(`{"expected_revision":1,"minimum_desktop_release":"1.2.0","revoked_desktop_builds":[{"build_id":"build-7","reason":" Crashes on wake "}],"administrator_message":"Update before the exam.","availability":"ready"}`),
 	)
 	request.Header.Set("Authorization", "Bearer session")
 	request.Header.Set("Content-Type", "application/json")
@@ -307,7 +307,16 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 	require.Equal(t, principal.UserID, replacement.ActorID)
 	require.Equal(t, int64(1), replacement.ExpectedRevision)
 	require.Equal(t, "1.2.0", replacement.Settings.MinimumDesktopRelease)
-	require.Equal(t, []string{"build-7"}, replacement.Settings.RevokedDesktopBuildIDs)
+	require.Equal(t, []model.DesktopBuildRevocationRequest{{BuildID: "build-7", Reason: "Crashes on wake"}}, replacement.Settings.RevokedDesktopBuilds)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	revoked := body["revoked_desktop_builds"].([]any)
+	require.Len(t, revoked, 1)
+	entry := revoked[0].(map[string]any)
+	require.Equal(t, "build-7", entry["build_id"])
+	require.Equal(t, "Crashes on wake", entry["reason"])
+	require.Equal(t, map[string]any{"id": principal.UserID.String()}, entry["revoked_by"], "the revoker is named by id; an unknown account has no name")
+	require.NotContains(t, entry, "release", "a build outside the catalogue has no release")
 	require.Equal(t, "Update before the exam.", replacement.Settings.AdministratorMessage)
 	require.Equal(t, model.DesktopAvailabilityReady, replacement.Settings.Availability)
 	require.False(t, replacement.Settings.RetryAt.Valid)
@@ -321,10 +330,10 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 	require.Contains(t, response.Body.String(), `"revision":2`)
 
 	for _, invalidBody := range []string{
-		`{"expected_revision":1,"revoked_desktop_build_ids":[],"administrator_message":""}`,
+		`{"expected_revision":1,"revoked_desktop_builds":[],"administrator_message":""}`,
 		`{"expected_revision":1,"minimum_desktop_release":"","administrator_message":""}`,
-		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_build_ids":[]}`,
-		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_build_ids":[],"administrator_message":"","availability":"ready","retry_at":null}`,
+		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_builds":[]}`,
+		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_builds":[],"administrator_message":"","availability":"ready","retry_at":null}`,
 	} {
 		invalid := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/desktop-compatibility-policy", strings.NewReader(invalidBody))
 		invalid.Header.Set("Authorization", "Bearer session")
@@ -360,4 +369,48 @@ func TestDesktopCompatibilityOpenAPIDocument(t *testing.T) {
 	}), "ping parameters = %#v", parameters)
 	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["SystemPingOK"].Headers["Cache-Control"].Ref, "SystemPingOK does not require no-store")
 	require.Equal(t, "#/components/headers/PrivateNoStore", document.Components.Responses["DesktopCompatibilityPolicyOK"].Headers["Cache-Control"].Ref, "DesktopCompatibilityPolicyOK does not require private no-store")
+}
+
+func (s *desktopCompatibilityPolicies) CountOpenSittings(context.Context, int) (int, error) {
+	return 2, nil
+}
+
+func TestDesktopReleasesHTTPPagesTheCompiledCatalogue(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
+		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb}
+	builds := desktopPingBuilds()
+	released := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	for index := range builds {
+		builds[index].ReleasedAt = released.Add(time.Duration(index) * time.Hour)
+	}
+	fixture := newIdentityFixture(t, identityOptions{
+		Stores:        identityStores{DesktopCompatibilityPolicies: desktopCompatibilityPolicy(t, nil)},
+		DesktopBuilds: builds,
+		Grants:        []accesstest.Grant{{UserID: principal.UserID, Actions: []model.Action{model.ActionAccessPolicyView}}},
+	})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
+		desktopCompatibilityPolicyResource(fixture.service, nil))
+	read := func(target string) map[string]any {
+		t.Helper()
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
+		request.Header.Set("Authorization", "Bearer session")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		return body
+	}
+	first := read("/api/v1/desktop-releases?limit=1")
+	require.Equal(t, []any{map[string]any{"release": "1.4.0", "build_id": "darwin-42", "platform": "darwin", "architecture": "arm64",
+		"released_at": "2026-09-01T13:00:00Z", "newest": true}}, first["items"])
+	second := read("/api/v1/desktop-releases?limit=1&cursor=" + first["next_cursor"].(string))
+	items := second["items"].([]any)
+	require.Len(t, items, 1)
+	require.Equal(t, "darwin-41", items[0].(map[string]any)["build_id"])
+	require.Equal(t, false, items[0].(map[string]any)["newest"])
+	require.NotContains(t, second, "next_cursor")
 }

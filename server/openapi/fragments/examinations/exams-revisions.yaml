@@ -413,6 +413,9 @@ components:
         published_by_user_id:
           $ref: "#/components/schemas/ID"
           description: The User who published the Revision.
+        published_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who published the Revision, named.
         published_at:
           type: string
           format: date-time

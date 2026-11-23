@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -28,24 +29,52 @@ import (
 )
 
 type userProfileResponse struct {
-	ID                      string  `json:"id"`
-	CreatedAt               string  `json:"created_at"`
-	UpdatedAt               string  `json:"updated_at"`
-	ArchivedAt              string  `json:"archived_at,omitempty"`
-	Username                string  `json:"username"`
-	Email                   *string `json:"email,omitempty"`
-	EmailVerified           *bool   `json:"email_verified,omitempty"`
-	DisplayName             string  `json:"display_name"`
-	FirstName               string  `json:"first_name"`
-	LastName                string  `json:"last_name"`
-	Locale                  *string `json:"locale,omitempty"`
-	Timezone                *string `json:"timezone,omitempty"`
-	LastLoginAt             string  `json:"last_login_at,omitempty"`
-	LastActivityAt          string  `json:"last_activity_at,omitempty"`
-	DisabledAt              string  `json:"disabled_at,omitempty"`
-	ProfilePictureURL       string  `json:"profile_picture_url"`
-	ProfilePictureChangedAt string  `json:"profile_picture_changed_at,omitempty"`
-	ProfilePictureKind      string  `json:"profile_picture_kind"`
+	ID             string  `json:"id"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+	ArchivedAt     string  `json:"archived_at,omitempty"`
+	Username       string  `json:"username"`
+	Email          *string `json:"email,omitempty"`
+	EmailVerified  *bool   `json:"email_verified,omitempty"`
+	DisplayName    string  `json:"display_name"`
+	FirstName      string  `json:"first_name"`
+	LastName       string  `json:"last_name"`
+	Locale         *string `json:"locale,omitempty"`
+	Timezone       *string `json:"timezone,omitempty"`
+	LastLoginAt    string  `json:"last_login_at,omitempty"`
+	LastActivityAt string  `json:"last_activity_at,omitempty"`
+	DisabledAt     string  `json:"disabled_at,omitempty"`
+	// DisabledBy and DisabledReason describe the disable in force. Only a
+	// profile read and the directory present them, and only to readers of
+	// the full profile.
+	DisabledBy              *personRefResponse `json:"disabled_by,omitempty"`
+	DisabledReason          string             `json:"disabled_reason,omitempty"`
+	ProfilePictureURL       string             `json:"profile_picture_url"`
+	ProfilePictureChangedAt string             `json:"profile_picture_changed_at,omitempty"`
+	ProfilePictureKind      string             `json:"profile_picture_kind"`
+	// MFA is present only for a caller who may see two-step verification.
+	MFA *userMFAResponse `json:"mfa,omitempty"`
+}
+
+// userMFAResponse is an account's two-step verification state; Method and
+// EnabledAt are present while it is on.
+type userMFAResponse struct {
+	Enabled   bool   `json:"enabled"`
+	Method    string `json:"method,omitempty"`
+	EnabledAt string `json:"enabled_at,omitempty"`
+}
+
+func userMFAResponseFromApplication(mfa *user.UserMFA) *userMFAResponse {
+	if mfa == nil {
+		return nil
+	}
+	return &userMFAResponse{Enabled: mfa.Enabled, Method: mfa.Method, EnabledAt: mfa.EnabledAt.FormatRFC3339()}
+}
+
+func userProfileResponseFromApplication(profile *user.UserProfile) userProfileResponse {
+	response := userProfileResponseFromModel(profile.User)
+	response.MFA = userMFAResponseFromApplication(profile.MFA)
+	return response
 }
 
 // userDirectoryEntryResponse is one user directory item: the profile the
@@ -163,6 +192,7 @@ type candidateExamActivityItemResponse struct {
 	Class             candidateExamActivityRelationResponse    `json:"class"`
 	ScheduledStartAt  string                                   `json:"scheduled_start_at"`
 	ScheduledEndAt    string                                   `json:"scheduled_end_at"`
+	JoinWindow        *examSittingJoinWindowResponse           `json:"join_window,omitempty"`
 	SittingState      model.ExamSittingState                   `json:"sitting_state"`
 	SittingReasonCode *string                                  `json:"sitting_reason_code"`
 	ActivityState     store.CandidateExamActivityState         `json:"activity_state"`
@@ -178,14 +208,20 @@ type candidateExamActivityRelationResponse struct {
 	DisplayName string `json:"display_name"`
 }
 
+// candidateExamActivityAttemptResponse is the candidate's own Attempt. The
+// suspension times carry no manager name or reason text.
 type candidateExamActivityAttemptResponse struct {
 	ID                   string                 `json:"id"`
 	State                model.ExamAttemptState `json:"state"`
 	SuspensionReasonCode *string                `json:"suspension_reason_code"`
+	SuspendedAt          string                 `json:"suspended_at,omitempty"`
+	ReallowedAt          string                 `json:"reallowed_at,omitempty"`
+	LastSavedAt          string                 `json:"last_saved_at,omitempty"`
 }
 
 type candidateExamActivitySubmissionResponse struct {
 	ID          string                         `json:"id"`
+	ReceiptCode string                         `json:"receipt_code"`
 	SubmittedAt string                         `json:"submitted_at"`
 	Provenance  model.ExamSubmissionProvenance `json:"provenance"`
 }
@@ -198,10 +234,11 @@ type userProfileHandlers struct {
 	users    *user.Service
 	attempts *attempt.Service
 	emails   *identity.Service
+	people   *people.Resolver
 }
 
-func userProfileResource(users *user.Service, attempts *attempt.Service, emails *identity.Service) route.Resource {
-	h := userProfileHandlers{users: users, attempts: attempts, emails: emails}
+func userProfileResource(users *user.Service, attempts *attempt.Service, emails *identity.Service, resolver *people.Resolver) route.Resource {
+	h := userProfileHandlers{users: users, attempts: attempts, emails: emails, people: resolver}
 	userPath := "/users/{user_id}"
 	picture := "/users/{user_id}/profile-picture"
 	email := "/users/{user_id}/email"
@@ -383,6 +420,7 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 			Class:            candidateExamActivityRelationResponse{ID: item.ClassID.String(), DisplayName: item.ClassDisplayName},
 			ScheduledStartAt: model.FormatRFC3339(item.ScheduledStartAt),
 			ScheduledEndAt:   model.FormatRFC3339(item.ScheduledEndAt),
+			JoinWindow:       joinWindowResponse(item.JoinWindow),
 			SittingState:     item.SittingState,
 			ActivityState:    item.ActivityState,
 			AccessState:      item.AccessState,
@@ -394,7 +432,9 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 		}
 
 		if item.Attempt != nil {
-			mapped.Attempt = &candidateExamActivityAttemptResponse{ID: item.Attempt.ID.String(), State: item.Attempt.State}
+			mapped.Attempt = &candidateExamActivityAttemptResponse{ID: item.Attempt.ID.String(), State: item.Attempt.State,
+				SuspendedAt: item.Attempt.SuspendedAt.FormatRFC3339(), ReallowedAt: item.Attempt.ReallowedAt.FormatRFC3339(),
+				LastSavedAt: item.Attempt.LastSavedAt.FormatRFC3339()}
 			if item.Attempt.SuspensionReasonCode != "" {
 				value := string(item.Attempt.SuspensionReasonCode)
 				mapped.Attempt.SuspensionReasonCode = &value
@@ -404,6 +444,7 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 		if item.Submission != nil {
 			mapped.Submission = &candidateExamActivitySubmissionResponse{
 				ID:          item.Submission.ID.String(),
+				ReceiptCode: item.Submission.ReceiptCode.Display(),
 				SubmittedAt: model.FormatRFC3339(item.Submission.SubmittedAt),
 				Provenance:  item.Submission.Provenance,
 			}
@@ -731,10 +772,26 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
+	// A scoped page carries no disable record, so only an institution-wide
+	// reader's disabled rows are named, in one read for the page.
+	disablers := make([]model.UserID, 0, len(page.Items))
+	for _, entry := range page.Items {
+		disablers = append(disablers, entry.User.DisabledByUserID)
+	}
+	refs, err := namePeople(request, h.people, disablers...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	envelope, err := route.NewList(
 		page.Items,
 		page.HasMore,
-		userDirectoryEntryResponseFromApplication,
+		func(entry user.UserDirectoryEntry) userDirectoryEntryResponse {
+			response := userDirectoryEntryResponseFromApplication(entry)
+			response.DisabledBy = personRef(refs, entry.User.DisabledByUserID)
+			response.DisabledReason = entry.User.DisabledReason
+			return response
+		},
 		func(last user.UserDirectoryEntry) (string, error) {
 			return route.EncodeCursor(newUserDirectoryCursor(order, last.User), userDirectoryCursorSpec())
 		},
@@ -788,7 +845,9 @@ func userDirectoryEntryResponseFromApplication(entry user.UserDirectoryEntry) us
 		}
 	}
 
-	return userDirectoryEntryResponse{userProfileResponse: userProfileResponseFromModel(entry.User), Summary: summary}
+	profile := userProfileResponseFromModel(entry.User)
+	profile.MFA = userMFAResponseFromApplication(entry.MFA)
+	return userDirectoryEntryResponse{userProfileResponse: profile, Summary: summary}
 }
 
 // userDirectoryFilters reads the repeatable affiliation filter and the single
@@ -817,8 +876,8 @@ func userDirectoryFilters(values url.Values) ([]model.AffiliationKind, model.Aca
 }
 
 // userDirectoryAccountFilters reads the repeatable role_id filter and the
-// single state, never_signed_in, last_active_after and last_active_before
-// filters. The application decides which of them the caller may apply.
+// single state, mfa, role_holder, never_signed_in, last_active_after and
+// last_active_before filters. The application decides which of them the caller may apply.
 func userDirectoryAccountFilters(values url.Values, query *user.SearchUsersQuery) error {
 	for _, raw := range values["role_id"] {
 		id, err := model.ParseRoleID(raw)
@@ -844,6 +903,25 @@ func userDirectoryAccountFilters(values url.Values, query *user.SearchUsersQuery
 	query.State = user.AccountState(state)
 	if state != "" && !query.State.IsValid() {
 		return apperror.Invalid("request.invalid", "state")
+	}
+	mfa, err := single("mfa")
+	if err != nil {
+		return err
+	}
+	query.MFA = store.UserMFAFilter(mfa)
+	if mfa != "" && !query.MFA.IsValid() {
+		return apperror.Invalid("request.invalid", "mfa")
+	}
+	roleHolder, err := single("role_holder")
+	if err != nil {
+		return err
+	}
+	switch roleHolder {
+	case "", "false":
+	case "true":
+		query.RoleHolder = true
+	default:
+		return apperror.Invalid("request.invalid", "role_holder")
 	}
 	never, err := single("never_signed_in")
 	if err != nil {
@@ -963,7 +1041,7 @@ func (h userProfileHandlers) current(request route.Request) (route.Result, error
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, userProfileResponseFromModel(account)), nil
+	return route.JSON(http.StatusOK, userProfileResponseFromApplication(account)), nil
 }
 
 func (h userProfileHandlers) get(request route.Request) (route.Result, error) {
@@ -975,7 +1053,14 @@ func (h userProfileHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, userProfileResponseFromModel(account)), nil
+	refs, err := namePeople(request, h.people, account.User.DisabledByUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := userProfileResponseFromApplication(account)
+	response.DisabledBy = personRef(refs, account.User.DisabledByUserID)
+	response.DisabledReason = account.User.DisabledReason
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func (h userProfileHandlers) update(request route.Request) (route.Result, error) {

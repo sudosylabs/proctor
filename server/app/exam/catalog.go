@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -30,14 +31,18 @@ type ListQuery struct {
 	StartsBefore    time.Time
 	BeforeUpdatedAt time.Time
 	BeforeExamID    model.ExamID
+	HasSittings     *bool
 	Limit           int
 }
 
 // CatalogPage is one page of visible exams; HasMore reports that another
-// page follows the last item.
+// page follows the last item. Total is counted on the first page only.
+// Actions holds each listed exam's action counts.
 type CatalogPage struct {
 	Items   []store.ExamSummary
 	HasMore bool
+	paging.Total
+	Actions map[model.ExamID]store.ExamActionCounts
 }
 
 type ArchiveCommand struct {
@@ -95,7 +100,7 @@ func (a *Authoring) ListExams(ctx context.Context, inv invocation.Invocation, qu
 		states = append(states, state)
 	}
 
-	items, err := a.exams.List(ctx, store.ExamListOptions{
+	options := store.ExamListOptions{
 		AcademicUnitID:  query.AcademicUnitID,
 		Query:           strings.TrimSpace(query.Query),
 		ArchiveFilter:   query.ArchiveFilter,
@@ -104,9 +109,11 @@ func (a *Authoring) ListExams(ctx context.Context, inv invocation.Invocation, qu
 		EndsAfter:       model.TimeUTC(query.EndsAfter),
 		StartsBefore:    model.TimeUTC(query.StartsBefore),
 		BeforeExamID:    query.BeforeExamID,
+		HasSittings:     query.HasSittings,
 		Limit:           query.Limit + 1,
 		Visibility:      visibility,
-	})
+	}
+	items, err := a.exams.List(ctx, options)
 	if err != nil {
 		return CatalogPage{}, examStoreErrors.Translate(err)
 	}
@@ -116,7 +123,59 @@ func (a *Authoring) ListExams(ctx context.Context, inv invocation.Invocation, qu
 		page.Items = []store.ExamSummary{}
 	}
 
+	total, consistent, err := paging.CountFirst(query.BeforeExamID.IsZero(), len(page.Items), func(maximum int) (int, error) {
+		return a.exams.Count(ctx, options, maximum)
+	})
+	if err != nil {
+		return CatalogPage{}, examStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return CatalogPage{}, apperror.New("exam.unavailable").Wrap(errors.New("exam count contradicts its page"))
+	}
+	page.Total = total
+
+	if page.Actions, err = a.examActionCounts(ctx, inv, page.Items); err != nil {
+		return CatalogPage{}, err
+	}
+
 	return page, nil
+}
+
+// examActionCounts counts what waits for the viewer on each listed exam,
+// only where they may view its sittings or review its submissions. The
+// scopes shape an already authorized listing, so no decision is recorded.
+func (a *Authoring) examActionCounts(
+	ctx context.Context,
+	inv invocation.Invocation,
+	items []store.ExamSummary,
+) (map[model.ExamID]store.ExamActionCounts, error) {
+	principal := inv.Principal()
+	sittings, err := a.authorizer.ExamManagerScopes(ctx, principal, model.ActionExamSittingView, model.ActionExamSittingViewOverride)
+	if err != nil {
+		return nil, err
+	}
+	reviews, err := a.authorizer.ExamManagerScopes(ctx, principal, model.ActionSubmissionReview, model.ActionSubmissionReviewOverride)
+	if err != nil {
+		return nil, err
+	}
+
+	submissions, err := a.authorizer.ExamManagerScopes(ctx, principal, model.ActionSubmissionView, model.ActionSubmissionViewOverride)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]model.ExamID, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	counts, err := a.exams.CountExamActions(ctx, store.ExamActionCountOptions{
+		ExamIDs: ids, ViewerUserID: principal.UserID,
+		SittingVisibility: sittings, ReviewVisibility: reviews, SubmissionVisibility: submissions, Maximum: store.MaximumListCount,
+	})
+	if err != nil {
+		return nil, examStoreErrors.Translate(err)
+	}
+	return counts, nil
 }
 
 // ArchiveExam idempotently archives an exam, fenced by ExpectedExamRevision.

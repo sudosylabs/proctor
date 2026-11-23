@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -35,6 +36,7 @@ type auditEventResponse struct {
 	CreatedAt  string                `json:"created_at"`
 	UpdatedAt  string                `json:"updated_at"`
 	ActorID    string                `json:"actor_id,omitempty"`
+	Actor      *personRefResponse    `json:"actor,omitempty"`
 	SessionID  string                `json:"session_id,omitempty"`
 	Action     string                `json:"action"`
 	Resource   auditResourceResponse `json:"resource"`
@@ -55,8 +57,17 @@ type auditEventResponse struct {
 	// receive it; academic-scoped readers never do because their projection
 	// drops parameters.
 	Reason string `json:"reason,omitempty"`
+	// Repeat is present when the same actor did the same action to the same
+	// resource more than once in the ten minutes up to and including this
+	// event, counting only events the caller can see.
+	Repeat *auditRepeatResponse `json:"repeat,omitempty"`
 	// prior_state, result and the other parameters are operator-only and
 	// deliberately left out.
+}
+
+type auditRepeatResponse struct {
+	Count         int `json:"count"`
+	WindowSeconds int `json:"window_seconds"`
 }
 
 type auditResourceResponse struct {
@@ -64,8 +75,9 @@ type auditResourceResponse struct {
 	ID   string             `json:"id"`
 }
 
-func auditEventResponseFromModel(request *http.Request, event *model.AuditEvent, names store.AuditNames) auditEventResponse {
+func auditEventResponseFromModel(request *http.Request, event *model.AuditEvent, names store.AuditNames, actors people.Refs) auditEventResponse {
 	return auditEventResponse{
+		Actor:      personRef(actors, event.ActorID),
 		ID:         event.ID.String(),
 		CreatedAt:  model.FormatRFC3339(event.CreatedAt),
 		UpdatedAt:  model.FormatRFC3339(event.UpdatedAt),
@@ -94,9 +106,8 @@ type auditHandlers struct {
 
 func auditResource(app *administration.Service) route.Resource {
 	h := auditHandlers{app: app}
-	return route.NewResource(
-		"audits",
-		route.Endpoint{
+	endpoints := []route.Endpoint{
+		{
 			Method: http.MethodGet,
 			Path:   "/audits",
 			Auth:   route.AuthPrincipalRequired,
@@ -111,7 +122,7 @@ func auditResource(app *administration.Service) route.Resource {
 			},
 			Handle: h.list,
 		},
-		route.Endpoint{
+		{
 			Method: http.MethodGet,
 			Path:   "/users/me/audits",
 			Auth:   route.AuthSessionRequired,
@@ -125,7 +136,8 @@ func auditResource(app *administration.Service) route.Resource {
 			},
 			Handle: h.listSelf,
 		},
-	)
+	}
+	return route.NewResource("audits", append(endpoints, auditExportEndpoints(h)...)...)
 }
 
 func (h auditHandlers) list(request route.Request) (route.Result, error) {
@@ -142,7 +154,11 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, listErr
 	}
 	present := func(event *model.AuditEvent) auditEventResponse {
-		return auditEventResponseFromModel(request.HTTP, event, page.Names)
+		response := auditEventResponseFromModel(request.HTTP, event, page.Names, page.Actors)
+		if count, repeated := page.Repeats[event.ID]; repeated {
+			response.Repeat = &auditRepeatResponse{Count: count, WindowSeconds: int(administration.AuditRepeatWindow.Seconds())}
+		}
+		return response
 	}
 	envelope, err := route.NewList(page.Items, page.HasMore, present, func(last *model.AuditEvent) (string, error) {
 		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order})

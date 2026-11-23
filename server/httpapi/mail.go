@@ -66,6 +66,7 @@ type mailRekeyStatusResponse struct {
 type mailPayloadKeyUsageResponse struct {
 	KeyID            string `json:"key_id"`
 	ActiveReferences int64  `json:"active_references"`
+	InUseSince       string `json:"in_use_since"`
 }
 
 type mailKeyStateResponse struct {
@@ -262,7 +263,7 @@ func (h mailHandlers) getKeyState(request route.Request) (route.Result, error) {
 		Active:               make([]mailPayloadKeyUsageResponse, 0, len(view.Active))}
 	for _, usage := range view.Active {
 		response.Active = append(response.Active, mailPayloadKeyUsageResponse{KeyID: usage.KeyID,
-			ActiveReferences: usage.ActiveReferences})
+			ActiveReferences: usage.ActiveReferences, InUseSince: model.FormatRFC3339(usage.CreatedAt)})
 	}
 	return route.JSON(http.StatusOK, response), nil
 }

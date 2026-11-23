@@ -54,6 +54,7 @@ components:
           schema:
             $ref: '#/components/schemas/CreateAcademicUnitRequest'
           example:
+            kind: department
             name: computer-science
             display_name: Computer Science
             description: Teaching and research in computing.
@@ -73,6 +74,7 @@ components:
             created_at: '2026-08-01T09:00:00Z'
             updated_at: '2026-08-01T09:00:00Z'
             institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+            kind: department
             name: computer-science
             display_name: Computer Science
             description: Teaching and research in computing.
@@ -89,6 +91,7 @@ components:
                 created_at: '2026-08-01T09:00:00Z'
                 updated_at: '2026-08-03T14:20:00Z'
                 institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+                kind: department
                 parent_id: ih1r84kij94nrwis97rft6rduh
                 name: computer-science
                 display_name: School of Computer Science
@@ -98,6 +101,7 @@ components:
                 created_at: '2026-08-02T10:15:00Z'
                 updated_at: '2026-08-02T10:15:00Z'
                 institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+                kind: department
                 parent_id: ih1r84kij94nrwis97rft6rduh
                 name: software-engineering
                 display_name: Software Engineering
@@ -157,6 +161,7 @@ components:
         - created_at
         - updated_at
         - institution_id
+        - kind
         - name
         - display_name
         - description
@@ -189,6 +194,8 @@ components:
         parent_id:
           $ref: '#/components/schemas/ID'
           description: The Academic Unit this one sits directly under. Omitted for a top-level Academic Unit.
+        kind:
+          $ref: '#/components/schemas/AcademicUnitKind'
         name:
           type: string
           description: >-
@@ -200,6 +207,73 @@ components:
         description:
           type: string
           description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+        member_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many people are members of this Academic Unit now. Present only if you hold
+            academic_unit.members.view on it. It is exact below 10,000; at 10,000 counting stops and
+            `member_count_is_lower_bound` is true.
+        member_count_is_lower_bound:
+          type: boolean
+          description: True when `member_count` stopped at 10,000. Present with `member_count`.
+        member_counts_by_affiliation:
+          $ref: '#/components/schemas/AcademicUnitAffiliationCounts'
+        administrators:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Up to three people who administer this Academic Unit: each holds a current Role Binding scoped exactly to
+            it, of a Role that grants academic_unit.manage. Earliest first. Present, possibly empty, only if you hold
+            role_binding.view on the Academic Unit.
+        administrators_more:
+          type: integer
+          minimum: 0
+          description: How many more administrators there are than `administrators` lists. Present with `administrators`.
+    AcademicUnitAffiliationCounts:
+      description: >-
+        How many of the Academic Unit's current members hold each current Affiliation kind. A person can hold several
+        kinds, so these don't add up to `member_count`. Each is exact below 10,000; at 10,000 counting stops and its
+        `_is_lower_bound` flag is true. Present with `member_count`.
+      type: object
+      additionalProperties: false
+      required:
+        - student
+        - student_is_lower_bound
+        - staff
+        - staff_is_lower_bound
+        - teacher
+        - teacher_is_lower_bound
+        - external
+        - external_is_lower_bound
+      properties:
+        student:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        student_is_lower_bound:
+          type: boolean
+        staff:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        staff_is_lower_bound:
+          type: boolean
+        teacher:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        teacher_is_lower_bound:
+          type: boolean
+        external:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        external_is_lower_bound:
+          type: boolean
     AcademicUnitListResponse:
       description: One page of Academic Units, ordered by name and then by identifier.
       type: object
@@ -214,6 +288,17 @@ components:
           description: The Academic Units on this page.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+    AcademicUnitKind:
+      type: string
+      enum:
+        - faculty
+        - school
+        - department
+        - office
+        - other
+      description: >-
+        What kind of Academic Unit this is, for people reading the tree. It is only a label: it changes no rule about
+        what the Academic Unit may contain.
     CreateAcademicUnitRequest:
       type: object
       additionalProperties: false
@@ -221,6 +306,13 @@ components:
         - name
         - display_name
       properties:
+        kind:
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/AcademicUnitKind'
+            - type: string
+              const: ""
+          description: Optional. The kind of Academic Unit. Omitted or empty means `other`.
         name:
           type: string
           description: >-
@@ -241,6 +333,7 @@ components:
         - created_at
         - updated_at
         - academic_unit_id
+        - kind
         - name
         - display_name
         - description
@@ -270,6 +363,8 @@ components:
         academic_unit_id:
           $ref: '#/components/schemas/ID'
           description: The Academic Unit that owns the Programme. It can't change.
+        kind:
+          $ref: '#/components/schemas/ProgrammeKind'
         name:
           type: string
           description: >-
@@ -281,6 +376,42 @@ components:
         description:
           type: string
           description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+        level_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many active Programme Levels the Programme has. Present only if you hold programme_level.view on its Academic Unit.  It is exact below 10,000; at 10,000 counting stops and `level_count_is_lower_bound` is true.
+        level_count_is_lower_bound:
+          type: boolean
+          description: True when `level_count` stopped at 10,000. Present with `level_count`.
+        class_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many active Classes the Programme has, counting only the Classes you hold class.view on. Absent if you hold class.view nowhere. It is exact below 10,000; at 10,000 counting stops and `class_count_is_lower_bound` is true.
+        class_count_is_lower_bound:
+          type: boolean
+          description: True when `class_count` stopped at 10,000. Present with `class_count`.
+        student_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many students the Programme has now, counting the distinct Users currently enrolled in the Classes you hold class.members.view on, as a Class's `student_count` does. Absent if you hold class.members.view nowhere. It is exact below 10,000; at 10,000 counting stops and `student_count_is_lower_bound` is true.
+        student_count_is_lower_bound:
+          type: boolean
+          description: True when `student_count` stopped at 10,000. Present with `student_count`.
+    ProgrammeKind:
+      type: string
+      enum:
+        - undergraduate
+        - postgraduate
+        - other
+      description: >-
+        What kind of Programme this is, for people reading the structure. It is only a label: it changes no rule about
+        the Programme's levels.
     ProgrammeLevelResponse:
       type: object
       additionalProperties: false
@@ -330,6 +461,24 @@ components:
         description:
           type: string
           description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+        class_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many active Classes the Programme Level has, counting only the Classes you hold class.view on. Absent if you hold class.view nowhere. It is exact below 10,000; at 10,000 counting stops and `class_count_is_lower_bound` is true.
+        class_count_is_lower_bound:
+          type: boolean
+          description: True when `class_count` stopped at 10,000. Present with `class_count`.
+        student_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many students the Programme Level has now, counting the distinct Users currently enrolled in the Classes you hold class.members.view on, as a Class's `student_count` does. Absent if you hold class.members.view nowhere. It is exact below 10,000; at 10,000 counting stops and `student_count_is_lower_bound` is true.
+        student_count_is_lower_bound:
+          type: boolean
+          description: True when `student_count` stopped at 10,000. Present with `student_count`.
     ClassResponse:
       type: object
       additionalProperties: false
@@ -383,6 +532,74 @@ components:
         description:
           type: string
           description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+    ClassDetailResponse:
+      description: >-
+        One Class. It includes the Class's teachers when the caller holds class.members.view on that Class.
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - id
+        - created_at
+        - updated_at
+        - programme_level_id
+        - academic_period_id
+        - name
+        - display_name
+        - description
+      properties:
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >-
+            Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the
+            change fails if someone else changed the Class first.
+        id:
+          $ref: '#/components/schemas/ID'
+          description: The Class identifier.
+        created_at:
+          type: string
+          format: date-time
+          description: When the Class was created.
+        updated_at:
+          type: string
+          format: date-time
+          description: When the Class last changed.
+        archived_at:
+          type: string
+          format: date-time
+          description: When the Class was archived. Omitted while it is active.
+        programme_level_id:
+          $ref: '#/components/schemas/ID'
+          description: The Programme Level the Class belongs to.
+        academic_period_id:
+          $ref: '#/components/schemas/ID'
+          description: The Academic Period the Class runs in.
+        name:
+          type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among
+            active Classes with the same Programme Level and Academic Period.
+        display_name:
+          type: string
+          description: Name shown to people, up to 128 characters.
+        description:
+          type: string
+          description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+        teachers:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Up to three of the Class's teachers, by name: the people holding a current Role Binding at the Class
+            itself. Present only when the caller holds class.members.view on this Class, as an empty list when the
+            Class has none.
+        teachers_more:
+          type: integer
+          minimum: 0
+          description: How many more teachers the Class has beyond `teachers`. Present with `teachers`.
     ClassListResponse:
       description: One page of Classes in the requested order. Only the first page carries the total.
       type: object
@@ -409,8 +626,8 @@ components:
           description: True when `total` reached 10,000 and there may be more. Present with `total`.
     ClassListItemResponse:
       description: >-
-        One Class in a Class listing. It includes the current student count when the caller holds
-        class.members.view on that Class.
+        One Class in a Class listing. It includes the current student count and the teachers when the caller
+        holds class.members.view on that Class.
       type: object
       additionalProperties: false
       required:
@@ -473,3 +690,16 @@ components:
         student_count_is_lower_bound:
           type: boolean
           description: True when `student_count` reached 10,000. Present with `student_count`.
+        teachers:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Up to three of the Class's teachers, by name: the people holding a current Role Binding at the Class
+            itself. Present only when the caller holds class.members.view on this Class, as an empty list when the
+            Class has none.
+        teachers_more:
+          type: integer
+          minimum: 0
+          description: How many more teachers the Class has beyond `teachers`. Present with `teachers`.

@@ -156,6 +156,7 @@ components:
                 exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
                 generation: 2
                 policy_kind: focus_loss
+                summary: The exam window lost focus 2 times
                 state: open
                 created_at: '2026-12-14T09:22:47Z'
                 evidence_count: 2
@@ -165,6 +166,7 @@ components:
                 exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
                 generation: 2
                 policy_kind: browser_navigation
+                summary: 1 page was blocked by the “block-search” browser rule
                 state: open
                 created_at: '2026-12-14T09:40:12Z'
                 evidence_count: 1
@@ -225,6 +227,7 @@ components:
         - exam_attempt_id
         - generation
         - policy_kind
+        - summary
         - state
         - created_at
         - evidence_count
@@ -250,6 +253,13 @@ components:
             "<plugin-id>.<kind>". Treat an unknown kind as opaque.
           maxLength: 97
           pattern: ^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31})$
+        summary:
+          type: string
+          maxLength: 1024
+          description: >-
+            One sentence, in the request's language, saying what the policy saw and how often, counting
+            evidence beyond what was kept. A browser rule uses its frozen label if available and otherwise
+            its identifier. Desktop check identifiers may appear. Application names stay in the Desktop catalogue.
         state:
           type: string
           enum:

@@ -138,7 +138,9 @@ func (c administrationCatalog) RetentionPolicy() store.RetentionPolicyStore {
 }
 func (c administrationCatalog) Retention() store.RetentionStore                   { return c.fixture.retention }
 func (c administrationCatalog) PluginSettings() store.PluginSettingsStore         { return nil }
+func (c administrationCatalog) Class() store.ClassStore                           { return nil }
 func (c administrationCatalog) EnvironmentProfile() store.EnvironmentProfileStore { return nil }
+func (c administrationCatalog) AuditExport() store.AuditExportStore               { return nil }
 
 // administrationRoleStore holds the Roles a test lists and records the
 // Roles the service created.
@@ -311,13 +313,15 @@ func (s *administrationBindingStore) listedHolders() []store.RoleBindingRoleList
 // including the probe row a test adds to say another page follows.
 type administrationAuditStore struct {
 	store.AuditStore
-	mu        sync.Mutex
-	events    []*model.AuditEvent
-	total     int
-	listErr   error
-	self      []*store.AuditSelfEntry
-	selfTotal int
-	names     store.AuditNames
+	mu          sync.Mutex
+	repeats     map[model.AuditEventID]int
+	repeatReads []store.AuditRepeatOptions
+	events      []*model.AuditEvent
+	total       int
+	listErr     error
+	self        []*store.AuditSelfEntry
+	selfTotal   int
+	names       store.AuditNames
 
 	lists     []store.AuditListOptions
 	selfLists []store.AuditSelfListOptions
@@ -503,11 +507,16 @@ func (s *administrationRetentionPolicyStore) callCount() int {
 // administrationRetentionStore answers retention control, notices and
 // records, and records what each call was asked.
 type administrationRetentionStore struct {
+	holds       *store.RetentionHoldPage
+	holdOptions []store.RetentionHoldListOptions
+	preview     *store.RetentionPreviewCreation
 	store.RetentionStore
 	mu            sync.Mutex
 	institutionID model.InstitutionID
 	notices       []model.RetentionNotice
 	records       *store.RetentionRecordPage
+	examSummaries *store.RetentionExamSummaryPage
+	examOptions   store.RetentionExamSummaryOptions
 	calls         int
 
 	change        *store.RetentionControlChange
@@ -744,3 +753,42 @@ func (c administrationCatalog) AssistantProfile() store.AssistantProfileStore {
 }
 
 func (c administrationCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }
+
+// CountRepeats reports the repeats the test set; an event without one has
+// no entry.
+func (s *administrationAuditStore) CountRepeats(_ context.Context, options store.AuditRepeatOptions) ([]store.AuditRepeat, error) {
+	s.repeatReads = append(s.repeatReads, options)
+	repeats := []store.AuditRepeat{}
+	for _, id := range options.EventIDs {
+		if count, repeated := s.repeats[id]; repeated {
+			repeats = append(repeats, store.AuditRepeat{EventID: id, Count: count})
+		}
+	}
+	return repeats, nil
+}
+
+func (s *administrationRetentionStore) SummarizeRecordsByExam(_ context.Context, options store.RetentionExamSummaryOptions) (*store.RetentionExamSummaryPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	s.examOptions = options
+	return s.examSummaries, nil
+}
+
+func (s *administrationRetentionStore) ListHolds(_ context.Context, options store.RetentionHoldListOptions) (*store.RetentionHoldPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	s.holdOptions = append(s.holdOptions, options)
+	return s.holds, nil
+}
+
+func (s *administrationRetentionStore) CreatePreview(_ context.Context, input *store.RetentionPreviewCreation, _ *store.CommandIdempotency) (*model.RetentionPreview, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	s.preview = input
+	at := model.NowUTC()
+	return &model.RetentionPreview{ID: input.PreviewID, InstitutionID: s.institutionID, PolicyRevision: input.ExpectedPolicyRevision,
+		Proposed: input.Proposed != nil, CreatedByUserID: input.Principal.UserID, CreatedAt: at, ExpiresAt: at.Add(time.Minute)}, nil
+}

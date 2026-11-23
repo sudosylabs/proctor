@@ -87,7 +87,17 @@ components:
           example:
             items:
               - candidate_user_id: sjebyge5cpbop1xwo4eds74ejb
+                candidate:
+                  id: sjebyge5cpbop1xwo4eds74ejb
+                  username: arao
+                  display_name: Asha Rao
+                class_member_since: "2026-09-04T08:00:00Z"
               - candidate_user_id: hmyjmj68dw6gdxctnghbrhwcth
+                candidate:
+                  id: hmyjmj68dw6gdxctnghbrhwcth
+                  username: tkim
+                  display_name: Tomas Kim
+                class_member_since: "2026-09-04T08:00:00Z"
             next_cursor: eyJjYW5kaWRhdGVfdXNlcl9pZCI6ImhteWptajY4ZHc2Z2R4Y3RuZ2hicmh3Y3RoIn0
   schemas:
     ExamSittingNoShowResponse:
@@ -96,10 +106,19 @@ components:
       additionalProperties: false
       required:
         - candidate_user_id
+        - candidate
+        - class_member_since
       properties:
         candidate_user_id:
           $ref: '#/components/schemas/ID'
           description: The candidate's user ID.
+        candidate:
+          description: The candidate, in the same shape the candidate statuses use.
+          $ref: '#/components/schemas/PersonRef'
+        class_member_since:
+          type: string
+          format: date-time
+          description: When the class membership the candidate held as the Sitting opened began.
     ExamSittingNoShowListResponse:
       description: One page of no-show candidates, ordered by user ID.
       type: object

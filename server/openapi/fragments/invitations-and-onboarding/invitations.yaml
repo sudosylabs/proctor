@@ -92,6 +92,71 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: expires_after
+          in: query
+          required: false
+          description: Return only Invitations that expire at or after this instant.
+          schema:
+            type: string
+            format: date-time
+        - name: expires_before
+          in: query
+          required: false
+          description: Return only Invitations that expire before this instant. It must be later than `expires_after`.
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          required: false
+          description: >-
+            Return only Invitations whose invited address or suggested display name starts with this text, compared
+            case-insensitively after trimming spaces. It is matched literally, at most 254 characters.
+          schema:
+            type: string
+            maxLength: 254
+        - name: delivery_state
+          in: query
+          required: false
+          description: >-
+            Return only Invitations whose newest delivery is in one of these states. Repeat the parameter for several
+            states. An Invitation with no delivery matches none.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 6
+            items:
+              type: string
+              enum:
+                - queued
+                - sending
+                - accepted
+                - failed
+                - suppressed
+                - canceled
+        - name: sort
+          in: query
+          required: false
+          description: >-
+            Sort by creation (`created`, the default) or expiry (`expires`) time, with Invitation ID breaking ties. A
+            cursor works only with the sort and direction that produced it.
+          schema:
+            type: string
+            enum:
+              - created
+              - expires
+            default: created
+        - name: dir
+          in: query
+          required: false
+          description: Descending (`desc`, the default, newest or latest first) or ascending (`asc`) by the `sort` key.
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: desc
         - name: cursor
           in: query
           required: false
@@ -434,6 +499,13 @@ components:
                 expires_at: '2026-08-27T10:00:00Z'
                 email: student.one@example.edu
                 inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+                inviter:
+                  id: rpn96r4g3jfk3t41u4dus44bzc
+                  display_name: Priya Raman
+                scope:
+                  type: class
+                  id: sjebyge5cpbop1xwo4eds74ejb
+                  display_name: Year 1 Mathematics A
                 created_at: '2026-08-20T10:00:00Z'
                 updated_at: '2026-08-20T10:00:03Z'
                 revision: 1
@@ -457,6 +529,16 @@ components:
                 expires_at: '2026-08-17T09:00:00Z'
                 email: teacher.one@example.edu
                 inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+                inviter:
+                  id: rpn96r4g3jfk3t41u4dus44bzc
+                  display_name: Priya Raman
+                role:
+                  id: nybc6xhg593upqice3sdeyro5k
+                  display_name: Teacher
+                scope:
+                  type: academic_unit
+                  id: 889766ufjgio6kbpzjbufozksq
+                  display_name: Computer Science
                 accepted_user_id: xgqjjg7fnyeqnueo58grucaoqy
                 created_at: '2026-08-10T09:00:00Z'
                 updated_at: '2026-08-11T15:42:10Z'

@@ -51,7 +51,7 @@ func (s SQLExamAuthoringStore) List(ctx context.Context, options store.ExamListO
 	if err := validateExamListOptions(options); err != nil {
 		return nil, err
 	}
-	query, args := examCatalogQuery(options)
+	query, args := examCatalogQuery(options, false)
 	var rows []examSummaryRow
 	reader := s.catalogReader
 	if reader == nil {
@@ -71,7 +71,9 @@ func (s SQLExamAuthoringStore) List(ctx context.Context, options store.ExamListO
 	return result, nil
 }
 
-func examCatalogQuery(options store.ExamListOptions) (string, []any) {
+// examCatalogQuery reads one page, or with count the rows a Count counts:
+// the same filters and visibility without the per-row columns.
+func examCatalogQuery(options store.ExamListOptions, count bool) (string, []any) {
 	ordinaryRoots := idStrings(options.Visibility.OrdinaryAcademicUnitRootIDs)
 	overrideRoots := idStrings(options.Visibility.OverrideAcademicUnitRootIDs)
 	hasSittingFilters := len(options.SittingStates) > 0 || !options.EndsAfter.IsZero()
@@ -115,7 +117,14 @@ func examCatalogQuery(options store.ExamListOptions) (string, []any) {
 	}
 
 	query += `)
-		SELECT e.id, e.academic_unit_id, au.display_name AS academic_unit_display_name,
+`
+	if count {
+		query += `SELECT 1
+` + `		FROM exams e JOIN exam_drafts d ON d.exam_id = e.id
+		JOIN academic_units au ON au.id = e.academic_unit_id
+`
+	} else {
+		query += `		SELECT e.id, e.academic_unit_id, au.display_name AS academic_unit_display_name,
 			e.creator_user_id, e.owner_user_id, d.title, e.updated_at, e.archived_at, e.revision,
 			(
 				SELECT COUNT(*)
@@ -162,11 +171,21 @@ func examCatalogQuery(options store.ExamListOptions) (string, []any) {
 				CASE WHEN s.state IN ('closed', 'canceled') THEN s.id END DESC, s.id ASC
 			LIMIT 1
 		) selected ON TRUE
-		WHERE (? = '' OR e.academic_unit_id = ?)
+`
+	}
+	query += `		WHERE (? = '' OR e.academic_unit_id = ?)
+			AND e.copying_until IS NULL
 	`
 	args = append(args, options.AcademicUnitID.String(), options.AcademicUnitID.String())
 	if hasSittingFilters {
 		query += ` AND EXISTS (SELECT 1 FROM eligible_sittings matching WHERE matching.exam_id = e.id)`
+	}
+	if options.HasSittings != nil {
+		presence := ` EXISTS`
+		if !*options.HasSittings {
+			presence = ` NOT EXISTS`
+		}
+		query += ` AND` + presence + ` (SELECT 1 FROM exam_sittings any_sitting WHERE any_sitting.exam_id = e.id)`
 	}
 
 	switch options.ArchiveFilter {
@@ -229,9 +248,39 @@ func examCatalogQuery(options store.ExamListOptions) (string, []any) {
 	}
 
 	query += ` AND (` + strings.Join(visibilityPredicates, ` OR `) + `)`
+	if count {
+		return query, args
+	}
 	query += ` ORDER BY e.updated_at DESC, e.id DESC LIMIT ?`
 	args = append(args, options.Limit)
 	return query, args
+}
+
+// Count counts the exams List would page through, with the same filters and
+// visibility and no cursor, stopping at maximum.
+func (s SQLExamAuthoringStore) Count(ctx context.Context, options store.ExamListOptions, maximum int) (int, error) {
+	options.BeforeUpdatedAt, options.BeforeExamID, options.Limit = time.Time{}, "", 1
+	if err := validateExamListOptions(options); err != nil {
+		return 0, err
+	}
+	if !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("exam", "count_maximum", nil)
+	}
+	query, args := examCatalogQuery(options, true)
+	query = `SELECT COUNT(*) FROM (` + query + ` LIMIT ?) counted`
+	args = append(args, maximum)
+	reader := s.catalogReader
+	if reader == nil {
+		reader = s.GetMaster()
+	}
+	var counts []int
+	if err := reader.Select(ctx, &counts, query, args...); err != nil {
+		return 0, fmt.Errorf("count Exam catalog: %w", err)
+	}
+	if len(counts) != 1 {
+		return 0, invalidPersistedState("exam", "count", errors.New("count returned no row"))
+	}
+	return counts[0], nil
 }
 
 func (s SQLExamAuthoringStore) Archive(

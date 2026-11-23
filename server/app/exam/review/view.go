@@ -59,7 +59,15 @@ func (s *Service) GetExamIntegrityReview(
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review snapshot"))
 	}
 
-	return cloneSnapshot(snapshot), nil
+	result := cloneSnapshot(snapshot)
+	if result.LatestReopeningReason != "" {
+		// A submission viewer may read the review, but only a sitting
+		// manager may read the private reason for reopening it.
+		if _, manageErr := s.authorizer.Sittings.AuthorizeSittingManage(ctx, inv, result.Authorization.SittingID); manageErr != nil {
+			result.LatestReopeningReason = ""
+		}
+	}
+	return result, nil
 }
 
 // ListExamIntegrityFlags returns one page of a submission's integrity flags.
@@ -185,7 +193,7 @@ func validSnapshot(snapshot *store.ExamSubmissionReviewSnapshot, submissionID mo
 		return false
 	}
 	if snapshot.Review == nil {
-		return len(snapshot.Decisions) == 0
+		return len(snapshot.Decisions) == 0 && snapshot.LatestReopeningReason == ""
 	}
 	if snapshot.Review.Validate() != nil || snapshot.Review.SubmissionID != submissionID {
 		return false

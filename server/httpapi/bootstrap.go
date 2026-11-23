@@ -10,11 +10,13 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type bootstrapRequest struct {
@@ -105,13 +107,24 @@ func installationBootstrapResponseFromModel(
 
 	var role *roleResponse
 	if result.Role != nil {
-		mapped := roleResponseFromModel(request, result.Role)
+		mapped := roleResponseFromModel(request, result.Role, nil)
 		role = &mapped
 	}
 
 	var binding *roleBindingResponse
 	if result.RoleBinding != nil {
-		mapped := roleBindingResponseFromModel(result.RoleBinding)
+		// The bootstrap response names what it just created, so it needs no
+		// read: the protected role and the new Institution.
+		names := administration.RoleBindingNames{}
+		if result.Role != nil {
+			names.Roles = map[model.RoleID]store.AuditRoleName{
+				result.Role.ID: {Name: result.Role.Name, DisplayName: result.Role.DisplayName},
+			}
+		}
+		if result.Institution != nil {
+			names.Institution = result.Institution.DisplayName
+		}
+		mapped := roleBindingResponseFromModel(request, result.RoleBinding, names)
 		binding = &mapped
 	}
 

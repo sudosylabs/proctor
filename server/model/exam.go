@@ -145,10 +145,19 @@ type ExamDraft struct {
 	BrowserPolicy        BrowserPolicy
 	BaseRevisionID       ExamRevisionID
 	UpdatedAt            time.Time
-	Revision             int64
+	// UpdatedByUserID is who made the latest change. The draft a Revision
+	// freezes carries none.
+	UpdatedByUserID UserID
+	Revision        int64
 }
 
-func NewExamDraft(examID ExamID, title, instructionsMarkdown string, policy ExamPolicySet, at time.Time) (*ExamDraft, error) {
+func NewExamDraft(
+	examID ExamID,
+	title, instructionsMarkdown string,
+	policy ExamPolicySet,
+	createdBy UserID,
+	at time.Time,
+) (*ExamDraft, error) {
 	draft := &ExamDraft{
 		ExamID:               examID,
 		Title:                strings.TrimSpace(title),
@@ -156,7 +165,11 @@ func NewExamDraft(examID ExamID, title, instructionsMarkdown string, policy Exam
 		Policy:               policy.Clone(),
 		BrowserPolicy:        DisabledBrowserPolicy(),
 		UpdatedAt:            TimeUTC(at),
+		UpdatedByUserID:      createdBy,
 		Revision:             1,
+	}
+	if !createdBy.IsValid() {
+		return nil, invalidModelError("NewExamDraft", "exam_draft", "updated_by_user_id", "must be a valid identifier", "")
 	}
 	if err := draft.Validate(); err != nil {
 		return nil, err
@@ -190,6 +203,9 @@ func (d *ExamDraft) Validate() error {
 	}
 	if d.UpdatedAt.IsZero() {
 		return invalidModelError(where, "exam_draft", "updated_at", "must be set", details)
+	}
+	if !d.UpdatedByUserID.IsZero() && !d.UpdatedByUserID.IsValid() {
+		return invalidModelError(where, "exam_draft", "updated_by_user_id", "must be empty or a valid identifier", details)
 	}
 	if d.Revision < 1 {
 		return invalidModelError(where, "exam_draft", "revision", "must be positive", details)

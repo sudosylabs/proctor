@@ -117,8 +117,11 @@ type ExamListOptions struct {
 	StartsBefore    time.Time
 	BeforeUpdatedAt time.Time
 	BeforeExamID    model.ExamID
-	Limit           int
-	Visibility      ExamListVisibility
+	// HasSittings keeps only exams that have, or with false have not, any
+	// Sitting. Nil keeps both.
+	HasSittings *bool
+	Limit       int
+	Visibility  ExamListVisibility
 }
 
 // ExamSummary is the catalog view of an exam; authored text, policy,
@@ -137,6 +140,29 @@ type ExamSummary struct {
 	SittingCount            int
 	MatchingSittingCount    int
 	SittingSummary          *ExamCatalogSittingSummary
+}
+
+// ExamActionCountOptions asks for the action counts of one page of exams.
+// SittingVisibility is where the viewer holds exam.sitting.view and
+// ReviewVisibility and SubmissionVisibility intersect submission.review
+// with submission.view. The viewer is never counted as their own candidate.
+type ExamActionCountOptions struct {
+	ExamIDs              []model.ExamID
+	ViewerUserID         model.UserID
+	SittingVisibility    ExamListVisibility
+	ReviewVisibility     ExamListVisibility
+	SubmissionVisibility ExamListVisibility
+	Maximum              int
+}
+
+// ExamActionCounts is what waits for a manager on one exam. NeedsAttention
+// counts candidates of its open and paused sittings who need a manager;
+// PendingReview counts its sealed Submissions with no finalized review. Each
+// is nil where the viewer's visibility does not reach the exam, and stops at
+// the asked maximum.
+type ExamActionCounts struct {
+	NeedsAttention *int
+	PendingReview  *int
 }
 
 type ExamCatalogSittingSummary struct {
@@ -309,6 +335,15 @@ type ExamDraftBrowserPolicyUpdate struct {
 // audit. Replays return the committed result without repeating the change.
 type ExamAuthoringStore interface {
 	Create(context.Context, *ExamAuthoringCreation, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
+	// ReserveCopy commits an invisible copy reservation; CommitCopy makes it
+	// visible with its Resources and Starter Workspace in one transaction. A
+	// replay of CommitCopy returns the copy first committed, and the replay's
+	// own reservation lapses.
+	ReserveCopy(context.Context, *ExamCopyReservation) error
+	// FindCopy returns the retained outcome. It returns ErrNotFound before
+	// a copy has committed for the command.
+	FindCopy(context.Context, *CommandIdempotency) (*ExamAuthoringSnapshot, error)
+	CommitCopy(context.Context, *ExamCopyCommit, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftText(context.Context, *ExamDraftTextUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftFocusLoss(context.Context, *ExamDraftFocusLossUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftExecution(context.Context, *ExamDraftExecutionUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
@@ -320,6 +355,12 @@ type ExamAuthoringStore interface {
 	// belong in the one bounded query, so no unrestricted set is ever read.
 	// Override scope is a separate branch that needs no relationship.
 	List(context.Context, ExamListOptions) ([]ExamSummary, error)
+	// Count counts what List pages through, ignoring the cursor and limit,
+	// stopping at maximum (1..MaximumListCount).
+	Count(context.Context, ExamListOptions, int) (int, error)
+	// CountExamActions reads the action counts of one page of exams, one
+	// grouped query per count.
+	CountExamActions(context.Context, ExamActionCountOptions) (map[model.ExamID]ExamActionCounts, error)
 	// Archive resolves a replay first. Otherwise it locks the exam, rechecks
 	// the manager relationship unless overridden, rejects archived or stale
 	// state, and records the archive time without deleting rows. Of concurrent

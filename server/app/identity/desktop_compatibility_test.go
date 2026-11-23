@@ -30,6 +30,11 @@ type desktopCompatibilityPolicyStoreFake struct {
 	command      *store.CommandIdempotency
 	result       *store.DesktopCompatibilityPolicyReplacementResult
 	replaceErr   error
+	openSittings int
+}
+
+func (s *desktopCompatibilityPolicyStoreFake) CountOpenSittings(context.Context, int) (int, error) {
+	return s.openSittings, nil
 }
 
 func (s *desktopCompatibilityPolicyStoreFake) Get(context.Context) (*model.DesktopCompatibilityPolicy, error) {
@@ -117,11 +122,11 @@ func TestDesktopCompatibilityEvaluationUsesCatalogAndInstitutionPolicy(t *testin
 	require.NoError(t, err)
 	policy := model.NewInitialDesktopCompatibilityPolicy(model.NewInstitutionID(), time.UnixMilli(100))
 	require.NoError(t, policy.Replace(1, model.DesktopCompatibilityPolicySettings{
-		MinimumDesktopRelease:  "1.2.3",
-		RevokedDesktopBuildIDs: []string{"darwin-old"},
-		AdministratorMessage:   "Update before the next exam.",
-		Availability:           model.DesktopAvailabilityReady,
-	}, time.UnixMilli(200)))
+		MinimumDesktopRelease: "1.2.3",
+		RevokedDesktopBuilds:  []model.DesktopBuildRevocationRequest{{BuildID: "darwin-old", Reason: "Revoked"}},
+		AdministratorMessage:  "Update before the next exam.",
+		Availability:          model.DesktopAvailabilityReady,
+	}, model.NewUserID(), time.UnixMilli(200)))
 
 	tests := []struct {
 		name              string
@@ -235,10 +240,10 @@ func TestDesktopCompatibilityServiceEvaluatesAuthoritativePolicy(t *testing.T) {
 	t.Parallel()
 	service, persistence, _, _ := desktopCompatibilityServiceFixture(t)
 	require.NoError(t, persistence.policy.Replace(1, model.DesktopCompatibilityPolicySettings{
-		RevokedDesktopBuildIDs: []string{"darwin-current"},
-		AdministratorMessage:   "Use another verified build.",
-		Availability:           model.DesktopAvailabilityReady,
-	}, time.UnixMilli(11_000)))
+		RevokedDesktopBuilds: []model.DesktopBuildRevocationRequest{{BuildID: "darwin-current", Reason: "Revoked"}},
+		AdministratorMessage: "Use another verified build.",
+		Availability:         model.DesktopAvailabilityReady,
+	}, model.NewUserID(), time.UnixMilli(11_000)))
 
 	result, err := service.EvaluateDesktopCompatibility(context.Background(), invocation.Invocation{}, DesktopCompatibilityQuery{
 		DesktopRelease:   "1.2.3",
@@ -261,21 +266,21 @@ func TestDesktopCompatibilityPolicyReadUsesAdministrativeViewAuthorization(t *te
 	policy, err := service.GetDesktopCompatibilityPolicy(context.Background(), inv)
 	require.NoError(t, err)
 	require.Equal(t, []string{string(model.ActionAccessPolicyView)}, decidedActions(access), "authorization")
-	require.NotSame(t, persistence.policy, policy, "authorization")
-	require.Equal(t, persistence.policy.InstitutionID, policy.InstitutionID, "authorization")
+	require.NotSame(t, persistence.policy, policy.Policy, "authorization")
+	require.Equal(t, persistence.policy.InstitutionID, policy.Policy.InstitutionID, "authorization")
 }
 
 func TestDesktopCompatibilityPolicyReplacementRequiresStrongRecentSystemAdministratorSession(t *testing.T) {
 	t.Parallel()
 	service, persistence, access, inv := desktopCompatibilityServiceFixture(t)
 	settings := model.DesktopCompatibilityPolicySettings{
-		MinimumDesktopRelease:  "1.2.3",
-		RevokedDesktopBuildIDs: []string{"darwin-old"},
-		AdministratorMessage:   "Update before the exam.",
-		Availability:           model.DesktopAvailabilityReady,
+		MinimumDesktopRelease: "1.2.3",
+		RevokedDesktopBuilds:  []model.DesktopBuildRevocationRequest{{BuildID: "darwin-old", Reason: "Revoked"}},
+		AdministratorMessage:  "Update before the exam.",
+		Availability:          model.DesktopAvailabilityReady,
 	}
 	updated := persistence.policy.Clone()
-	require.NoError(t, updated.Replace(1, settings, time.UnixMilli(11_000)))
+	require.NoError(t, updated.Replace(1, settings, model.NewUserID(), time.UnixMilli(11_000)))
 	persistence.result = &store.DesktopCompatibilityPolicyReplacementResult{
 		Policy:  updated,
 		Changed: true,
@@ -290,7 +295,7 @@ func TestDesktopCompatibilityPolicyReplacementRequiresStrongRecentSystemAdminist
 	attempts := recordedAttempts(t, access)
 	require.Len(t, attempts, 1)
 	audit := attempts[0]
-	require.Equal(t, int64(2), result.Revision, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit)
+	require.Equal(t, int64(2), result.Policy.Revision, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit)
 	require.Equal(t, []string{string(model.ActionDesktopCompatibilityPolicyManage)}, decidedActions(access), "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit)
 	require.NotNil(t, persistence.replaceInput, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit)
 	require.Equal(t, inv.Principal().UserID, persistence.replaceInput.ActorID, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit)
@@ -302,7 +307,7 @@ func TestDesktopCompatibilityPolicyReplacementRequiresStrongRecentSystemAdminist
 	// Everything the attempt stored, not only its value, must leave the
 	// policy content out.
 	encodedAudit := string(audit.Parameters) + string(audit.PriorState)
-	for _, secret := range append(settings.RevokedDesktopBuildIDs, settings.AdministratorMessage) {
+	for _, secret := range []string{settings.RevokedDesktopBuilds[0].BuildID, settings.AdministratorMessage} {
 		require.NotContains(t, encodedAudit, secret, "audit attempt exposed policy content")
 	}
 }
@@ -449,7 +454,7 @@ func TestDevelopmentCompatibilitySkipsBuildChecksButKeepsAvailabilityAndValidati
 		authorizer: strict.authorizer, auditor: strict.auditor, skipDesktopBuildChecks: true, recentAuthenticationTTL: time.Minute, now: strict.now}
 	require.NoError(t, development.requireDesktopCompatibility(nil))
 	persistence.policy.MinimumDesktopRelease = "9.0.0"
-	persistence.policy.RevokedDesktopBuildIDs = []string{"dev-build"}
+	persistence.policy.RevokedDesktopBuilds = []model.DesktopBuildRevocation{{BuildID: "dev-build", Reason: "Revoked", RevokedAt: persistence.policy.UpdatedAt, RevokedByUserID: model.NewUserID()}}
 	for _, query := range []DesktopCompatibilityQuery{
 		{DesktopRelease: "0.0.0-private", DesktopBuildID: "dev-build", Platform: "darwin", Architecture: "arm64", RealtimeProtocol: 1},
 		{DesktopRelease: "100.0.0", DesktopBuildID: "next-build", Platform: "linux", Architecture: "x64", RealtimeProtocol: 99},
@@ -502,7 +507,7 @@ func TestDevelopmentLoginDoesNotBypassProtectedAttemptBuildChecks(t *testing.T) 
 	principal.DesktopBuildID = "darwin-current"
 	_, err = service.ResolveAttemptDesktopBuild(t.Context(), principal)
 	require.NoError(t, err)
-	persistence.policy.RevokedDesktopBuildIDs = []string{principal.DesktopBuildID}
+	persistence.policy.RevokedDesktopBuilds = []model.DesktopBuildRevocation{{BuildID: principal.DesktopBuildID, Reason: "Revoked", RevokedAt: persistence.policy.UpdatedAt, RevokedByUserID: model.NewUserID()}}
 	_, err = service.ResolveAttemptDesktopBuild(t.Context(), principal)
 	require.Error(t, err, "revoked build obtained Attempt authority in dev")
 }

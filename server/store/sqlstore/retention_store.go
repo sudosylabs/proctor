@@ -12,9 +12,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -95,12 +98,13 @@ func getRetentionPreview(ctx context.Context, executor sqlxExecutor, id model.Re
 		ID             string    `db:"id"`
 		InstitutionID  string    `db:"institution_id"`
 		PolicyRevision int64     `db:"policy_revision"`
+		Proposed       bool      `db:"proposed"`
 		ActorID        string    `db:"created_by_user_id"`
 		CreatedAt      time.Time `db:"created_at"`
 		ExpiresAt      time.Time `db:"expires_at"`
 		Counts         []byte    `db:"counts"`
 	}
-	err := executor.Get(ctx, &row, `SELECT p.id, p.institution_id, p.policy_revision, p.created_by_user_id, p.created_at,
+	err := executor.Get(ctx, &row, `SELECT p.id, p.institution_id, p.policy_revision, p.proposed, p.created_by_user_id, p.created_at,
 			p.expires_at, p.counts
 		FROM retention_previews p
 		JOIN institutions i ON i.id = p.institution_id
@@ -119,6 +123,7 @@ func getRetentionPreview(ctx context.Context, executor sqlxExecutor, id model.Re
 		ID:                  model.RetentionPreviewID(row.ID),
 		InstitutionID:       model.InstitutionID(row.InstitutionID),
 		PolicyRevision:      row.PolicyRevision,
+		Proposed:            row.Proposed,
 		CreatedByUserID:     model.UserID(row.ActorID),
 		CreatedAt:           model.TimeUTC(row.CreatedAt),
 		ExpiresAt:           model.TimeUTC(row.ExpiresAt),
@@ -286,7 +291,8 @@ func (s *SQLRetentionStore) CreatePreview(
 	if input == nil ||
 		!validRetentionMutation(input.RetentionMutation, command, store.RetentionPreviewOperation) ||
 		!input.PreviewID.IsValid() ||
-		input.ExpectedPolicyRevision < 1 {
+		input.ExpectedPolicyRevision < 1 ||
+		(input.Proposed != nil && input.Proposed.Validate() != nil) {
 		return nil, store.NewErrInvalidInput("retention_preview", "creation", nil)
 	}
 
@@ -302,7 +308,12 @@ func (s *SQLRetentionStore) CreatePreview(
 				return nil, &store.ErrRetentionPolicyRevisionConflict{CurrentRevision: policy.Revision}
 			}
 
-			counts, err := countRetentionRecords(ctx, tx, policy, at)
+			counted := policy
+			if input.Proposed != nil {
+				counted = policy.Clone()
+				counted.RetentionPolicySettings = *input.Proposed
+			}
+			counts, err := countRetentionRecords(ctx, tx, counted, at)
 			if err != nil {
 				return nil, err
 			}
@@ -316,6 +327,7 @@ func (s *SQLRetentionStore) CreatePreview(
 				ID:                  input.PreviewID,
 				InstitutionID:       policy.InstitutionID,
 				PolicyRevision:      policy.Revision,
+				Proposed:            input.Proposed != nil,
 				CreatedByUserID:     input.Principal.UserID,
 				CreatedAt:           at,
 				ExpiresAt:           at.Add(model.RetentionPreviewLifetime),
@@ -334,12 +346,13 @@ func (s *SQLRetentionStore) CreatePreview(
 			_, err = tx.Exec(
 				ctx,
 				`INSERT INTO retention_previews(
-					id, institution_id, policy_revision, created_by_user_id, created_at, expires_at, counts
+					id, institution_id, policy_revision, proposed, created_by_user_id, created_at, expires_at, counts
 				)
-				VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 				p.ID.String(),
 				p.InstitutionID.String(),
 				p.PolicyRevision,
+				p.Proposed,
 				p.CreatedByUserID.String(),
 				p.CreatedAt,
 				p.ExpiresAt,
@@ -353,7 +366,7 @@ func (s *SQLRetentionStore) CreatePreview(
 				ctx,
 				tx,
 				input.RetentionMutation,
-				map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision},
+				map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision, "proposed": p.Proposed},
 				"",
 			); err != nil {
 				return nil, err
@@ -379,7 +392,7 @@ func (s *SQLRetentionStore) CreatePreview(
 				ctx,
 				tx,
 				input.RetentionMutation,
-				map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision},
+				map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision, "proposed": p.Proposed},
 				original,
 			)
 		},
@@ -437,6 +450,7 @@ func (s *SQLRetentionStore) ChangeControl(
 				}
 
 				if preview.InstitutionID != policy.InstitutionID ||
+					preview.Proposed ||
 					preview.PolicyRevision != policy.Revision ||
 					preview.CreatedAt.After(at) ||
 					!preview.ExpiresAt.After(at) {
@@ -708,6 +722,7 @@ func countRetentionRecords(
 	}
 
 	defer rows.Close()
+	eligibleExams := map[model.RetentionCategory]map[string]struct{}{}
 	for rows.Next() {
 		var row retentionFactsRow
 		if structScanErr := rows.StructScan(&row); structScanErr != nil {
@@ -734,6 +749,10 @@ func countRetentionRecords(
 			switch eligibility.Blocker {
 			case model.RetentionBlockerNone:
 				counter.Eligible++
+				if eligibleExams[record.Category] == nil {
+					eligibleExams[record.Category] = map[string]struct{}{}
+				}
+				eligibleExams[record.Category][record.Scope.ExamID.String()] = struct{}{}
 			case model.RetentionBlockerRetired:
 				counter.Retired++
 			case model.RetentionBlockerIncomplete:
@@ -760,6 +779,10 @@ func countRetentionRecords(
 	if closeErr := rows.Close(); closeErr != nil {
 		return counts, closeErr
 	}
+	counts.Work.EligibleExams = int64(len(eligibleExams[model.RetentionCategoryWork]))
+	counts.Integrity.EligibleExams = int64(len(eligibleExams[model.RetentionCategoryIntegrity]))
+	counts.BrowserActivity.EligibleExams = int64(len(eligibleExams[model.RetentionCategoryBrowserActivity]))
+	counts.SecurityOperational.EligibleExams = int64(len(eligibleExams[model.RetentionCategorySecurityOperational]))
 
 	counts.Audit, counts.Receipts, err = countRetentionExpiry(ctx, tx, policy, at)
 	return counts, err
@@ -841,7 +864,9 @@ func (s *SQLRetentionStore) ListRecords(ctx context.Context, options store.Reten
 			}
 		}
 
+		examIDs := make([]string, 0, len(rows))
 		for _, row := range rows {
+			examIDs = append(examIDs, row.ExamID)
 			for _, record := range row.records() {
 				eligibility, err := record.Eligibility(policy, at)
 				if err != nil {
@@ -853,6 +878,9 @@ func (s *SQLRetentionStore) ListRecords(ctx context.Context, options store.Reten
 			}
 		}
 
+		if page.ExamTitles, err = listExamTitles(ctx, tx, examIDs); err != nil {
+			return nil, err
+		}
 		return page, nil
 	})
 }
@@ -863,6 +891,7 @@ type retentionPreviewOutcome struct {
 	ID                  model.RetentionPreviewID       `json:"id"`
 	InstitutionID       model.InstitutionID            `json:"institution_id"`
 	PolicyRevision      int64                          `json:"policy_revision"`
+	Proposed            bool                           `json:"proposed"`
 	CreatedByUserID     model.UserID                   `json:"created_by_user_id"`
 	CreatedAt           time.Time                      `json:"created_at"`
 	ExpiresAt           time.Time                      `json:"expires_at"`
@@ -888,6 +917,7 @@ type retentionPreviewCountsDocument struct {
 	SupportingWork   int64 `json:"supporting_work"`
 	ExportProtected  int64 `json:"export_protected"`
 	Retired          int64 `json:"retired"`
+	EligibleExams    int64 `json:"eligible_exams"`
 }
 
 // retentionExpiryCountsDocument converts directly to
@@ -909,6 +939,7 @@ func encodeRetentionPreviewOutcome(p *model.RetentionPreview) ([]byte, error) {
 		ID:                  p.ID,
 		InstitutionID:       p.InstitutionID,
 		PolicyRevision:      p.PolicyRevision,
+		Proposed:            p.Proposed,
 		CreatedByUserID:     p.CreatedByUserID,
 		CreatedAt:           p.CreatedAt,
 		ExpiresAt:           p.ExpiresAt,
@@ -930,6 +961,7 @@ func decodeRetentionPreviewOutcome(data []byte) (*model.RetentionPreview, error)
 		ID:                  outcome.ID,
 		InstitutionID:       outcome.InstitutionID,
 		PolicyRevision:      outcome.PolicyRevision,
+		Proposed:            outcome.Proposed,
 		CreatedByUserID:     outcome.CreatedByUserID,
 		CreatedAt:           outcome.CreatedAt,
 		ExpiresAt:           outcome.ExpiresAt,
@@ -956,3 +988,225 @@ type retentionControlOutcome struct {
 }
 
 func (retentionControlOutcome) outcomeDocument() {}
+
+// listExamTitles names Exams by their draft title, one read for the page.
+func listExamTitles(ctx context.Context, executor sqlxExecutor, examIDs []string) (map[model.ExamID]string, error) {
+	titles := map[model.ExamID]string{}
+	if len(examIDs) == 0 {
+		return titles, nil
+	}
+	rows := []struct {
+		ExamID string `db:"exam_id"`
+		Title  string `db:"title"`
+	}{}
+	if err := executor.Select(ctx, &rows, `SELECT exam_id, title FROM exam_drafts WHERE exam_id = ANY(?)`, pq.Array(examIDs)); err != nil {
+		return nil, fmt.Errorf("list exam titles: %w", err)
+	}
+	for _, row := range rows {
+		titles[model.ExamID(row.ExamID)] = row.Title
+	}
+	return titles, nil
+}
+
+// SummarizeRecordsByExam reads the page's Exams first, then only their
+// records, in one read-only snapshot with the policy.
+func (s *SQLRetentionStore) SummarizeRecordsByExam(
+	ctx context.Context,
+	options store.RetentionExamSummaryOptions,
+) (*store.RetentionExamSummaryPage, error) {
+	if options.Limit < 1 || options.Limit > model.RetentionMaximumPageSize ||
+		!options.AfterExamID.IsZero() && !options.AfterExamID.IsValid() {
+		return nil, store.NewErrInvalidInput("retention_records", "exam_summary", nil)
+	}
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "retention exam summary", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.RetentionExamSummaryPage, error) {
+		if _, err := tx.Exec(ctx, `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`); err != nil {
+			return nil, err
+		}
+		policy, err := getRetentionPolicy(ctx, tx, "")
+		if err != nil {
+			return nil, err
+		}
+		var at time.Time
+		if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
+			return nil, err
+		}
+
+		var exams []string
+		if err = tx.Select(ctx, &exams, `
+			SELECT DISTINCT a.exam_id
+			FROM exam_submissions sub
+			JOIN exam_attempts a ON a.id = sub.exam_attempt_id
+			JOIN exams e ON e.id = a.exam_id
+			JOIN academic_units u ON u.id = e.academic_unit_id
+			WHERE sub.sealed = true AND u.institution_id = ? AND a.exam_id > ?
+			ORDER BY a.exam_id
+			LIMIT ?`, policy.InstitutionID.String(), options.AfterExamID.String(), options.Limit+1); err != nil {
+			return nil, err
+		}
+		page := &store.RetentionExamSummaryPage{PolicyRevision: policy.Revision, AsOf: model.TimeUTC(at), HasMore: len(exams) > options.Limit}
+		if page.HasMore {
+			exams = exams[:options.Limit]
+		}
+		if len(exams) == 0 {
+			page.Items = []store.RetentionExamSummary{}
+			return page, nil
+		}
+
+		var rows []retentionFactsRow
+		if err = tx.Select(ctx, &rows, retentionFactsQuery+` AND a.exam_id = ANY(?)`,
+			policy.InstitutionID.String(), pq.Array(exams)); err != nil {
+			return nil, err
+		}
+		summaries := make(map[string]*store.RetentionExamSummary, len(exams))
+		for _, id := range exams {
+			summaries[id] = &store.RetentionExamSummary{ExamID: model.ExamID(id)}
+		}
+		for _, row := range rows {
+			summary := summaries[row.ExamID]
+			if summary == nil {
+				continue
+			}
+			for _, record := range row.records() {
+				eligibility, eligibilityErr := record.Eligibility(policy, at)
+				if eligibilityErr != nil {
+					return nil, invalidPersistedState("retention_records", "record", eligibilityErr)
+				}
+				counter := &summary.Work
+				switch record.Category {
+				case model.RetentionCategoryIntegrity:
+					counter = &summary.Integrity
+				case model.RetentionCategoryBrowserActivity:
+					counter = &summary.BrowserActivity
+				case model.RetentionCategorySecurityOperational:
+					counter = &summary.SecurityOperational
+				}
+				if countErr := countRetentionBlocker(counter, eligibility.Blocker); countErr != nil {
+					return nil, countErr
+				}
+				if eligibility.Blocker == model.RetentionBlockerNone {
+					counter.EligibleExams = 1
+				}
+			}
+		}
+
+		titles, err := listExamTitles(ctx, tx, exams)
+		if err != nil {
+			return nil, err
+		}
+		page.Items = make([]store.RetentionExamSummary, 0, len(exams))
+		for _, id := range exams {
+			summary := summaries[id]
+			summary.Title = titles[summary.ExamID]
+			page.Items = append(page.Items, *summary)
+		}
+		return page, nil
+	})
+}
+
+// countRetentionBlocker adds one record to counter under its blocker.
+func countRetentionBlocker(counter *model.RetentionPreviewCounts, blocker model.RetentionBlocker) error {
+	counter.Total++
+	switch blocker {
+	case model.RetentionBlockerNone:
+		counter.Eligible++
+	case model.RetentionBlockerRetired:
+		counter.Retired++
+	case model.RetentionBlockerIncomplete:
+		counter.Incomplete++
+	case model.RetentionBlockerHold:
+		counter.Held++
+	case model.RetentionBlockerUnconfigured:
+		counter.Unconfigured++
+	case model.RetentionBlockerSupportingWork:
+		counter.SupportingWork++
+	case model.RetentionBlockerExport:
+		counter.ExportProtected++
+	case model.RetentionBlockerDeadline:
+		counter.AwaitingDeadline++
+	default:
+		return errors.New("unsupported retention blocker")
+	}
+	return nil
+}
+
+func (s *SQLRetentionStore) ClaimDueHoldNotifications(ctx context.Context) ([]store.RetentionHoldDue, error) {
+	var rows []struct {
+		ID     model.RetentionHoldID `db:"id"`
+		ExamID model.ExamID          `db:"exam_id"`
+	}
+	if err := s.GetMaster().Select(ctx, &rows, `
+		WITH due AS (
+			SELECT id
+			FROM retention_holds
+			WHERE until <= statement_timestamp()
+				AND released_at IS NULL AND due_notified_at IS NULL
+			ORDER BY until, id
+			LIMIT 100
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE retention_holds h
+		SET due_notified_at = statement_timestamp()
+		FROM due
+		WHERE h.id = due.id
+		RETURNING h.id, h.exam_id`); err != nil {
+		return nil, fmt.Errorf("claim due retention hold notifications: %w", err)
+	}
+	holds := make([]store.RetentionHoldDue, len(rows))
+	for i, row := range rows {
+		holds[i] = store.RetentionHoldDue{ID: row.ID, ExamID: row.ExamID}
+	}
+	return holds, nil
+}
+
+// ListHolds pages the Institution's holds by ID, naming each Exam in the same
+// read.
+func (s *SQLRetentionStore) ListHolds(ctx context.Context, options store.RetentionHoldListOptions) (*store.RetentionHoldPage, error) {
+	if options.Limit < 1 || options.Limit > 200 ||
+		!options.After.IsZero() && !options.After.IsValid() ||
+		!options.ExamID.IsZero() && !options.ExamID.IsValid() ||
+		options.ReasonCode != "" && !model.ValidRecordsReasonCode(options.ReasonCode) {
+		return nil, store.NewErrInvalidInput("retention_hold", "list", nil)
+	}
+
+	var rows []retentionHoldRow
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT `+retentionHoldColumns+`
+		FROM retention_holds
+		WHERE id > ?
+			AND (? OR released_at IS NULL)
+			AND (? = '' OR exam_id = ?)
+			AND (? = '' OR reason_code = ?)
+		ORDER BY id
+		LIMIT ?`,
+		options.After.String(),
+		options.IncludeReleased,
+		options.ExamID.String(), options.ExamID.String(),
+		options.ReasonCode, options.ReasonCode,
+		options.Limit+1,
+	); err != nil {
+		return nil, fmt.Errorf("list retention holds: %w", err)
+	}
+
+	page := &store.RetentionHoldPage{Holds: make([]model.RetentionHold, 0, len(rows)), HasMore: len(rows) > options.Limit}
+	if page.HasMore {
+		rows = rows[:options.Limit]
+	}
+	examIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		hold, err := row.value()
+		if err != nil {
+			return nil, err
+		}
+		page.Holds = append(page.Holds, *hold)
+		examIDs = append(examIDs, row.ExamID)
+	}
+	titles, err := listExamTitles(ctx, s.GetMaster(), examIDs)
+	if err != nil {
+		return nil, err
+	}
+	page.ExamTitles = titles
+	return page, nil
+}

@@ -32,6 +32,7 @@ type RoleUpdate struct {
 type RoleArchive struct {
 	ID           model.RoleID
 	ArchiveAt    time.Time
+	ArchivedBy   model.UserID
 	AuditEventID model.AuditEventID
 	AuditAt      time.Time
 }
@@ -153,10 +154,69 @@ type RoleHolderCount struct {
 	Scopes   int
 }
 
+// MaximumClassTeacherClasses is the most classes one ListTeachersByClasses
+// call reads: one page of a class listing.
+const MaximumClassTeacherClasses = 200
+
+// ClassTeacherOptions selects, for a page of classes, up to Limit (1 to 10)
+// teachers each, as current at ActiveAt.
+type ClassTeacherOptions struct {
+	ClassIDs []model.ClassID
+	ActiveAt time.Time
+	Limit    int
+}
+
+// ClassTeachers is one class's teachers: the distinct people holding a
+// current Role Binding of an unarchived role at the class itself, by sort name
+// then ID. More counts the teachers past the limit.
+type ClassTeachers struct {
+	ClassID model.ClassID
+	UserIDs []model.UserID
+	More    int
+}
+
 // RoleBindingStore persists time-bounded role assignments. Scope references
 // are checked in the transaction because PostgreSQL cannot express a foreign
 // key whose target table depends on scope_type.
+// AcademicUnitAdministratorOptions names one page of units, at most
+// MaximumAcademicUnitCountUnits, read at ActiveAt; each unit lists up to
+// Limit administrators.
+type AcademicUnitAdministratorOptions struct {
+	AcademicUnitIDs []model.AcademicUnitID
+	ActiveAt        time.Time
+	Limit           int
+}
+
+// AcademicUnitAdministrators are the people holding a current binding,
+// scoped exactly to the unit, of an unarchived role that grants
+// academic_unit.manage. UserIDs is ordered by earliest such binding, then
+// user ID; More counts the administrators past it.
+type AcademicUnitAdministrators struct {
+	AcademicUnitID model.AcademicUnitID
+	UserIDs        []model.UserID
+	More           int
+}
+
+// RoleBindingExpiryCursor continues a node's scan of crossed binding deadlines.
+type RoleBindingExpiryCursor struct {
+	At time.Time
+	ID model.RoleBindingID
+}
+
+type RoleBindingExpiry struct {
+	Cursor RoleBindingExpiryCursor
+	UserID model.UserID
+}
+
+type RoleBindingExpiryPage struct {
+	CheckedAt time.Time
+	Items     []RoleBindingExpiry
+}
+
 type RoleBindingStore interface {
+	// ListExpiries reads crossed end_at deadlines in chronological order,
+	// using the database clock. The zero cursor starts at the recent past.
+	ListExpiries(context.Context, RoleBindingExpiryCursor, int) (RoleBindingExpiryPage, error)
 	Save(context.Context, *RoleBindingCreation) (*model.RoleBinding, error)
 	Get(context.Context, model.RoleBindingID) (*model.RoleBinding, error)
 	ListByUser(context.Context, model.UserID) ([]*model.RoleBinding, error)
@@ -165,6 +225,8 @@ type RoleBindingStore interface {
 	// binding.
 	ListVisibleSummariesByUsers(context.Context, RoleBindingSummaryOptions) ([]UserRoleBindingSummary, error)
 	ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error)
+	// ListTeachersByClasses omits a class with no teacher.
+	ListTeachersByClasses(context.Context, ClassTeacherOptions) ([]ClassTeachers, error)
 	// CountCurrentByRoles counts what ListCurrentByRoles would return across
 	// every page, ignoring the keyset and limit, capped at maximum (see
 	// MaximumListCount).
@@ -176,4 +238,6 @@ type RoleBindingStore interface {
 	// and excludes archived bindings.
 	ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.RoleBinding, error)
 	End(context.Context, *RoleBindingEnd) (*model.RoleBinding, error)
+	// ListAcademicUnitAdministrators omits a unit with no administrator.
+	ListAcademicUnitAdministrators(context.Context, AcademicUnitAdministratorOptions) ([]AcademicUnitAdministrators, error)
 }

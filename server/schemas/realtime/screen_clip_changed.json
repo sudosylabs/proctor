@@ -1,0 +1,31 @@
+{
+  "title": "Screen clip changed",
+  "description": "Names a screen clip that was requested or changed state. Its reason, range and state stay in the clip list.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "exam_id",
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "screen_clip_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "screen_clip_id": {
+      "$ref": "id.json"
+    }
+  }
+}

@@ -24,7 +24,7 @@ import (
 func TestSittingMailReconciliationPeriodicRunnerPreparesOneBoundedFanout(t *testing.T) {
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	record, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		at.Add(time.Hour), at.Add(2*time.Hour), at)
+		at.Add(time.Hour), at.Add(2*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	persistence := &sittingMailStoreFake{candidates: []store.ExamSittingMailReconciliationCandidate{{
 		Sitting: record, ActorUserID: model.NewUserID(),

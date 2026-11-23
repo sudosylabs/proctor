@@ -30,7 +30,7 @@ func TestExamRevisionHTTPPublishUsesStrictIdempotentCommandAndSafeSummary(t *tes
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamRevisionFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRevisionResource(f.publication))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRevisionResource(f.publication, f.people))
 
 	request := newJSONRequest(http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/revisions", bytes.NewReader([]byte(`{"expected_revision":4}`)))
 	request.Header.Set("Authorization", "Bearer credential")
@@ -71,7 +71,7 @@ func TestExamRevisionHTTPGetAndListUseExactIdentityAndVersionedTupleCursor(t *te
 	// The listing reads one past the limit of two, so a third Revision says
 	// another page follows.
 	f.revisions.listed = []store.ExamRevisionSummary{summary, older, oldest}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRevisionResource(f.publication))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRevisionResource(f.publication, f.people))
 
 	getRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+f.examID.String()+"/revisions/"+summary.ID.String(), nil)
 	getRequest.Header.Set("Authorization", "Bearer credential")
@@ -150,7 +150,7 @@ func TestExamRevisionHTTPCursorAndPublishBodyAreStrict(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newExamRevisionFixture(t, principal)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRevisionResource(f.publication))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examRevisionResource(f.publication, f.people))
 	for name, body := range map[string]string{
 		"unknown field":    `{"expected_revision":4,"unexpected":true}`,
 		"missing revision": `{}`,

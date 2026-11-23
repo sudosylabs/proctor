@@ -261,11 +261,11 @@ func TestImportEffectsStillTellTheOwnScopeWhenEnclosingScopesCannotBeRead(t *tes
 	}, f.publisher.Calls())
 }
 
-func TestScopedRoleAcceptanceTellsOnlyTheInviter(t *testing.T) {
+func TestScopedRoleAcceptanceTellsInvitationAndRoleViewers(t *testing.T) {
 	t.Parallel()
 
 	now := model.TimeFromMillis(1_800_000_000_000)
-	unitID, inviterID, userID := model.NewAcademicUnitID(), model.NewUserID(), model.NewUserID()
+	unitID, parentID, inviterID, userID := model.NewAcademicUnitID(), model.NewAcademicUnitID(), model.NewUserID(), model.NewUserID()
 	raw := model.NewCredentialToken()
 	invitation, err := model.NewScopedRoleInvitation(model.ScopedRoleInvitationInput{
 		ID: model.NewInvitationID(), Purpose: model.InvitationPurposeAcademicUnitRole, TargetEmail: "invited@example.edu",
@@ -275,7 +275,7 @@ func TestScopedRoleAcceptanceTellsOnlyTheInviter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	accept := func(persistence store.InvitationStore) (*realtimetest.Publisher, error) {
-		service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
+		service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{unit: &model.AcademicUnit{ID: unitID, ParentID: parentID}}, invitationRoleStoreFake{},
 			permissiveAccess(t, accesstest.Options{}, nil), newTestComposer(t), now.Add(time.Minute))
 		publisher := &realtimetest.Publisher{}
 		service.publisher = publisher
@@ -289,12 +289,26 @@ func TestScopedRoleAcceptanceTellsOnlyTheInviter(t *testing.T) {
 
 	publisher, err := accept(&invitationStoreFake{invitation: invitation})
 	require.NoError(t, err)
-	changed, err := realtime.NewInvitationChangedEvent(inviterID, invitation.ID, model.InvitationAccepted)
+	changed, err := realtime.NewInvitationChangedEvent(invitation.ID, model.InvitationAccepted,
+		invitation.ScopeType, invitation.ScopeID, model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()})
 	require.NoError(t, err)
+	calls := publisher.Calls()
+	require.Len(t, calls, 5, "the invitation audience, accepting User's authority, then viewers of the User, binding and unit")
 	require.Equal(t, []realtimetest.Call{
 		{Method: realtimetest.Publish, Event: changed},
 		{Method: realtimetest.InvalidateAuthorization, UserID: userID},
-	}, publisher.Calls(), "the inviter hears once, and the accepting User only of their new authority")
+	}, calls[:2], "the invitation audience hears once, and the accepting User only of their new authority")
+	userChanged, err := realtime.NewUserChangedEvent(userID)
+	require.NoError(t, err)
+	require.Equal(t, realtimetest.Call{Method: realtimetest.Publish, Event: userChanged}, calls[2], "the User's viewers refetch them")
+	require.Equal(t, "role_binding.changed", calls[3].Event.Name)
+	require.Equal(t, model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}, calls[3].Event.Resource,
+		"only role_binding.view holders at the Invitation's unit hear of the grant")
+
+	unitUpdated, err := realtime.NewAcademicUnitUpdatedEvent(unitID, parentID)
+	require.NoError(t, err)
+	require.Equal(t, realtimetest.Call{Method: realtimetest.Publish, Event: unitUpdated}, calls[4],
+		"academic_unit.view subscribers refetch the unit after an administrator grant")
 
 	publisher, err = accept(&replayedScopedRoleStoreFake{invitationStoreFake: &invitationStoreFake{invitation: invitation}})
 	require.NoError(t, err)

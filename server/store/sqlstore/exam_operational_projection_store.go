@@ -102,6 +102,8 @@ type candidateExamActivityRow struct {
 	ClassDisplayName        string         `db:"class_display_name"`
 	ScheduledStartAt        time.Time      `db:"scheduled_start_at"`
 	ScheduledEndAt          time.Time      `db:"scheduled_end_at"`
+	JoinOpensAt             sql.NullTime   `db:"join_opens_at"`
+	JoinClosesAt            sql.NullTime   `db:"join_closes_at"`
 	SittingState            string         `db:"sitting_state"`
 	SittingReasonCode       sql.NullString `db:"sitting_reason_code"`
 	CurrentMembership       bool           `db:"current_membership"`
@@ -111,7 +113,11 @@ type candidateExamActivityRow struct {
 	AttemptID               sql.NullString `db:"attempt_id"`
 	AttemptState            sql.NullString `db:"attempt_state"`
 	SuspensionReason        sql.NullString `db:"suspension_reason"`
+	SuspendedAt             sql.NullTime   `db:"suspended_at"`
+	ReallowedAt             sql.NullTime   `db:"reallowed_at"`
+	LastSavedAt             sql.NullTime   `db:"last_saved_at"`
 	SubmissionID            sql.NullString `db:"submission_id"`
+	SubmissionReceiptCode   sql.NullString `db:"submission_receipt_code"`
 	SubmittedAt             sql.NullTime   `db:"submitted_at"`
 	SubmissionProvenance    sql.NullString `db:"submission_provenance"`
 	ReleasedAt              sql.NullTime   `db:"released_at"`
@@ -193,7 +199,7 @@ func candidateActivityQuery(options store.CandidateExamActivityListOptions, serv
 			e.id AS exam_id, e.archived_at AS exam_archived_at, s.id AS sitting_id, r.title,
 			e.academic_unit_id, unit.display_name AS academic_unit_display_name, s.class_id,
 			class.display_name AS class_display_name, s.scheduled_start_at, s.scheduled_end_at,
-			s.state AS sitting_state, s.reason_code AS sitting_reason_code,
+			s.join_opens_at, s.join_closes_at, s.state AS sitting_state, s.reason_code AS sitting_reason_code,
 			EXISTS (
 				SELECT 1
 				FROM class_members current_member
@@ -230,9 +236,10 @@ func candidateActivityQuery(options store.CandidateExamActivityListOptions, serv
 					)
 			) AS established_access,
 			a.id AS attempt_id, a.state AS attempt_state,
-			suspension.candidate_reason AS suspension_reason, submission.id AS submission_id,
-			submission.submitted_at, submission.provenance AS submission_provenance,
-			review.released_at
+			suspension.candidate_reason AS suspension_reason, suspension_times.suspended_at,
+			suspension_times.reallowed_at, saved.changed_at AS last_saved_at, submission.id AS submission_id,
+			submission.receipt_code AS submission_receipt_code, submission.submitted_at,
+			submission.provenance AS submission_provenance, review.released_at
 		FROM exam_sittings s
 		JOIN exams e ON e.id = s.exam_id
 		JOIN exam_revisions r ON r.id = s.exam_revision_id
@@ -247,6 +254,19 @@ func candidateActivityQuery(options store.CandidateExamActivityListOptions, serv
 			AND review.release_state = 'released'
 		LEFT JOIN exam_attempt_suspensions suspension ON suspension.exam_attempt_id = a.id
 			AND suspension.state = 'active'
+		-- Only a manager's reallow closes a suspension, so the latest closed
+		-- one ended when the candidate was let back in.
+		LEFT JOIN LATERAL (
+			SELECT MAX(history.started_at) AS suspended_at,
+				MAX(history.ended_at) FILTER (WHERE history.state = 'closed') AS reallowed_at
+			FROM exam_attempt_suspensions history
+			WHERE history.exam_attempt_id = a.id
+		) suspension_times ON true
+		-- The journal always keeps the entry at the workspace cursor, the
+		-- latest change the workspace acknowledged.
+		LEFT JOIN exam_attempt_workspaces workspace ON workspace.exam_attempt_id = a.id
+		LEFT JOIN exam_attempt_workspace_journal saved ON saved.workspace_id = workspace.id
+			AND saved.cursor = workspace.cursor
 		WHERE (`
 	args := []any{
 		serverTime,
@@ -377,13 +397,18 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 
 	classID, err := model.ParseClassID(row.ClassID)
 	state := model.ExamSittingState(row.SittingState)
+	joinWindow := model.ExamSittingJoinWindow{
+		OpensAt:  OptionalTimeFromNullTime(row.JoinOpensAt),
+		ClosesAt: OptionalTimeFromNullTime(row.JoinClosesAt),
+	}
 	if err != nil ||
 		!state.IsValid() ||
 		row.Title == "" ||
 		row.AcademicUnitDisplayName == "" ||
 		row.ClassDisplayName == "" ||
 		row.ServerTime.IsZero() ||
-		!row.ScheduledEndAt.After(row.ScheduledStartAt) {
+		!row.ScheduledEndAt.After(row.ScheduledStartAt) ||
+		joinWindow.ValidateFor(model.TimeUTC(row.ScheduledStartAt), model.TimeUTC(row.ScheduledEndAt)) != nil {
 		return store.CandidateExamActivityItem{}, invalidPersistedState("candidate_exam_activity", "value", errors.New("invalid activity row"))
 	}
 
@@ -397,6 +422,7 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 		ClassDisplayName:        row.ClassDisplayName,
 		ScheduledStartAt:        model.TimeUTC(row.ScheduledStartAt),
 		ScheduledEndAt:          model.TimeUTC(row.ScheduledEndAt),
+		JoinWindow:              joinWindow,
 		SittingState:            state,
 		SittingReasonCode:       row.SittingReasonCode.String,
 		AllowedActions:          []store.CandidateExamAllowedAction{},
@@ -416,6 +442,16 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 			ID:                   attemptID,
 			State:                attemptState,
 			SuspensionReasonCode: model.AttemptSuspensionCandidateReason(row.SuspensionReason.String),
+			SuspendedAt:          OptionalTimeFromNullTime(row.SuspendedAt),
+			ReallowedAt:          OptionalTimeFromNullTime(row.ReallowedAt),
+			LastSavedAt:          OptionalTimeFromNullTime(row.LastSavedAt),
+		}
+		if (attemptState == model.ExamAttemptSuspended || row.ReallowedAt.Valid) && !row.SuspendedAt.Valid {
+			return store.CandidateExamActivityItem{}, invalidPersistedState(
+				"candidate_exam_activity",
+				"suspension",
+				errors.New("inconsistent suspension times"),
+			)
 		}
 		if (attemptState == model.ExamAttemptSuspended) != row.SuspensionReason.Valid {
 			return store.CandidateExamActivityItem{}, invalidPersistedState(
@@ -424,7 +460,7 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 				errors.New("inconsistent Suspension projection"),
 			)
 		}
-	} else if row.AttemptState.Valid || row.SuspensionReason.Valid {
+	} else if row.AttemptState.Valid || row.SuspensionReason.Valid || row.SuspendedAt.Valid || row.ReallowedAt.Valid || row.LastSavedAt.Valid {
 		return store.CandidateExamActivityItem{}, invalidPersistedState(
 			"candidate_exam_activity",
 			"attempt",
@@ -435,7 +471,9 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 	if row.SubmissionID.Valid {
 		submissionID, parseErr := model.ParseSubmissionID(row.SubmissionID.String)
 		provenance := model.ExamSubmissionProvenance(row.SubmissionProvenance.String)
+		receiptCode := model.SubmissionReceiptCode(row.SubmissionReceiptCode.String)
 		if parseErr != nil ||
+			!receiptCode.IsValid() ||
 			!row.SubmittedAt.Valid ||
 			!provenance.IsValid() ||
 			item.Attempt == nil ||
@@ -449,10 +487,12 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 
 		item.Submission = &store.CandidateExamActivitySubmission{
 			ID:          submissionID,
+			ReceiptCode: receiptCode,
 			SubmittedAt: model.TimeUTC(row.SubmittedAt.Time),
 			Provenance:  provenance,
 		}
 	} else if row.SubmittedAt.Valid ||
+		row.SubmissionReceiptCode.Valid ||
 		row.SubmissionProvenance.Valid ||
 		item.Attempt != nil && item.Attempt.State == model.ExamAttemptSubmitted {
 		return store.CandidateExamActivityItem{}, invalidPersistedState(
@@ -494,10 +534,15 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 	case state == model.ExamSittingScheduled:
 		item.ActivityState = store.CandidateExamActivityUpcoming
 		item.AccessState = store.CandidateExamAccessNotOpen
+		if row.ServerTime.Before(item.ScheduledEndAt) && joinWindow.Waiting(state, item.ScheduledStartAt, row.ServerTime) {
+			item.AccessState = store.CandidateExamAccessWaiting
+		}
 	case !row.ExamArchivedAt.Valid && (state == model.ExamSittingOpen || state == model.ExamSittingPaused) && row.CurrentMembership:
 		item.ActivityState = store.CandidateExamActivityAvailable
 		if row.ManagementAuthority {
 			item.AccessState = store.CandidateExamAccessNotEligible
+		} else if model.CheckAttemptFirstEntry(item.JoinWindow, row.ServerTime) != nil {
+			item.AccessState = store.CandidateExamAccessJoinClosed
 		} else if row.OtherUnresolved {
 			item.AccessState = store.CandidateExamAccessBlockedByOtherAttempt
 		} else if state == model.ExamSittingPaused {
@@ -567,6 +612,10 @@ type sittingCandidateStatusHeaderRow struct {
 }
 
 type sittingCandidateStatusRow struct {
+	ExamSittingID            string         `db:"exam_sitting_id"`
+	ServerTime               time.Time      `db:"server_time"`
+	PresenceState            string         `db:"presence_state"`
+	FailingCheck             bool           `db:"failing_check"`
 	NativeConditionRecords   int64          `db:"native_condition_records"`
 	NativeLive               bool           `db:"native_live"`
 	NativeInterpretation     []byte         `db:"native_interpretation"`
@@ -648,7 +697,7 @@ func listSittingCandidateStatuses(
 	}
 
 	serverTime := model.TimeUTC(header.ServerTime)
-	query, args := sittingCandidateStatusQuery(options, header, serverTime)
+	query, args := sittingCandidateStatusQuery(options, serverTime)
 	var rows []sittingCandidateStatusRow
 	if err := tx.Select(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("list Sitting candidate statuses: %w", err)
@@ -663,6 +712,19 @@ func listSittingCandidateStatuses(
 		FROM exam_attempt_environments
 		WHERE exam_sitting_id = ? AND state = 'waiting_capacity'`, options.SittingID.String()); err != nil {
 		return nil, fmt.Errorf("count environments waiting for capacity: %w", err)
+	}
+
+	if options.IncludeCounts {
+		counts, countErr := countCandidateStatuses(ctx, tx, serverTime, options.ExcludeCandidateUserID,
+			`SELECT id, class_id, state, scheduled_start_at, opened_at FROM exam_sittings WHERE id = ?`,
+			options.SittingID.String())
+		if countErr != nil {
+			return nil, countErr
+		}
+		page.Counts = counts[options.SittingID]
+		if page.Counts == nil {
+			page.Counts = &store.SittingCandidateStatusCounts{ByPresenceState: map[store.SittingCandidatePresenceState]int64{}}
+		}
 	}
 
 	page.Items = make([]store.SittingCandidateStatusItem, 0, len(rows))
@@ -686,227 +748,25 @@ func listSittingCandidateStatuses(
 
 func sittingCandidateStatusQuery(
 	options store.SittingCandidateStatusListOptions,
-	header sittingCandidateStatusHeaderRow,
 	serverTime time.Time,
 ) (string, []any) {
-	query := `WITH population AS (
-			SELECT a.candidate_user_id
-			FROM exam_attempts a
-			WHERE a.exam_sitting_id = ?
-			UNION
-			SELECT member.user_id
-			FROM class_members member
-			WHERE member.class_id = ?
-				AND (
-					(
-						? IN ('scheduled', 'canceled')
-						AND member.start_at <= ?
-						AND (member.end_at IS NULL OR member.end_at > ?)
-						AND (member.archived_at IS NULL OR member.archived_at > ?)
-					)
-					OR (
-						? NOT IN ('scheduled', 'canceled')
-						AND ?::timestamptz IS NOT NULL
-						AND member.start_at <= ?
-						AND (member.end_at IS NULL OR member.end_at > ?)
-						AND (member.archived_at IS NULL OR member.archived_at > ?)
-					)
-					OR (
-						? IN ('open', 'paused')
-						AND member.start_at <= ?
-						AND (member.end_at IS NULL OR member.end_at > ?)
-						AND (member.archived_at IS NULL OR member.archived_at > ?)
-					)
-				)
-		),
-		finalized_review AS (
-			SELECT review.id, review.exam_attempt_id
-			FROM submission_reviews review
-			WHERE review.state = 'finalized'
-		)
-		SELECT candidate.id AS candidate_user_id, candidate.username, candidate.display_name,
-			EXISTS (
-				SELECT 1
-				FROM class_members current_member
-				WHERE current_member.class_id = ?
-					AND current_member.user_id = candidate.id
-					AND current_member.start_at <= ?
-					AND (current_member.end_at IS NULL OR current_member.end_at > ?)
-					AND (current_member.archived_at IS NULL OR current_member.archived_at > ?)
-			) AS current_membership,
-			a.id AS attempt_id, a.state AS attempt_state, a.revision AS attempt_revision,
-			a.created_at AS attempt_created_at, a.updated_at AS attempt_updated_at,
-			submission.id AS submission_id, submission.submitted_at,
-			submission.provenance AS submission_provenance, participation.id AS participation_id,
-			participation.state AS participation_state,
-			participation.updated_at AS participation_updated_at, participation.lease_expires_at,
-			(
-				SELECT COUNT(*)
-				FROM exam_attempt_participations active_participation
-				WHERE active_participation.exam_attempt_id = a.id
-					AND active_participation.state = 'active'
-			) AS active_participation_count,
-			(
-				SELECT COUNT(*)
-				FROM exam_attempt_connections open_connection
-				WHERE open_connection.exam_attempt_id = a.id
-					AND open_connection.state = 'open'
-			) AS open_connection_count,
-			suspension.id AS suspension_id, suspension.candidate_reason AS suspension_reason,
-			(
-				SELECT COUNT(*)
-				FROM exam_attempt_suspensions active_suspension
-				WHERE active_suspension.exam_attempt_id = a.id
-					AND active_suspension.state = 'active'
-			) AS active_suspension_count,
-			COALESCE(
-				(
-					SELECT COUNT(*)
-					FROM integrity_flags flag
-					WHERE flag.exam_attempt_id = a.id
-						AND NOT EXISTS (
-							SELECT 1
-							FROM integrity_review_decisions decision
-							JOIN submission_reviews decision_review ON decision_review.id = decision.submission_review_id
-							WHERE decision.integrity_flag_id = flag.id
-								AND decision_review.exam_attempt_id = a.id
-						)
-				),
-					0
-			) + CASE
-				WHEN (
-						a.state <> 'submitted'
-						AND (
-							EXISTS (
-								SELECT 1
-								FROM exam_attempt_focus_loss_evaluations evaluation
-								WHERE evaluation.exam_attempt_id = a.id
-									AND evaluation.unresolved_missing_count > 0
-							)
-							OR EXISTS (
-								SELECT 1
-								FROM browser_activity_sources source
-								WHERE source.exam_attempt_id = a.id
-									AND (
-										source.state = 'gapped'
-										OR (
-											source.state = 'current'
-											AND source.highest_contiguous < source.highest_seen
-										)
-									)
-							)
-						)
-					)
-					OR (
-						a.state = 'submitted'
-						AND submission.integrity_state = 'gapped'
-						AND NOT EXISTS (
-							SELECT 1
-							FROM finalized_review review
-							WHERE review.exam_attempt_id = a.id
-						)
-					)
-					THEN 1
-				ELSE 0
-			END + COALESCE(
-				(
-					SELECT COUNT(*)
-					FROM integrity_discrepancies discrepancy
-					WHERE discrepancy.exam_attempt_id = a.id
-						AND NOT EXISTS (
-							SELECT 1
-							FROM submission_review_inventory_discrepancies inventory
-							JOIN finalized_review review ON review.id = inventory.submission_review_id
-							WHERE inventory.integrity_discrepancy_id = discrepancy.id
-						)
-				),
-					0
-			) AS integrity_attention_count,
-			CASE
-				WHEN submission.integrity_retired_at IS NULL
-					THEN COALESCE(delivery_budget.native_condition_records, 0)
-				ELSE 0
-			END AS native_condition_records,
-			COALESCE(participation.state = 'active'
-				AND participation.lease_expires_at > statement_timestamp()
-				AND delivery_budget.security_retired_at IS NULL
-				AND native_owner.participation_id IS NOT NULL, false) AS native_live,
-			CASE
-				WHEN participation.state = 'active'
-					AND participation.lease_expires_at > statement_timestamp()
-					AND delivery_budget.security_retired_at IS NULL
-					THEN native_owner.native_interpretation_canonical
-				ELSE NULL
-			END AS native_interpretation,
-			COALESCE(clips.requested, 0) AS clips_requested,
-			COALESCE(clips.recording, 0) AS clips_recording,
-			COALESCE(clips.uploading, 0) AS clips_uploading,
-			COALESCE(clips.ready, 0) AS clips_ready,
-			COALESCE(clips.failed, 0) AS clips_failed,
-			environment.state AS environment_state, environment.desired AS environment_desired,
-			environment.incarnation AS environment_incarnation, environment.waiting_since AS environment_waiting_since
-		FROM population
-		JOIN users candidate ON candidate.id = population.candidate_user_id
-		LEFT JOIN exam_attempts a ON a.exam_sitting_id = ?
-			AND a.candidate_user_id = candidate.id
-		LEFT JOIN exam_submissions submission ON submission.exam_attempt_id = a.id
-			AND submission.sealed = true
-		LEFT JOIN LATERAL (
-			SELECT p.id, p.state, p.updated_at, p.lease_expires_at
-			FROM exam_attempt_participations p
-			WHERE p.exam_attempt_id = a.id
-			ORDER BY p.generation DESC
-			LIMIT 1
-		) participation ON TRUE
-		LEFT JOIN exam_attempt_security_owners native_owner ON native_owner.participation_id = participation.id
-		LEFT JOIN exam_attempt_delivery_budgets delivery_budget ON delivery_budget.exam_attempt_id = a.id
-		LEFT JOIN LATERAL (
-			SELECT count(*) FILTER (WHERE c.state = 'requested') AS requested,
-				count(*) FILTER (WHERE c.state = 'recording') AS recording,
-				count(*) FILTER (WHERE c.state = 'uploading') AS uploading,
-				count(*) FILTER (WHERE c.state = 'ready') AS ready,
-				count(*) FILTER (WHERE c.state = 'failed') AS failed
-			FROM exam_attempt_screen_clips c
-			WHERE c.exam_attempt_id = a.id
-		) clips ON TRUE
-		LEFT JOIN exam_attempt_suspensions suspension ON suspension.exam_attempt_id = a.id
-			AND suspension.state = 'active'
-		LEFT JOIN exam_attempt_environments environment ON environment.exam_attempt_id = a.id
-		WHERE candidate.id > ?
-			AND candidate.id <> ?
-		ORDER BY candidate.id
-		LIMIT ?`
-	openedAt := any(nil)
-	if header.OpenedAt.Valid {
-		openedAt = model.TimeUTC(header.OpenedAt.Time)
-	}
-
-	args := []any{
+	cte, args := candidateStatusCTE(
+		serverTime,
+		options.ExcludeCandidateUserID,
+		`SELECT id, class_id, state, scheduled_start_at, opened_at FROM exam_sittings WHERE id = ?`,
 		options.SittingID.String(),
-		header.ClassID,
-		header.State,
-		header.ScheduledStart,
-		header.ScheduledStart,
-		header.ScheduledStart,
-		header.State,
-		openedAt,
-		openedAt,
-		openedAt,
-		openedAt,
-		header.State,
-		serverTime,
-		serverTime,
-		serverTime,
-		header.ClassID,
-		serverTime,
-		serverTime,
-		serverTime,
-		options.SittingID.String(),
-		options.AfterCandidateUserID.String(),
-		options.ExcludeCandidateUserID.String(),
-		options.Limit,
-	}
-	return query, args
+	)
+	filter, filterArgs := candidateStatusFilterSQL(options.Filter)
+	args = append(args, options.AfterCandidateUserID.String())
+	args = append(args, filterArgs...)
+	args = append(args, options.Limit)
+	return cte + `
+		SELECT status.*
+		FROM candidate_status status
+		WHERE status.candidate_user_id > ?
+			AND ` + filter + `
+		ORDER BY status.candidate_user_id
+		LIMIT ?`, args
 }
 
 func candidateStatusPageHeader(row sittingCandidateStatusHeaderRow) (*store.SittingCandidateStatusPage, error) {
@@ -931,7 +791,29 @@ func candidateStatusPageHeader(row sittingCandidateStatusHeaderRow) (*store.Sitt
 	}, nil
 }
 
+// item checks that the presence state the query filtered and counted by is
+// the one the row's fields give.
 func (row sittingCandidateStatusRow) item(
+	serverTime time.Time,
+	sittingState model.ExamSittingState,
+	scheduledEnd time.Time,
+	examArchived, reallowAuthorized bool,
+) (store.SittingCandidateStatusItem, error) {
+	item, err := row.fields(serverTime, sittingState, scheduledEnd, examArchived, reallowAuthorized)
+	if err != nil {
+		return item, err
+	}
+	if string(item.Presence.State) != row.PresenceState {
+		return store.SittingCandidateStatusItem{}, invalidPersistedState(
+			"sitting_candidate_status",
+			"presence_state",
+			errors.New("derived presence states disagree"),
+		)
+	}
+	return item, nil
+}
+
+func (row sittingCandidateStatusRow) fields(
 	serverTime time.Time,
 	sittingState model.ExamSittingState,
 	scheduledEnd time.Time,

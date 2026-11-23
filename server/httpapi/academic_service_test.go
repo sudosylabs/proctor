@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/mailtest"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -117,6 +118,11 @@ func newAcademicFixture(t *testing.T, options academicOptions) *academicFixture 
 	require.NoError(t, err)
 	fixture.service = service
 	return fixture
+}
+
+// people names the fixture's users through its authorizer.
+func (f *academicFixture) people() *people.Resolver {
+	return testPeople(f.users, f.access.Authorizer)
 }
 
 // onlyAttempt is the one mutation attempt the auditor recorded.
@@ -450,6 +456,8 @@ type academicClassRecords struct {
 	created  []*store.ClassCreation
 	updates  []*store.ClassUpdate
 	archives []*store.ClassArchive
+	// periods records the Academic Period each listing narrowed to.
+	periods []model.AcademicPeriodID
 }
 
 func (s *academicClassRecords) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
@@ -469,20 +477,22 @@ func (s *academicClassRecords) GetAcademicUnitID(_ context.Context, id model.Cla
 	return unitID, nil
 }
 
-func (s *academicClassRecords) SearchByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.Class, error) {
-	return s.search.list(options)
+func (s *academicClassRecords) SearchByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.ClassListOptions) ([]*model.Class, error) {
+	s.periods = append(s.periods, options.AcademicPeriodID)
+	return s.search.list(options.AcademicNameListOptions)
 }
 
-func (s *academicClassRecords) CountByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions, maximum int) (int, error) {
-	return s.search.count(options, maximum)
+func (s *academicClassRecords) CountByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.ClassListOptions, maximum int) (int, error) {
+	return s.search.count(options.AcademicNameListOptions, maximum)
 }
 
-func (s *academicClassRecords) ListByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.AcademicNameListOptions) ([]*model.Class, error) {
-	return s.byLevel.list(options)
+func (s *academicClassRecords) ListByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.ClassListOptions) ([]*model.Class, error) {
+	s.periods = append(s.periods, options.AcademicPeriodID)
+	return s.byLevel.list(options.AcademicNameListOptions)
 }
 
-func (s *academicClassRecords) CountByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.AcademicNameListOptions, maximum int) (int, error) {
-	return s.byLevel.count(options, maximum)
+func (s *academicClassRecords) CountByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.ClassListOptions, maximum int) (int, error) {
+	return s.byLevel.count(options.AcademicNameListOptions, maximum)
 }
 
 func (s *academicClassRecords) Create(_ context.Context, input *store.ClassCreation) (*model.Class, error) {
@@ -520,6 +530,8 @@ type academicClassMemberRecords struct {
 	// the Classes each count asked for.
 	studentCounts  []store.ClassStudentCount
 	countedClasses [][]model.ClassID
+	// transfers answers a page's transfer read.
+	transfers []store.ClassMemberTransfer
 }
 
 func (s *academicClassMemberRecords) CountCurrentByClasses(_ context.Context, classIDs []model.ClassID, _ time.Time, _ int) ([]store.ClassStudentCount, error) {
@@ -632,12 +644,40 @@ func (s *academicAffiliationRecords) Create(_ context.Context, input *store.Affi
 // it names the members of a page from the same Users.
 type academicUserRecords struct {
 	*identityUsers
+	// memberships answers ListMemberships, which records each read in
+	// membershipReads.
+	memberships     []store.UserMembership
+	membershipReads []store.UserMembershipListOptions
+}
+
+func (s *academicUserRecords) ListMemberships(_ context.Context, options store.UserMembershipListOptions) ([]store.UserMembership, error) {
+	s.membershipReads = append(s.membershipReads, options)
+	return s.memberships[:min(len(s.memberships), options.Limit)], nil
 }
 
 func (s *academicUserRecords) add(users ...*model.User) {
 	for _, user := range users {
 		s.byID[user.ID] = user
 	}
+}
+
+// ListDisplayNames names every unarchived user the fake holds.
+func (s *academicUserRecords) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+	names := make([]store.UserDisplayName, 0, len(ids))
+	for _, id := range ids {
+		if user, ok := s.byID[id]; ok && !user.ArchivedAt.Valid {
+			names = append(names, store.UserDisplayName{UserID: id, DisplayName: user.DisplayName})
+		}
+	}
+	return names, nil
+}
+
+// ListVisibleDisplayNames sees only through institution-wide visibility.
+func (s *academicUserRecords) ListVisibleDisplayNames(ctx context.Context, ids []model.UserID, visibility store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	if !visibility.InstitutionWide {
+		return nil, nil
+	}
+	return s.ListDisplayNames(ctx, ids)
 }
 
 func (s *academicUserRecords) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
@@ -656,9 +696,20 @@ type academicBindingRecords struct {
 	store.RoleBindingStore
 	summaries []store.UserRoleBindingSummary
 	options   []store.RoleBindingSummaryOptions
+	teachers  []store.ClassTeachers
+	teacherOf []store.ClassTeacherOptions
+}
+
+func (s *academicBindingRecords) ListTeachersByClasses(_ context.Context, options store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	s.teacherOf = append(s.teacherOf, options)
+	return s.teachers, nil
 }
 
 func (s *academicBindingRecords) ListVisibleSummariesByUsers(_ context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
 	s.options = append(s.options, options)
 	return s.summaries, nil
+}
+
+func (s *academicClassMemberRecords) ListTransfers(context.Context, []model.ClassMemberID, store.ClassVisibilityScope) ([]store.ClassMemberTransfer, error) {
+	return s.transfers, nil
 }

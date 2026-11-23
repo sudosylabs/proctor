@@ -1,0 +1,163 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/users/{user_id}/memberships:
+    parameters:
+      - $ref: '#/components/parameters/UserID'
+    get:
+      operationId: listUserMemberships
+      summary: List what a User is a current member of
+      tags:
+        - Users
+      description: >-
+        Lists the User's current Academic Unit memberships, then their current Class enrolments, each oldest first.
+        You need to see the User, as for reading their profile, and are refused as that read refuses. Each entry
+        appears only if you can view that unit's members (academic_unit.members.view) or that Class's members
+        (class.members.view). Entries you can't see are left out entirely, so a page never hints at them.
+        Memberships of archived units, and enrolments in archived Classes, levels or programmes, are not listed.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - administration.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        "200":
+          $ref: '#/components/responses/UserMembershipListOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    UserMembershipListOK:
+      description: The User's current memberships you can see
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UserMembershipListResponse'
+          example:
+            items:
+              - kind: academic_unit
+                id: 3yqk1oxnmb8gxe4cwa6r1ytsjy
+                academic_unit:
+                  id: 14j8umgczgrdp95w77zuxmxfu9
+                  display_name: Computer Science
+                start_at: '2025-09-01T00:00:00Z'
+              - kind: class
+                id: q8n4cx7oufyp5nm1bdt3wh9eia
+                class:
+                  id: mx1kgmf7h3drjxs5ub8n3o4wpe
+                  display_name: CS2 Group A
+                programme_level:
+                  id: o9g8oyzef7r1eihn5t3ypu4cwa
+                  display_name: Year 2
+                programme:
+                  id: kd5u7xdgpbn8zw3r1sfoey9mqc
+                  display_name: BSc Computing
+                academic_period:
+                  id: c4sxtxwr3pd8gmk1o5y9nazhqe
+                  display_name: 2026/27
+                start_at: '2026-09-01T00:00:00Z'
+                end_at: '2027-07-01T00:00:00Z'
+            next_cursor: eyJraW5kIjoiY2xhc3MifQ
+  schemas:
+    UserMembershipListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/UserMembershipResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    UserMembershipResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        One current membership. An `academic_unit` entry names its unit. A `class` entry names its Class, programme
+        level, programme and Academic Period.
+      required:
+        - kind
+        - id
+        - start_at
+      properties:
+        kind:
+          type: string
+          enum:
+            - academic_unit
+            - class
+          description: Whether this is an Academic Unit membership or a Class enrolment.
+        id:
+          $ref: '#/components/schemas/ID'
+          description: The ID of the Academic Unit membership or Class membership itself.
+        academic_unit:
+          $ref: '#/components/schemas/UserMembershipName'
+          description: The Academic Unit. Present only for `academic_unit` entries.
+        class:
+          $ref: '#/components/schemas/ClassRef'
+          description: The Class. Present only for `class` entries.
+        programme_level:
+          $ref: '#/components/schemas/UserMembershipName'
+          description: The Class's programme level. Present only for `class` entries.
+        programme:
+          $ref: '#/components/schemas/UserMembershipName'
+          description: The Class's programme. Present only for `class` entries.
+        academic_period:
+          $ref: '#/components/schemas/UserMembershipName'
+          description: The Academic Period of the enrolment. Present only for `class` entries.
+        start_at:
+          type: string
+          format: date-time
+          description: When the membership started.
+        end_at:
+          type: string
+          format: date-time
+          description: When the membership ends. Omitted when it has no end.
+    UserMembershipName:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - display_name
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          maxLength: 512
+          description: The display name.

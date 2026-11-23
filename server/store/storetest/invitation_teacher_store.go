@@ -412,7 +412,8 @@ func teacherAcademicUnitInvitationAcceptanceFixture(t *testing.T, invitation *mo
 	binding := &model.RoleBinding{UserID: student.User.ID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
 		OriginAcademicUnitMemberID: member.ID,
 		ScopeType:                  model.RoleScopeAcademicUnit, ScopeID: invitation.AcademicUnitID.String(),
-		StartsAt: invitation.EffectiveStartsAt(acceptedAt), EndsAt: invitation.IntendedEndsAt}
+		StartsAt: invitation.EffectiveStartsAt(acceptedAt), EndsAt: invitation.IntendedEndsAt,
+		GrantedByUserID: invitation.InviterUserID, GrantedVia: model.RoleBindingGrantedByInvitation}
 	binding.PrepareCreate(model.NewRoleBindingID(), acceptedAt)
 	student.AuditEvent.Resource = model.Resource{Type: model.ResourceAcademicUnit, ID: invitation.AcademicUnitID.String()}
 	student.AuditEvent.ScopeType, student.AuditEvent.ScopeID = model.RoleScopeAcademicUnit, invitation.AcademicUnitID.String()

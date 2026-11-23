@@ -127,8 +127,9 @@ type ScreenClipViewAuthorization struct {
 	ScopeID   string
 }
 
-// AuthorizeScreenClipView admits the sitting's managers and, once the attempt
-// is submitted, its reviewers. The candidate never sees their own clips.
+// AuthorizeScreenClipView admits sitting managers with submission view and,
+// once the attempt is submitted, its reviewers. The manager path's self
+// fence runs against the attempt's identity before the clip store is read.
 func (a SittingManagerAuthorizer) AuthorizeScreenClipView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -136,6 +137,9 @@ func (a SittingManagerAuthorizer) AuthorizeScreenClipView(
 	attemptID model.ExamAttemptID,
 ) (ScreenClipViewAuthorization, error) {
 	management, err := a.Sittings.AuthorizeSittingManage(ctx, inv, sittingID)
+	if err == nil {
+		err = a.Sittings.AuthorizeSittingSubmissionView(ctx, inv, sittingID)
+	}
 	if err == nil {
 		action := model.ActionExamSittingManage
 		if management.Override {

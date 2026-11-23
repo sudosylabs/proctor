@@ -101,6 +101,11 @@ func testExamRevisionStore(t *testing.T, ss store.Store, probe *ExamRevisionRete
 	var capacityConflict *store.ErrConflict
 	require.ErrorAs(t, err, &capacityConflict)
 	require.Equal(t, "exam_revision_capacity", capacityConflict.Constraint)
+	capacityCheck, err := ss.ExamRevision().CheckPublication(ctx, examPublicationCheck(capacityInput))
+	require.NoError(t, err)
+	require.Equal(t, int64(4), capacityCheck.DraftRevision, "the check names the draft it read")
+	require.Equal(t, []store.ExamPublicationProblem{{Reason: store.ExamPublicationTooManyStarterEntries}}, capacityCheck.Problems,
+		"the check reports the capacity problem publishing refused")
 	institution.ExamCapacity = model.DefaultExamCapacityPolicy()
 	institution, err = UpdateInstitution(ctx, ss, institution)
 	require.NoError(t, err)
@@ -141,6 +146,13 @@ func testExamRevisionStore(t *testing.T, ss store.Store, probe *ExamRevisionRete
 	var conflict *store.ErrConflict
 	require.ErrorAs(t, err, &conflict)
 	require.Equal(t, "exam_revision_no_changes", conflict.Constraint)
+	unchangedCheck, err := ss.ExamRevision().CheckPublication(ctx, examPublicationCheck(unchanged))
+	require.NoError(t, err)
+	require.Equal(t, []store.ExamPublicationProblem{{Reason: store.ExamPublicationNoChanges}}, unchangedCheck.Problems,
+		"the check reports that nothing changed")
+	outsider := saveUser(t, ctx, ss)
+	_, err = ss.ExamRevision().CheckPublication(ctx, &store.ExamPublicationCheck{ExamID: examID, ActorUserID: outsider.ID})
+	require.True(t, store.IsNotFound(err), "a non-manager's check is refused like publishing: %v", err)
 
 	// Change both content families after publication. The first revision must
 	// keep its exact old bytes while the second freezes the new selections.
@@ -302,4 +314,17 @@ func examRevisionPublication(t *testing.T, ctx context.Context, ss store.Store, 
 	return &store.ExamRevisionPublication{RevisionID: model.NewExamRevisionID(), ExamID: examID, ActorUserID: actorID,
 		ExpectedDraftRevision: expected, Kind: model.ExamRevisionPublicationStandard, PublishedAt: at,
 		AuditEventID: audit.ID, AuditAt: at}
+}
+
+// examPublicationCheck asks the same question publication would.
+func examPublicationCheck(publication *store.ExamRevisionPublication) *store.ExamPublicationCheck {
+	return &store.ExamPublicationCheck{
+		InstitutionOrigin:  publication.InstitutionOrigin,
+		ExecutionEnabled:   publication.ExecutionEnabled,
+		AssistantEnabled:   publication.AssistantEnabled,
+		AssistantProviders: publication.AssistantProviders,
+		ExamID:             publication.ExamID,
+		ActorUserID:        publication.ActorUserID,
+		ManagerOverride:    publication.ManagerOverride,
+	}
 }

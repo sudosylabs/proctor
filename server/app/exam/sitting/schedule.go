@@ -25,9 +25,13 @@ type ScheduleCommand struct {
 	ClassID          model.ClassID
 	ScheduledStartAt time.Time
 	ScheduledEndAt   time.Time
-	IdempotencyKey   string
+	// JoinWindow is optional; its zero value keeps today's admission rules.
+	JoinWindow     model.ExamSittingJoinWindow
+	IdempotencyKey string
 }
 
+// UpdateScheduleCommand changes only the fields it sets. A JoinWindow
+// replaces the whole join window, and an empty one removes it.
 type UpdateScheduleCommand struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -36,6 +40,7 @@ type UpdateScheduleCommand struct {
 	ClassID          *model.ClassID
 	ScheduledStartAt *time.Time
 	ScheduledEndAt   *time.Time
+	JoinWindow       *model.ExamSittingJoinWindow
 	IdempotencyKey   string
 }
 
@@ -50,12 +55,16 @@ func (s *Service) ScheduleExamSitting(
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	command.ScheduledStartAt = model.TimeUTC(command.ScheduledStartAt)
 	command.ScheduledEndAt = model.TimeUTC(command.ScheduledEndAt)
+	command.JoinWindow = command.JoinWindow.Canonical()
 	if !command.ExamID.IsValid() ||
 		!command.ExamRevisionID.IsValid() ||
 		!command.ClassID.IsValid() ||
 		command.ScheduledStartAt.IsZero() ||
 		!command.ScheduledStartAt.Before(command.ScheduledEndAt) {
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "schedule")
+	}
+	if err := validateJoinWindow(command.JoinWindow, command.ScheduledStartAt, command.ScheduledEndAt); err != nil {
+		return store.ExamSittingSnapshot{}, err
 	}
 
 	commandIdempotency, err := prepareScheduleIdempotency(inv, command)
@@ -89,6 +98,7 @@ func (s *Service) ScheduleExamSitting(
 		command.ClassID,
 		command.ScheduledStartAt,
 		command.ScheduledEndAt,
+		command.JoinWindow,
 		at,
 	)
 	if err != nil {
@@ -177,10 +187,15 @@ func (s *Service) UpdateExamSittingSchedule(
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	command.ScheduledStartAt = canonicalTimePointer(command.ScheduledStartAt)
 	command.ScheduledEndAt = canonicalTimePointer(command.ScheduledEndAt)
+	if command.JoinWindow != nil {
+		canonical := command.JoinWindow.Canonical()
+		command.JoinWindow = &canonical
+	}
 	if !command.ExamID.IsValid() ||
 		!command.SittingID.IsValid() ||
 		command.ExpectedRevision < 1 ||
-		(command.ExamRevisionID == nil && command.ClassID == nil && command.ScheduledStartAt == nil && command.ScheduledEndAt == nil) ||
+		(command.ExamRevisionID == nil && command.ClassID == nil && command.ScheduledStartAt == nil && command.ScheduledEndAt == nil &&
+			command.JoinWindow == nil) ||
 		command.ExamRevisionID != nil && !command.ExamRevisionID.IsValid() ||
 		command.ClassID != nil && !command.ClassID.IsValid() ||
 		command.ScheduledStartAt != nil && command.ScheduledStartAt.IsZero() ||
@@ -235,14 +250,21 @@ func (s *Service) UpdateExamSittingSchedule(
 	if command.ScheduledEndAt != nil {
 		endAt = model.TimeUTC(*command.ScheduledEndAt)
 	}
+	joinWindow := snapshot.Sitting.JoinWindow
+	if command.JoinWindow != nil {
+		joinWindow = *command.JoinWindow
+	}
 	if !startAt.Before(endAt) {
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "schedule")
 	}
+	// A bound left unchanged is checked against the new times too, so moving
+	// the start past an early join opening is refused rather than reinterpreted.
+	if err = validateJoinWindow(joinWindow, startAt, endAt); err != nil {
+		return store.ExamSittingSnapshot{}, err
+	}
 
-	noChanges := revisionID == snapshot.Sitting.ExamRevisionID &&
-		classID == snapshot.Sitting.ClassID &&
-		startAt.Equal(snapshot.Sitting.ScheduledStartAt) &&
-		endAt.Equal(snapshot.Sitting.ScheduledEndAt)
+	mailNeeded := snapshot.Sitting.ScheduleDiffers(revisionID, classID, startAt, endAt)
+	noChanges := !mailNeeded && joinWindow.Equal(snapshot.Sitting.JoinWindow)
 	if noChanges &&
 		snapshot.Sitting.Revision == command.ExpectedRevision &&
 		snapshot.Sitting.State == model.ExamSittingScheduled &&
@@ -255,23 +277,26 @@ func (s *Service) UpdateExamSittingSchedule(
 		return store.ExamSittingSnapshot{}, jobFactoryUnavailable("construct Exam Sitting boundary Jobs", err)
 	}
 
-	fanout, err := s.mail.Prepare(ctx, ScheduleMailRequest{
-		ActorUserID:     inv.Principal().UserID,
-		ExamID:          command.ExamID,
-		ExamRevisionID:  revisionID,
-		SittingID:       command.SittingID,
-		SittingRevision: command.ExpectedRevision + 1,
-		ClassID:         classID,
-		PriorClassID:    snapshot.Sitting.ClassID,
-		StartsAt:        startAt,
-		EndsAt:          endAt,
-		ChangeKind:      store.ExamSittingMailRescheduled,
-	})
-	if err != nil || fanout == nil {
-		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(errors.Join(
-			errors.New("prepare Sitting reschedule mail"),
-			err,
-		))
+	var fanout *store.ExamSittingMailFanout
+	if mailNeeded {
+		fanout, err = s.mail.Prepare(ctx, ScheduleMailRequest{
+			ActorUserID:     inv.Principal().UserID,
+			ExamID:          command.ExamID,
+			ExamRevisionID:  revisionID,
+			SittingID:       command.SittingID,
+			SittingRevision: command.ExpectedRevision + 1,
+			ClassID:         classID,
+			PriorClassID:    snapshot.Sitting.ClassID,
+			StartsAt:        startAt,
+			EndsAt:          endAt,
+			ChangeKind:      store.ExamSittingMailRescheduled,
+		})
+		if err != nil || fanout == nil {
+			return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(errors.Join(
+				errors.New("prepare Sitting reschedule mail"),
+				err,
+			))
+		}
 	}
 
 	auditValue := map[string]any{
@@ -304,6 +329,7 @@ func (s *Service) UpdateExamSittingSchedule(
 		ClassID:          classID,
 		ScheduledStartAt: startAt,
 		ScheduledEndAt:   endAt,
+		JoinWindow:       joinWindow,
 		OpenJob:          openJob,
 		DeadlineJob:      deadlineJob,
 		AuditEventID:     auditID,
@@ -323,4 +349,12 @@ func (s *Service) UpdateExamSittingSchedule(
 	}
 
 	return value, nil
+}
+
+// validateJoinWindow names the bound that does not fit the schedule.
+func validateJoinWindow(window model.ExamSittingJoinWindow, startAt, endAt time.Time) error {
+	if err := window.ValidateFor(startAt, endAt); err != nil {
+		return apperror.DomainInvalid("exam.sitting.invalid", err)
+	}
+	return nil
 }

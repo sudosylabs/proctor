@@ -29,6 +29,7 @@ import (
 
 type examServices struct {
 	authoring              *exam.Authoring
+	copies                 *exam.Copier
 	publication            *exam.Publication
 	sittings               *sitting.Service
 	attempts               *attempt.Service
@@ -51,6 +52,20 @@ func newExamServices(
 	var built examServices
 	var err error
 	if built.authoring, err = newExamAuthoring(deps, shared, authorizer); err != nil {
+		return examServices{}, err
+	}
+	if built.copies, err = exam.NewCopier(exam.CopierDependencies{
+		Persistence:       deps.Store.ExamAuthoring(),
+		Resources:         deps.Store.ExamResource(),
+		StarterWorkspaces: deps.Store.ExamStarterWorkspace(),
+		Memberships:       deps.Store.AcademicUnitMember(),
+		Content:           deps.FileContent,
+		Authorizer:        authorizer,
+		Auditor:           shared.audit,
+		Publisher:         shared.realtime,
+		Now:               time.Now,
+		NewID:             model.NewExamID,
+	}); err != nil {
 		return examServices{}, err
 	}
 	if built.sittingMail, err = newSittingMail(deps); err != nil {
@@ -151,6 +166,7 @@ func newExamPublication(
 		Persistence:        deps.Store.ExamRevision(),
 		Access:             deps.Store.ExamAuthoring(),
 		Memberships:        deps.Store.AcademicUnitMember(),
+		Content:            deps.FileContent,
 		Authorizer:         authorizer,
 		Auditor:            shared.audit,
 		Publisher:          shared.realtime,
@@ -339,6 +355,7 @@ func newExamRecords(deps Dependencies, shared sharedMechanics, authorizer *acces
 		RecentTTL:   deps.RecentAuthenticationTTL,
 		Now:         time.Now,
 		NewHoldID:   model.NewRetentionHoldID,
+		Publisher:   shared.realtime,
 	})
 }
 

@@ -54,7 +54,7 @@ func (s SQLExamAuthoringStore) ListManagers(ctx context.Context, options store.E
 			(m.user_id = e.creator_user_id) AS is_creator, (m.user_id = e.owner_user_id) AS is_owner
 		FROM exam_managers m
 		JOIN exams e ON e.id = m.exam_id
-		WHERE m.exam_id = ?`
+		WHERE m.exam_id = ? AND e.copying_until IS NULL`
 	args := []any{options.ExamID.String()}
 	if !options.BeforeGrantedAt.IsZero() {
 		query += ` AND (m.granted_at, m.user_id) < (?, ?)`

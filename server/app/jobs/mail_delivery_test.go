@@ -249,6 +249,37 @@ func runMailDeliveryJob(persistence store.MailStore, sender mail.Sender,
 	return descriptor.Handler.Run(context.Background(), job.NewExecution(record, nil, nil, nil))
 }
 
+// mailDeliveryChangesFake records each delivery change it hears of.
+type mailDeliveryChangesFake struct{ changed []model.MailDeliveryID }
+
+func (f *mailDeliveryChangesFake) MailDeliveryChanged(_ context.Context, id model.MailDeliveryID) {
+	f.changed = append(f.changed, id)
+}
+
+// TestMailDeliveryHandlerAnnouncesEachCommittedStateChange pins that mail
+// viewers hear once when the delivery starts sending and once when it is
+// accepted, and not again for a run that changes nothing.
+func TestMailDeliveryHandlerAnnouncesEachCommittedStateChange(t *testing.T) {
+	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+	sealer, record, delivery := mailDeliveryHandlerFixture(t, at, 24*time.Hour)
+	persistence := &mailStoreFake{delivery: delivery}
+	sender := &mailSenderFake{enabled: true, from: mail.Address{Address: "new-sender@example.test"}}
+	changes := &mailDeliveryChangesFake{}
+	now := at.Add(time.Second)
+	run := func() job.Outcome {
+		descriptor := NewMailDelivery(MailDeliveryDependencies{
+			Changes: changes, Deliveries: persistence, Sender: sender, Sealer: sealer, Relevance: mail.DeliveryIsRelevant,
+			Now: func() time.Time { now = now.Add(time.Second); return now },
+		}).Descriptor
+		return descriptor.Handler.Run(context.Background(), job.NewExecution(record, nil, nil, nil))
+	}
+	require.Equal(t, job.OutcomeSucceeded, run().Kind)
+	require.Equal(t, model.MailDeliveryAccepted, persistence.delivery.State)
+	require.Equal(t, []model.MailDeliveryID{delivery.ID, delivery.ID}, changes.changed, "sending, then accepted")
+	require.Equal(t, job.OutcomeSucceeded, run().Kind)
+	require.Len(t, changes.changed, 2, "an accepted delivery changes no more")
+}
+
 func TestMailDeliveryHandlerClassifiesRetryableAndPermanentFailures(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

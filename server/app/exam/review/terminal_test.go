@@ -34,7 +34,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	require.Equal(t, []string{"success"}, f.decisions(model.ActionSubmissionReview), "finalization decisions")
 	require.Empty(t, f.decisions(model.ActionSubmissionRelease), "finalization decisions")
 	// Contract: finalizing tells managers the Review was finalized, then
-	// invalidates the Sitting board.
+	// invalidates the Sitting board and its submission list.
 	finalizedCalls := reviewCalls(t, realtime.NewExamIntegrityReviewFinalizedEvent, finalized)
 	require.Equal(t, finalizedCalls, f.publisher.Calls())
 	wantFinalize, prepareErr := prepareTerminalIdempotency(f.inv, store.ExamIntegrityReviewFinalizeOperation,
@@ -56,14 +56,17 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	require.NoError(t, eventErr)
 	board, eventErr := realtime.NewManagerSittingBoardChangedEvent(released.Authorization.ExamID, released.Authorization.SittingID)
 	require.NoError(t, eventErr)
+	submissions, eventErr := realtime.NewSittingSubmissionsChangedEvent(released.Authorization.ExamID, released.Authorization.SittingID)
+	require.NoError(t, eventErr)
 	// Contract: after the finalization's publications, the release reaches
-	// managers before the candidate, then the candidate's Exam activity and
-	// the Sitting board are invalidated.
+	// managers before the candidate, then the candidate's Exam activity, the
+	// Sitting board and its submission list are invalidated.
 	require.Equal(t, append(finalizedCalls,
 		realtimetest.Call{Method: realtimetest.Publish, Event: managerRelease},
 		realtimetest.Call{Method: realtimetest.Publish, Event: candidateRelease},
 		realtimetest.Call{Method: realtimetest.Publish, Event: activity},
 		realtimetest.Call{Method: realtimetest.Publish, Event: board},
+		realtimetest.Call{Method: realtimetest.Publish, Event: submissions},
 	), f.publisher.Calls())
 	wantRelease, prepareErr := prepareTerminalIdempotency(f.inv, store.ExamIntegrityReviewReleaseOperation,
 		"test-key", f.submissionID, f.reviewID, 3)

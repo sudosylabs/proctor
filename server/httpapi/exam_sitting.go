@@ -21,24 +21,34 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 type scheduleExamSittingRequest struct {
-	ExamRevisionID   string `json:"exam_revision_id"`
-	ClassID          string `json:"class_id"`
-	ScheduledStartAt string `json:"scheduled_start_at"`
-	ScheduledEndAt   string `json:"scheduled_end_at"`
+	ExamRevisionID   string                                       `json:"exam_revision_id"`
+	ClassID          string                                       `json:"class_id"`
+	ScheduledStartAt string                                       `json:"scheduled_start_at"`
+	ScheduledEndAt   string                                       `json:"scheduled_end_at"`
+	JoinWindow       route.Optional[examSittingJoinWindowRequest] `json:"join_window"`
+}
+
+// examSittingJoinWindowRequest is a whole join window. A bound left out is
+// absent, so in a schedule edit {} removes the window.
+type examSittingJoinWindowRequest struct {
+	OpensAt  route.Optional[string] `json:"opens_at"`
+	ClosesAt route.Optional[string] `json:"closes_at"`
 }
 
 type updateExamSittingScheduleRequest struct {
-	ExpectedRevision int64                  `json:"expected_revision"`
-	ExamRevisionID   route.Optional[string] `json:"exam_revision_id"`
-	ClassID          route.Optional[string] `json:"class_id"`
-	ScheduledStartAt route.Optional[string] `json:"scheduled_start_at"`
-	ScheduledEndAt   route.Optional[string] `json:"scheduled_end_at"`
+	ExpectedRevision int64                                        `json:"expected_revision"`
+	ExamRevisionID   route.Optional[string]                       `json:"exam_revision_id"`
+	ClassID          route.Optional[string]                       `json:"class_id"`
+	ScheduledStartAt route.Optional[string]                       `json:"scheduled_start_at"`
+	ScheduledEndAt   route.Optional[string]                       `json:"scheduled_end_at"`
+	JoinWindow       route.Optional[examSittingJoinWindowRequest] `json:"join_window"`
 }
 
 type cancelExamSittingRequest struct {
@@ -64,6 +74,16 @@ func (b *scheduleExamSittingRequest) UnmarshalJSON(encoded []byte) error {
 		return err
 	}
 	*b = scheduleExamSittingRequest(decoded)
+	return nil
+}
+
+func (b *examSittingJoinWindowRequest) UnmarshalJSON(encoded []byte) error {
+	type wire examSittingJoinWindowRequest
+	var decoded wire
+	if err := decodeDuplicateFreeExamSittingObject(encoded, &decoded); err != nil {
+		return err
+	}
+	*b = examSittingJoinWindowRequest(decoded)
 	return nil
 }
 
@@ -155,22 +175,61 @@ func decodeDuplicateFreeExamSittingObject(encoded []byte, target any) error {
 // examSittingResponse exposes only the candidate-safe reason code. Private
 // manager reasons, authorization decisions and audit provenance stay out.
 type examSittingResponse struct {
-	ID               string `json:"id"`
-	ExamID           string `json:"exam_id"`
-	ExamRevisionID   string `json:"exam_revision_id"`
-	ClassID          string `json:"class_id"`
-	ScheduledStartAt string `json:"scheduled_start_at"`
-	ScheduledEndAt   string `json:"scheduled_end_at"`
-	State            string `json:"state"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
-	OpenedAt         string `json:"opened_at,omitempty"`
-	PausedAt         string `json:"paused_at,omitempty"`
-	ClosingAt        string `json:"closing_at,omitempty"`
-	ClosedAt         string `json:"closed_at,omitempty"`
-	CanceledAt       string `json:"canceled_at,omitempty"`
-	ReasonCode       string `json:"reason_code,omitempty"`
-	Revision         int64  `json:"revision"`
+	ID               string                         `json:"id"`
+	ExamID           string                         `json:"exam_id"`
+	ExamRevisionID   string                         `json:"exam_revision_id"`
+	ClassID          string                         `json:"class_id"`
+	ScheduledStartAt string                         `json:"scheduled_start_at"`
+	ScheduledEndAt   string                         `json:"scheduled_end_at"`
+	JoinWindow       *examSittingJoinWindowResponse `json:"join_window,omitempty"`
+	State            string                         `json:"state"`
+	CreatedAt        string                         `json:"created_at"`
+	UpdatedAt        string                         `json:"updated_at"`
+	OpenedAt         string                         `json:"opened_at,omitempty"`
+	PausedAt         string                         `json:"paused_at,omitempty"`
+	ClosingAt        string                         `json:"closing_at,omitempty"`
+	ClosedAt         string                         `json:"closed_at,omitempty"`
+	CanceledAt       string                         `json:"canceled_at,omitempty"`
+	ReasonCode       string                         `json:"reason_code,omitempty"`
+	Revision         int64                          `json:"revision"`
+	// The members below are present on reads, not on a mutation's result.
+	CandidateCount             *int                          `json:"candidate_count,omitempty"`
+	CandidateCountIsLowerBound *bool                         `json:"candidate_count_is_lower_bound,omitempty"`
+	Corrections                []examSittingCorrectionEntry  `json:"corrections,omitempty"`
+	History                    []examSittingHistoryEntryWire `json:"history,omitempty"`
+}
+
+type examSittingJoinWindowResponse struct {
+	OpensAt  string `json:"opens_at,omitempty"`
+	ClosesAt string `json:"closes_at,omitempty"`
+}
+
+func joinWindowResponse(window model.ExamSittingJoinWindow) *examSittingJoinWindowResponse {
+	if !window.OpensAt.Valid && !window.ClosesAt.Valid {
+		return nil
+	}
+	return &examSittingJoinWindowResponse{OpensAt: window.OpensAt.FormatRFC3339(), ClosesAt: window.ClosesAt.FormatRFC3339()}
+}
+
+// examSittingCorrectionEntry is one live correction and how many of the
+// candidates it applies to have acknowledged it.
+type examSittingCorrectionEntry struct {
+	RevisionID              string `json:"revision_id"`
+	Number                  int64  `json:"number"`
+	EffectiveAt             string `json:"effective_at"`
+	AcknowledgementRequired bool   `json:"acknowledgement_required"`
+	AcknowledgedCount       int    `json:"acknowledged_count"`
+	RequiredCount           int    `json:"required_count"`
+}
+
+// examSittingHistoryEntryWire is one manager action with the manager's
+// private reason, for the sitting's managers only.
+type examSittingHistoryEntryWire struct {
+	Kind    string             `json:"kind"`
+	At      string             `json:"at"`
+	ActorID string             `json:"actor_user_id"`
+	Actor   *personRefResponse `json:"actor,omitempty"`
+	Reason  string             `json:"reason"`
 }
 
 type examSittingListResponse struct {
@@ -179,7 +238,9 @@ type examSittingListResponse struct {
 }
 
 type examSittingNoShowResponse struct {
-	CandidateUserID string `json:"candidate_user_id"`
+	CandidateUserID  string            `json:"candidate_user_id"`
+	Candidate        personRefResponse `json:"candidate"`
+	ClassMemberSince string            `json:"class_member_since"`
 }
 
 type examSittingNoShowListResponse struct {
@@ -201,10 +262,13 @@ type examSittingCursorWire struct {
 	ID      string `json:"id"`
 }
 
-type examSittingHandlers struct{ app *sitting.Service }
+type examSittingHandlers struct {
+	app    *sitting.Service
+	people *people.Resolver
+}
 
-func examSittingResource(app *sitting.Service) route.Resource {
-	h := examSittingHandlers{app: app}
+func examSittingResource(app *sitting.Service, resolver *people.Resolver) route.Resource {
+	h := examSittingHandlers{app: app, people: resolver}
 	collection := "/exams/{exam_id}/sittings"
 	member := "/exams/{exam_id}/sittings/{exam_sitting_id}"
 	cancel := "/exams/{exam_id}/sittings/{exam_sitting_id}/cancel"
@@ -468,9 +532,25 @@ func (h examSittingHandlers) listNoShows(request route.Request) (route.Result, e
 		return route.Result{}, err
 	}
 
+	ids := make([]model.UserID, 0, len(page.Items))
+	for _, item := range page.Items {
+		if !item.CandidateUserID.IsValid() {
+			return route.Result{}, route.ErrUnpresentable
+		}
+		ids = append(ids, item.CandidateUserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	response := examSittingNoShowListResponse{Items: make([]examSittingNoShowResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examSittingNoShowResponse{CandidateUserID: item.CandidateUserID.String()})
+		response.Items = append(response.Items, examSittingNoShowResponse{
+			CandidateUserID:  item.CandidateUserID.String(),
+			Candidate:        *personRef(refs, item.CandidateUserID),
+			ClassMemberSince: model.FormatRFC3339(item.ClassMemberSince),
+		})
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
@@ -551,12 +631,20 @@ func (h examSittingHandlers) schedule(request route.Request) (route.Result, erro
 		return route.Result{}, route.InvalidRequest(errors.New("must be a nonempty interval"))
 	}
 
+	var joinWindow model.ExamSittingJoinWindow
+	if parsed, parseErr := parseExamSittingJoinWindow(body.JoinWindow); parseErr != nil {
+		return route.Result{}, parseErr
+	} else if parsed != nil {
+		joinWindow = *parsed
+	}
+
 	view, err := h.app.ScheduleExamSitting(request.Context, request.Invocation(), sitting.ScheduleCommand{
 		ExamID:           examID,
 		ExamRevisionID:   revisionID,
 		ClassID:          classID,
 		ScheduledStartAt: startAt,
 		ScheduledEndAt:   endAt,
+		JoinWindow:       joinWindow,
 		IdempotencyKey:   request.IdempotencyKey,
 	})
 	if err != nil {
@@ -571,11 +659,51 @@ func (h examSittingHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	view, err := h.app.GetExamSitting(request.Context, request.Invocation(), examID, sittingID)
+	read, err := h.app.ReadExamSitting(request.Context, request.Invocation(), examID, sittingID)
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, examSittingResponseFromView(view)), nil
+
+	response := examSittingResponseFromView(read.ExamSittingSnapshot).withCandidates(read.Candidates)
+	response.Corrections = make([]examSittingCorrectionEntry, 0, len(read.Corrections))
+	for _, correction := range read.Corrections {
+		response.Corrections = append(response.Corrections, examSittingCorrectionEntry{
+			RevisionID:              correction.RevisionID.String(),
+			Number:                  correction.Number,
+			EffectiveAt:             model.FormatRFC3339(correction.EffectiveAt),
+			AcknowledgementRequired: correction.AcknowledgementRequired,
+			AcknowledgedCount:       correction.AcknowledgedCount,
+			RequiredCount:           correction.RequiredCount,
+		})
+	}
+	if read.HistoryVisible {
+		actors := make([]model.UserID, 0, len(read.History))
+		for _, entry := range read.History {
+			actors = append(actors, entry.ActorUserID)
+		}
+		refs, nameErr := namePeople(request, h.people, actors...)
+		if nameErr != nil {
+			return route.Result{}, nameErr
+		}
+		response.History = make([]examSittingHistoryEntryWire, 0, len(read.History))
+		for _, entry := range read.History {
+			response.History = append(response.History, examSittingHistoryEntryWire{
+				Kind:    string(entry.Kind),
+				At:      model.FormatRFC3339(entry.At),
+				ActorID: entry.ActorUserID.String(),
+				Actor:   personRef(refs, entry.ActorUserID),
+				Reason:  entry.Reason,
+			})
+		}
+	}
+	return route.JSON(http.StatusOK, response), nil
+}
+
+// withCandidates adds a read's candidate count.
+func (r examSittingResponse) withCandidates(candidates sitting.CandidateCount) examSittingResponse {
+	count, lowerBound := candidates.Count, candidates.IsLowerBound
+	r.CandidateCount, r.CandidateCountIsLowerBound = &count, &lowerBound
+	return r
 }
 
 func (h examSittingHandlers) list(request route.Request) (route.Result, error) {
@@ -634,22 +762,22 @@ func (h examSittingHandlers) list(request route.Request) (route.Result, error) {
 		query.BeforeScheduledStartAt, query.BeforeSittingID = cursor.StartAt, cursor.ID
 	}
 
-	page, err := h.app.ListExamSittings(request.Context, request.Invocation(), query)
+	items, hasMore, err := h.app.ListExamSittingsWithCounts(request.Context, request.Invocation(), query)
 	if err != nil {
 		return route.Result{}, err
 	}
 
-	response := examSittingListResponse{Items: make([]examSittingResponse, 0, len(page.Items))}
-	for _, view := range page.Items {
-		response.Items = append(response.Items, examSittingResponseFromView(view))
+	response := examSittingListResponse{Items: make([]examSittingResponse, 0, len(items))}
+	for _, item := range items {
+		response.Items = append(response.Items, examSittingResponseFromView(item.ExamSittingSnapshot).withCandidates(item.Candidates))
 	}
 
-	if page.HasMore && len(page.Items) == 0 {
+	if hasMore && len(items) == 0 {
 		return route.Result{}, route.Unpresentable(errors.New("sitting page made no progress"))
 	}
 
-	if page.HasMore {
-		last := page.Items[len(page.Items)-1].Sitting
+	if hasMore {
+		last := items[len(items)-1].Sitting
 		if last == nil {
 			return route.Result{}, route.ErrUnpresentable
 		}
@@ -718,6 +846,11 @@ func (h examSittingHandlers) updateSchedule(request route.Request) (route.Result
 	}
 
 	command.ScheduledEndAt, err = parseOptionalExamSittingTime("scheduled_end_at", body.ScheduledEndAt)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	command.JoinWindow, err = parseExamSittingJoinWindow(body.JoinWindow)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -885,7 +1018,39 @@ func examSittingIDs(request route.Request) (model.ExamID, model.ExamSittingID, e
 }
 
 func noExamSittingScheduleChange(body updateExamSittingScheduleRequest) bool {
-	return !body.ExamRevisionID.IsSet() && !body.ClassID.IsSet() && !body.ScheduledStartAt.IsSet() && !body.ScheduledEndAt.IsSet()
+	return !body.ExamRevisionID.IsSet() && !body.ClassID.IsSet() && !body.ScheduledStartAt.IsSet() && !body.ScheduledEndAt.IsSet() &&
+		!body.JoinWindow.IsSet()
+}
+
+// parseExamSittingJoinWindow reads an optional join window: omitted is nil,
+// and null or a null bound is refused, because an absent instant is left out.
+func parseExamSittingJoinWindow(value route.Optional[examSittingJoinWindowRequest]) (*model.ExamSittingJoinWindow, error) {
+	if !value.IsSet() {
+		return nil, nil
+	}
+	if value.IsNull() {
+		return nil, route.InvalidRequest(errors.New("must not be null"))
+	}
+	body := *value.ValuePointer()
+	var window model.ExamSittingJoinWindow
+	for _, bound := range []struct {
+		field string
+		value route.Optional[string]
+		into  *model.OptionalTime
+	}{{"opens_at", body.OpensAt, &window.OpensAt}, {"closes_at", body.ClosesAt, &window.ClosesAt}} {
+		if !bound.value.IsSet() {
+			continue
+		}
+		if bound.value.IsNull() {
+			return nil, route.InvalidRequest(errors.New("must not be null"))
+		}
+		parsed, err := parseExamSittingTime(bound.field, *bound.value.ValuePointer())
+		if err != nil {
+			return nil, err
+		}
+		*bound.into = model.OptionalTimeFrom(parsed)
+	}
+	return &window, nil
 }
 
 func parseOptionalExamSittingTime(field string, value route.Optional[string]) (*time.Time, error) {
@@ -943,6 +1108,7 @@ func examSittingResponseFromView(view store.ExamSittingSnapshot) examSittingResp
 		ClassID:          record.ClassID.String(),
 		ScheduledStartAt: model.FormatRFC3339(record.ScheduledStartAt),
 		ScheduledEndAt:   model.FormatRFC3339(record.ScheduledEndAt),
+		JoinWindow:       joinWindowResponse(record.JoinWindow),
 		State:            string(record.State),
 		CreatedAt:        model.FormatRFC3339(record.CreatedAt),
 		UpdatedAt:        model.FormatRFC3339(record.UpdatedAt),

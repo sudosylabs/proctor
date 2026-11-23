@@ -8,42 +8,90 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type desktopCompatibilityPolicyRequest struct {
-	ExpectedRevision       int64                    `json:"expected_revision"`
-	MinimumDesktopRelease  route.Optional[string]   `json:"minimum_desktop_release"`
-	RevokedDesktopBuildIDs route.Optional[[]string] `json:"revoked_desktop_build_ids"`
-	AdministratorMessage   route.Optional[string]   `json:"administrator_message"`
-	Availability           route.Optional[string]   `json:"availability"`
-	RetryAt                route.Optional[string]   `json:"retry_at"`
+	ExpectedRevision      int64                                           `json:"expected_revision"`
+	MinimumDesktopRelease route.Optional[string]                          `json:"minimum_desktop_release"`
+	RevokedDesktopBuilds  route.Optional[[]desktopBuildRevocationRequest] `json:"revoked_desktop_builds"`
+	AdministratorMessage  route.Optional[string]                          `json:"administrator_message"`
+	Availability          route.Optional[string]                          `json:"availability"`
+	RetryAt               route.Optional[string]                          `json:"retry_at"`
+}
+
+type desktopBuildRevocationRequest struct {
+	BuildID string `json:"build_id"`
+	Reason  string `json:"reason"`
 }
 
 type desktopCompatibilityPolicyResponse struct {
-	Revision               int64    `json:"revision"`
-	MinimumDesktopRelease  string   `json:"minimum_desktop_release"`
-	RevokedDesktopBuildIDs []string `json:"revoked_desktop_build_ids"`
-	AdministratorMessage   string   `json:"administrator_message"`
-	Availability           string   `json:"availability"`
-	RetryAt                *string  `json:"retry_at,omitempty"`
-	CreatedAt              string   `json:"created_at"`
-	UpdatedAt              string   `json:"updated_at"`
+	Revision              int64                            `json:"revision"`
+	MinimumDesktopRelease string                           `json:"minimum_desktop_release"`
+	RevokedDesktopBuilds  []desktopBuildRevocationResponse `json:"revoked_desktop_builds"`
+	AdministratorMessage  string                           `json:"administrator_message"`
+	Availability          string                           `json:"availability"`
+	RetryAt               *string                          `json:"retry_at,omitempty"`
+	CreatedAt             string                           `json:"created_at"`
+	UpdatedAt             string                           `json:"updated_at"`
+}
+
+// desktopBuildRevocationResponse is one revoked build. Release, platform and
+// architecture are absent for a build this server's catalogue doesn't hold.
+type desktopBuildRevocationResponse struct {
+	BuildID      string            `json:"build_id"`
+	Release      string            `json:"release,omitempty"`
+	Platform     string            `json:"platform,omitempty"`
+	Architecture string            `json:"architecture,omitempty"`
+	Reason       string            `json:"reason"`
+	RevokedAt    string            `json:"revoked_at"`
+	RevokedBy    personRefResponse `json:"revoked_by"`
+}
+
+// desktopReleaseResponse is one build of the compiled catalogue.
+type desktopReleaseResponse struct {
+	Release      string `json:"release"`
+	BuildID      string `json:"build_id"`
+	Platform     string `json:"platform"`
+	Architecture string `json:"architecture"`
+	ReleasedAt   string `json:"released_at"`
+	Newest       bool   `json:"newest"`
+}
+
+type desktopReleaseCursor struct {
+	BuildID string `json:"build_id"`
+}
+
+func desktopReleaseCursorSpec() route.CursorSpec[desktopReleaseCursor] {
+	return route.CursorSpec[desktopReleaseCursor]{
+		Label:                "desktop release",
+		MaximumEncodedLength: 512,
+		Members:              []string{"build_id"},
+		Validate: func(cursor desktopReleaseCursor) error {
+			if !model.IsValidDesktopBuildID(cursor.BuildID) {
+				return errors.New("invalid desktop release keyset")
+			}
+			return nil
+		},
+	}
 }
 
 type desktopCompatibilityPolicyHandlers struct {
-	app *identity.Service
+	app    *identity.Service
+	people *people.Resolver
 }
 
-func desktopCompatibilityPolicyResource(app *identity.Service) route.Resource {
-	h := desktopCompatibilityPolicyHandlers{app: app}
+func desktopCompatibilityPolicyResource(app *identity.Service, resolver *people.Resolver) route.Resource {
+	h := desktopCompatibilityPolicyHandlers{app: app, people: resolver}
 	replace := route.Endpoint{
 		Method:      http.MethodPut,
 		Path:        "/desktop-compatibility-policy",
@@ -83,23 +131,98 @@ func desktopCompatibilityPolicyResource(app *identity.Service) route.Resource {
 			Handle: h.get,
 		},
 		replace,
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/desktop-releases",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"desktop_compatibility_policy.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
+			Handle: h.releases,
+		},
 	)
+}
+
+// releases pages the compiled catalogue, which is fixed for this server
+// release, so a cursor is the last build listed.
+func (h desktopCompatibilityPolicyHandlers) releases(request route.Request) (route.Result, error) {
+	requested, err := request.Page()
+	if err != nil {
+		return route.Result{}, err
+	}
+	cursor, present, err := route.DecodePageCursor(requested, desktopReleaseCursorSpec())
+	if err != nil {
+		return route.Result{}, err
+	}
+	releases, err := h.app.ListDesktopReleases(request.Context, request.Invocation())
+	if err != nil {
+		return route.Result{}, err
+	}
+	if present {
+		next := slices.IndexFunc(releases, func(release identity.DesktopRelease) bool {
+			return release.Build.DesktopBuildID == cursor.BuildID
+		})
+		if next < 0 {
+			return route.Result{}, route.InvalidRequest(errors.New("the cursor names no listed build"))
+		}
+		releases = releases[next+1:]
+	}
+	more := len(releases) > requested.Limit
+	if more {
+		releases = releases[:requested.Limit]
+	}
+	response, err := route.NewList(releases, more, func(release identity.DesktopRelease) desktopReleaseResponse {
+		return desktopReleaseResponse{
+			Release:      release.Build.DesktopRelease,
+			BuildID:      release.Build.DesktopBuildID,
+			Platform:     string(release.Build.Platform),
+			Architecture: string(release.Build.Architecture),
+			ReleasedAt:   model.FormatRFC3339(release.Build.ReleasedAt),
+			Newest:       release.Newest,
+		}
+	}, func(last identity.DesktopRelease) (string, error) {
+		return route.EncodeCursor(desktopReleaseCursor{BuildID: last.Build.DesktopBuildID}, desktopReleaseCursorSpec())
+	})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func (h desktopCompatibilityPolicyHandlers) present(
+	request route.Request,
+	view *identity.DesktopCompatibilityPolicyView,
+) (route.Result, error) {
+	ids := make([]model.UserID, 0, len(view.Policy.RevokedDesktopBuilds))
+	for _, revocation := range view.Policy.RevokedDesktopBuilds {
+		ids = append(ids, revocation.RevokedByUserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(
+		http.StatusOK,
+		desktopCompatibilityPolicyResponseFromView(view, refs),
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func (h desktopCompatibilityPolicyHandlers) get(
 	request route.Request,
 ) (route.Result, error) {
-	policy, err := h.app.GetDesktopCompatibilityPolicy(
+	view, err := h.app.GetDesktopCompatibilityPolicy(
 		request.Context,
 		request.Invocation(),
 	)
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(
-		http.StatusOK,
-		desktopCompatibilityPolicyResponseFromModel(policy),
-	).WithHeaders(privateNoStoreHeaders()), nil
+	return h.present(request, view)
 }
 
 func (h desktopCompatibilityPolicyHandlers) replace(
@@ -113,7 +236,7 @@ func (h desktopCompatibilityPolicyHandlers) replace(
 	if err != nil {
 		return route.Result{}, err
 	}
-	policy, err := h.app.ReplaceDesktopCompatibilityPolicy(
+	view, err := h.app.ReplaceDesktopCompatibilityPolicy(
 		request.Context,
 		request.Invocation(),
 		identity.ReplaceDesktopCompatibilityPolicyCommand{
@@ -125,10 +248,7 @@ func (h desktopCompatibilityPolicyHandlers) replace(
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(
-		http.StatusOK,
-		desktopCompatibilityPolicyResponseFromModel(policy),
-	).WithHeaders(privateNoStoreHeaders()), nil
+	return h.present(request, view)
 }
 
 func requiredDesktopCompatibilityPolicySettings(
@@ -141,11 +261,11 @@ func requiredDesktopCompatibilityPolicySettings(
 		).WithField("field", "minimum_desktop_release")
 	}
 
-	revokedBuildIDs := body.RevokedDesktopBuildIDs.ValuePointer()
-	if revokedBuildIDs == nil {
+	revokedBuilds := body.RevokedDesktopBuilds.ValuePointer()
+	if revokedBuilds == nil {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
-		).WithField("field", "revoked_desktop_build_ids")
+		).WithField("field", "revoked_desktop_builds")
 	}
 
 	message := body.AdministratorMessage.ValuePointer()
@@ -180,29 +300,49 @@ func requiredDesktopCompatibilityPolicySettings(
 		retryAt = model.OptionalTimeFrom(parsed)
 	}
 
-	canonicalBuildIDs := slices.Clone(*revokedBuildIDs)
-	slices.Sort(canonicalBuildIDs)
+	canonicalBuilds := make([]model.DesktopBuildRevocationRequest, 0, len(*revokedBuilds))
+	for _, revocation := range *revokedBuilds {
+		canonicalBuilds = append(canonicalBuilds, model.DesktopBuildRevocationRequest{
+			BuildID: revocation.BuildID, Reason: strings.TrimSpace(revocation.Reason),
+		})
+	}
+	slices.SortFunc(canonicalBuilds, func(left, right model.DesktopBuildRevocationRequest) int {
+		return strings.Compare(left.BuildID, right.BuildID)
+	})
 	return model.DesktopCompatibilityPolicySettings{
-		MinimumDesktopRelease:  *minimumRelease,
-		RevokedDesktopBuildIDs: canonicalBuildIDs,
-		AdministratorMessage:   strings.TrimSpace(*message),
-		Availability:           model.DesktopAvailability(*availability),
-		RetryAt:                retryAt,
+		MinimumDesktopRelease: *minimumRelease,
+		RevokedDesktopBuilds:  canonicalBuilds,
+		AdministratorMessage:  strings.TrimSpace(*message),
+		Availability:          model.DesktopAvailability(*availability),
+		RetryAt:               retryAt,
 	}, nil
 }
 
-func desktopCompatibilityPolicyResponseFromModel(
-	policy *model.DesktopCompatibilityPolicy,
+func desktopCompatibilityPolicyResponseFromView(
+	view *identity.DesktopCompatibilityPolicyView,
+	refs people.Refs,
 ) desktopCompatibilityPolicyResponse {
 	response := desktopCompatibilityPolicyResponse{
-		RevokedDesktopBuildIDs: []string{},
+		RevokedDesktopBuilds: []desktopBuildRevocationResponse{},
 	}
-	if policy == nil {
+	if view == nil || view.Policy == nil {
 		return response
 	}
+	policy := view.Policy
 	response.Revision = policy.Revision
 	response.MinimumDesktopRelease = policy.MinimumDesktopRelease
-	response.RevokedDesktopBuildIDs = slices.Clone(policy.RevokedDesktopBuildIDs)
+	for _, revocation := range policy.RevokedDesktopBuilds {
+		item := desktopBuildRevocationResponse{
+			BuildID:   revocation.BuildID,
+			Reason:    revocation.Reason,
+			RevokedAt: model.FormatRFC3339(revocation.RevokedAt),
+			RevokedBy: *personRef(refs, revocation.RevokedByUserID),
+		}
+		if build, known := view.RevokedBuilds[revocation.BuildID]; known {
+			item.Release, item.Platform, item.Architecture = build.DesktopRelease, string(build.Platform), string(build.Architecture)
+		}
+		response.RevokedDesktopBuilds = append(response.RevokedDesktopBuilds, item)
+	}
 	response.AdministratorMessage = policy.AdministratorMessage
 	response.Availability = string(policy.Availability)
 	if policy.RetryAt.Valid {

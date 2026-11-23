@@ -78,6 +78,7 @@ type examSubmissionReceiptResponse struct {
 type examSubmissionManagerResponse struct {
 	BrowserActivity           model.BrowserSubmissionSettlement `json:"browser_activity"`
 	SubmissionID              string                            `json:"submission_id"`
+	ReceiptCode               string                            `json:"receipt_code"`
 	ExamID                    string                            `json:"exam_id"`
 	ExamSittingID             string                            `json:"exam_sitting_id"`
 	ExamAttemptID             string                            `json:"exam_attempt_id"`
@@ -189,6 +190,7 @@ func (h examAttemptHandlers) getSubmission(request route.Request) (route.Result,
 	response := examSubmissionManagerResponse{
 		BrowserActivity:           submission.BrowserActivity,
 		SubmissionID:              submission.ID.String(),
+		ReceiptCode:               submission.ReceiptCode.Display(),
 		ExamID:                    view.Authorization.ExamID.String(),
 		ExamSittingID:             view.Authorization.SittingID.String(),
 		ExamAttemptID:             submission.AttemptID.String(),

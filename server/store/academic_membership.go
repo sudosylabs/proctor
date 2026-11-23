@@ -47,6 +47,10 @@ type MembershipPageKeyset struct {
 type AcademicUnitMemberPageOptions struct {
 	AcademicUnitID model.AcademicUnitID
 	ActiveAt       time.Time
+	// Affiliations keeps only members holding a current Affiliation of one of
+	// these kinds at AffiliationsAt, which a non-empty list requires.
+	Affiliations   []model.AffiliationKind
+	AffiliationsAt time.Time
 	MembershipPageKeyset
 	AfterID model.AcademicUnitMemberID
 	Limit   int
@@ -63,6 +67,11 @@ type AcademicUnitMemberPage struct {
 type ClassMemberPageOptions struct {
 	ClassID  model.ClassID
 	ActiveAt time.Time
+	// Query keeps members whose username, display name, first or last name
+	// contains it, as the user directory matches; QueryMatchesEmail also
+	// matches the email, only for a caller who may see emails.
+	Query             string
+	QueryMatchesEmail bool
 	MembershipPageKeyset
 	AfterID model.ClassMemberID
 	Limit   int
@@ -73,11 +82,45 @@ type ClassMemberPage struct {
 	HasMore bool
 }
 
+// ClassMemberTransfer is the class a membership's end moves the student to,
+// and when.
+type ClassMemberTransfer struct {
+	ClassMemberID model.ClassMemberID
+	ToClassID     model.ClassID
+	ToClassName   string
+	At            time.Time
+}
+
 // ClassStudentCount is the number of current members of one class, capped at
 // the maximum its read was given.
 type ClassStudentCount struct {
 	ClassID model.ClassID
 	Count   int
+}
+
+// AcademicUnitMemberCount is the number of current members of one unit, and
+// of those holding each current Affiliation kind, each capped at the maximum
+// its read was given. The kinds overlap, so they don't sum to Members.
+type AcademicUnitMemberCount struct {
+	AcademicUnitID model.AcademicUnitID
+	Members        int
+	ByAffiliation  map[model.AffiliationKind]int
+}
+
+// AcademicUnitMemberCountOptions names one page of units, at most
+// MaximumAcademicUnitCountUnits, counted at ActiveAt.
+type AcademicUnitMemberCountOptions struct {
+	AcademicUnitIDs []model.AcademicUnitID
+	ActiveAt        time.Time
+	Maximum         int
+}
+
+// MaximumAcademicUnitCountUnits is the most units one count accepts: one page.
+const MaximumAcademicUnitCountUnits = 200
+
+// CountedAffiliationKinds are the kinds a unit's member counts break down by.
+var CountedAffiliationKinds = []model.AffiliationKind{
+	model.AffiliationStudent, model.AffiliationStaff, model.AffiliationTeacher, model.AffiliationExternal,
 }
 
 // MaximumClassStudentCountClasses is the most classes one
@@ -157,6 +200,9 @@ type AcademicUnitMemberStore interface {
 	// ignoring the keyset, order, and limit, and stops at maximum (see
 	// MaximumListCount).
 	CountPageByAcademicUnit(context.Context, AcademicUnitMemberPageOptions, int) (int, error)
+	// CountCurrentByAcademicUnits counts each listed unit's current members in
+	// one read; every listed unit has an entry, zero when it has no member.
+	CountCurrentByAcademicUnits(context.Context, AcademicUnitMemberCountOptions) ([]AcademicUnitMemberCount, error)
 	// ListActiveByUser compares at UTC microsecond precision over [start, end)
 	// and excludes archived memberships.
 	ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.AcademicUnitMember, error)
@@ -219,6 +265,11 @@ type ClassMemberStore interface {
 	// MaximumClassStudentCountClasses distinct classes are read; a class with
 	// no current member has no entry.
 	CountCurrentByClasses(ctx context.Context, classIDs []model.ClassID, at time.Time, maximum int) ([]ClassStudentCount, error)
+	// ListTransfers finds, for each listed membership that has an end, the
+	// membership of the same student in another class starting exactly at
+	// that end: the transfer that ends it. A membership without one has no
+	// entry. At most MaximumClassStudentCountClasses memberships are read.
+	ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID, visibility ClassVisibilityScope) ([]ClassMemberTransfer, error)
 	ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.ClassMember, error)
 	// SeedEnroll and SeedEnd are unaudited fixture writes for conformance and
 	// integration tests; production code never calls a Seed operation.

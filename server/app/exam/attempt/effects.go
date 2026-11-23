@@ -51,6 +51,7 @@ func (s *Service) publishConnectionOpened(ctx context.Context, result Connection
 	}
 
 	event, err := realtime.NewExamAttemptConnectionOpenedEvent(
+		result.Attempt.ExamID,
 		result.Attempt.SittingID,
 		result.Attempt.ID,
 		result.Attempt.CandidateUserID,
@@ -74,6 +75,7 @@ func (s *Service) publishConnectionClosed(ctx context.Context, result Connection
 		s.environments.Wake(result.AttemptID)
 	}
 	event, err := realtime.NewExamAttemptConnectionClosedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.AttemptID,
 		result.CandidateUserID,
@@ -96,10 +98,12 @@ func (s *Service) publishConnectionClosed(ctx context.Context, result Connection
 // event can be built.
 func (s *Service) publishParticipationExpired(ctx context.Context, result ParticipationExpiry) error {
 	effects := integrityEffects{
+		ExamID:          result.ExamID,
 		SittingID:       result.SittingID,
 		AttemptID:       result.Attempt.ID,
 		CandidateUserID: result.CandidateUserID,
 		At:              result.DatabaseTime,
+		EvidenceChanged: true,
 		Suspension: &integritySuspensionNotice{
 			ConnectionID:    result.Connection.ID,
 			FlagID:          result.Flag.ID,
@@ -119,6 +123,7 @@ func (s *Service) publishParticipationExpired(ctx context.Context, result Partic
 
 func (s *Service) publishAttemptReallowed(ctx context.Context, result ReallowResult) error {
 	managerEvent, err := realtime.NewExamAttemptReallowedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.Attempt.ID,
 		result.CandidateUserID,
@@ -131,6 +136,7 @@ func (s *Service) publishAttemptReallowed(ctx context.Context, result ReallowRes
 	}
 
 	candidateEvent, err := realtime.NewCandidateExamAttemptReallowedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.Attempt.ID,
 		result.CandidateUserID,
@@ -156,6 +162,7 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 	}
 
 	managerEvent, err := realtime.NewExamAttemptKickedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.Attempt.ID,
 		result.CandidateUserID,
@@ -169,6 +176,7 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 	}
 
 	candidateEvent, err := realtime.NewCandidateExamAttemptSuspendedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.Attempt.ID,
 		result.CandidateUserID,
@@ -189,6 +197,7 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 	}
 
 	connectionEvent, err := realtime.NewExamAttemptConnectionClosedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.Attempt.ID,
 		result.CandidateUserID,
@@ -219,6 +228,7 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceBatchResult) error {
 	first, last := result.Changes[0], result.Changes[len(result.Changes)-1]
 	event, err := realtime.NewCandidateExamAttemptWorkspaceChangedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.AttemptID,
 		result.CandidateUserID,
@@ -254,11 +264,13 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 	}
 
 	effects := integrityEffects{
+		ExamID:          result.ExamID,
 		SittingID:       result.SittingID,
 		AttemptID:       result.AttemptID,
 		CandidateUserID: result.CandidateUserID,
 		At:              result.ReceivedAt,
 		Warning:         result.CandidateWarningCreated,
+		EvidenceChanged: result.FlagCreated || result.ManagerNotificationRequired || result.GapDetected,
 		Invalidate: func() error {
 			var joined error
 			if result.GapDetected || result.FlagCreated || result.SuspensionCreated {
@@ -297,6 +309,7 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 // integrityEffects are the realtime effects of one integrity policy decision;
 // every policy publishes them the same way.
 type integrityEffects struct {
+	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
 	AttemptID        model.ExamAttemptID
 	CandidateUserID  model.UserID
@@ -306,9 +319,43 @@ type integrityEffects struct {
 	Flagged    *integrityFlagNotice
 	Suspension *integritySuspensionNotice
 	Warning    bool
+	// EvidenceChanged hints the managers' live evidence reads, after every
+	// other event.
+	EvidenceChanged bool
 	// Invalidate runs after the events and before the closed connection is
 	// unbound.
 	Invalidate func() error
+}
+
+// evidenceHintWindow is how often an attempt's managers may be told its
+// live evidence changed.
+const evidenceHintWindow = 5 * time.Second
+
+// CloseEvidenceHints stops trailing live evidence hints during node shutdown.
+func (s *Service) CloseEvidenceHints(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.evidenceHints.Close(ctx)
+}
+
+// publishEvidenceChanged tells the sitting's managers that the attempt's
+// live evidence changed, throttled per attempt. A lost hint only delays the
+// refresh, so a failure is reported and nothing more.
+func (s *Service) publishEvidenceChanged(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	at time.Time,
+) {
+	event, err := realtime.NewAttemptEvidenceChangedEvent(examID, sittingID, attemptID, at)
+	if err == nil {
+		err = s.evidenceHints.Publish(ctx, attemptID.String(), "exam_attempt.evidence.changed", event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "exam_attempt.evidence.changed", err)
+	}
 }
 
 type integrityFlagNotice struct {
@@ -335,6 +382,7 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 	events := make([]realtime.Event, 0, 5)
 	if connection := effects.ClosedConnection; connection != nil {
 		event, err := realtime.NewExamAttemptConnectionClosedEvent(
+			effects.ExamID,
 			effects.SittingID,
 			effects.AttemptID,
 			effects.CandidateUserID,
@@ -351,6 +399,7 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 
 	if flagged := effects.Flagged; flagged != nil {
 		event, err := realtime.NewExamAttemptIntegrityFlaggedEvent(
+			effects.ExamID,
 			effects.SittingID,
 			effects.AttemptID,
 			effects.CandidateUserID,
@@ -370,6 +419,7 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 
 	if suspended := effects.Suspension; suspended != nil {
 		managerEvent, err := realtime.NewExamAttemptPolicySuspendedEvent(
+			effects.ExamID,
 			effects.SittingID,
 			effects.AttemptID,
 			effects.CandidateUserID,
@@ -384,6 +434,7 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 		}
 
 		candidateEvent, err := realtime.NewCandidateExamAttemptSuspendedEvent(
+			effects.ExamID,
 			effects.SittingID,
 			effects.AttemptID,
 			effects.CandidateUserID,
@@ -400,6 +451,7 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 
 	if effects.Warning {
 		event, err := realtime.NewCandidateExamAttemptFocusLossWarningEvent(
+			effects.ExamID,
 			effects.SittingID,
 			effects.AttemptID,
 			effects.CandidateUserID,
@@ -421,6 +473,9 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 	}
 	if effects.ClosedConnection != nil {
 		joined = errors.Join(joined, s.publisher.UnbindExamAttemptConnection(ctx, effects.ClosedConnection.ID))
+	}
+	if effects.EvidenceChanged && effects.ExamID.IsValid() {
+		s.publishEvidenceChanged(ctx, effects.ExamID, effects.SittingID, effects.AttemptID, effects.At)
 	}
 
 	return joined
@@ -448,6 +503,7 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 	result SubmissionResult,
 ) (publishErr, constructionErr error) {
 	managerEvent, err := realtime.NewExamAttemptSubmittedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.Receipt.AttemptID,
 		result.CandidateUserID,
@@ -463,6 +519,7 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 	}
 
 	candidateEvent, err := realtime.NewCandidateExamAttemptSubmittedEvent(
+		result.ExamID,
 		result.SittingID,
 		result.Receipt.AttemptID,
 		result.CandidateUserID,
@@ -477,8 +534,14 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 		return nil, err
 	}
 
+	submissionsEvent, err := realtime.NewSittingSubmissionsChangedEvent(result.ExamID, result.SittingID)
+	if err != nil {
+		return nil, err
+	}
+
 	sessionErr := s.publishSealedAssistantSessions(ctx, result)
-	return errors.Join(sessionErr, s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
+	return errors.Join(sessionErr, s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent),
+		s.publisher.PublishExamChange(ctx, submissionsEvent, result.ExamID)), nil
 }
 
 // publishAttemptSealedForSittingClose unbinds the connection the seal closed
@@ -491,6 +554,7 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 
 	if result.ConnectionClosed {
 		connectionEvent, eventErr := realtime.NewExamAttemptConnectionClosedEvent(
+			result.ExamID,
 			result.SittingID,
 			result.Receipt.AttemptID,
 			result.CandidateUserID,
@@ -516,13 +580,17 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 // PublishAssistantSessionEnded delivers a session closure the environment owner committed.
 func (s *Service) PublishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, result *store.AssistantSessionEndResult) error {
+	snapshot, err := s.sittings.Resolve(ctx, sittingID)
+	if err != nil {
+		return err
+	}
 	call := result.Record.Call
-	return s.publishAssistantSessionEnded(ctx, sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
+	return s.publishAssistantSessionEnded(ctx, snapshot.Sitting.ExamID, sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
 }
 
-func (s *Service) publishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+func (s *Service) publishAssistantSessionEnded(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, tag, outcome string, at time.Time) error {
-	event, err := realtime.NewAssistantSessionEndedEvent(sittingID, attemptID, candidate, tag, outcome, at)
+	event, err := realtime.NewAssistantSessionEndedEvent(examID, sittingID, attemptID, candidate, tag, outcome, at)
 	if err != nil {
 		return err
 	}
@@ -551,7 +619,7 @@ func (s *Service) publishSealedAssistantSessions(ctx context.Context, result Sub
 	}
 	for _, row := range rows {
 		if row.Outcome == "sealed" {
-			joined = errors.Join(joined, s.publishAssistantSessionEnded(ctx, result.SittingID, result.Receipt.AttemptID,
+			joined = errors.Join(joined, s.publishAssistantSessionEnded(ctx, result.ExamID, result.SittingID, result.Receipt.AttemptID,
 				result.CandidateUserID, row.Tag, row.Outcome, row.EndedAt))
 		}
 	}

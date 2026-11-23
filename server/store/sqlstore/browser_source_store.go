@@ -715,6 +715,9 @@ func settleBrowserSource(ctx context.Context, tx *sqlxTxWrapper, id model.Browse
 // browserSourceRow is the persisted source, owner and budget state a Browser
 // source status is built from.
 type browserSourceRow struct {
+	Exam                string         `db:"exam_id"`
+	Sitting             string         `db:"exam_sitting_id"`
+	Settled             int64          `db:"settled_through_sequence"`
 	Attempt             string         `db:"exam_attempt_id"`
 	Part                string         `db:"participation_id"`
 	Generation          int64          `db:"generation"`
@@ -750,7 +753,8 @@ func browserSourceState(
 	if err := tx.Get(
 		ctx,
 		&row,
-		`SELECT s.exam_attempt_id, s.participation_id, s.generation, s.policy_revision_id,
+		`SELECT s.exam_id, s.exam_sitting_id, s.settled_through_sequence,
+			s.exam_attempt_id, s.participation_id, s.generation, s.policy_revision_id,
 			s.policy_digest, s.predecessor_id::text, s.start_transition, s.reset_reason,
 			s.started_at, s.closure_canonical, s.allocated_through_sequence, s.highest_seen,
 			s.highest_contiguous, s.terminal_missing_through_sequence, s.declaration_revision,
@@ -845,6 +849,9 @@ func browserSourceState(
 		}
 	}
 
+	value.ExamID = model.ExamID(row.Exam)
+	value.SittingID = model.ExamSittingID(row.Sitting)
+	value.InterpretationAdvanced = persist && progress.SettledThrough > row.Settled
 	value.BrowserDeliveryProgress = model.BrowserDeliveryProgress{
 		HighestContiguous:      progress.HighestContiguous,
 		SettledThrough:         progress.SettledThrough,

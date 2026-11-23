@@ -87,9 +87,13 @@ func (c *RetentionControl) Permits(policy *RetentionPolicy) bool {
 // scheduled and final step rechecks the live policy, completion, holds and
 // source protections.
 type RetentionPreview struct {
-	ID                  RetentionPreviewID
-	InstitutionID       InstitutionID
-	PolicyRevision      int64
+	ID             RetentionPreviewID
+	InstitutionID  InstitutionID
+	PolicyRevision int64
+	// Proposed marks a preview of settings that were not saved, counted
+	// against PolicyRevision's records. It shows what a change would do and
+	// can never approve cleanup.
+	Proposed            bool
 	CreatedByUserID     UserID
 	CreatedAt           time.Time
 	ExpiresAt           time.Time
@@ -111,6 +115,8 @@ type RetentionPreviewCounts struct {
 	SupportingWork   int64
 	ExportProtected  int64
 	Retired          int64
+	// EligibleExams is how many distinct Exams have an eligible record.
+	EligibleExams int64
 }
 
 func (p *RetentionPreview) Validate() error {
@@ -135,6 +141,7 @@ func (p *RetentionPreview) Validate() error {
 			c.SupportingWork < 0 ||
 			c.ExportProtected < 0 ||
 			c.Retired < 0 ||
+			c.EligibleExams < 0 || c.EligibleExams > c.Eligible ||
 			c.Total != c.Eligible+c.AwaitingDeadline+c.Incomplete+c.Held+c.Unconfigured+c.SupportingWork+c.ExportProtected+c.Retired {
 			return invalidModelError("RetentionPreview.Validate", "retention_preview", "", "invalid retention preview counts", "")
 		}

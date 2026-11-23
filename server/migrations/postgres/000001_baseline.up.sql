@@ -50,6 +50,8 @@ CREATE TABLE academic_units (
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     institution_id varchar(26) NOT NULL REFERENCES institutions(id),
     parent_id varchar(26) REFERENCES academic_units(id),
+    kind varchar(32) NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('faculty', 'school', 'department', 'office', 'other')),
     name varchar(64) NOT NULL,
     display_name varchar(512) NOT NULL,
     description varchar(4096) NOT NULL DEFAULT '',
@@ -72,6 +74,8 @@ CREATE TABLE programmes (
     archived_at timestamptz,
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     academic_unit_id varchar(26) NOT NULL REFERENCES academic_units(id),
+    kind varchar(32) NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('undergraduate', 'postgraduate', 'other')),
     name varchar(64) NOT NULL,
     display_name varchar(512) NOT NULL,
     description varchar(4096) NOT NULL DEFAULT '',
@@ -125,6 +129,9 @@ CREATE TABLE academic_periods (
     CONSTRAINT academic_periods_lifecycle_check CHECK (updated_at >= created_at)
 );
 
+-- Period pages order by start, and the active_at filter narrows by it.
+CREATE INDEX academic_periods_start_at_idx
+    ON academic_periods (start_at, name, id) WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX academic_periods_institution_id_name_key
     ON academic_periods (institution_id, name)
     WHERE owner_type = 'institution' AND archived_at IS NULL;
@@ -380,6 +387,10 @@ CREATE TABLE users (
     last_login_at timestamptz,
     last_activity_at timestamptz,
     disabled_at timestamptz,
+    -- Who disabled the account and why, for the disable in force. Both clear
+    -- when the account is enabled again; the audit keeps the history.
+    disabled_by_user_id varchar(26) REFERENCES users(id),
+    disabled_reason varchar(500),
     default_profile_picture_seed char(64) NOT NULL,
     default_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
     custom_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
@@ -392,6 +403,16 @@ CREATE TABLE users (
         lower(left(CASE WHEN display_name <> '' THEN display_name ELSE username END, 64))
     ) STORED,
     CONSTRAINT users_lifecycle_check CHECK (updated_at >= created_at),
+    CONSTRAINT users_disabled_record_check CHECK (
+        disabled_at IS NOT NULL OR (disabled_by_user_id IS NULL AND disabled_reason IS NULL)
+    ),
+    CONSTRAINT users_disabled_reason_check CHECK (
+        disabled_reason IS NULL OR (
+            disabled_reason <> ''
+            AND disabled_reason = btrim(disabled_reason)
+            AND disabled_reason !~ '[\x01-\x1f\x7f-\x9f]'
+        )
+    ),
     -- Profile names are single-line text that mail embeds; Unicode Cc is
     -- rejected (model.ContainsControlCharacter).
     CONSTRAINT users_profile_names_check CHECK (
@@ -407,6 +428,8 @@ CREATE INDEX users_default_profile_picture_file_id_idx
     ON users (default_profile_picture_file_id) WHERE default_profile_picture_file_id IS NOT NULL;
 CREATE INDEX users_custom_profile_picture_file_id_idx
     ON users (custom_profile_picture_file_id) WHERE custom_profile_picture_file_id IS NOT NULL;
+CREATE INDEX users_disabled_by_user_id_idx
+    ON users (disabled_by_user_id) WHERE disabled_by_user_id IS NOT NULL;
 CREATE UNIQUE INDEX users_email_key ON users (email) WHERE archived_at IS NULL;
 -- User directory orders; each serves both directions. A User who was never
 -- active sorts as the least recent.
@@ -527,6 +550,13 @@ CREATE UNIQUE INDEX invitations_pending_institution_role_package_key
 -- The administration list filters by state newest first, and the summary
 -- counts pending Invitations; both read this instead of the whole table.
 CREATE INDEX invitations_state_created_at_idx ON invitations (state, created_at DESC, id DESC);
+
+-- The administration list sorts by expiry and searches by a prefix of the
+-- invited address or the suggested name.
+CREATE INDEX invitations_expires_at_idx ON invitations (expires_at, id);
+CREATE INDEX invitations_target_email_prefix_idx ON invitations (lower(target_email) text_pattern_ops);
+CREATE INDEX invitations_suggested_display_name_prefix_idx
+    ON invitations (lower(suggested_display_name) text_pattern_ops);
 
 -- Administrative imports and student progression retain only a seven-day
 -- private preview/report. Job commands contain the opaque aggregate ID;
@@ -798,6 +828,12 @@ CREATE UNIQUE INDEX mail_deliveries_occurrence_invitation_recipient_key
     ON mail_deliveries (occurrence_id, target_invitation_id)
     WHERE target_invitation_id IS NOT NULL;
 
+-- An invitation's newest delivery, which its summary and the delivery_state
+-- filter read.
+CREATE INDEX mail_deliveries_target_invitation_newest_idx
+    ON mail_deliveries (target_invitation_id, created_at DESC, id DESC)
+    WHERE target_invitation_id IS NOT NULL;
+
 CREATE INDEX mail_deliveries_state_deadline_idx
     ON mail_deliveries (state, deadline, created_at, id);
 
@@ -822,7 +858,10 @@ CREATE INDEX mail_deliveries_terminal_retention_idx
 -- decrement when ciphertext is destroyed or retained history is deleted.
 CREATE TABLE mail_payload_keys (
     key_id char(32) PRIMARY KEY CHECK (key_id ~ '^[0-9a-f]{32}$'),
-    active_references bigint NOT NULL CHECK (active_references >= 0)
+    active_references bigint NOT NULL CHECK (active_references >= 0),
+    -- When the key's current use began: its first reference since it last had
+    -- none. A key with no references has no row.
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
 -- Fan-out expansion is delivered in later mail slices, but its frozen bundle
@@ -988,11 +1027,18 @@ CREATE TABLE exams (
     updated_at timestamptz NOT NULL,
     archived_at timestamptz,
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
+    -- Set while a copy is reserved and its bytes are written; every read
+    -- treats such an exam as absent, and the purge job deletes one whose
+    -- reservation lapsed.
+    copying_until timestamptz,
     CONSTRAINT exams_lifecycle_check CHECK (
         updated_at >= created_at AND
         (archived_at IS NULL OR archived_at >= created_at)
-    )
+    ),
+    CONSTRAINT exams_copying_check CHECK (copying_until IS NULL OR copying_until > created_at)
 );
+
+CREATE INDEX exams_copying_until_idx ON exams (copying_until) WHERE copying_until IS NOT NULL;
 
 CREATE INDEX exams_academic_unit_id_updated_at_id_idx
     ON exams (academic_unit_id, updated_at DESC, id DESC);
@@ -1014,6 +1060,7 @@ CREATE TABLE exam_drafts (
     browser_policy jsonb NOT NULL DEFAULT '{"enabled":false}'::jsonb,
     base_revision_id varchar(26),
     updated_at timestamptz NOT NULL,
+    updated_by_user_id varchar(26) NOT NULL REFERENCES users(id),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     CONSTRAINT exam_drafts_title_check CHECK (char_length(title) BETWEEN 1 AND 200),
     CONSTRAINT exam_drafts_instructions_markdown_check
@@ -1024,6 +1071,8 @@ CREATE TABLE exam_drafts (
 
 CREATE INDEX exam_drafts_title_search_idx
     ON exam_drafts USING gin (title gin_trgm_ops);
+
+CREATE INDEX exam_drafts_updated_by_user_id_idx ON exam_drafts (updated_by_user_id);
 
 CREATE TABLE exam_managers (
     exam_id varchar(26) NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
@@ -1411,6 +1460,11 @@ CREATE TABLE exam_sittings (
     class_id varchar(26) NOT NULL REFERENCES classes(id),
     scheduled_start_at timestamptz NOT NULL,
     scheduled_end_at timestamptz NOT NULL,
+    -- The optional join window: when candidates may join early to prepare,
+    -- and when first entry closes. The sitting still opens at its scheduled
+    -- start. Both freeze when the sitting opens.
+    join_opens_at timestamptz,
+    join_closes_at timestamptz,
     state varchar(16) NOT NULL CHECK (state IN ('scheduled', 'open', 'paused', 'closing', 'closed', 'canceled')),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
@@ -1421,6 +1475,8 @@ CREATE TABLE exam_sittings (
     canceled_at timestamptz,
     reason_code varchar(32),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
+    -- Join-window changes do not change the schedule announced in mail.
+    mail_schedule_revision bigint NOT NULL DEFAULT 1 CHECK (mail_schedule_revision BETWEEN 1 AND revision),
     mail_reconciliation_actor_user_id varchar(26) REFERENCES users(id),
     mail_disabled_suppressed_revision bigint,
     mail_disabled_suppressed_audience_revision bigint,
@@ -1430,10 +1486,14 @@ CREATE TABLE exam_sittings (
         FOREIGN KEY (exam_id, exam_revision_id, exam_revision_sealed)
         REFERENCES exam_revisions(exam_id, id, sealed),
     CONSTRAINT exam_sittings_schedule_check CHECK (scheduled_start_at < scheduled_end_at),
+    CONSTRAINT exam_sittings_join_window_check CHECK (
+        (join_opens_at IS NULL OR join_opens_at <= scheduled_start_at) AND
+        (join_closes_at IS NULL OR (join_closes_at > scheduled_start_at AND join_closes_at <= scheduled_end_at))
+    ),
     CONSTRAINT exam_sittings_mail_disabled_suppressed_revision_check CHECK (
         (mail_disabled_suppressed_revision IS NULL AND mail_disabled_suppressed_audience_revision IS NULL AND
             mail_disabled_suppressed_eligibility_revision IS NULL) OR
-        (mail_disabled_suppressed_revision BETWEEN 1 AND revision AND mail_disabled_suppressed_audience_revision >= 0 AND
+        (mail_disabled_suppressed_revision BETWEEN 1 AND mail_schedule_revision AND mail_disabled_suppressed_audience_revision >= 0 AND
             mail_disabled_suppressed_eligibility_revision >= 0)
     ),
     CONSTRAINT exam_sittings_timestamps_check CHECK (
@@ -1497,6 +1557,9 @@ CREATE INDEX exam_sittings_lifecycle_deadline_due_idx
     ON exam_sittings (scheduled_end_at, id) WHERE state IN ('open', 'paused');
 CREATE INDEX exam_sittings_lifecycle_closing_due_idx
     ON exam_sittings (closing_at, id) WHERE state = 'closing';
+-- The administration counts show how many Sittings are under way.
+CREATE INDEX exam_sittings_under_way_idx
+    ON exam_sittings (state) WHERE state IN ('open', 'paused', 'closing');
 
 -- Resource bytes staged for a live correction remain pending and invisible
 -- until the named correction transaction consumes them. Exact command replay
@@ -1650,8 +1713,16 @@ CREATE TABLE roles (
     description varchar(4096) NOT NULL DEFAULT '',
     permissions text[] NOT NULL DEFAULT '{}',
     built_in boolean NOT NULL DEFAULT false,
+    -- The person who last created, changed or archived the Role. Built-in
+    -- roles change only with the server, so theirs stays empty.
+    updated_by_user_id varchar(26) REFERENCES users(id),
     CONSTRAINT roles_lifecycle_check CHECK (updated_at >= created_at)
 );
+
+-- Removing a User checks the roles they last changed.
+CREATE INDEX roles_updated_by_user_id_idx
+    ON roles (updated_by_user_id)
+    WHERE updated_by_user_id IS NOT NULL;
 
 CREATE UNIQUE INDEX roles_name_key ON roles (name) WHERE archived_at IS NULL;
 
@@ -1682,6 +1753,12 @@ CREATE TABLE role_bindings (
     scope_id varchar(26) NOT NULL,
     start_at timestamptz NOT NULL,
     end_at timestamptz,
+    -- Who granted the Role, kept for the record. An invitation row names its
+    -- inviter, who is the importer for an imported invitation; the bootstrap
+    -- row has no person behind it.
+    granted_by_user_id varchar(26) REFERENCES users(id),
+    granted_via varchar(16) NOT NULL CHECK (granted_via IN ('manual', 'invitation', 'import', 'bootstrap')),
+    CONSTRAINT role_bindings_granted_by_check CHECK ((granted_via = 'bootstrap') = (granted_by_user_id IS NULL)),
     CONSTRAINT role_bindings_start_at_end_at_check CHECK (end_at IS NULL OR end_at > start_at),
     CONSTRAINT role_bindings_lifecycle_check CHECK (updated_at >= created_at)
 );
@@ -1694,9 +1771,17 @@ CREATE INDEX role_bindings_user_id_scope_type_scope_id_idx
     ON role_bindings (user_id, scope_type, scope_id)
     WHERE archived_at IS NULL AND end_at IS NULL;
 
+-- Removing a User checks the bindings they granted.
+CREATE INDEX role_bindings_granted_by_user_id_idx
+    ON role_bindings (granted_by_user_id)
+    WHERE granted_by_user_id IS NOT NULL;
+
 CREATE INDEX role_bindings_user_id_start_at_end_at_idx
     ON role_bindings (user_id, start_at, end_at)
     WHERE archived_at IS NULL;
+
+CREATE INDEX role_bindings_expiry_idx ON role_bindings (end_at, id)
+    WHERE archived_at IS NULL AND end_at IS NOT NULL;
 
 CREATE INDEX role_bindings_origin_invitation_id_idx
     ON role_bindings (origin_invitation_id)
@@ -3181,6 +3266,26 @@ CREATE TABLE submission_review_release_preparations (
         CHECK (submission_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
 );
 
+-- Each manager reopening of a finalized review, with the manager's private
+-- reason. Append-only: it is the record of why a decision was revisited.
+CREATE TABLE submission_review_reopenings (
+    submission_review_id varchar(26) NOT NULL REFERENCES submission_reviews(id) ON DELETE CASCADE,
+    review_revision bigint NOT NULL CHECK (review_revision > 1),
+    actor_user_id varchar(26) NOT NULL REFERENCES users(id),
+    reason text NOT NULL,
+    reopened_at timestamptz NOT NULL,
+    PRIMARY KEY (submission_review_id, review_revision),
+    CONSTRAINT submission_review_reopenings_reason_check CHECK (
+        reason = btrim(reason) AND char_length(reason) BETWEEN 1 AND 1000 AND octet_length(reason) <= 4000
+    ),
+    CONSTRAINT submission_review_reopenings_submissio_b3fd9e0b_canonical_check
+        CHECK (submission_review_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT submission_review_reopenings_actor_user_id_canonical_check
+        CHECK (actor_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
+);
+
+CREATE INDEX submission_review_reopenings_actor_user_id_idx ON submission_review_reopenings (actor_user_id);
+
 CREATE TABLE integrity_review_decisions (
     id varchar(26) PRIMARY KEY,
     submission_review_id varchar(26) NOT NULL,
@@ -3272,6 +3377,17 @@ BEGIN
        (OLD.state='draft' OR EXISTS(SELECT 1 FROM submission_review_finalizations WHERE submission_review_id=OLD.id AND finalization_revision<=OLD.revision)) THEN RETURN NEW; END IF;
     IF NEW.delivery_inventory_revision IS DISTINCT FROM OLD.delivery_inventory_revision THEN
        RAISE EXCEPTION 'Review inventory revision is server-owned' USING ERRCODE='55000'; END IF;
+    -- A manager may reopen a finalized review whose result is still withheld.
+    -- Its finalization snapshot and inventory stay as history.
+    IF OLD.state = 'finalized' AND OLD.release_state = 'withheld' AND NEW.state = 'draft' AND
+       NEW.release_state = 'withheld' AND NEW.manager_notes = OLD.manager_notes AND
+       NEW.student_remarks_markdown = OLD.student_remarks_markdown AND NEW.flag_count = 0 AND
+       NEW.evidence_count = 0 AND NEW.discrepancy_count = 0 AND NEW.evidence_inventory_digest IS NULL AND
+       NEW.finalized_at IS NULL AND NEW.finalized_by_user_id IS NULL AND NEW.released_at IS NULL AND
+       NEW.released_by_user_id IS NULL AND
+       EXISTS(SELECT 1 FROM submission_review_finalizations WHERE submission_review_id=OLD.id AND finalization_revision<=OLD.revision) THEN
+        RETURN NEW;
+    END IF;
     IF OLD.state = 'draft' AND NEW.state = 'draft' AND NEW.release_state = 'withheld' AND
        NEW.flag_count = 0 AND NEW.evidence_count = 0 AND NEW.discrepancy_count = 0 AND NEW.evidence_inventory_digest IS NULL AND
        NEW.finalized_at IS NULL AND NEW.finalized_by_user_id IS NULL AND NEW.released_at IS NULL AND NEW.released_by_user_id IS NULL THEN
@@ -3871,6 +3987,11 @@ CREATE INDEX external_second_factor_states_password_idx
 
 
 CREATE INDEX audit_events_created_at_id_idx ON audit_events (created_at DESC, id DESC);
+-- An audit page counts how often each event repeated in the ten minutes up to
+-- it: the same actor, action and resource.
+CREATE INDEX audit_events_repeat_idx
+    ON audit_events (actor_id, action, resource_type, resource_id, created_at)
+    WHERE actor_id IS NOT NULL;
 CREATE INDEX audit_events_actor_id_created_at_id_idx
     ON audit_events (actor_id, created_at DESC, id DESC)
     WHERE actor_id IS NOT NULL;
@@ -4102,9 +4223,10 @@ CREATE TABLE desktop_compatibility_policies (
     institution_id varchar(26) NOT NULL UNIQUE REFERENCES institutions(id),
     revision bigint NOT NULL CHECK (revision > 0),
     minimum_desktop_release varchar(64) NOT NULL,
-    revoked_desktop_build_ids jsonb NOT NULL CHECK (
-        jsonb_typeof(revoked_desktop_build_ids) = 'array' AND
-        jsonb_array_length(revoked_desktop_build_ids) <= 256
+    -- Each entry is {build_id, reason, revoked_at, revoked_by_user_id}.
+    revoked_desktop_builds jsonb NOT NULL CHECK (
+        jsonb_typeof(revoked_desktop_builds) = 'array' AND
+        jsonb_array_length(revoked_desktop_builds) <= 256
     ),
     administrator_message varchar(2048) NOT NULL CHECK (
         char_length(administrator_message) <= 500 AND
@@ -4518,7 +4640,9 @@ ALTER TABLE exam_drafts
     ADD CONSTRAINT exam_drafts_exam_id_canonical_check
     CHECK (exam_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT exam_drafts_base_revision_id_canonical_check
-    CHECK (base_revision_id IS NULL OR base_revision_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (base_revision_id IS NULL OR base_revision_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_drafts_updated_by_user_id_canonical_check
+    CHECK (updated_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE exam_managers
     ADD CONSTRAINT exam_managers_exam_id_canonical_check
@@ -4859,7 +4983,9 @@ ALTER TABLE users
     ADD CONSTRAINT users_default_profile_picture_file_id_canonical_check
     CHECK (default_profile_picture_file_id IS NULL OR default_profile_picture_file_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT users_custom_profile_picture_file_id_canonical_check
-    CHECK (custom_profile_picture_file_id IS NULL OR custom_profile_picture_file_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (custom_profile_picture_file_id IS NULL OR custom_profile_picture_file_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT users_disabled_by_user_id_canonical_check
+    CHECK (disabled_by_user_id IS NULL OR disabled_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE user_settings_documents
     ADD CONSTRAINT user_settings_documents_user_id_canonical_check
@@ -4923,7 +5049,9 @@ ALTER TABLE class_members
 
 ALTER TABLE roles
     ADD CONSTRAINT roles_id_canonical_check
-    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT roles_updated_by_user_id_canonical_check
+    CHECK (updated_by_user_id IS NULL OR updated_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE role_bindings
     ADD CONSTRAINT role_bindings_id_canonical_check
@@ -4937,7 +5065,9 @@ ALTER TABLE role_bindings
     ADD CONSTRAINT role_bindings_origin_academic_unit_member_id_canonical_check
     CHECK (origin_academic_unit_member_id IS NULL OR origin_academic_unit_member_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT role_bindings_scope_id_canonical_check
-    CHECK (scope_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (scope_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT role_bindings_granted_by_user_id_canonical_check
+    CHECK (granted_by_user_id IS NULL OR granted_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE sessions
     ADD CONSTRAINT sessions_id_canonical_check
@@ -5131,6 +5261,9 @@ CREATE TABLE retention_holds (
     integrity_retired_submission_count bigint NOT NULL DEFAULT 0 CHECK (integrity_retired_submission_count >= 0),
     created_at timestamptz NOT NULL,
     created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
+    -- When the hold is due for review. It never releases the hold.
+    until timestamptz CHECK (until IS NULL OR until > created_at),
+    due_notified_at timestamptz CHECK (due_notified_at IS NULL OR (until IS NOT NULL AND due_notified_at >= until)),
     reason_code varchar(64) NOT NULL CHECK (reason_code IN ('institution_request','integrity_review','records_review','review_not_required','case_closed','mistake','other')),
     private_reason text NOT NULL CHECK (private_reason = btrim(private_reason) AND char_length(private_reason) BETWEEN 1 AND 1000 AND octet_length(private_reason) <= 4000),
     creation_audit_event_id varchar(26) NOT NULL REFERENCES audit_events(id),
@@ -5150,6 +5283,10 @@ CREATE TABLE retention_holds (
     )
 );
 CREATE INDEX retention_holds_exam_id_id_idx ON retention_holds (exam_id, id);
+-- The Institution-wide hold list pages by ID, mostly over unreleased holds.
+CREATE INDEX retention_holds_unreleased_id_idx ON retention_holds (id) WHERE released_at IS NULL;
+CREATE INDEX retention_holds_due_notification_idx ON retention_holds (until, id)
+    WHERE until IS NOT NULL AND released_at IS NULL AND due_notified_at IS NULL;
 CREATE INDEX retention_holds_active_scope_idx ON retention_holds (exam_id, exam_sitting_id, submission_id) WHERE released_at IS NULL;
 
 -- Configuration and authorization of recurring retirement are independent.
@@ -5157,6 +5294,9 @@ CREATE TABLE retention_previews (
     id varchar(26) PRIMARY KEY,
     institution_id varchar(26) NOT NULL REFERENCES institutions(id),
     policy_revision bigint NOT NULL CHECK (policy_revision > 0),
+    -- A proposed preview counted unsaved settings; it can never approve
+    -- cleanup.
+    proposed boolean NOT NULL DEFAULT false,
     created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
     created_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL CHECK (expires_at > created_at AND expires_at <= created_at + interval '1 hour'),
@@ -5325,6 +5465,78 @@ CREATE TABLE exam_export_artifacts (
 CREATE INDEX exam_export_artifacts_cleanup_idx ON exam_export_artifacts (reconcile_after, export_id, attempt_id);
 ALTER TABLE retention_source_protections ADD CONSTRAINT retention_source_protections_export_fkey FOREIGN KEY (export_id) REFERENCES exam_exports(id);
 
+CREATE TABLE academic_topology_revision (
+    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+    revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0)
+);
+INSERT INTO academic_topology_revision DEFAULT VALUES;
+
+-- Subtree-scoped audit files are invalid after an ownership move. Taking
+-- this fence in the same transaction as the move lets export creation and
+-- publication see either topology, never an unfenced mixture.
+CREATE FUNCTION bump_academic_topology_revision() RETURNS trigger AS $$
+BEGIN
+    UPDATE academic_topology_revision SET revision = revision + 1 WHERE singleton;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER academic_units_audit_topology_update
+    AFTER UPDATE OF parent_id ON academic_units
+    FOR EACH ROW WHEN (OLD.parent_id IS DISTINCT FROM NEW.parent_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+CREATE TRIGGER programmes_audit_topology_update
+    AFTER UPDATE OF academic_unit_id ON programmes
+    FOR EACH ROW WHEN (OLD.academic_unit_id IS DISTINCT FROM NEW.academic_unit_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+CREATE TRIGGER programme_levels_audit_topology_update
+    AFTER UPDATE OF programme_id ON programme_levels
+    FOR EACH ROW WHEN (OLD.programme_id IS DISTINCT FROM NEW.programme_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+CREATE TRIGGER classes_audit_topology_update
+    AFTER UPDATE OF programme_level_id ON classes
+    FOR EACH ROW WHEN (OLD.programme_level_id IS DISTINCT FROM NEW.programme_level_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+
+-- Temporary files of audit events. Visibility is the requester's audit
+-- visibility, frozen at the request and checked again on every read. The
+-- query holds the frozen filters and exists only while the file is pending.
+-- Jobs contain IDs only.
+CREATE TABLE audit_exports (
+    id varchar(26) PRIMARY KEY,
+    requester_user_id varchar(26) NOT NULL REFERENCES users(id),
+    format varchar(8) NOT NULL CHECK (format IN ('csv','jsonl')),
+    redacted boolean NOT NULL,
+    state varchar(16) NOT NULL CHECK (state IN ('queued','ready','failed','expired')),
+    created_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL CHECK (expires_at > created_at AND expires_at <= created_at + interval '168 hours'),
+    event_count integer NOT NULL CHECK (event_count BETWEEN 0 AND 100000),
+    job_id varchar(26) NOT NULL UNIQUE,
+    visibility jsonb NOT NULL CHECK (octet_length(visibility::text) <= 65536),
+    query jsonb,
+    topology_revision bigint CHECK (topology_revision IS NULL OR (redacted AND topology_revision > 0)),
+    archive_attempt_id varchar(26),
+    archive_size_bytes bigint,
+    archive_sha256 char(64),
+    ready_at timestamptz,
+    CHECK (query IS NULL OR octet_length(query::text) <= 65536),
+    CHECK ((state = 'queued' AND query IS NOT NULL) OR (state <> 'queued' AND query IS NULL)),
+    CHECK ((state = 'ready' AND archive_attempt_id IS NOT NULL AND archive_size_bytes BETWEEN 0 AND 536870912 AND archive_sha256 ~ '^[0-9a-f]{64}$' AND ready_at >= created_at AND ready_at < expires_at) OR
+        (state <> 'ready' AND archive_attempt_id IS NULL AND archive_size_bytes IS NULL AND archive_sha256 IS NULL AND ready_at IS NULL))
+);
+CREATE INDEX audit_exports_requester_user_id_idx ON audit_exports (requester_user_id);
+CREATE INDEX audit_exports_cleanup_idx ON audit_exports (expires_at, id);
+CREATE TABLE audit_export_artifacts (
+    export_id varchar(26) NOT NULL REFERENCES audit_exports(id),
+    attempt_id varchar(26) NOT NULL,
+    created_at timestamptz NOT NULL,
+    writer_finished boolean NOT NULL DEFAULT false,
+    observed_absent_at timestamptz,
+    reconcile_after timestamptz NOT NULL,
+    PRIMARY KEY (export_id, attempt_id)
+);
+CREATE INDEX audit_export_artifacts_cleanup_idx ON audit_export_artifacts (reconcile_after, export_id, attempt_id);
+
 CREATE TABLE retention_purge_objects (
     retirement_id varchar(26) NOT NULL REFERENCES retention_retirements(id),
     object_id varchar(26) NOT NULL,
@@ -5394,6 +5606,22 @@ CREATE TRIGGER retention_holds_creation_cancel_audit_expiry AFTER INSERT OR UPDA
 CREATE TRIGGER retention_holds_release_cancel_audit_expiry AFTER INSERT OR UPDATE OF release_audit_event_id ON retention_holds FOR EACH ROW EXECUTE FUNCTION cancel_referenced_audit_expiry('release_audit_event_id');
 
 -- Canonical identifiers for examination records, retention, exports, and recovery.
+
+ALTER TABLE audit_export_artifacts
+    ADD CONSTRAINT audit_export_artifacts_attempt_id_canonical_check
+    CHECK (attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_export_artifacts_export_id_canonical_check
+    CHECK (export_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE audit_exports
+    ADD CONSTRAINT audit_exports_archive_attempt_id_canonical_check
+    CHECK (archive_attempt_id IS NULL OR archive_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_exports_id_canonical_check
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_exports_job_id_canonical_check
+    CHECK (job_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_exports_requester_user_id_canonical_check
+    CHECK (requester_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE exam_export_artifacts
     ADD CONSTRAINT exam_export_artifacts_attempt_id_canonical_check
@@ -6140,6 +6368,10 @@ CREATE INDEX class_members_user_id_academic_period_id_idx
 -- of a current binding, which start_at and end_at narrow at read time.
 CREATE INDEX role_bindings_role_id_created_at_idx
     ON role_bindings (role_id, created_at DESC, id DESC) WHERE archived_at IS NULL;
+-- The holders of roles bound at one scope, such as a Class's teachers or an
+-- Academic Unit's administrators.
+CREATE INDEX role_bindings_scope_type_scope_id_idx
+    ON role_bindings (scope_type, scope_id) WHERE archived_at IS NULL;
 CREATE INDEX role_bindings_origin_academic_unit_member_id_idx
     ON role_bindings (origin_academic_unit_member_id) WHERE origin_academic_unit_member_id IS NOT NULL;
 CREATE INDEX exam_sittings_class_id_idx ON exam_sittings (class_id);

@@ -1,0 +1,193 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exam-sittings:
+    get:
+      operationId: listExamSittingsAcrossExams
+      summary: List Sittings across the Exams you can see
+      tags:
+        - Sittings
+      description: >-
+        Lists the Sittings of every Exam where you hold exam.sitting.view, earliest start first. An ordinary grant
+        reaches the Exams you manage in a unit you belong to; an override grant reaches every Exam under it. Each
+        row names its Exam and Class. An open or paused Sitting also carries its candidate board's counts, without
+        you, and needs_attention_count: its candidates who are suspended, fail an enforced native check, or have
+        unresolved integrity attention. Bounded and cursor-paged.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          description: Keep Sittings in any of these states. Repeat it for more than one.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 7
+            items:
+              $ref: '#/components/schemas/ExamSittingState'
+        - name: starts_before
+          in: query
+          required: false
+          description: Keep Sittings scheduled to start before this instant.
+          schema:
+            type: string
+            format: date-time
+        - name: ends_after
+          in: query
+          required: false
+          description: Keep Sittings scheduled to end after this instant. With starts_before, it must be earlier.
+          schema:
+            type: string
+            format: date-time
+        - name: academic_unit_id
+          in: query
+          required: false
+          description: Keep Sittings of Exams owned by this Academic Unit.
+          schema:
+            $ref: '#/components/schemas/ID'
+        - $ref: '#/components/parameters/PageLimit'
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same filters.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page of Sittings.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExamSittingAcrossListResponse'
+              example:
+                server_time: '2026-08-01T09:45:00Z'
+                items:
+                  - id: 889766ufjgio6kbpzjbufozksq
+                    exam:
+                      id: 39kqk53i4cswfzbi7hbai1r8qg
+                      display_name: Algorithms final
+                    academic_unit_id: wj3drgzdpnf54rxf5d8qd3dqne
+                    class:
+                      id: 14j8umgczgrdp95w77zuxmxfu9
+                      display_name: Computer Science, year 2
+                    state: open
+                    revision: 4
+                    scheduled_start_at: '2026-08-01T09:00:00Z'
+                    scheduled_end_at: '2026-08-01T11:00:00Z'
+                    counts:
+                      total: 66
+                      by_presence_state:
+                        not_started: 3
+                        ready: 0
+                        connected: 57
+                        reconnecting: 3
+                        lease_expired: 0
+                        suspended: 1
+                        submitted: 2
+                      with_failed_checks: 1
+                      with_attention: 2
+                    needs_attention_count: 3
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    ExamSittingAcrossListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - server_time
+        - items
+      properties:
+        server_time:
+          description: Server time the counts were worked out at.
+          type: string
+          format: date-time
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/ExamSittingAcrossItemResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    ExamSittingAcrossItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - exam
+        - academic_unit_id
+        - class
+        - state
+        - revision
+        - scheduled_start_at
+        - scheduled_end_at
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        exam:
+          $ref: '#/components/schemas/ExamRef'
+        academic_unit_id:
+          description: The Academic Unit that owns the Exam.
+          $ref: '#/components/schemas/ID'
+        class:
+          $ref: '#/components/schemas/ClassRef'
+        state:
+          $ref: '#/components/schemas/ExamSittingState'
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        scheduled_start_at:
+          type: string
+          format: date-time
+        scheduled_end_at:
+          type: string
+          format: date-time
+        counts:
+          description: The candidate board's counts, for an open or paused Sitting only.
+          $ref: '#/components/schemas/SittingCandidateStatusCounts'
+        needs_attention_count:
+          description: >-
+            Exact count within one open or paused Sitting. Includes candidates who are suspended, fail an enforced
+            native check, or have unresolved integrity attention.
+          type: integer
+          format: int64
+          minimum: 0

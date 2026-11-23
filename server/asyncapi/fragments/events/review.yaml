@@ -86,6 +86,8 @@ components:
               type: submission
               id: '9nfemqtwz47ydgjcx1ia56br8k'
             data:
+              exam_id: 6br8h9nfemqtwz47ydgjcx1ia5
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
@@ -130,6 +132,8 @@ components:
               type: submission
               id: '9nfemqtwz47ydgjcx1ia56br8k'
             data:
+              exam_id: 6br8h9nfemqtwz47ydgjcx1ia5
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
@@ -174,6 +178,8 @@ components:
               type: submission
               id: '9nfemqtwz47ydgjcx1ia56br8k'
             data:
+              exam_id: 6br8h9nfemqtwz47ydgjcx1ia5
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
@@ -218,6 +224,8 @@ components:
               type: ''
               id: ''
             data:
+              exam_id: 6br8h9nfemqtwz47ydgjcx1ia5
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               submission_review_id: gjcx1ia56br8kpous3h9nfemqt

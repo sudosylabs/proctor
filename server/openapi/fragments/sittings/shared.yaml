@@ -23,6 +23,9 @@ components:
             class_id: 1asb7sk89dp1ex339fkh3te5t4
             scheduled_start_at: '2026-12-14T09:00:00Z'
             scheduled_end_at: '2026-12-14T11:00:00Z'
+            join_window:
+              opens_at: '2026-12-14T08:50:00Z'
+              closes_at: '2026-12-14T09:30:00Z'
             state: paused
             created_at: '2026-11-20T14:12:05Z'
             updated_at: '2026-12-14T09:41:17Z'
@@ -79,8 +82,8 @@ components:
         - scheduled_end_reached
     ExamSittingResponse:
       description: >-
-        One Sitting as a manager sees it. It never includes candidate credentials, private manager
-        reasons, answers or integrity evidence.
+        One Sitting as a manager sees it. It never includes candidate credentials, answers or integrity
+        evidence. Managers' private reasons appear only in history, only to those who may manage the Sitting.
       type: object
       additionalProperties: false
       required:
@@ -112,11 +115,14 @@ components:
         scheduled_start_at:
           type: string
           format: date-time
-          description: When the Sitting is scheduled to open.
+          description: When the Sitting opens and every Attempt can start, whether or not candidates joined early.
         scheduled_end_at:
           type: string
           format: date-time
           description: The Sitting's deadline. An extension moves it later.
+        join_window:
+          $ref: '#/components/schemas/ExamSittingJoinWindow'
+          description: The join window, when either bound is set.
         state:
           $ref: '#/components/schemas/ExamSittingState'
         created_at:
@@ -159,3 +165,98 @@ components:
           description: >-
             Goes up by one with every change to the Sitting. Send it as `expected_revision` when you
             change the Sitting.
+        candidate_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many candidates the Sitting's board lists: everyone with an Attempt and the Class members it
+            admits. Present on reads, not on the result of a change. Counting stops at 10,000.
+        candidate_count_is_lower_bound:
+          type: boolean
+          description: True when counting stopped at its bound, so candidate_count is "at least". Present with candidate_count.
+        corrections:
+          type: array
+          maxItems: 32
+          description: >-
+            The Sitting's live corrections, oldest first, with how many candidates have acknowledged each.
+            Present when reading one Sitting.
+          items:
+            $ref: '#/components/schemas/ExamSittingCorrectionSummary'
+        history:
+          type: array
+          maxItems: 20
+          description: >-
+            Manager actions on the Sitting with the manager's private reason, newest first. Present only when
+            reading one Sitting as someone who may manage it; never shown to candidates.
+          items:
+            $ref: '#/components/schemas/ExamSittingHistoryEntry'
+    ExamSittingCorrectionSummary:
+      description: One live correction and how many of the candidates it applies to have acknowledged it.
+      type: object
+      additionalProperties: false
+      required:
+        - revision_id
+        - number
+        - effective_at
+        - acknowledgement_required
+        - acknowledged_count
+        - required_count
+      properties:
+        revision_id:
+          $ref: '#/components/schemas/ID'
+          description: The correction's Revision.
+        number:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The correction Revision's number.
+        effective_at:
+          type: string
+          format: date-time
+          description: When the correction took effect.
+        acknowledgement_required:
+          type: boolean
+          description: Whether candidates must acknowledge the correction.
+        acknowledged_count:
+          type: integer
+          minimum: 0
+          description: How many candidates have acknowledged it.
+        required_count:
+          type: integer
+          minimum: 0
+          description: >-
+            How many candidates must acknowledge it: those admitted before it who had not submitted when it took
+            effect. Zero when no acknowledgement is required.
+    ExamSittingHistoryEntry:
+      description: One manager action on a Sitting and the manager's private reason.
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - at
+        - actor_user_id
+        - reason
+      properties:
+        kind:
+          type: string
+          enum:
+            - canceled
+            - paused
+            - resumed
+            - extended
+            - closed
+          description: What the manager did.
+        at:
+          type: string
+          format: date-time
+          description: When.
+        actor_user_id:
+          $ref: '#/components/schemas/ID'
+          description: The manager who acted.
+        actor:
+          $ref: '#/components/schemas/PersonRef'
+          description: The manager who acted, named.
+        reason:
+          type: string
+          description: The manager's private reason, in their words.

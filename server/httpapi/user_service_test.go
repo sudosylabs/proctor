@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -36,6 +37,7 @@ type userFixture struct {
 	pictures *pictureContent
 	settings *settingsDocumentStore
 	service  *user.Service
+	access   *access.Authorizer
 }
 
 // newUserFixture builds the fixture with the caller's grants.
@@ -60,6 +62,7 @@ func newUserFixture(t *testing.T, grants ...accesstest.Grant) *userFixture {
 	})
 	require.NoError(t, err)
 	fixture.service = service
+	fixture.access = authorization.Authorizer
 	return fixture
 }
 
@@ -95,6 +98,8 @@ type directoryUserStore struct {
 	total          int
 	summaries      []store.UserDirectorySummary
 	currentContext *store.CurrentUserContext
+	// mfaEnabledAt holds the users with two-step verification on.
+	mfaEnabledAt map[model.UserID]time.Time
 
 	listOptions []store.UserListOptions
 	update      *store.UserProfileUpdate
@@ -303,4 +308,50 @@ func (s *settingsDocumentStore) Get(context.Context, model.UserID) (*model.UserS
 func (s *settingsDocumentStore) Replace(_ context.Context, input *store.UserSettingsReplacement, command *store.CommandIdempotency) (*store.UserSettingsReplacementResult, error) {
 	s.replacement, s.idempotency = input, command
 	return s.result, nil
+}
+
+// ListDisplayNames names every unarchived user the fake holds.
+func (s *directoryUserStore) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+	names := make([]store.UserDisplayName, 0, len(ids))
+	for _, id := range ids {
+		user, ok := s.byID[id]
+		if !ok || user.ArchivedAt.Valid {
+			continue
+		}
+		name := user.DisplayName
+		if name == "" {
+			name = user.Username
+		}
+		names = append(names, store.UserDisplayName{UserID: id, DisplayName: name})
+	}
+	return names, nil
+}
+
+// ListVisibleDisplayNames treats only institution-wide visibility as seeing
+// anyone, which is enough to tell a visible person from a hidden one.
+func (s *directoryUserStore) ListVisibleDisplayNames(ctx context.Context, ids []model.UserID, visibility store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	if !visibility.InstitutionWide {
+		return nil, nil
+	}
+	return s.ListDisplayNames(ctx, ids)
+}
+
+func (s *directoryUserStore) ListMFAStates(_ context.Context, ids []model.UserID) ([]store.UserMFAState, error) {
+	states := []store.UserMFAState{}
+	for _, id := range ids {
+		if at, ok := s.mfaEnabledAt[id]; ok {
+			states = append(states, store.UserMFAState{UserID: id, EnabledAt: model.OptionalTimeFrom(at)})
+		}
+	}
+	return states, nil
+}
+
+func (s *directoryUserStore) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
+	identities := make([]store.UserIdentity, 0, len(ids))
+	for _, id := range ids {
+		if user, ok := s.byID[id]; ok {
+			identities = append(identities, store.UserIdentity{ID: id, Username: user.Username, DisplayName: user.DisplayName, Email: user.Email})
+		}
+	}
+	return identities, nil
 }

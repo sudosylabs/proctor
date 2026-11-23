@@ -150,7 +150,7 @@ func (s SQLUserStore) ListDirectorySummaries(
 // ListIdentities returns the username, display name and email of each listed
 // user that exists.
 func (s SQLUserStore) ListIdentities(ctx context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
-	if !validSummaryUserIDs(ids) {
+	if len(ids) > store.MaximumUserDisplayNames || !validVisibilityIDs(ids) {
 		return nil, store.NewErrInvalidInput("user", "identity_ids", nil)
 	}
 	if len(ids) == 0 {

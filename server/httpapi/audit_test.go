@@ -26,7 +26,7 @@ func TestAuditResourceResponseWireShapeRemainsSnakeCase(t *testing.T) {
 
 	response := auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), &model.AuditEvent{
 		Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
-	}, store.AuditNames{})
+	}, store.AuditNames{}, nil)
 	encoded, err := json.Marshal(response)
 	require.NoError(t, err)
 	var wire struct {
@@ -43,14 +43,14 @@ func TestAuditEventResponseCarriesOnlyTheDisableReason(t *testing.T) {
 	event := &model.AuditEvent{Action: string(model.ActionUserManage),
 		Resource:   model.Resource{Type: model.ResourceUser, ID: model.NewID()},
 		Parameters: json.RawMessage(`{"operation":"disable_account","value":{"user_id":"x","disabled":true,"reason":"Left the institution"}}`)}
-	encoded, err := json.Marshal(auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), event, store.AuditNames{}))
+	encoded, err := json.Marshal(auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), event, store.AuditNames{}, nil))
 	require.NoError(t, err)
 	var wire map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(encoded, &wire))
 	require.JSONEq(t, `"Left the institution"`, string(wire["reason"]))
 	require.NotContains(t, wire, "parameters", "other parameters stay operator-only")
 	event.Parameters = nil
-	encoded, err = json.Marshal(auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), event, store.AuditNames{}))
+	encoded, err = json.Marshal(auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), event, store.AuditNames{}, nil))
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "reason", "an academic projection drops parameters and so the reason")
 }

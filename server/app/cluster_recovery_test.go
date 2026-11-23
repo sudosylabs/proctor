@@ -275,6 +275,10 @@ func (recoveryRoleStore) Archive(context.Context, *store.RoleArchive) (*model.Ro
 
 type recoveryRoleBindingStore struct{ root *recoveryAuthorizationStore }
 
+func (recoveryRoleBindingStore) ListExpiries(context.Context, store.RoleBindingExpiryCursor, int) (store.RoleBindingExpiryPage, error) {
+	return store.RoleBindingExpiryPage{CheckedAt: model.NowUTC()}, nil
+}
+
 func (s recoveryRoleBindingStore) ListActiveByUser(_ context.Context, userID model.UserID, at time.Time) ([]*model.RoleBinding, error) {
 	out := make([]*model.RoleBinding, 0)
 	for _, binding := range s.root.bindings {
@@ -289,6 +293,10 @@ func (s recoveryRoleBindingStore) ListActiveByUser(_ context.Context, userID mod
 	}
 	return out, nil
 }
+func (recoveryRoleBindingStore) ListAcademicUnitAdministrators(context.Context, store.AcademicUnitAdministratorOptions) ([]store.AcademicUnitAdministrators, error) {
+	panic("unexpected ListAcademicUnitAdministrators")
+}
+
 func (recoveryRoleBindingStore) Save(context.Context, *store.RoleBindingCreation) (*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }
@@ -296,6 +304,9 @@ func (recoveryRoleBindingStore) Get(context.Context, model.RoleBindingID) (*mode
 	return nil, errors.New("unused")
 }
 func (recoveryRoleBindingStore) ListByUser(context.Context, model.UserID) ([]*model.RoleBinding, error) {
+	return nil, errors.New("unused")
+}
+func (recoveryRoleBindingStore) ListTeachersByClasses(context.Context, store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
 	return nil, errors.New("unused")
 }
 func (recoveryRoleBindingStore) ListVisibleByUser(context.Context, model.UserID, store.UserVisibilityScope) ([]*model.RoleBinding, error) {

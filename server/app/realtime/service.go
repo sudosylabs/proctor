@@ -32,6 +32,9 @@ type Dependencies struct {
 // revocation or authorization change owes.
 type Service struct {
 	deps Dependencies
+	// examCounts throttles exam.counts.changed, which follows board and
+	// submissions events.
+	examCounts *ThrottledPublisher
 }
 
 // New returns a Service whose sink and cluster fan-out are attached later.
@@ -45,7 +48,21 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Attempts == nil {
 		return nil, errors.New("realtime session attempt targets are required")
 	}
-	return &Service{deps: deps}, nil
+	service := &Service{deps: deps}
+	examCounts, err := NewThrottledPublisher(service, examCountsWindow, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	service.examCounts = examCounts
+	return service, nil
+}
+
+// Close stops coalesced refetch hints before the realtime transports drain.
+func (s *Service) Close(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.examCounts.Close(ctx)
 }
 
 // AttachClusterFanout must be called once before the node becomes ready. Peer
@@ -71,6 +88,16 @@ func (s *Service) Publish(ctx context.Context, event Event) error {
 		return invalidRealtimeRequest(invalid.Error())
 	}
 	return internalRealtimeError(err)
+}
+
+// PublishExamChange follows a board or submissions hint with a coalesced
+// exam counts hint from its originating node.
+func (s *Service) PublishExamChange(ctx context.Context, event Event, examID model.ExamID) error {
+	if err := s.Publish(ctx, event); err != nil {
+		return err
+	}
+	s.noteExamCounts(ctx, examID)
+	return nil
 }
 
 // UnbindExamAttemptConnection unbinds one attempt connection locally and then
@@ -153,7 +180,7 @@ func (s *Service) SessionsRevoked(
 			publishErr = errors.Join(publishErr, s.Publish(ctx, candidateEvent))
 		}
 		if managerErr == nil {
-			publishErr = errors.Join(publishErr, s.Publish(ctx, managerEvent))
+			publishErr = errors.Join(publishErr, s.PublishExamChange(ctx, managerEvent, target.ExamID))
 		}
 
 		publishErr = errors.Join(publishErr, s.InvalidateCurrentUserContext(ctx, target.CandidateUserID))

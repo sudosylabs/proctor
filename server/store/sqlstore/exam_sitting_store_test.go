@@ -56,7 +56,7 @@ func TestPrepareExamSittingCancellationBoundsPrivateReason(t *testing.T) {
 
 func TestExamSittingAuditExcludesPrivateContent(t *testing.T) {
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		model.NowUTC().Add(time.Hour), model.NowUTC().Add(2*time.Hour), model.NowUTC())
+		model.NowUTC().Add(time.Hour), model.NowUTC().Add(2*time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	encoded, err := encodeExamSittingAudit(sitting, true, model.NewID())
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestPrepareExamSittingManagerTransitionRequiresPhaseSpecificFinalizeJob(t *
 func TestStaleExamSittingFinalizeJobIsRevisionConflictCandidate(t *testing.T) {
 	now := model.NowUTC()
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
-		now.Add(-time.Hour), now.Add(-time.Minute), now.Add(-2*time.Hour))
+		now.Add(-time.Hour), now.Add(-time.Minute), model.ExamSittingJoinWindow{}, now.Add(-2*time.Hour))
 	require.NoError(t, err)
 	err = sitting.Open(now.Add(-50 * time.Minute))
 	require.NoError(t, err)

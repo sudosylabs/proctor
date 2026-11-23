@@ -235,7 +235,7 @@ func mustExamSittingSealingJob(t *testing.T, sittingID model.ExamSittingID, at t
 func closingSittingForSealingTest(t *testing.T, at time.Time) *model.ExamSitting {
 	t.Helper()
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(),
-		model.NewClassID(), at.Add(-2*time.Hour), at.Add(-time.Hour), at.Add(-3*time.Hour))
+		model.NewClassID(), at.Add(-2*time.Hour), at.Add(-time.Hour), model.ExamSittingJoinWindow{}, at.Add(-3*time.Hour))
 	require.NoError(t, err)
 	err = sitting.Open(at.Add(-2 * time.Hour))
 	require.NoError(t, err)

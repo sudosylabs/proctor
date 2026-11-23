@@ -101,6 +101,13 @@ components:
             expires_at: '2026-08-29T14:00:00Z'
             email: student.one@example.edu
             inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+            inviter:
+              id: rpn96r4g3jfk3t41u4dus44bzc
+              display_name: Priya Raman
+            scope:
+              type: class
+              id: ybndrfg8ejkmcpqxot1uwisza3
+              display_name: Year 1 Mathematics A
             created_at: '2026-08-22T14:00:00Z'
             updated_at: '2026-08-22T14:00:00Z'
             revision: 1

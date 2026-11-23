@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -37,10 +38,10 @@ func (s *classStoreFake) Get(context.Context, model.ClassID) (*model.Class, erro
 	*s.events = append(*s.events, "get-class")
 	return s.current, nil
 }
-func (*classStoreFake) ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, store.AcademicNameListOptions) ([]*model.Class, error) {
+func (*classStoreFake) ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, store.ClassListOptions) ([]*model.Class, error) {
 	return nil, nil
 }
-func (*classStoreFake) SearchByAcademicUnit(context.Context, model.AcademicUnitID, store.AcademicNameListOptions) ([]*model.Class, error) {
+func (*classStoreFake) SearchByAcademicUnit(context.Context, model.AcademicUnitID, store.ClassListOptions) ([]*model.Class, error) {
 	return nil, nil
 }
 func (s *classStoreFake) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {
@@ -97,7 +98,8 @@ func TestClassUpdateMoveAuthorizesCurrentAndDestinationOwners(t *testing.T) {
 	}
 	persistence := &classStoreFake{events: &events, current: current, unitID: world.unitID.String()}
 	access := world.access(t, &events, persistence, unitGrant(principal.UserID, world.unitID, model.ActionClassManage))
-	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+	publisher := &realtimetest.Publisher{}
+	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Publisher: publisher, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	updated, err := service.UpdateClass(context.Background(), caller, UpdateClassCommand{ID: current.ID, ProgrammeLevelID: &newLevelID})
 	require.NoError(t, err)
 	require.Equal(t, newLevelID, updated.ProgrammeLevelID)
@@ -110,12 +112,15 @@ func TestClassUpdateMoveAuthorizesCurrentAndDestinationOwners(t *testing.T) {
 	}, decisions(access), "the current and destination owners are authorized")
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The first get-class and get-unit
-	// resolve the Class's scope for the decision.
+	// resolve the Class's scope for the decision; the last get-unit names the
+	// moved Class's owning unit for its viewers after commit.
 	require.Equal(t, []string{
 		"get-class", "get-unit", "grants", "decision:class.manage:success",
 		"get-unit", "get-class", "grants", "decision:class.manage:success",
-		"audit-begin:class.manage", "store-update",
+		"audit-begin:class.manage", "store-update", "get-unit",
 	}, events)
+	require.Equal(t, []realtimetest.Call{classChangedCall(t, current.ID, world.unitID)}, publisher.Calls(),
+		"the Class's viewers are told to refetch it, once")
 }
 
 func TestClassMutationMissingClassUsesClassResource(t *testing.T) {

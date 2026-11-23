@@ -284,7 +284,7 @@ func mustExamSittingLifecycleJob(t *testing.T, sittingID model.ExamSittingID, at
 func lifecycleJobResult(t *testing.T, sittingID model.ExamSittingID, changed bool) *store.ExamSittingLifecycleResult {
 	t.Helper()
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
-	sitting, err := model.NewExamSitting(sittingID, model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	sitting, err := model.NewExamSitting(sittingID, model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	result := &store.ExamSittingLifecycleResult{Value: &store.ExamSittingSnapshot{Sitting: sitting}, Changed: changed}
 	if changed {
@@ -318,7 +318,7 @@ func assertExamSittingLifecycleJob(t *testing.T, job *model.Job, wantType model.
 func TestExamSittingLifecycleJobReconcileLeavesClosingToDedicatedSealingJob(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
-	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), model.ExamSittingJoinWindow{}, at)
 	require.NoError(t, err)
 	err = sitting.Open(at.Add(time.Hour))
 	require.NoError(t, err)

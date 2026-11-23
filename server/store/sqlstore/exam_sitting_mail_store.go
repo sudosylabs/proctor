@@ -141,7 +141,7 @@ func (s SQLExamSittingStore) ListMailRecipients(
 	}
 
 	query := `WITH current_sitting AS (
-				SELECT s.id, s.class_id, s.scheduled_start_at, s.state, s.revision,
+				SELECT s.id, s.class_id, s.scheduled_start_at, s.state, s.mail_schedule_revision,
 					s.mail_disabled_suppressed_revision,
 					s.mail_disabled_suppressed_audience_revision,
 					s.mail_disabled_suppressed_eligibility_revision, statement_timestamp() now
@@ -171,7 +171,7 @@ func (s SQLExamSittingStore) ListMailRecipients(
 				), 0
 			) mail_audience_revision, p.communicated_sitting_revision, p.communicated_template_key,
 			p.communicated_class_id, s.class_id current_class_id, s.state sitting_state,
-			s.revision sitting_revision, s.scheduled_start_at, s.mail_disabled_suppressed_revision,
+			s.mail_schedule_revision sitting_revision, s.scheduled_start_at, s.mail_disabled_suppressed_revision,
 			s.mail_disabled_suppressed_audience_revision,
 			s.mail_disabled_suppressed_eligibility_revision, s.now
 		FROM candidates c
@@ -376,10 +376,15 @@ func commitSittingMailRecipient(
 		return nil, err
 	}
 
+	scheduleRevision, err := readSittingMailScheduleRevision(ctx, tx, sitting.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	expectedKey := sittingMailRecipientTemplate(
 		fanout,
 		string(sitting.State),
-		sitting.Revision,
+		scheduleRevision,
 		sitting.ScheduledStartAt,
 		now,
 		audience.Eligible,
@@ -511,7 +516,7 @@ func insertSittingMailRecipientDelivery(
 		userID.String(),
 		input.OccurrenceID.String(),
 		input.Delivery.ID.String(),
-		sitting.Revision,
+		input.SittingRevision,
 		expectedKey,
 		now,
 	); err != nil {
@@ -681,10 +686,20 @@ type sittingMailDeliveryFence struct {
 	Projection           sittingMailProjectionRow
 	OccurrenceID         model.MailOccurrenceID
 	OccurrenceRevision   int64
+	ScheduleRevision     int64
 	TemplateKey          model.MailTemplateKey
 	CommunicatedClassID  model.ClassID
 	FanoutTerminalReason string
 	Now                  time.Time
+}
+
+// readSittingMailScheduleRevision reads the mail version under a sitting lock.
+func readSittingMailScheduleRevision(ctx context.Context, tx *sqlxTxWrapper, sittingID model.ExamSittingID) (int64, error) {
+	var revision int64
+	if err := tx.Get(ctx, &revision, `SELECT mail_schedule_revision FROM exam_sittings WHERE id = ?`, sittingID.String()); err != nil {
+		return 0, fmt.Errorf("read Sitting mail schedule revision: %w", err)
+	}
+	return revision, nil
 }
 
 func lockSittingMailDeliveryFence(
@@ -746,6 +761,11 @@ func lockSittingMailDeliveryFence(
 		return nil, err
 	}
 
+	scheduleRevision, err := readSittingMailScheduleRevision(ctx, tx, sitting.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	var fanoutTerminalReason string
 	if err = tx.Get(ctx, &fanoutTerminalReason, `SELECT terminal_reason
 		FROM exam_sitting_mail_fanouts
@@ -775,6 +795,7 @@ func lockSittingMailDeliveryFence(
 		Projection:           projection,
 		OccurrenceID:         occurrenceID,
 		OccurrenceRevision:   route.SittingRevision,
+		ScheduleRevision:     scheduleRevision,
 		TemplateKey:          model.MailTemplateKey(route.TemplateKey),
 		CommunicatedClassID:  communicatedClassID,
 		FanoutTerminalReason: fanoutTerminalReason,
@@ -796,7 +817,7 @@ func (f *sittingMailDeliveryFence) relevant(ctx context.Context, tx *sqlxTxWrapp
 		f.Projection.DesiredRevision.Int64 != f.OccurrenceRevision ||
 		!f.Projection.DesiredTemplateKey.Valid ||
 		model.MailTemplateKey(f.Projection.DesiredTemplateKey.String) != f.TemplateKey ||
-		f.Sitting.Revision != f.OccurrenceRevision {
+		f.ScheduleRevision != f.OccurrenceRevision {
 		return false, nil
 	}
 
@@ -1469,7 +1490,7 @@ func (s SQLExamSittingStore) ListMailReconciliationDue(ctx context.Context,
 		ActorUserID string `db:"actor_user_id"`
 	}
 	query := `SELECT s.id, s.exam_id, s.exam_revision_id, s.class_id, s.scheduled_start_at,
-			s.scheduled_end_at, s.state, s.created_at, s.updated_at, s.opened_at, s.paused_at,
+			s.scheduled_end_at, s.join_opens_at, s.join_closes_at, s.state, s.created_at, s.updated_at, s.opened_at, s.paused_at,
 			s.closing_at, s.closed_at, s.canceled_at, s.reason_code, s.revision, e.academic_unit_id,
 			current_actor.user_id actor_user_id
 		FROM exam_sittings s
@@ -1540,12 +1561,12 @@ func sittingMailReconciliationDueSQL(alias string) string {
 			AND u.archived_at IS NULL
 			AND u.disabled_at IS NULL
 			AND u.email_verified = TRUE
-			AND (` + alias + `.mail_disabled_suppressed_revision IS DISTINCT FROM ` + alias + `.revision
+			AND (` + alias + `.mail_disabled_suppressed_revision IS DISTINCT FROM ` + alias + `.mail_schedule_revision
 				OR cm.mail_audience_revision >` + alias + `.mail_disabled_suppressed_audience_revision
 				OR u.mail_eligibility_revision >` + alias + `.mail_disabled_suppressed_eligibility_revision)
 			AND (
 				p.desired_sitting_revision IS NULL
-				OR p.desired_sitting_revision <` + alias + `.revision
+				OR p.desired_sitting_revision <` + alias + `.mail_schedule_revision
 				OR p.desired_template_key NOT IN (
 					'exam.sitting_scheduled', 'exam.sitting_rescheduled'
 				)
@@ -1558,7 +1579,7 @@ func sittingMailReconciliationDueSQL(alias string) string {
 			)
 			AND (
 				p.communicated_sitting_revision IS NULL
-				OR p.communicated_sitting_revision <` + alias + `.revision
+				OR p.communicated_sitting_revision <` + alias + `.mail_schedule_revision
 				OR p.communicated_template_key IN (
 					'exam.sitting_assignment_removed', 'exam.sitting_canceled'
 				)
@@ -1572,7 +1593,7 @@ func sittingMailReconciliationDueSQL(alias string) string {
 			AND p.communicated_template_key IN (
 				'exam.sitting_scheduled', 'exam.sitting_rescheduled'
 			)
-			AND (` + alias + `.mail_disabled_suppressed_revision IS DISTINCT FROM ` + alias + `.revision
+			AND (` + alias + `.mail_disabled_suppressed_revision IS DISTINCT FROM ` + alias + `.mail_schedule_revision
 				OR EXISTS (
 					SELECT 1
 					FROM class_members changed
@@ -1583,7 +1604,7 @@ func sittingMailReconciliationDueSQL(alias string) string {
 				OR changed_user.mail_eligibility_revision >` + alias + `.mail_disabled_suppressed_eligibility_revision)
 			AND (
 				p.desired_sitting_revision IS NULL
-				OR p.desired_sitting_revision <` + alias + `.revision
+				OR p.desired_sitting_revision <` + alias + `.mail_schedule_revision
 				OR p.desired_template_key <> 'exam.sitting_assignment_removed'
 			)
 			AND NOT EXISTS (

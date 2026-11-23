@@ -381,6 +381,12 @@ func (t *AccessPolicyTransition) Validate() error {
 	return nil
 }
 
+// AccessPolicyTransitionFields returns, in stable order, every setting name a
+// transition may record.
+func AccessPolicyTransitionFields() []string {
+	return append([]string(nil), accessPolicyTransitionFields...)
+}
+
 // A transition may record only these names.
 var accessPolicyTransitionFields = []string{
 	"desktop_authorization_enabled",

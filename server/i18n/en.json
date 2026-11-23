@@ -584,6 +584,58 @@
     "translation": "Submissions"
   },
   {
+    "id": "access_policy.field.desktop_authorization_enabled",
+    "translation": "Proctor Desktop sign-in"
+  },
+  {
+    "id": "access_policy.field.invitation_admission_enabled",
+    "translation": "joining by invitation"
+  },
+  {
+    "id": "access_policy.field.invitation_local_credential_enabled",
+    "translation": "passwords for invited people"
+  },
+  {
+    "id": "access_policy.field.local_login_enabled",
+    "translation": "password sign-in"
+  },
+  {
+    "id": "access_policy.field.provider_admissions",
+    "translation": "sign-in providers"
+  },
+  {
+    "id": "access_policy.field.public_registration_enabled",
+    "translation": "public registration"
+  },
+  {
+    "id": "access_policy.field.revoke_existing_sessions",
+    "translation": "signing everyone out"
+  },
+  {
+    "id": "access_policy.field.role_holder_mfa_required",
+    "translation": "two-step for role holders"
+  },
+  {
+    "id": "access_policy.field.session_absolute_minutes",
+    "translation": "the longest session"
+  },
+  {
+    "id": "access_policy.field.session_idle_minutes",
+    "translation": "the idle session timeout"
+  },
+  {
+    "id": "access_policy.history.actor_unknown",
+    "translation": "Someone"
+  },
+  {
+    "id": "access_policy.history.field_separator",
+    "translation": ", "
+  },
+  {
+    "id": "access_policy.history.summary",
+    "translation": "{{.Actor}} changed {{.Fields}}"
+  },
+  {
     "id": "audit.action.academic.progression.manage",
     "translation": "{{.Actor}} moved students on from {{.Resource}}"
   },

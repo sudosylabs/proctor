@@ -10,10 +10,13 @@ package httpapi
 import (
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -58,12 +61,15 @@ type accessPolicyResponse struct {
 }
 
 type accessPolicyTransitionResponse struct {
-	FromRevision  int64    `json:"from_revision"`
-	ToRevision    int64    `json:"to_revision"`
-	ActorUserID   string   `json:"actor_user_id"`
-	ChangedFields []string `json:"changed_fields"`
-	ChangedAt     string   `json:"changed_at"`
-	Outcome       string   `json:"outcome"`
+	FromRevision  int64              `json:"from_revision"`
+	ToRevision    int64              `json:"to_revision"`
+	ActorUserID   string             `json:"actor_user_id"`
+	Actor         *personRefResponse `json:"actor,omitempty"`
+	ChangedFields []string           `json:"changed_fields"`
+	// Summary is one sentence on who changed what, in the request's locale.
+	Summary   string `json:"summary"`
+	ChangedAt string `json:"changed_at"`
+	Outcome   string `json:"outcome"`
 }
 
 type accessPolicyBlockerResponse struct {
@@ -189,7 +195,11 @@ func (h accessPolicyHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, accessPolicyResponseFromView(view)), nil
+	actors, err := h.app.NamePeople(request.Context, request.Invocation(), accessPolicyActors(view))
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, accessPolicyResponseFromView(request.HTTP, view, actors)), nil
 }
 
 func (h accessPolicyHandlers) preflight(request route.Request) (route.Result, error) {
@@ -245,7 +255,11 @@ func (h accessPolicyHandlers) replace(request route.Request) (route.Result, erro
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, accessPolicyResponseFromView(view)), nil
+	actors, err := h.app.NamePeople(request.Context, request.Invocation(), accessPolicyActors(view))
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, accessPolicyResponseFromView(request.HTTP, view, actors)), nil
 }
 
 func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.AccessPolicySettings, bool, error) {
@@ -345,7 +359,7 @@ func (h accessPolicyHandlers) discover(request route.Request) (route.Result, err
 	return route.JSON(http.StatusOK, publicAccessDiscoveryResponseFromView(discovery)), nil
 }
 
-func accessPolicyResponseFromView(view administration.AccessPolicyView) accessPolicyResponse {
+func accessPolicyResponseFromView(request *http.Request, view administration.AccessPolicyView, actors people.Refs) accessPolicyResponse {
 	response := accessPolicyResponse{
 		History:            []accessPolicyTransitionResponse{},
 		AvailableProviders: []externalAuthenticationProviderResponse{},
@@ -382,7 +396,9 @@ func accessPolicyResponseFromView(view administration.AccessPolicyView) accessPo
 				FromRevision:  transition.FromRevision,
 				ToRevision:    transition.ToRevision,
 				ActorUserID:   transition.ActorID.String(),
+				Actor:         personRef(actors, transition.ActorID),
 				ChangedFields: append([]string(nil), transition.ChangedFields...),
+				Summary:       accessPolicyTransitionSummary(request, actors, transition),
 				ChangedAt:     model.FormatRFC3339(transition.ChangedAt),
 				Outcome:       string(transition.Outcome),
 			})
@@ -448,4 +464,58 @@ func publicAccessDiscoveryResponseFromView(view administration.PublicAccessDisco
 
 	sort.Slice(response.Providers, func(i, j int) bool { return response.Providers[i].ID < response.Providers[j].ID })
 	return response
+}
+
+func accessPolicyActors(view administration.AccessPolicyView) []model.UserID {
+	actors := make([]model.UserID, 0, len(view.History))
+	for _, transition := range view.History {
+		if transition != nil {
+			actors = append(actors, transition.ActorID)
+		}
+	}
+	return actors
+}
+
+// accessPolicyTransitionSummary says who changed which settings, naming each
+// setting in the request's locale.
+func accessPolicyTransitionSummary(request *http.Request, actors people.Refs, transition *model.AccessPolicyTransition) string {
+	actor := route.Translate(request, accessPolicyHistoryActorUnknown, "")
+	if ref, ok := actors.Get(transition.ActorID); ok && !ref.Removed() {
+		actor = ref.DisplayName
+	}
+	fields := make([]string, 0, len(transition.ChangedFields))
+	for _, field := range transition.ChangedFields {
+		fields = append(fields, route.Translate(request, accessPolicyFieldLocalizationID(field), field))
+	}
+	return route.TranslateRequest(request, localization.Request{
+		ID: accessPolicyHistorySummary,
+		TemplateData: map[string]string{
+			"Actor":  actor,
+			"Fields": strings.Join(fields, route.Translate(request, accessPolicyHistoryFieldSeparator, ", ")),
+		},
+	}, actor)
+}
+
+const (
+	accessPolicyHistorySummary        = "access_policy.history.summary"
+	accessPolicyHistoryActorUnknown   = "access_policy.history.actor_unknown"
+	accessPolicyHistoryFieldSeparator = "access_policy.history.field_separator"
+)
+
+func accessPolicyFieldLocalizationID(field string) string {
+	return "access_policy.field." + field
+}
+
+// accessPolicyLocalizationDefinitions are the history sentence and the name
+// of every setting a transition may record.
+func accessPolicyLocalizationDefinitions() []localization.Definition {
+	definitions := []localization.Definition{
+		{ID: accessPolicyHistorySummary, Origin: localizationOrigin, Variables: []string{"Actor", "Fields"}},
+		{ID: accessPolicyHistoryActorUnknown, Origin: localizationOrigin},
+		{ID: accessPolicyHistoryFieldSeparator, Origin: localizationOrigin},
+	}
+	for _, field := range model.AccessPolicyTransitionFields() {
+		definitions = append(definitions, localization.Definition{ID: accessPolicyFieldLocalizationID(field), Origin: localizationOrigin})
+	}
+	return definitions
 }

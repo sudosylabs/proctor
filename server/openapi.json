@@ -3092,6 +3092,10 @@
               "durable_mail": true,
               "history": [
                 {
+                  "actor": {
+                    "display_name": "Priya Raman",
+                    "id": "o87yi4tenx8kodmcuup1hmtsbo"
+                  },
                   "actor_user_id": "o87yi4tenx8kodmcuup1hmtsbo",
                   "changed_at": "2026-08-20T13:15:00Z",
                   "changed_fields": [
@@ -3100,9 +3104,14 @@
                   ],
                   "from_revision": 3,
                   "outcome": "applied",
+                  "summary": "Priya Raman changed signing everyone out, two-step for role holders",
                   "to_revision": 4
                 },
                 {
+                  "actor": {
+                    "display_name": "Priya Raman",
+                    "id": "o87yi4tenx8kodmcuup1hmtsbo"
+                  },
                   "actor_user_id": "o87yi4tenx8kodmcuup1hmtsbo",
                   "changed_at": "2026-08-02T10:00:00Z",
                   "changed_fields": [
@@ -3110,6 +3119,7 @@
                   ],
                   "from_revision": 2,
                   "outcome": "applied",
+                  "summary": "Priya Raman changed the idle session timeout",
                   "to_revision": 3
                 }
               ],
@@ -12404,6 +12414,10 @@
         "additionalProperties": false,
         "description": "A summary of one applied change to the Access Policy. A recorded change can't be edited.",
         "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The User who made the change, named."
+          },
           "actor_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The User who made the change."
@@ -12445,6 +12459,11 @@
             "description": "The result of the change. Only applied changes are recorded, so it is always `applied`.",
             "type": "string"
           },
+          "summary": {
+            "description": "One sentence in the request's language naming who changed which settings.",
+            "maxLength": 2048,
+            "type": "string"
+          },
           "to_revision": {
             "description": "The policy revision the change produced.",
             "format": "int64",
@@ -12457,6 +12476,7 @@
           "to_revision",
           "actor_user_id",
           "changed_fields",
+          "summary",
           "changed_at",
           "outcome"
         ],

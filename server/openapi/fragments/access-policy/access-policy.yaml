@@ -254,16 +254,24 @@ components:
               - from_revision: 3
                 to_revision: 4
                 actor_user_id: o87yi4tenx8kodmcuup1hmtsbo
+                actor:
+                  id: o87yi4tenx8kodmcuup1hmtsbo
+                  display_name: Priya Raman
                 changed_fields:
                   - revoke_existing_sessions
                   - role_holder_mfa_required
+                summary: Priya Raman changed signing everyone out, two-step for role holders
                 changed_at: '2026-08-20T13:15:00Z'
                 outcome: applied
               - from_revision: 2
                 to_revision: 3
                 actor_user_id: o87yi4tenx8kodmcuup1hmtsbo
+                actor:
+                  id: o87yi4tenx8kodmcuup1hmtsbo
+                  display_name: Priya Raman
                 changed_fields:
                   - session_idle_minutes
+                summary: Priya Raman changed the idle session timeout
                 changed_at: '2026-08-02T10:00:00Z'
                 outcome: applied
             available_providers:
@@ -392,6 +400,7 @@ components:
         - to_revision
         - actor_user_id
         - changed_fields
+        - summary
         - changed_at
         - outcome
       properties:
@@ -408,6 +417,13 @@ components:
         actor_user_id:
           $ref: '#/components/schemas/ID'
           description: The User who made the change.
+        actor:
+          $ref: '#/components/schemas/PersonRef'
+          description: The User who made the change, named.
+        summary:
+          type: string
+          maxLength: 2048
+          description: One sentence in the request's language naming who changed which settings.
         changed_fields:
           description: >-
             The settings whose values changed, in alphabetical order. It includes `revoke_existing_sessions` when the

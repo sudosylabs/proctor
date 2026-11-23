@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -307,7 +308,24 @@ func (s *Service) CreateRoleBinding(
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, saved.UserID)
+	s.publishUnitAdministratorsChanged(ctx, command.Batch, saved)
 	return saved, nil
+}
+
+// publishUnitAdministratorsChanged tells viewers of a unit that its
+// administrators may have changed, since a unit lists who administers it. A
+// batch item publishes nothing; the batch owes one event for the whole batch.
+func (s *Service) publishUnitAdministratorsChanged(ctx context.Context, batch batchitem.Item, binding *model.RoleBinding) {
+	if binding == nil || binding.ScopeType != model.RoleScopeAcademicUnit || batch.Fields() != (batchitem.Fields{}) {
+		return
+	}
+	event, err := realtime.NewAcademicUnitUpdatedEvent(model.AcademicUnitID(binding.ScopeID))
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "academic_unit_updated", err)
+	}
 }
 
 func (s *Service) authorizeRoleDelegation(
@@ -501,6 +519,7 @@ func (s *Service) EndRoleBinding(
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, ended.UserID)
+	s.publishUnitAdministratorsChanged(ctx, command.Batch, ended)
 	return ended, nil
 }
 

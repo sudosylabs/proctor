@@ -27,6 +27,24 @@ type classMemberResponse struct {
 	EndAt            string `json:"end_at,omitempty"`
 }
 
+// classMemberListItemResponse is one listed membership with who the member
+// is, as a unit member listing names them, and the transfer its end is.
+type classMemberListItemResponse struct {
+	classMemberResponse
+	User     academicUnitMemberUserResponse `json:"user"`
+	Transfer *classMemberTransferResponse   `json:"transfer,omitempty"`
+}
+
+type classMemberTransferResponse struct {
+	ToClass classMemberTransferClassResponse `json:"to_class"`
+	At      string                           `json:"at"`
+}
+
+type classMemberTransferClassResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type enrollClassMemberRequest struct {
 	UserID  string `json:"user_id"`
 	StartAt string `json:"start_at"`
@@ -90,6 +108,7 @@ func (h classMemberHandlers) list(request route.Request) (route.Result, error) {
 	afterStartAt, afterUserID := after.after()
 	page, err := h.app.ListClassMembersPage(request.Context, request.Invocation(), academic.ListClassMembersPageQuery{
 		ClassID:             classID,
+		Query:               request.HTTP.URL.Query().Get("q"),
 		MembershipPageQuery: query,
 		AfterStartAt:        afterStartAt,
 		AfterUserID:         afterUserID,
@@ -107,7 +126,22 @@ func (h classMemberHandlers) list(request route.Request) (route.Result, error) {
 		page.HasMore,
 		page.Total,
 		after.AfterID != "",
-		classMemberResponseFromModel,
+		func(member *model.ClassMember) classMemberListItemResponse {
+			identity := page.Users[member.UserID]
+			item := classMemberListItemResponse{
+				classMemberResponse: classMemberResponseFromModel(member),
+				User: academicUnitMemberUserResponse{
+					DisplayName: identity.DisplayName, Username: identity.Username, Email: identity.Email,
+				},
+			}
+			if transfer, transferred := page.Transfers[member.ID]; transferred {
+				item.Transfer = &classMemberTransferResponse{
+					ToClass: classMemberTransferClassResponse{ID: transfer.ToClassID.String(), Name: transfer.ToClassName},
+					At:      model.FormatRFC3339(transfer.At),
+				}
+			}
+			return item
+		},
 		func(member *model.ClassMember) membershipPageKey {
 			return membershipPageKey{ID: member.ID.String(), UserID: member.UserID, StartAt: member.StartsAt}
 		},

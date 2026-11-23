@@ -450,6 +450,8 @@ type academicClassRecords struct {
 	created  []*store.ClassCreation
 	updates  []*store.ClassUpdate
 	archives []*store.ClassArchive
+	// periods records the Academic Period each listing narrowed to.
+	periods []model.AcademicPeriodID
 }
 
 func (s *academicClassRecords) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
@@ -469,20 +471,22 @@ func (s *academicClassRecords) GetAcademicUnitID(_ context.Context, id model.Cla
 	return unitID, nil
 }
 
-func (s *academicClassRecords) SearchByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.Class, error) {
-	return s.search.list(options)
+func (s *academicClassRecords) SearchByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.ClassListOptions) ([]*model.Class, error) {
+	s.periods = append(s.periods, options.AcademicPeriodID)
+	return s.search.list(options.AcademicNameListOptions)
 }
 
-func (s *academicClassRecords) CountByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions, maximum int) (int, error) {
-	return s.search.count(options, maximum)
+func (s *academicClassRecords) CountByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.ClassListOptions, maximum int) (int, error) {
+	return s.search.count(options.AcademicNameListOptions, maximum)
 }
 
-func (s *academicClassRecords) ListByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.AcademicNameListOptions) ([]*model.Class, error) {
-	return s.byLevel.list(options)
+func (s *academicClassRecords) ListByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.ClassListOptions) ([]*model.Class, error) {
+	s.periods = append(s.periods, options.AcademicPeriodID)
+	return s.byLevel.list(options.AcademicNameListOptions)
 }
 
-func (s *academicClassRecords) CountByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.AcademicNameListOptions, maximum int) (int, error) {
-	return s.byLevel.count(options, maximum)
+func (s *academicClassRecords) CountByProgrammeLevel(_ context.Context, _ model.ProgrammeLevelID, options store.ClassListOptions, maximum int) (int, error) {
+	return s.byLevel.count(options.AcademicNameListOptions, maximum)
 }
 
 func (s *academicClassRecords) Create(_ context.Context, input *store.ClassCreation) (*model.Class, error) {
@@ -520,6 +524,8 @@ type academicClassMemberRecords struct {
 	// the Classes each count asked for.
 	studentCounts  []store.ClassStudentCount
 	countedClasses [][]model.ClassID
+	// transfers answers a page's transfer read.
+	transfers []store.ClassMemberTransfer
 }
 
 func (s *academicClassMemberRecords) CountCurrentByClasses(_ context.Context, classIDs []model.ClassID, _ time.Time, _ int) ([]store.ClassStudentCount, error) {
@@ -661,4 +667,8 @@ type academicBindingRecords struct {
 func (s *academicBindingRecords) ListVisibleSummariesByUsers(_ context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
 	s.options = append(s.options, options)
 	return s.summaries, nil
+}
+
+func (s *academicClassMemberRecords) ListTransfers(context.Context, []model.ClassMemberID) ([]store.ClassMemberTransfer, error) {
+	return s.transfers, nil
 }

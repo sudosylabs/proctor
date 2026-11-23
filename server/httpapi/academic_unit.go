@@ -11,9 +11,10 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type academicUnitResponse struct {
@@ -28,6 +29,35 @@ type academicUnitResponse struct {
 	Name          string `json:"name"`
 	DisplayName   string `json:"display_name"`
 	Description   string `json:"description"`
+	*academicUnitMemberCountsResponse
+	*academicUnitAdministratorsResponse
+}
+
+// academicUnitMemberCountsResponse is present only for a caller holding
+// academic_unit.members.view on the unit. Affiliation kinds overlap, so they
+// don't sum to the member count.
+type academicUnitMemberCountsResponse struct {
+	MemberCount               int                                   `json:"member_count"`
+	MemberCountIsLowerBound   bool                                  `json:"member_count_is_lower_bound"`
+	MemberCountsByAffiliation academicUnitAffiliationCountsResponse `json:"member_counts_by_affiliation"`
+}
+
+type academicUnitAffiliationCountsResponse struct {
+	Student              int  `json:"student"`
+	StudentIsLowerBound  bool `json:"student_is_lower_bound"`
+	Staff                int  `json:"staff"`
+	StaffIsLowerBound    bool `json:"staff_is_lower_bound"`
+	Teacher              int  `json:"teacher"`
+	TeacherIsLowerBound  bool `json:"teacher_is_lower_bound"`
+	External             int  `json:"external"`
+	ExternalIsLowerBound bool `json:"external_is_lower_bound"`
+}
+
+// academicUnitAdministratorsResponse is present only for a caller holding
+// role_binding.view on the unit.
+type academicUnitAdministratorsResponse struct {
+	Administrators     []personRefResponse `json:"administrators"`
+	AdministratorsMore int                 `json:"administrators_more"`
 }
 
 type createAcademicUnitRequest struct {
@@ -50,11 +80,12 @@ type updateAcademicUnitRequest struct {
 }
 
 type academicUnitHandlers struct {
-	app *academic.Service
+	app    *academic.Service
+	people *people.Resolver
 }
 
-func academicUnitResource(app *academic.Service) route.Resource {
-	h := academicUnitHandlers{app: app}
+func academicUnitResource(app *academic.Service, resolver *people.Resolver) route.Resource {
+	h := academicUnitHandlers{app: app, people: resolver}
 	collection := "/academic-units"
 	member := "/academic-units/{academic_unit_id}"
 	children := "/academic-units/{academic_unit_id}/children"
@@ -152,7 +183,7 @@ func (h academicUnitHandlers) listRoot(request route.Request) (route.Result, err
 	if err != nil {
 		return route.Result{}, err
 	}
-	var page paging.Page[*model.AcademicUnit]
+	var page academic.AcademicUnitPage
 	if query := request.HTTP.URL.Query().Get("q"); query != "" {
 		page, err = h.app.SearchAcademicUnits(
 			request.Context,
@@ -167,9 +198,7 @@ func (h academicUnitHandlers) listRoot(request route.Request) (route.Result, err
 	if err != nil {
 		return route.Result{}, err
 	}
-	return academicNameListResult(page, academicUnitResponseFromModel, func(unit *model.AcademicUnit) (string, string) {
-		return unit.Name, unit.ID.String()
-	})
+	return h.unitListResult(request, page)
 }
 
 func (h academicUnitHandlers) createRoot(request route.Request) (route.Result, error) {
@@ -201,7 +230,7 @@ func (h academicUnitHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	unit, err := h.app.GetAcademicUnit(
+	view, err := h.app.GetAcademicUnit(
 		request.Context,
 		request.Invocation(),
 		id,
@@ -209,7 +238,62 @@ func (h academicUnitHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, academicUnitResponseFromModel(unit)), nil
+	refs, err := namePeople(request, h.people, "administration.unavailable", administratorIDs(view.AcademicUnitSummaries)...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, summarizedAcademicUnitResponse(view.Unit, view.AcademicUnitSummaries, refs)), nil
+}
+
+func (h academicUnitHandlers) unitListResult(request route.Request, page academic.AcademicUnitPage) (route.Result, error) {
+	refs, err := namePeople(request, h.people, "administration.unavailable", administratorIDs(page.AcademicUnitSummaries)...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	present := func(unit *model.AcademicUnit) academicUnitResponse {
+		return summarizedAcademicUnitResponse(unit, page.AcademicUnitSummaries, refs)
+	}
+	return academicNameListResult(page.Page, present, func(unit *model.AcademicUnit) (string, string) {
+		return unit.Name, unit.ID.String()
+	})
+}
+
+func administratorIDs(summaries academic.AcademicUnitSummaries) []model.UserID {
+	ids := []model.UserID{}
+	for _, listed := range summaries.Administrators {
+		ids = append(ids, listed.UserIDs...)
+	}
+	return ids
+}
+
+func summarizedAcademicUnitResponse(
+	unit *model.AcademicUnit,
+	summaries academic.AcademicUnitSummaries,
+	refs people.Refs,
+) academicUnitResponse {
+	response := academicUnitResponseFromModel(unit)
+	if count, counted := summaries.MemberCounts[unit.ID]; counted {
+		capped := func(value int) (int, bool) { return value, value >= store.MaximumListCount }
+		counts := &academicUnitMemberCountsResponse{}
+		counts.MemberCount, counts.MemberCountIsLowerBound = capped(count.Members)
+		byKind := &counts.MemberCountsByAffiliation
+		byKind.Student, byKind.StudentIsLowerBound = capped(count.ByAffiliation[model.AffiliationStudent])
+		byKind.Staff, byKind.StaffIsLowerBound = capped(count.ByAffiliation[model.AffiliationStaff])
+		byKind.Teacher, byKind.TeacherIsLowerBound = capped(count.ByAffiliation[model.AffiliationTeacher])
+		byKind.External, byKind.ExternalIsLowerBound = capped(count.ByAffiliation[model.AffiliationExternal])
+		response.academicUnitMemberCountsResponse = counts
+	}
+	if listed, visible := summaries.Administrators[unit.ID]; visible {
+		administrators := &academicUnitAdministratorsResponse{
+			Administrators:     make([]personRefResponse, 0, len(listed.UserIDs)),
+			AdministratorsMore: listed.More,
+		}
+		for _, userID := range listed.UserIDs {
+			administrators.Administrators = append(administrators.Administrators, *personRef(refs, userID))
+		}
+		response.academicUnitAdministratorsResponse = administrators
+	}
+	return response
 }
 
 func (h academicUnitHandlers) patch(request route.Request) (route.Result, error) {
@@ -283,9 +367,7 @@ func (h academicUnitHandlers) listChildren(request route.Request) (route.Result,
 	if err != nil {
 		return route.Result{}, err
 	}
-	return academicNameListResult(page, academicUnitResponseFromModel, func(unit *model.AcademicUnit) (string, string) {
-		return unit.Name, unit.ID.String()
-	})
+	return h.unitListResult(request, page)
 }
 
 func (h academicUnitHandlers) createChild(request route.Request) (route.Result, error) {

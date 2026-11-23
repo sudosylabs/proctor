@@ -9,7 +9,9 @@ package academic
 
 import (
 	"context"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -85,7 +87,9 @@ func TestAcademicUnitGetUsesUnitViewScope(t *testing.T) {
 	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: access.Authorizer, Auditor: access.Auditor})
 	got, err := service.GetAcademicUnit(context.Background(), caller, unit.ID)
 	require.NoError(t, err)
-	require.Same(t, unit, got, "Get()")
+	require.Same(t, unit, got.Unit, "Get()")
+	require.Nil(t, got.MemberCounts, "no academic_unit.members.view, no counts")
+	require.Nil(t, got.Administrators, "no role_binding.view, no administrators")
 	require.Equal(t, []string{"academic_unit.view academic_unit:" + unit.ID.String() + " success"}, decisions(access), "authorization")
 }
 
@@ -143,4 +147,89 @@ func TestAcademicUnitSearchDenialDoesNotReadQueryStore(t *testing.T) {
 	_, err := service.SearchAcademicUnits(context.Background(), caller, SearchAcademicUnitsQuery{})
 	require.True(t, apperror.Is(err, "authorization.denied"), "Search() error = %v, want authorization.denied", err)
 	require.Equal(t, 0, units.searchCalls)
+}
+
+func (s *academicUnitReadStore) ListWithinSubtrees(_ context.Context, ids, roots []model.AcademicUnitID) ([]model.AcademicUnitID, error) {
+	within := []model.AcademicUnitID{}
+	for _, id := range ids {
+		if slices.Contains(roots, id) {
+			within = append(within, id)
+		}
+	}
+	return within, nil
+}
+
+type academicUnitSummaryMembers struct {
+	store.AcademicUnitMemberStore
+	counted [][]model.AcademicUnitID
+}
+
+func (s *academicUnitSummaryMembers) CountCurrentByAcademicUnits(_ context.Context, options store.AcademicUnitMemberCountOptions) ([]store.AcademicUnitMemberCount, error) {
+	s.counted = append(s.counted, options.AcademicUnitIDs)
+	counts := []store.AcademicUnitMemberCount{}
+	for _, id := range options.AcademicUnitIDs {
+		counts = append(counts, store.AcademicUnitMemberCount{AcademicUnitID: id, Members: 7,
+			ByAffiliation: map[model.AffiliationKind]int{model.AffiliationStudent: 5}})
+	}
+	return counts, nil
+}
+
+type academicUnitSummaryBindings struct {
+	store.RoleBindingStore
+	named         [][]model.AcademicUnitID
+	administrator model.UserID
+}
+
+func (s *academicUnitSummaryBindings) ListAcademicUnitAdministrators(_ context.Context, options store.AcademicUnitAdministratorOptions) ([]store.AcademicUnitAdministrators, error) {
+	s.named = append(s.named, options.AcademicUnitIDs)
+	return []store.AcademicUnitAdministrators{{AcademicUnitID: options.AcademicUnitIDs[0], UserIDs: []model.UserID{s.administrator}, More: 2}}, nil
+}
+
+func TestAcademicUnitListSummarizesOnlyGrantedUnits(t *testing.T) {
+	t.Parallel()
+
+	principal, caller := newCaller()
+	counted, named, hidden := model.NewAcademicUnitID(), model.NewAcademicUnitID(), model.NewAcademicUnitID()
+	access := academicUnitAccess(t, nil, nil,
+		institutionGrant(principal.UserID, model.ActionAcademicUnitView),
+		unitGrant(principal.UserID, counted, model.ActionAcademicUnitMembersView),
+		unitGrant(principal.UserID, named, model.ActionRoleBindingView))
+	page := []*model.AcademicUnit{
+		{ID: counted, InstitutionID: access.Institution.ID, Name: "a"},
+		{ID: named, InstitutionID: access.Institution.ID, Name: "b"},
+		{ID: hidden, InstitutionID: access.Institution.ID, Name: "c"},
+	}
+	members := &academicUnitSummaryMembers{}
+	bindings := &academicUnitSummaryBindings{administrator: model.NewUserID()}
+	service := mustNew(Dependencies{
+		Store:      &catalogFake{academicUnit: &academicUnitReadStore{children: page}, academicUnitMember: members, roleBinding: bindings},
+		Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now,
+	})
+
+	got, err := service.ListAcademicUnits(context.Background(), caller, ListAcademicUnitsQuery{})
+	require.NoError(t, err)
+	require.Equal(t, [][]model.AcademicUnitID{{counted}}, members.counted, "one count read, for the granted unit only")
+	require.Equal(t, [][]model.AcademicUnitID{{named}}, bindings.named, "one administrator read, for the granted unit only")
+	require.Equal(t, 7, got.MemberCounts[counted].Members)
+	require.NotContains(t, got.MemberCounts, named)
+	require.NotContains(t, got.MemberCounts, hidden)
+	require.Equal(t, []model.UserID{bindings.administrator}, got.Administrators[named].UserIDs)
+	require.Equal(t, 2, got.Administrators[named].More)
+	require.NotContains(t, got.Administrators, counted)
+	require.NotContains(t, got.Administrators, hidden)
+	// The summaries record no decision of their own.
+	require.Equal(t, []string{"academic_unit.view institution:" + access.Institution.ID.String() + " success"}, decisions(access))
+}
+
+func TestAcademicUnitMembersRejectUnknownAffiliation(t *testing.T) {
+	t.Parallel()
+
+	principal, caller := newCaller()
+	unitID := model.NewAcademicUnitID()
+	access := academicUnitAccess(t, nil, nil, unitGrant(principal.UserID, unitID, model.ActionAcademicUnitMembersView))
+	service := mustNew(Dependencies{Store: &catalogFake{}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now})
+	_, err := service.ListAcademicUnitMembersPage(context.Background(), caller, ListAcademicUnitMembersPageQuery{
+		AcademicUnitID: unitID, Affiliations: []model.AffiliationKind{"alumni"},
+	})
+	require.True(t, apperror.Is(err, "request.invalid"), "error = %v", err)
 }

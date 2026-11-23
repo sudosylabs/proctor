@@ -378,7 +378,7 @@
         "title": "Academic Unit created"
       },
       "academic_unit_updated": {
-        "description": "Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "description": "Refetch the Academic Unit. The event has no data. Sent when the Academic Unit itself changes, when a member joins or leaves it outside a batch, and when a Role Binding scoped to it is granted or ended outside a batch, since its member counts and administrators may have moved. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
         "examples": [
           {
             "name": "example",

@@ -9,6 +9,7 @@ package academic
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -137,6 +138,7 @@ func (s *Service) CreateAcademicUnitMember(
 	)
 	if err == nil && changed {
 		s.publisher.InvalidateAuthorization(ctx, userID)
+		s.publishMemberCountChanged(ctx, command.Batch, command.AcademicUnitID)
 	}
 
 	return result, err
@@ -243,9 +245,22 @@ func (s *Service) EndAcademicUnitMember(
 	)
 	if err == nil && changed {
 		s.publisher.InvalidateAuthorization(ctx, current.UserID)
+		s.publishMemberCountChanged(ctx, command.Batch, current.AcademicUnitID)
 	}
 
 	return result, err
+}
+
+// publishMemberCountChanged tells unit viewers the member count moved. A
+// batch item publishes nothing, since the batch owes one event for the whole
+// batch.
+func (s *Service) publishMemberCountChanged(ctx context.Context, batch batchitem.Item, unitID model.AcademicUnitID) {
+	if batch.Fields() != (batchitem.Fields{}) {
+		return
+	}
+	if err := s.publishAcademicUnitUpdated(ctx, unitID); err != nil {
+		s.publisher.Report(ctx, "academic_unit_updated", err)
+	}
 }
 
 func concealMembershipAuthorizationError(err error, resource string) error {
@@ -291,6 +306,9 @@ type ListAcademicUnitMembersPageQuery struct {
 	AfterUserID    model.UserID
 	AfterID        model.AcademicUnitMemberID
 	AcademicUnitID model.AcademicUnitID
+	// Affiliations keeps members holding a current Affiliation of any listed
+	// kind, at the page's instant or, for history, now.
+	Affiliations []model.AffiliationKind
 	MembershipPageQuery
 }
 
@@ -342,6 +360,18 @@ func (s *Service) ListAcademicUnitMembersPage(
 		MembershipPageKeyset: keyset,
 		AfterID:              query.AfterID,
 		Limit:                limit,
+	}
+	if len(query.Affiliations) > 0 {
+		for _, kind := range query.Affiliations {
+			if !kind.IsValid() {
+				return nil, apperror.New("request.invalid").WithField("field", "affiliation")
+			}
+		}
+		options.Affiliations = slices.Compact(slices.Sorted(slices.Values(query.Affiliations)))
+		options.AffiliationsAt = now
+		if activeAt != 0 {
+			options.AffiliationsAt = options.ActiveAt
+		}
 	}
 
 	page, err := s.academicUnitMembers.ListPageByAcademicUnit(ctx, options)

@@ -171,9 +171,9 @@ func (s SQLClassStore) GetByName(
 func (s SQLClassStore) ListByProgrammeLevel(
 	ctx context.Context,
 	programmeLevelID model.ProgrammeLevelID,
-	options store.AcademicNameListOptions,
+	options store.ClassListOptions,
 ) ([]*model.Class, error) {
-	query, valid := academicNamePage(classesInLevel(s.classesQuery, programmeLevelID), "classes", options)
+	query, valid := academicNamePage(classesInPeriod(classesInLevel(s.classesQuery, programmeLevelID), options), "classes", options.AcademicNameListOptions)
 	if !valid {
 		return nil, store.NewErrInvalidInput("class", "list_options", options)
 	}
@@ -198,9 +198,9 @@ func (s SQLClassStore) ListByAcademicPeriod(ctx context.Context, academicPeriodI
 func (s SQLClassStore) SearchByAcademicUnit(
 	ctx context.Context,
 	academicUnitID model.AcademicUnitID,
-	options store.AcademicNameListOptions,
+	options store.ClassListOptions,
 ) ([]*model.Class, error) {
-	query, valid := academicNamePage(classesInUnit(s.classesQuery, academicUnitID), "classes", options)
+	query, valid := academicNamePage(classesInPeriod(classesInUnit(s.classesQuery, academicUnitID), options), "classes", options.AcademicNameListOptions)
 	if !valid {
 		return nil, store.NewErrInvalidInput("class", "list_options", options)
 	}
@@ -697,11 +697,11 @@ var _ store.ClassStore = (*SQLClassStore)(nil)
 func (s SQLClassStore) CountByProgrammeLevel(
 	ctx context.Context,
 	programmeLevelID model.ProgrammeLevelID,
-	options store.AcademicNameListOptions,
+	options store.ClassListOptions,
 	maximum int,
 ) (int, error) {
-	rows := classesInLevel(sq.Select("classes.id").From("classes"), programmeLevelID)
-	return countAcademicNamePage(ctx, s.GetMaster(), rows, "classes", options, maximum)
+	rows := classesInPeriod(classesInLevel(sq.Select("classes.id").From("classes"), programmeLevelID), options)
+	return countAcademicNamePage(ctx, s.GetMaster(), rows, "classes", options.AcademicNameListOptions, maximum)
 }
 
 // CountByAcademicUnit counts through the same unit and term filter as
@@ -709,11 +709,20 @@ func (s SQLClassStore) CountByProgrammeLevel(
 func (s SQLClassStore) CountByAcademicUnit(
 	ctx context.Context,
 	academicUnitID model.AcademicUnitID,
-	options store.AcademicNameListOptions,
+	options store.ClassListOptions,
 	maximum int,
 ) (int, error) {
-	rows := classesInUnit(sq.Select("classes.id").From("classes"), academicUnitID)
-	return countAcademicNamePage(ctx, s.GetMaster(), rows, "classes", options, maximum)
+	rows := classesInPeriod(classesInUnit(sq.Select("classes.id").From("classes"), academicUnitID), options)
+	return countAcademicNamePage(ctx, s.GetMaster(), rows, "classes", options.AcademicNameListOptions, maximum)
+}
+
+// classesInPeriod keeps the classes of options' Academic Period, when it
+// names one.
+func classesInPeriod(query sq.SelectBuilder, options store.ClassListOptions) sq.SelectBuilder {
+	if options.AcademicPeriodID.IsZero() {
+		return query
+	}
+	return query.Where(sq.Eq{"classes.academic_period_id": options.AcademicPeriodID})
 }
 
 // classesInLevel keeps the programme level's unarchived classes.

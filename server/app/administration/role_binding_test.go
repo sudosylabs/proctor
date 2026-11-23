@@ -265,3 +265,26 @@ func TestRoleBindingListByUserPassesAcademicScopeToPersistence(t *testing.T) {
 		scopeType: model.RoleScopeAcademicUnit, scopeID: rootID, allowed: true,
 	}}, recordedDecisions(fixture))
 }
+
+func TestRoleBindingCreateAtAUnitTellsTheUnitsViewers(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	userID, unitID := model.NewUserID(), model.NewAcademicUnitID()
+	created := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: userID, RoleID: model.NewRoleID(),
+		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}
+	role := &model.Role{ID: created.RoleID, Name: "unit-manager", Permissions: []string{string(model.ActionAcademicUnitManage)}}
+	caller, inv := newCaller()
+	fixture := grantedAccess(t, &events, unitGrant(caller.UserID, unitID, model.ActionRoleBindingManage, model.ActionAcademicUnitManage))
+	mail, _ := newMail(t)
+	publisher := publisherIn(&events)
+	service := &Service{roleBindings: &roleBindingStoreFake{events: &events, createResult: created}, roles: &roleBindingRoleStoreFake{events: &events, role: role}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: noCapabilities(), auditor: fixture.Auditor.MutationAudit(), mail: mail, publisher: publisher, now: func() time.Time { return time.UnixMilli(500) }}
+	_, err := service.CreateRoleBinding(context.Background(), inv, CreateRoleBindingCommand{
+		UserID: userID, RoleID: created.RoleID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(), StartAt: 100,
+	})
+	require.NoError(t, err)
+	calls := publisher.Calls()
+	require.Len(t, calls, 2)
+	require.Equal(t, realtimetest.Publish, calls[1].Method)
+	require.Equal(t, "academic_unit_updated", calls[1].Event.Name)
+	require.Equal(t, model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}, calls[1].Event.Resource)
+}

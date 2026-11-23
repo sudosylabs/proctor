@@ -74,6 +74,8 @@ CREATE TABLE programmes (
     archived_at timestamptz,
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     academic_unit_id varchar(26) NOT NULL REFERENCES academic_units(id),
+    kind varchar(32) NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('undergraduate', 'postgraduate', 'other')),
     name varchar(64) NOT NULL,
     display_name varchar(512) NOT NULL,
     description varchar(4096) NOT NULL DEFAULT '',
@@ -127,6 +129,9 @@ CREATE TABLE academic_periods (
     CONSTRAINT academic_periods_lifecycle_check CHECK (updated_at >= created_at)
 );
 
+-- Period pages order by start, and the active_at filter narrows by it.
+CREATE INDEX academic_periods_start_at_idx
+    ON academic_periods (start_at, name, id) WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX academic_periods_institution_id_name_key
     ON academic_periods (institution_id, name)
     WHERE owner_type = 'institution' AND archived_at IS NULL;
@@ -6157,6 +6162,9 @@ CREATE INDEX role_bindings_role_id_created_at_idx
     ON role_bindings (role_id, created_at DESC, id DESC) WHERE archived_at IS NULL;
 CREATE INDEX role_bindings_origin_academic_unit_member_id_idx
     ON role_bindings (origin_academic_unit_member_id) WHERE origin_academic_unit_member_id IS NOT NULL;
+-- A page of academic units names who administers each, by scope.
+CREATE INDEX role_bindings_scope_type_scope_id_idx
+    ON role_bindings (scope_type, scope_id, start_at) WHERE archived_at IS NULL;
 CREATE INDEX exam_sittings_class_id_idx ON exam_sittings (class_id);
 CREATE INDEX retention_retirements_sitting_grace_idx
     ON retention_retirements (exam_sitting_id) WHERE state = 'grace';

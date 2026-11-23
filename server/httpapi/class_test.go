@@ -174,7 +174,7 @@ func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
 	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
-		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service))
+		academicUnitResource(fixture.service, nil), institutionResource(fixture.service), classResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/classes", nil)
@@ -198,7 +198,7 @@ func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
 	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
-		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service))
+		academicUnitResource(fixture.service, nil), institutionResource(fixture.service), classResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programme-levels/"+world.level.ID.String()+"/classes", strings.NewReader(`{"academic_period_id":"`+world.period.ID.String()+`","name":"class-a","display_name":"Class A"}`))
@@ -234,7 +234,7 @@ func TestClassOpenAPIDocument(t *testing.T) {
 	var searchOperation openAPIOperation
 	path := model.APIURLSuffix + "/academic-units/{academic_unit_id}/classes"
 	require.NoError(t, json.Unmarshal(document.Paths[path]["get"], &searchOperation))
-	require.Equal(t, []string{"cursor", "dir", "limit", "q"}, academicStructureQueryParameterNames(searchOperation.Parameters), "Class search query parameters")
+	require.Equal(t, []string{"academic_period_id", "cursor", "dir", "limit", "q"}, academicStructureQueryParameterNames(searchOperation.Parameters), "Class search query parameters")
 	list := document.Components.Schemas["ClassListResponse"]
 	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ClassListItemResponse")
 	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["ClassArchived"].Headers["Cache-Control"].Ref)

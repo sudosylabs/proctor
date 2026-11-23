@@ -289,6 +289,10 @@ func (s recoveryRoleBindingStore) ListActiveByUser(_ context.Context, userID mod
 	}
 	return out, nil
 }
+func (recoveryRoleBindingStore) ListAcademicUnitAdministrators(context.Context, store.AcademicUnitAdministratorOptions) ([]store.AcademicUnitAdministrators, error) {
+	panic("unexpected ListAcademicUnitAdministrators")
+}
+
 func (recoveryRoleBindingStore) Save(context.Context, *store.RoleBindingCreation) (*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }

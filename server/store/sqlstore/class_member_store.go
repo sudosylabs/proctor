@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -1396,7 +1397,68 @@ func filterClassMemberPage(query sq.SelectBuilder, options store.ClassMemberPage
 		query = query.Where(sq.LtOrEq{"class_members.start_at": at}).
 			Where("(class_members.end_at IS NULL OR class_members.end_at > ?)", at)
 	}
+	if term := strings.TrimSpace(options.Query); term != "" {
+		pattern := directorySearchPattern(term)
+		email := ""
+		args := []any{pattern, pattern, pattern, pattern}
+		if options.QueryMatchesEmail {
+			email = " OR search_users.email ILIKE ? ESCAPE '!'"
+			args = append(args, pattern)
+		}
+		query = query.Where(`EXISTS (
+			SELECT 1 FROM users search_users
+			WHERE search_users.id = class_members.user_id
+				AND (
+					search_users.username ILIKE ? ESCAPE '!' OR search_users.display_name ILIKE ? ESCAPE '!' OR
+					search_users.first_name ILIKE ? ESCAPE '!' OR search_users.last_name ILIKE ? ESCAPE '!'`+email+`
+				)
+		)`, args...)
+	}
 	return query
+}
+
+// ListTransfers reads every listed membership in one statement.
+func (s SQLClassMemberStore) ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID) ([]store.ClassMemberTransfer, error) {
+	if len(memberIDs) > store.MaximumClassStudentCountClasses || !validVisibilityIDs(memberIDs) {
+		return nil, store.NewErrInvalidInput("class_member", "transfers", nil)
+	}
+	if len(memberIDs) == 0 {
+		return []store.ClassMemberTransfer{}, nil
+	}
+
+	rows := []struct {
+		ClassMemberID string    `db:"class_member_id"`
+		ToClassID     string    `db:"to_class_id"`
+		ToClassName   string    `db:"to_class_name"`
+		At            time.Time `db:"transfer_at"`
+	}{}
+	if err := s.GetMaster().Select(ctx, &rows, `
+		SELECT DISTINCT ON (ended.id)
+			ended.id AS class_member_id, next.class_id AS to_class_id,
+			classes.display_name AS to_class_name, ended.end_at AS transfer_at
+		FROM class_members ended
+		JOIN class_members next ON next.user_id = ended.user_id
+			AND next.start_at = ended.end_at
+			AND next.class_id <> ended.class_id
+			AND next.archived_at IS NULL
+		JOIN classes ON classes.id = next.class_id
+		WHERE ended.id = ANY(?)
+			AND ended.archived_at IS NULL
+			AND ended.end_at IS NOT NULL
+		ORDER BY ended.id, next.id`, pq.Array(idStrings(memberIDs))); err != nil {
+		return nil, fmt.Errorf("list class member transfers: %w", err)
+	}
+
+	transfers := make([]store.ClassMemberTransfer, 0, len(rows))
+	for _, row := range rows {
+		transfers = append(transfers, store.ClassMemberTransfer{
+			ClassMemberID: model.ClassMemberID(row.ClassMemberID),
+			ToClassID:     model.ClassID(row.ToClassID),
+			ToClassName:   row.ToClassName,
+			At:            row.At.UTC(),
+		})
+	}
+	return transfers, nil
 }
 
 func validClassMemberPageOptions(options store.ClassMemberPageOptions) bool {

@@ -111,6 +111,7 @@ func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 		Now:    func() time.Time { return model.TimeFromMillis(1000) },
 	})
 	fixture.hold(world)
+	fixture.users.add(&model.User{ID: member.UserID, Username: "student", DisplayName: "Student"})
 	members := fixture.classMembers
 	firstPage, emptyPage := store.ClassMemberPage{Members: []*model.ClassMember{member}, HasMore: true}, store.ClassMemberPage{}
 	members.page, members.total = firstPage, 2

@@ -2839,6 +2839,8 @@
             "example": {
               "items": [
                 {
+                  "class_count": 24,
+                  "class_count_is_lower_bound": false,
                   "created_at": "2026-07-15T09:00:00Z",
                   "description": "Academic year 2026 to 2027.",
                   "display_name": "2026–2027",
@@ -2865,7 +2867,7 @@
                   "updated_at": "2026-07-20T14:00:00Z"
                 }
               ],
-              "next_cursor": "eyJzdGFydF9hdCI6IjIwMjctMDEtMTFUMDA6MDA6MDBaIiwibmFtZSI6IjIwMjYtMjAyNy1zZW1lc3Rlci0yIiwiaWQiOiJobXlqbWo2OGR3NmdkeGN0bmdoYnJod2N0aCJ9"
+              "next_cursor": "eyJzdGFydF9hdCI6IjIwMjctMDEtMTFUMDA6MDA6MDBaIiwibmFtZSI6IjIwMjYtMjAyNy1zZW1lc3Rlci0yIiwiaWQiOiJobXlqbWo2OGR3NmdkeGN0bmdoYnJod2N0aCIsInNvcnQiOiJzdGFydCIsImRpciI6ImFzYyJ9"
             },
             "schema": {
               "$ref": "#/components/schemas/AcademicPeriodListResponse"
@@ -3063,12 +3065,37 @@
         "content": {
           "application/json": {
             "example": {
+              "administrators": [
+                {
+                  "display_name": "Priya Raman",
+                  "id": "4ufo8k7p1h3m5bxj9y6rqwtzse",
+                  "profile_picture_url": "/api/v1/users/4ufo8k7p1h3m5bxj9y6rqwtzse/profile-picture",
+                  "username": "praman"
+                },
+                {
+                  "display_name": "Ahmed Farouk",
+                  "id": "n3c8xa5hk1ymqpz7rj6wtf4ub9"
+                }
+              ],
+              "administrators_more": 0,
               "created_at": "2026-08-01T09:00:00Z",
               "description": "Computing teaching and research.",
               "display_name": "School of Computer Science",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
               "institution_id": "wj3drgzdpnf54rxf5d8qd3dqne",
               "kind": "department",
+              "member_count": 412,
+              "member_count_is_lower_bound": false,
+              "member_counts_by_affiliation": {
+                "external": 0,
+                "external_is_lower_bound": false,
+                "staff": 36,
+                "staff_is_lower_bound": false,
+                "student": 376,
+                "student_is_lower_bound": false,
+                "teacher": 21,
+                "teacher_is_lower_bound": false
+              },
               "name": "computer-science",
               "parent_id": "ih1r84kij94nrwis97rft6rduh",
               "revision": 3,
@@ -4629,16 +4656,33 @@
                   "id": "ih1r84kij94nrwis97rft6rduh",
                   "start_at": "2026-09-01T00:00:00Z",
                   "updated_at": "2026-07-28T10:00:00Z",
+                  "user": {
+                    "display_name": "Amara Okafor",
+                    "email": "amara.okafor@example.edu",
+                    "username": "aokafor"
+                  },
                   "user_id": "5ebqfbnezgahdbx9oy7rfr6oro"
                 },
                 {
                   "academic_period_id": "p6y6sf8ac6m5if373fkkebj7j6",
                   "class_id": "sjebyge5cpbop1xwo4eds74ejb",
                   "created_at": "2026-07-28T10:00:02Z",
-                  "end_at": "2027-07-01T00:00:00Z",
+                  "end_at": "2027-01-11T00:00:00Z",
                   "id": "xpq79ar61ncrjiouey6d9tgp91",
                   "start_at": "2026-09-01T00:00:00Z",
+                  "transfer": {
+                    "at": "2027-01-11T00:00:00Z",
+                    "to_class": {
+                      "id": "8kpous3h9nfemqtwz47ydgjcx1",
+                      "name": "Year 1, Group B"
+                    }
+                  },
                   "updated_at": "2026-07-28T10:00:02Z",
+                  "user": {
+                    "display_name": "Tomas Lindqvist",
+                    "email": "tomas.lindqvist@example.edu",
+                    "username": "tlindqvist"
+                  },
                   "user_id": "17778cuf6b17rhtapprfjozet8"
                 }
               ],
@@ -9074,6 +9118,7 @@
               "description": "Undergraduate computer science programme.",
               "display_name": "BSc Computer Science",
               "id": "g63dcrphk8idgyjgzbrpajosz6",
+              "kind": "undergraduate",
               "name": "bsc-computer-science",
               "revision": 1,
               "updated_at": "2026-08-02T09:30:00Z"
@@ -9119,6 +9164,8 @@
             "example": {
               "items": [
                 {
+                  "class_count": 3,
+                  "class_count_is_lower_bound": false,
                   "created_at": "2026-08-03T10:00:00Z",
                   "description": "First year of the programme.",
                   "display_name": "Level 100",
@@ -9126,6 +9173,8 @@
                   "name": "level-100",
                   "programme_id": "g63dcrphk8idgyjgzbrpajosz6",
                   "revision": 1,
+                  "student_count": 138,
+                  "student_count_is_lower_bound": false,
                   "updated_at": "2026-08-03T10:00:00Z"
                 },
                 {
@@ -9177,12 +9226,19 @@
               "items": [
                 {
                   "academic_unit_id": "14j8umgczgrdp95w77zuxmxfu9",
+                  "class_count": 9,
+                  "class_count_is_lower_bound": false,
                   "created_at": "2026-08-02T09:30:00Z",
                   "description": "Undergraduate computer science programme.",
                   "display_name": "BSc Computer Science",
                   "id": "g63dcrphk8idgyjgzbrpajosz6",
+                  "kind": "undergraduate",
+                  "level_count": 3,
+                  "level_count_is_lower_bound": false,
                   "name": "bsc-computer-science",
                   "revision": 1,
+                  "student_count": 412,
+                  "student_count_is_lower_bound": false,
                   "updated_at": "2026-08-02T09:30:00Z"
                 },
                 {
@@ -9191,6 +9247,7 @@
                   "description": "Taught postgraduate programme in data science.",
                   "display_name": "MSc Data Science",
                   "id": "889766ufjgio6kbpzjbufozksq",
+                  "kind": "postgraduate",
                   "name": "msc-data-science",
                   "revision": 2,
                   "updated_at": "2026-08-15T13:05:00Z"
@@ -9215,6 +9272,7 @@
               "description": "Undergraduate computer science programme.",
               "display_name": "Bachelor of Science in Computer Science",
               "id": "g63dcrphk8idgyjgzbrpajosz6",
+              "kind": "undergraduate",
               "name": "bsc-computer-science",
               "revision": 2,
               "updated_at": "2026-08-09T15:00:00Z"
@@ -11713,6 +11771,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "class_count": {
+            "description": "On a listed Academic Period only: how many of its active Classes you hold class.view on. Absent if you hold class.view nowhere. It is exact below 10,000; at 10,000 counting stops and `class_count_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "class_count_is_lower_bound": {
+            "description": "True when `class_count` stopped at 10,000. Present with `class_count`.",
+            "type": "boolean"
+          },
           "created_at": {
             "description": "When the Academic Period was created.",
             "format": "date-time",
@@ -11780,6 +11848,55 @@
           "description",
           "start_at",
           "end_at"
+        ],
+        "type": "object"
+      },
+      "AcademicUnitAffiliationCounts": {
+        "additionalProperties": false,
+        "description": "How many of the Academic Unit's current members hold each current Affiliation kind. A person can hold several kinds, so these don't add up to `member_count`. Each is exact below 10,000; at 10,000 counting stops and its `_is_lower_bound` flag is true. Present with `member_count`.",
+        "properties": {
+          "external": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "external_is_lower_bound": {
+            "type": "boolean"
+          },
+          "staff": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "staff_is_lower_bound": {
+            "type": "boolean"
+          },
+          "student": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "student_is_lower_bound": {
+            "type": "boolean"
+          },
+          "teacher": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "teacher_is_lower_bound": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "student",
+          "student_is_lower_bound",
+          "staff",
+          "staff_is_lower_bound",
+          "teacher",
+          "teacher_is_lower_bound",
+          "external",
+          "external_is_lower_bound"
         ],
         "type": "object"
       },
@@ -12011,6 +12128,19 @@
       "AcademicUnitResponse": {
         "additionalProperties": false,
         "properties": {
+          "administrators": {
+            "description": "Up to three people who administer this Academic Unit: each holds a current Role Binding scoped exactly to it, of a Role that grants academic_unit.manage. Earliest first. Present, possibly empty, only if you hold role_binding.view on the Academic Unit.",
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "administrators_more": {
+            "description": "How many more administrators there are than `administrators` lists. Present with `administrators`.",
+            "minimum": 0,
+            "type": "integer"
+          },
           "archived_at": {
             "description": "When the Academic Unit was archived. Omitted while it is active.",
             "format": "date-time",
@@ -12039,6 +12169,19 @@
           },
           "kind": {
             "$ref": "#/components/schemas/AcademicUnitKind"
+          },
+          "member_count": {
+            "description": "How many people are members of this Academic Unit now. Present only if you hold academic_unit.members.view on it. It is exact below 10,000; at 10,000 counting stops and `member_count_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "member_count_is_lower_bound": {
+            "description": "True when `member_count` stopped at 10,000. Present with `member_count`.",
+            "type": "boolean"
+          },
+          "member_counts_by_affiliation": {
+            "$ref": "#/components/schemas/AcademicUnitAffiliationCounts"
           },
           "name": {
             "description": "Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among the Institution's active Academic Units.",
@@ -17719,6 +17862,71 @@
         ],
         "type": "object"
       },
+      "ClassMemberListItemResponse": {
+        "additionalProperties": false,
+        "description": "One enrollment, who the student is, and, when its end moves the student to another Class, that transfer.",
+        "properties": {
+          "academic_period_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Academic Period of the Class, which the enrollment belongs to."
+          },
+          "archived_at": {
+            "description": "When the enrollment was archived. Omitted unless archived.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "class_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Class the student is enrolled in."
+          },
+          "created_at": {
+            "description": "When the enrollment was created.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "end_at": {
+            "description": "When the enrollment stops being in effect. Omitted while it has no end.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The ID of the enrollment."
+          },
+          "start_at": {
+            "description": "When the enrollment takes effect.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "transfer": {
+            "$ref": "#/components/schemas/ClassMemberTransfer"
+          },
+          "updated_at": {
+            "description": "When the enrollment last changed, for example when it was ended.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AcademicUnitMemberUser",
+            "description": "Who the student is, named exactly as an Academic Unit member is. `email` is included only if you hold Institution-wide user.view."
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The enrolled student."
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "class_id",
+          "academic_period_id",
+          "user_id",
+          "start_at",
+          "user"
+        ],
+        "type": "object"
+      },
       "ClassMemberListResponse": {
         "additionalProperties": false,
         "description": "One page of enrollments in the requested order. Only the first page carries `total`.",
@@ -17726,7 +17934,7 @@
           "items": {
             "description": "The enrollments on this page.",
             "items": {
-              "$ref": "#/components/schemas/ClassMemberResponse"
+              "$ref": "#/components/schemas/ClassMemberListItemResponse"
             },
             "type": "array"
           },
@@ -17802,6 +18010,40 @@
           "academic_period_id",
           "user_id",
           "start_at"
+        ],
+        "type": "object"
+      },
+      "ClassMemberTransfer": {
+        "additionalProperties": false,
+        "description": "The transfer that ends this enrollment: the student's enrollment in another Class starts exactly when this one ends. Omitted when the end is not a transfer.",
+        "properties": {
+          "at": {
+            "description": "When the student moves, which is this enrollment's `end_at`.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "to_class": {
+            "additionalProperties": false,
+            "description": "The Class the student moves to.",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ID"
+              },
+              "name": {
+                "description": "The Class's display name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "to_class",
+          "at"
         ],
         "type": "object"
       },
@@ -18340,6 +18582,10 @@
           "display_name": {
             "description": "Name shown to people, 1 to 128 characters.",
             "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProgrammeKind",
+            "description": "Optional. The kind of Programme. Omitted or empty means `other`."
           },
           "name": {
             "description": "Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at most 64 characters. It must be unique among the Academic Unit's active Programmes.",
@@ -31515,6 +31761,15 @@
         ],
         "type": "string"
       },
+      "ProgrammeKind": {
+        "description": "What kind of Programme this is, for people reading the structure. It is only a label: it changes no rule about the Programme's levels.",
+        "enum": [
+          "undergraduate",
+          "postgraduate",
+          "other"
+        ],
+        "type": "string"
+      },
       "ProgrammeLevelListResponse": {
         "additionalProperties": false,
         "description": "One page of Programme Levels, ordered by name and then by identifier. Only the first page carries the total.",
@@ -31553,6 +31808,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "class_count": {
+            "description": "How many active Classes the Programme Level has, counting only the Classes you hold class.view on. Absent if you hold class.view nowhere. It is exact below 10,000; at 10,000 counting stops and `class_count_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "class_count_is_lower_bound": {
+            "description": "True when `class_count` stopped at 10,000. Present with `class_count`.",
+            "type": "boolean"
+          },
           "created_at": {
             "description": "When the Programme Level was created.",
             "format": "date-time",
@@ -31583,6 +31848,16 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "student_count": {
+            "description": "How many students the Programme Level has now, counting the distinct Users currently enrolled in the Classes you hold class.members.view on, as a Class's `student_count` does. Absent if you hold class.members.view nowhere. It is exact below 10,000; at 10,000 counting stops and `student_count_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "student_count_is_lower_bound": {
+            "description": "True when `student_count` stopped at 10,000. Present with `student_count`.",
+            "type": "boolean"
           },
           "updated_at": {
             "description": "When the Programme Level last changed.",
@@ -31644,6 +31919,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "class_count": {
+            "description": "How many active Classes the Programme has, counting only the Classes you hold class.view on. Absent if you hold class.view nowhere. It is exact below 10,000; at 10,000 counting stops and `class_count_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "class_count_is_lower_bound": {
+            "description": "True when `class_count` stopped at 10,000. Present with `class_count`.",
+            "type": "boolean"
+          },
           "created_at": {
             "description": "When the Programme was created.",
             "format": "date-time",
@@ -31661,6 +31946,19 @@
             "$ref": "#/components/schemas/ID",
             "description": "The Programme identifier."
           },
+          "kind": {
+            "$ref": "#/components/schemas/ProgrammeKind"
+          },
+          "level_count": {
+            "description": "How many active Programme Levels the Programme has. Present only if you hold programme_level.view on its Academic Unit.  It is exact below 10,000; at 10,000 counting stops and `level_count_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "level_count_is_lower_bound": {
+            "description": "True when `level_count` stopped at 10,000. Present with `level_count`.",
+            "type": "boolean"
+          },
           "name": {
             "description": "Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among the Academic Unit's active Programmes.",
             "type": "string"
@@ -31670,6 +31968,16 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "student_count": {
+            "description": "How many students the Programme has now, counting the distinct Users currently enrolled in the Classes you hold class.members.view on, as a Class's `student_count` does. Absent if you hold class.members.view nowhere. It is exact below 10,000; at 10,000 counting stops and `student_count_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "student_count_is_lower_bound": {
+            "description": "True when `student_count` stopped at 10,000. Present with `student_count`.",
+            "type": "boolean"
           },
           "updated_at": {
             "description": "When the Programme last changed.",
@@ -31683,6 +31991,7 @@
           "created_at",
           "updated_at",
           "academic_unit_id",
+          "kind",
           "name",
           "display_name",
           "description"
@@ -36236,6 +36545,19 @@
             "minimum": 1,
             "type": "integer"
           },
+          "kind": {
+            "description": "The new kind of Programme. Omitted or null leaves it unchanged.",
+            "enum": [
+              "undergraduate",
+              "postgraduate",
+              "other",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "name": {
             "description": "New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. It must be unique among the Academic Unit's active Programmes. Omitted or null leaves it unchanged. An empty string is rejected.",
             "type": [
@@ -37445,7 +37767,7 @@
     },
     "/api/v1/academic-periods": {
       "get": {
-        "description": "Lists the Academic Periods the caller can see through permissions on the Institution or on Academic Units, ordered by start time, then name, then identifier. An Academic Period is a span of academic time, such as a year or semester. Seeing one gives no access to its Classes or students.",
+        "description": "Lists the Academic Periods the caller can see through permissions on the Institution or on Academic Units, ordered by `sort` and `dir`: by default by start time, then name, then identifier, oldest first. An Academic Period is a span of academic time, such as a year or semester. Seeing one gives no access to its Classes or students. Each item carries `class_count`, the active Classes of the Period that you hold class.view on, counted up to 10,000, with `class_count_is_lower_bound`; both are omitted if you hold class.view nowhere.",
         "operationId": "listAcademicPeriods",
         "parameters": [
           {
@@ -37454,6 +37776,66 @@
             "name": "q",
             "required": false,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keeps the Academic Periods of one kind of owner. Filters only narrow what you can already see.",
+            "in": "query",
+            "name": "owner_type",
+            "required": false,
+            "schema": {
+              "enum": [
+                "institution",
+                "academic_unit"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keeps the Academic Periods of this owner. It needs `owner_type`.",
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Keeps the Academic Periods covering this instant, from `start_at` up to but not including `end_at`.",
+            "in": "query",
+            "name": "active_at",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page order, each key followed by identifier: `start` (start time, then name, the default) or `name`. A cursor only continues the sort and direction that produced it, so repeat both when following it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "start",
+              "enum": [
+                "start",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "The direction of `sort`.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
               "type": "string"
             }
           },
@@ -38428,6 +38810,15 @@
             }
           },
           {
+            "description": "Keeps the Classes of this Academic Period. A cursor doesn't remember it, so repeat it on every page.",
+            "in": "query",
+            "name": "academic_period_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
             "description": "Sort by name, then by identifier, ascending (`asc`, the default) or descending (`desc`). A cursor works only with the direction that produced it.",
             "in": "query",
             "name": "dir",
@@ -38742,6 +39133,28 @@
         "description": "Lists the memberships of one Academic Unit that you may see: either those in effect at one instant, or the full history. A membership records a relationship only. It never grants permissions by itself.\nPages are ordered by `sort` and `dir`, by default by membership start (`since`), oldest first, then by ID. The first page also reports `total`, the number of memberships the filter matches across all pages. It is exact below 10,000; at 10,000 counting stops and `total_is_lower_bound` is true. A cursor keeps the first page's instant or history filter and its order, but every page reads current data, so memberships added or changed between requests can change later pages.\nEach item names the member in `user`. `email` is included only if you hold Institution-wide user.view. If you hold role_binding.view on this Academic Unit, each item also lists the member's current Role Bindings scoped exactly to it, in `roles_here`.",
         "operationId": "listAcademicUnitMembers",
         "parameters": [
+          {
+            "description": "Keeps members who hold a current Affiliation of any listed kind: at `active_at`, or now for the full history. Repeat the parameter for several kinds, each kind at most once. It also narrows `total`.",
+            "explode": true,
+            "in": "query",
+            "name": "affiliation",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "student",
+                  "teacher",
+                  "staff",
+                  "external"
+                ],
+                "type": "string"
+              },
+              "maxItems": 4,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "style": "form"
+          },
           {
             "description": "Return the memberships in effect at this instant. Defaults to now. It cannot be combined with `history=true`. When following a cursor you may omit it, because the cursor keeps the first page's instant.",
             "in": "query",
@@ -43097,6 +43510,15 @@
         "description": "Lists the student enrollments of one Class that you may see: either those in effect at one instant, or the full history. Each item describes the enrollment only. It never includes the student's credentials, answers or other profile data.\nPages are ordered by `sort` and `dir`, by default by enrollment start (`enrolled`), oldest first, then by ID. The first page also reports `total`, the number of enrollments the filter matches across all pages. It is exact below 10,000; at 10,000 counting stops and `total_is_lower_bound` is true. A cursor keeps the first page's instant or history filter and its order, but every page reads current data, so enrollments added or changed between requests can change later pages.",
         "operationId": "listClassMembers",
         "parameters": [
+          {
+            "description": "Keeps students whose username, display name, first or last name contains this text, matched literally and ignoring case, as the User directory matches. Their email address is matched too only if you hold Institution-wide user.view. It also narrows `total`. A cursor doesn't remember it, so repeat it on every page.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "description": "Return the enrollments in effect at this instant. Defaults to now. It cannot be combined with `history=true`. When following a cursor you may omit it, because the cursor keeps the first page's instant.",
             "in": "query",
@@ -58528,6 +58950,15 @@
         "description": "Lists the active Classes of one Programme Level. Each item describes the Class itself and leaves out its roster, candidate Attempts and permission grants. Items are ordered by name, then by identifier, in the `dir` direction. The first page, read without a cursor, also reports `total`, the number of Classes across every page. It is exact below 10,000. At 10,000 counting stops and `total_is_lower_bound` is true. Later pages carry no total, so keep the first page's. Each item carries `student_count`, the Class's current members counted up to 10,000, with `student_count_is_lower_bound`, but only when the caller holds class.members.view on this Programme Level. Otherwise both are omitted.",
         "operationId": "listClasses",
         "parameters": [
+          {
+            "description": "Keeps the Classes of this Academic Period. A cursor doesn't remember it, so repeat it on every page.",
+            "in": "query",
+            "name": "academic_period_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
           {
             "description": "Sort by name, then by identifier, ascending (`asc`, the default) or descending (`desc`). A cursor works only with the direction that produced it.",
             "in": "query",

@@ -758,15 +758,23 @@ type ListClassMembersPageQuery struct {
 	AfterUserID  model.UserID
 	AfterID      model.ClassMemberID
 	ClassID      model.ClassID
+	// Query keeps members whose name or username contains it, and whose
+	// email does for a caller with institution-wide user.view, as the user
+	// directory matches.
+	Query string
 	MembershipPageQuery
 }
 
 // ClassMemberPage is one page of a class's memberships; only the first page
-// is counted.
+// is counted. Users names each member as a unit member page does: Email is
+// set only for a caller with institution-wide user.view. Transfers holds the
+// membership whose end is a transfer to another class.
 type ClassMemberPage struct {
-	Members  []*model.ClassMember
-	HasMore  bool
-	ActiveAt int64
+	Members   []*model.ClassMember
+	HasMore   bool
+	ActiveAt  int64
+	Users     map[model.UserID]store.UserIdentity
+	Transfers map[model.ClassMemberID]store.ClassMemberTransfer
 	paging.Total
 }
 
@@ -794,9 +802,16 @@ func (s *Service) ListClassMembersPage(
 		return nil, err
 	}
 
+	showEmail, err := s.authorizer.CanViewInstitutionUsers(ctx, inv)
+	if err != nil {
+		return nil, err
+	}
+
 	options := store.ClassMemberPageOptions{
 		ClassID:              query.ClassID,
 		ActiveAt:             model.TimeFromMillis(activeAt),
+		Query:                strings.TrimSpace(query.Query),
+		QueryMatchesEmail:    showEmail,
 		MembershipPageKeyset: keyset,
 		AfterID:              query.AfterID,
 		Limit:                limit,
@@ -823,5 +838,58 @@ func (s *Service) ListClassMembersPage(
 	}
 
 	result.Total = total
+	if err := s.describeClassMembers(ctx, result, showEmail); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+// describeClassMembers names the members and their transfers in one read
+// each for the page.
+func (s *Service) describeClassMembers(ctx context.Context, page *ClassMemberPage, showEmail bool) error {
+	page.Users = map[model.UserID]store.UserIdentity{}
+	page.Transfers = map[model.ClassMemberID]store.ClassMemberTransfer{}
+	if len(page.Members) == 0 {
+		return nil
+	}
+
+	userIDs := make([]model.UserID, 0, len(page.Members))
+	ended := []model.ClassMemberID{}
+	for _, member := range page.Members {
+		if _, seen := page.Users[member.UserID]; !seen {
+			page.Users[member.UserID] = store.UserIdentity{}
+			userIDs = append(userIDs, member.UserID)
+		}
+		if member.EndsAt.Valid {
+			ended = append(ended, member.ID)
+		}
+	}
+
+	identities, err := s.users.ListIdentities(ctx, userIDs)
+	if err != nil {
+		return ClassMemberStoreErrors.Translate(err)
+	}
+	for _, identity := range identities {
+		if !showEmail {
+			identity.Email = ""
+		}
+		page.Users[identity.ID] = identity
+	}
+	for _, userID := range userIDs {
+		if page.Users[userID].ID != userID {
+			return apperror.New("administration.unavailable").WithField("resource", "class_member")
+		}
+	}
+
+	if len(ended) == 0 {
+		return nil
+	}
+	transfers, err := s.classMembers.ListTransfers(ctx, ended)
+	if err != nil {
+		return ClassMemberStoreErrors.Translate(err)
+	}
+	for _, transfer := range transfers {
+		page.Transfers[transfer.ClassMemberID] = transfer
+	}
+	return nil
 }

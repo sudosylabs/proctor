@@ -8,11 +8,14 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type academicPeriodResponse struct {
@@ -28,6 +31,10 @@ type academicPeriodResponse struct {
 	Description string `json:"description"`
 	StartAt     string `json:"start_at"`
 	EndAt       string `json:"end_at"`
+	// ClassCount, on a listed period, counts only the classes the caller
+	// holds class.view on, and is absent without class.view anywhere.
+	ClassCount             *int  `json:"class_count,omitempty"`
+	ClassCountIsLowerBound *bool `json:"class_count_is_lower_bound,omitempty"`
 }
 
 type createAcademicPeriodRequest struct {
@@ -124,9 +131,39 @@ func (h academicPeriodHandlers) list(request route.Request) (route.Result, error
 		return route.Result{}, err
 	}
 
-	query := academic.ListAcademicPeriodsQuery{Query: request.HTTP.URL.Query().Get("q"), Limit: requested.Limit}
+	values := request.HTTP.URL.Query()
+	order, err := parseListOrder(values, []string{academicPeriodSortStart, academicPeriodSortName}, listAscending)
+	if err != nil {
+		return route.Result{}, err
+	}
+	query := academic.ListAcademicPeriodsQuery{
+		Query: values.Get("q"), Limit: requested.Limit,
+		Order: store.AcademicPeriodOrder(order.Sort), Descending: order.Descending(),
+	}
+	for name, target := range map[string]*string{"owner_type": &query.OwnerType, "owner_id": &query.OwnerID} {
+		raw, _, valueErr := singleQueryValue(values, name)
+		if valueErr != nil {
+			return route.Result{}, valueErr
+		}
+		*target = raw
+	}
+	if raw, has, valueErr := singleQueryValue(values, "active_at"); valueErr != nil {
+		return route.Result{}, valueErr
+	} else if has {
+		activeAt, parseErr := model.ParseRFC3339(raw)
+		if parseErr != nil || activeAt.IsZero() {
+			return route.Result{}, apperror.Invalid("request.invalid", "active_at")
+		}
+		query.ActiveAt = activeAt
+	}
 	if present {
-		query.AfterStartAt, query.AfterName, query.AfterID = academicPeriodCursorStart(cursor), cursor.Name, model.AcademicPeriodID(cursor.ID)
+		if !order.continues(cursor.Sort, cursor.Dir) {
+			return route.Result{}, route.InvalidRequest(errors.New("the cursor continues another order"))
+		}
+		query.AfterName, query.AfterID = cursor.Name, model.AcademicPeriodID(cursor.ID)
+		if order.Sort == academicPeriodSortStart {
+			query.AfterStartAt = academicPeriodCursorStart(cursor)
+		}
 	}
 
 	page, err := h.app.ListAcademicPeriods(request.Context, request.Invocation(), query)
@@ -137,10 +174,17 @@ func (h academicPeriodHandlers) list(request route.Request) (route.Result, error
 	response, err := route.NewList(
 		page.Items,
 		page.HasMore,
-		academicPeriodResponseFromModel,
+		func(period *model.AcademicPeriod) academicPeriodResponse {
+			item := academicPeriodResponseFromModel(period)
+			item.ClassCount, item.ClassCountIsLowerBound = cappedCount(page.Classes, period.ID.String())
+			return item
+		},
 		func(last *model.AcademicPeriod) (string, error) {
 			return route.EncodeCursor(
-				academicPeriodCursor{StartAt: model.FormatRFC3339(last.StartsAt), Name: last.Name, ID: last.ID.String()},
+				academicPeriodCursor{
+					StartAt: model.FormatRFC3339(last.StartsAt), Name: last.Name, ID: last.ID.String(),
+					Sort: order.Sort, Dir: order.Dir,
+				},
 				academicPeriodCursorSpec(),
 			)
 		},

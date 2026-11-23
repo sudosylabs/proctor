@@ -25,6 +25,7 @@ func TestProgrammeRowRehydrationRejectsInvalidPersistedState(t *testing.T) {
 		UpdatedAt:      time.Unix(11, 0).UTC(),
 		Revision:       1,
 		AcademicUnitID: model.NewAcademicUnitID().String(),
+		Kind:           string(model.ProgrammeKindOther),
 		Name:           "computer-science",
 		DisplayName:    "Computer Science",
 	}
@@ -60,6 +61,7 @@ func TestProgrammeRowConversion(t *testing.T) {
 		ArchivedAt:     model.OptionalTimeFromMillis(3),
 		Revision:       7,
 		AcademicUnitID: unitID,
+		Kind:           model.ProgrammeKindUndergraduate,
 		Name:           "computer-science",
 		DisplayName:    "Computer Science",
 		Description:    "Course of study",

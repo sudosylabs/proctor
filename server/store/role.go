@@ -157,6 +157,25 @@ type RoleHolderCount struct {
 // RoleBindingStore persists time-bounded role assignments. Scope references
 // are checked in the transaction because PostgreSQL cannot express a foreign
 // key whose target table depends on scope_type.
+// AcademicUnitAdministratorOptions names one page of units, at most
+// MaximumAcademicUnitCountUnits, read at ActiveAt; each unit lists up to
+// Limit administrators.
+type AcademicUnitAdministratorOptions struct {
+	AcademicUnitIDs []model.AcademicUnitID
+	ActiveAt        time.Time
+	Limit           int
+}
+
+// AcademicUnitAdministrators are the people holding a current binding,
+// scoped exactly to the unit, of an unarchived role that grants
+// academic_unit.manage. UserIDs is ordered by earliest such binding, then
+// user ID; More counts the administrators past it.
+type AcademicUnitAdministrators struct {
+	AcademicUnitID model.AcademicUnitID
+	UserIDs        []model.UserID
+	More           int
+}
+
 type RoleBindingStore interface {
 	Save(context.Context, *RoleBindingCreation) (*model.RoleBinding, error)
 	Get(context.Context, model.RoleBindingID) (*model.RoleBinding, error)
@@ -177,4 +196,6 @@ type RoleBindingStore interface {
 	// and excludes archived bindings.
 	ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.RoleBinding, error)
 	End(context.Context, *RoleBindingEnd) (*model.RoleBinding, error)
+	// ListAcademicUnitAdministrators omits a unit with no administrator.
+	ListAcademicUnitAdministrators(context.Context, AcademicUnitAdministratorOptions) ([]AcademicUnitAdministrators, error)
 }

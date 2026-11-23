@@ -13,12 +13,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestClassMemberHTTPUsesDTOAndRouteOwnedClass(t *testing.T) {
@@ -128,5 +130,43 @@ func TestClassMemberOpenAPIDocument(t *testing.T) {
 
 	// This v1 relationship collection remains a legacy bare array.
 	list := document.Components.Schemas["ClassMemberListResponse"]
-	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ClassMemberResponse")
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ClassMemberListItemResponse")
+}
+
+func TestClassMemberHTTPListNamesMembersAndTheirTransfers(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := academicCaller()
+	world := newAcademicWorld()
+	at := time.Date(2027, 1, 11, 0, 0, 0, 0, time.UTC)
+	member := &model.ClassMember{ID: model.NewClassMemberID(), UserID: model.NewUserID(), ClassID: world.class.ID,
+		StartsAt: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC), EndsAt: model.OptionalTimeFrom(at)}
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassMembersView)},
+		Units:  world.units(),
+	})
+	fixture.hold(world)
+	fixture.users.add(&model.User{ID: member.UserID, Username: "aokafor", DisplayName: "Amara Okafor", Email: "amara@example.edu"})
+	destination := model.NewClassID()
+	fixture.classMembers.page, fixture.classMembers.total = store.ClassMemberPage{Members: []*model.ClassMember{member}}, 1
+	fixture.classMembers.transfers = []store.ClassMemberTransfer{{ClassMemberID: member.ID, ToClassID: destination, ToClassName: "Group B", At: at}}
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(fixture.service))
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/"+world.class.ID.String()+"/members?q=%20amara%20", nil)
+	request.Header.Set("Authorization", "Bearer credential")
+	response := httptest.NewRecorder()
+	api.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+
+	var body struct {
+		Items []map[string]any `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Len(t, body.Items, 1)
+	require.Equal(t, map[string]any{"display_name": "Amara Okafor", "username": "aokafor"}, body.Items[0]["user"],
+		"the email stays hidden without Institution-wide user.view")
+	require.Equal(t, map[string]any{"to_class": map[string]any{"id": destination.String(), "name": "Group B"}, "at": "2027-01-11T00:00:00Z"},
+		body.Items[0]["transfer"])
+	require.Equal(t, "amara", fixture.classMembers.pageOptions[0].Query)
+	require.False(t, fixture.classMembers.pageOptions[0].QueryMatchesEmail, "a scoped viewer can't search by a hidden email")
 }

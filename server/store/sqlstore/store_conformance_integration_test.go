@@ -91,6 +91,9 @@ func runLayerConformance(
 		{"Institution", storetest.TestInstitutionStore},
 		{"AssistantProfile", storetest.TestAssistantProfileStore},
 		{"AcademicUnit", storetest.TestAcademicUnitStore},
+		{"AcademicUnitSummary", storetest.TestAcademicUnitSummaryStore},
+		{"StructureCount", storetest.TestStructureCountStore},
+		{"ClassMemberListing", storetest.TestClassMemberListingStore},
 		{"Programme", storetest.TestProgrammeStore},
 		{"ProgrammeLevel", storetest.TestProgrammeLevelStore},
 		{"AcademicPeriod", storetest.TestAcademicPeriodStore},
@@ -235,6 +238,18 @@ func TestInstitutionStore(t *testing.T) {
 
 func TestAcademicUnitStore(t *testing.T) {
 	StoreTest(t, storetest.TestAcademicUnitStore)
+}
+
+func TestAcademicUnitSummaryStore(t *testing.T) {
+	StoreTest(t, storetest.TestAcademicUnitSummaryStore)
+}
+
+func TestStructureCountStore(t *testing.T) {
+	StoreTest(t, storetest.TestStructureCountStore)
+}
+
+func TestClassMemberListingStore(t *testing.T) {
+	StoreTest(t, storetest.TestClassMemberListingStore)
 }
 
 func TestProgrammeStore(t *testing.T) {

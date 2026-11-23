@@ -61,6 +61,9 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("academic store catalog is required")
 	}
+	if deps.Now == nil {
+		deps.Now = time.Now
+	}
 	return &Service{
 		institutions:        deps.Store.Institution(),
 		academicUnits:       deps.Store.AcademicUnit(),

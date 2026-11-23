@@ -207,6 +207,73 @@ components:
         description:
           type: string
           description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+        member_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many people are members of this Academic Unit now. Present only if you hold
+            academic_unit.members.view on it. It is exact below 10,000; at 10,000 counting stops and
+            `member_count_is_lower_bound` is true.
+        member_count_is_lower_bound:
+          type: boolean
+          description: True when `member_count` stopped at 10,000. Present with `member_count`.
+        member_counts_by_affiliation:
+          $ref: '#/components/schemas/AcademicUnitAffiliationCounts'
+        administrators:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Up to three people who administer this Academic Unit: each holds a current Role Binding scoped exactly to
+            it, of a Role that grants academic_unit.manage. Earliest first. Present, possibly empty, only if you hold
+            role_binding.view on the Academic Unit.
+        administrators_more:
+          type: integer
+          minimum: 0
+          description: How many more administrators there are than `administrators` lists. Present with `administrators`.
+    AcademicUnitAffiliationCounts:
+      description: >-
+        How many of the Academic Unit's current members hold each current Affiliation kind. A person can hold several
+        kinds, so these don't add up to `member_count`. Each is exact below 10,000; at 10,000 counting stops and its
+        `_is_lower_bound` flag is true. Present with `member_count`.
+      type: object
+      additionalProperties: false
+      required:
+        - student
+        - student_is_lower_bound
+        - staff
+        - staff_is_lower_bound
+        - teacher
+        - teacher_is_lower_bound
+        - external
+        - external_is_lower_bound
+      properties:
+        student:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        student_is_lower_bound:
+          type: boolean
+        staff:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        staff_is_lower_bound:
+          type: boolean
+        teacher:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        teacher_is_lower_bound:
+          type: boolean
+        external:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        external_is_lower_bound:
+          type: boolean
     AcademicUnitListResponse:
       description: One page of Academic Units, ordered by name and then by identifier.
       type: object
@@ -262,6 +329,7 @@ components:
         - created_at
         - updated_at
         - academic_unit_id
+        - kind
         - name
         - display_name
         - description
@@ -291,6 +359,8 @@ components:
         academic_unit_id:
           $ref: '#/components/schemas/ID'
           description: The Academic Unit that owns the Programme. It can't change.
+        kind:
+          $ref: '#/components/schemas/ProgrammeKind'
         name:
           type: string
           description: >-
@@ -302,6 +372,42 @@ components:
         description:
           type: string
           description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+        level_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many active Programme Levels the Programme has. Present only if you hold programme_level.view on its Academic Unit.  It is exact below 10,000; at 10,000 counting stops and `level_count_is_lower_bound` is true.
+        level_count_is_lower_bound:
+          type: boolean
+          description: True when `level_count` stopped at 10,000. Present with `level_count`.
+        class_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many active Classes the Programme has, counting only the Classes you hold class.view on. Absent if you hold class.view nowhere. It is exact below 10,000; at 10,000 counting stops and `class_count_is_lower_bound` is true.
+        class_count_is_lower_bound:
+          type: boolean
+          description: True when `class_count` stopped at 10,000. Present with `class_count`.
+        student_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many students the Programme has now, counting the distinct Users currently enrolled in the Classes you hold class.members.view on, as a Class's `student_count` does. Absent if you hold class.members.view nowhere. It is exact below 10,000; at 10,000 counting stops and `student_count_is_lower_bound` is true.
+        student_count_is_lower_bound:
+          type: boolean
+          description: True when `student_count` stopped at 10,000. Present with `student_count`.
+    ProgrammeKind:
+      type: string
+      enum:
+        - undergraduate
+        - postgraduate
+        - other
+      description: >-
+        What kind of Programme this is, for people reading the structure. It is only a label: it changes no rule about
+        the Programme's levels.
     ProgrammeLevelResponse:
       type: object
       additionalProperties: false
@@ -351,6 +457,24 @@ components:
         description:
           type: string
           description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
+        class_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many active Classes the Programme Level has, counting only the Classes you hold class.view on. Absent if you hold class.view nowhere. It is exact below 10,000; at 10,000 counting stops and `class_count_is_lower_bound` is true.
+        class_count_is_lower_bound:
+          type: boolean
+          description: True when `class_count` stopped at 10,000. Present with `class_count`.
+        student_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many students the Programme Level has now, counting the distinct Users currently enrolled in the Classes you hold class.members.view on, as a Class's `student_count` does. Absent if you hold class.members.view nowhere. It is exact below 10,000; at 10,000 counting stops and `student_count_is_lower_bound` is true.
+        student_count_is_lower_bound:
+          type: boolean
+          description: True when `student_count` stopped at 10,000. Present with `student_count`.
     ClassResponse:
       type: object
       additionalProperties: false

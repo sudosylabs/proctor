@@ -41,6 +41,7 @@ type programmeRow struct {
 	ArchivedAt     sql.NullTime `db:"archived_at"`
 	Revision       int64        `db:"revision"`
 	AcademicUnitID string       `db:"academic_unit_id"`
+	Kind           string       `db:"kind"`
 	Name           string       `db:"name"`
 	DisplayName    string       `db:"display_name"`
 	Description    string       `db:"description"`
@@ -54,6 +55,7 @@ func programmeSliceColumns() []string {
 		"programmes.archived_at",
 		"programmes.revision",
 		"programmes.academic_unit_id",
+		"programmes.kind",
 		"programmes.name",
 		"programmes.display_name",
 		"programmes.description",
@@ -107,11 +109,11 @@ func (s SQLProgrammeStore) createProgramme(
 		if _, err := tx.NamedExec(ctx, `
 			INSERT INTO programmes (
 				id, created_at, updated_at, archived_at, revision, academic_unit_id,
-				name, display_name, description
+				kind, name, display_name, description
 			)
 			VALUES (
 				:id, :created_at, :updated_at, :archived_at, :revision, :academic_unit_id,
-				:name, :display_name, :description
+				:kind, :name, :display_name, :description
 			)`, &row); err != nil {
 			return nil, fmt.Errorf("create programme: %w", translateError("programme", candidate.ID.String(), err))
 		}
@@ -224,6 +226,7 @@ func (s SQLProgrammeStore) updateProgramme(
 			   SET updated_at = :updated_at,
 			       revision = :revision,
 			       academic_unit_id = :academic_unit_id,
+			       kind = :kind,
 			       name = :name,
 			       display_name = :display_name,
 			       description = :description
@@ -235,6 +238,7 @@ func (s SQLProgrammeStore) updateProgramme(
 			"updated_at":        row.UpdatedAt,
 			"revision":          candidate.Revision,
 			"academic_unit_id":  row.AcademicUnitID,
+			"kind":              row.Kind,
 			"name":              row.Name,
 			"display_name":      row.DisplayName,
 			"description":       row.Description,
@@ -416,6 +420,7 @@ func newProgrammeRow(programme *model.Programme) programmeRow {
 		ArchivedAt:     NullTimeFromOptional(programme.ArchivedAt),
 		Revision:       programme.Revision,
 		AcademicUnitID: programme.AcademicUnitID.String(),
+		Kind:           string(programme.Kind),
 		Name:           programme.Name,
 		DisplayName:    programme.DisplayName,
 		Description:    programme.Description,
@@ -440,6 +445,7 @@ func (row programmeRow) model() (*model.Programme, error) {
 		ArchivedAt:     OptionalTimeFromNullTime(row.ArchivedAt),
 		Revision:       row.Revision,
 		AcademicUnitID: academicUnitID,
+		Kind:           model.ProgrammeKind(row.Kind),
 		Name:           row.Name,
 		DisplayName:    row.DisplayName,
 		Description:    row.Description,

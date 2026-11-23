@@ -57,7 +57,7 @@ func productionResources(
 		mfaKeyResource(application.Identity),
 		personalAccessTokenResource(application.Identity),
 		institutionResource(application.Academic),
-		academicUnitResource(application.Academic),
+		academicUnitResource(application.Academic, application.People),
 		examResource(application.ExamAuthoring, application.People),
 		examRevisionResource(application.ExamPublication, application.People),
 		examSittingResource(application.Sittings),

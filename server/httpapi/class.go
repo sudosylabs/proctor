@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -140,13 +141,18 @@ func (h classHandlers) search(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
+	periodID, err := classPeriodFilter(request)
+	if err != nil {
+		return route.Result{}, err
+	}
 	page, err := h.app.SearchClasses(
 		request.Context,
 		request.Invocation(),
 		academic.SearchClassesQuery{
-			AcademicUnitID: academicUnitID,
-			Query:          request.HTTP.URL.Query().Get("q"),
-			NameQuery:      pageQuery,
+			AcademicUnitID:   academicUnitID,
+			AcademicPeriodID: periodID,
+			Query:            request.HTTP.URL.Query().Get("q"),
+			NameQuery:        pageQuery,
 		},
 	)
 	if err != nil {
@@ -164,15 +170,33 @@ func (h classHandlers) list(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
+	periodID, err := classPeriodFilter(request)
+	if err != nil {
+		return route.Result{}, err
+	}
 	page, err := h.app.ListClasses(
 		request.Context,
 		request.Invocation(),
-		academic.ListClassesQuery{ProgrammeLevelID: programmeLevelID, NameQuery: pageQuery},
+		academic.ListClassesQuery{ProgrammeLevelID: programmeLevelID, AcademicPeriodID: periodID, NameQuery: pageQuery},
 	)
 	if err != nil {
 		return route.Result{}, err
 	}
 	return classListResult(page, pageQuery)
+}
+
+// classPeriodFilter reads the optional single academic_period_id filter. A
+// cursor doesn't record it, so a caller repeats it on every page.
+func classPeriodFilter(request route.Request) (model.AcademicPeriodID, error) {
+	raw, present, err := singleQueryValue(request.HTTP.URL.Query(), "academic_period_id")
+	if err != nil || !present {
+		return "", err
+	}
+	id, parseErr := model.ParseAcademicPeriodID(raw)
+	if parseErr != nil {
+		return "", apperror.Invalid("request.invalid", "academic_period_id")
+	}
+	return id, nil
 }
 
 // classListResult presents one name-ordered class page with its first-page

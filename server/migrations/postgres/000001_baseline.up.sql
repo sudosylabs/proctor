@@ -5204,6 +5204,8 @@ CREATE TABLE retention_holds (
     integrity_retired_submission_count bigint NOT NULL DEFAULT 0 CHECK (integrity_retired_submission_count >= 0),
     created_at timestamptz NOT NULL,
     created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
+    -- When the hold is due for review. It never releases the hold.
+    until timestamptz CHECK (until IS NULL OR until > created_at),
     reason_code varchar(64) NOT NULL CHECK (reason_code IN ('institution_request','integrity_review','records_review','review_not_required','case_closed','mistake','other')),
     private_reason text NOT NULL CHECK (private_reason = btrim(private_reason) AND char_length(private_reason) BETWEEN 1 AND 1000 AND octet_length(private_reason) <= 4000),
     creation_audit_event_id varchar(26) NOT NULL REFERENCES audit_events(id),
@@ -5223,6 +5225,8 @@ CREATE TABLE retention_holds (
     )
 );
 CREATE INDEX retention_holds_exam_id_id_idx ON retention_holds (exam_id, id);
+-- The Institution-wide hold list pages by ID, mostly over unreleased holds.
+CREATE INDEX retention_holds_unreleased_id_idx ON retention_holds (id) WHERE released_at IS NULL;
 CREATE INDEX retention_holds_active_scope_idx ON retention_holds (exam_id, exam_sitting_id, submission_id) WHERE released_at IS NULL;
 
 -- Configuration and authorization of recurring retirement are independent.
@@ -5230,6 +5234,9 @@ CREATE TABLE retention_previews (
     id varchar(26) PRIMARY KEY,
     institution_id varchar(26) NOT NULL REFERENCES institutions(id),
     policy_revision bigint NOT NULL CHECK (policy_revision > 0),
+    -- A proposed preview counted unsaved settings; it can never approve
+    -- cleanup.
+    proposed boolean NOT NULL DEFAULT false,
     created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
     created_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL CHECK (expires_at > created_at AND expires_at <= created_at + interval '1 hour'),
@@ -6213,14 +6220,12 @@ CREATE INDEX class_members_user_id_academic_period_id_idx
 -- of a current binding, which start_at and end_at narrow at read time.
 CREATE INDEX role_bindings_role_id_created_at_idx
     ON role_bindings (role_id, created_at DESC, id DESC) WHERE archived_at IS NULL;
--- The holders of roles bound at one scope, such as a Class's teachers.
+-- The holders of roles bound at one scope, such as a Class's teachers or an
+-- Academic Unit's administrators.
 CREATE INDEX role_bindings_scope_type_scope_id_idx
     ON role_bindings (scope_type, scope_id) WHERE archived_at IS NULL;
 CREATE INDEX role_bindings_origin_academic_unit_member_id_idx
     ON role_bindings (origin_academic_unit_member_id) WHERE origin_academic_unit_member_id IS NOT NULL;
--- A page of academic units names who administers each, by scope.
-CREATE INDEX role_bindings_scope_type_scope_id_idx
-    ON role_bindings (scope_type, scope_id, start_at) WHERE archived_at IS NULL;
 CREATE INDEX exam_sittings_class_id_idx ON exam_sittings (class_id);
 CREATE INDEX retention_retirements_sitting_grace_idx
     ON retention_retirements (exam_sitting_id) WHERE state = 'grace';

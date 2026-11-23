@@ -506,6 +506,9 @@ func (s *administrationRetentionPolicyStore) callCount() int {
 // administrationRetentionStore answers retention control, notices and
 // records, and records what each call was asked.
 type administrationRetentionStore struct {
+	holds       *store.RetentionHoldPage
+	holdOptions []store.RetentionHoldListOptions
+	preview     *store.RetentionPreviewCreation
 	store.RetentionStore
 	mu            sync.Mutex
 	institutionID model.InstitutionID
@@ -759,4 +762,22 @@ func (s *administrationAuditStore) CountRepeats(_ context.Context, options store
 		}
 	}
 	return repeats, nil
+}
+
+func (s *administrationRetentionStore) ListHolds(_ context.Context, options store.RetentionHoldListOptions) (*store.RetentionHoldPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	s.holdOptions = append(s.holdOptions, options)
+	return s.holds, nil
+}
+
+func (s *administrationRetentionStore) CreatePreview(_ context.Context, input *store.RetentionPreviewCreation, _ *store.CommandIdempotency) (*model.RetentionPreview, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	s.preview = input
+	at := model.NowUTC()
+	return &model.RetentionPreview{ID: input.PreviewID, InstitutionID: s.institutionID, PolicyRevision: input.ExpectedPolicyRevision,
+		Proposed: input.Proposed != nil, CreatedByUserID: input.Principal.UserID, CreatedAt: at, ExpiresAt: at.Add(time.Minute)}, nil
 }

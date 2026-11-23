@@ -141,6 +141,7 @@ const (
 	methodCountByProgrammes                         methodName = "count_by_programmes"
 	methodCountOpenSittings                         methodName = "count_open_sittings"
 	methodCountRepeats                              methodName = "count_repeats"
+	methodSummarizeRecordsByExam                    methodName = "summarize_records_by_exam"
 	methodTally                                     methodName = "tally"
 	methodCountByProgrammeLevel                     methodName = "count_by_programme_level"
 	methodAccess                                    methodName = "access"

@@ -4496,6 +4496,18 @@ func (s *timedRetentionStore) ListRecords(arg0 context.Context, arg1 store.Reten
 	})
 }
 
+func (s *timedRetentionStore) SummarizeRecordsByExam(arg0 context.Context, arg1 store.RetentionExamSummaryOptions) (*store.RetentionExamSummaryPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetention, methodSummarizeRecordsByExam), func(callCtx context.Context) (*store.RetentionExamSummaryPage, error) {
+		return s.next.SummarizeRecordsByExam(callCtx, arg1)
+	})
+}
+
+func (s *timedRetentionStore) ListHolds(arg0 context.Context, arg1 store.RetentionHoldListOptions) (*store.RetentionHoldPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetention, methodListHolds), func(callCtx context.Context) (*store.RetentionHoldPage, error) {
+		return s.next.ListHolds(callCtx, arg1)
+	})
+}
+
 func (s *timedRetentionStore) ReconcileSubmission(arg0 context.Context, arg1 *store.RetentionReconciliation) (*store.RetentionReconciliationResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetention, methodReconcileSubmission), func(callCtx context.Context) (*store.RetentionReconciliationResult, error) {
 		return s.next.ReconcileSubmission(callCtx, arg1)

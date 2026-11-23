@@ -1295,7 +1295,8 @@
           "application/json": {
             "example": {
               "private_reason": "Preserve records until the institution concludes its review.",
-              "reason_code": "institution_request"
+              "reason_code": "institution_request",
+              "until": "2027-09-01T00:00:00Z"
             },
             "schema": {
               "$ref": "#/components/schemas/CreateRetentionHoldRequest"
@@ -9439,6 +9440,7 @@
             "example": {
               "created_at": "2026-09-01T10:00:00Z",
               "created_by_user_id": "dpbj4ddm3hw8fkicm7nuazihkg",
+              "due_for_review": false,
               "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
               "exam_sitting_id": "4z3cy1rp9cucq7qo1g9mq94dj3",
               "id": "yftfs48pasu5fd6czhcwz6b4x3",
@@ -9466,6 +9468,7 @@
             "example": {
               "created_at": "2026-09-01T10:00:00Z",
               "created_by_user_id": "dpbj4ddm3hw8fkicm7nuazihkg",
+              "due_for_review": false,
               "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
               "exam_sitting_id": "4z3cy1rp9cucq7qo1g9mq94dj3",
               "id": "yftfs48pasu5fd6czhcwz6b4x3",
@@ -9499,6 +9502,7 @@
                 {
                   "created_at": "2026-09-01T10:00:00Z",
                   "created_by_user_id": "dpbj4ddm3hw8fkicm7nuazihkg",
+                  "due_for_review": false,
                   "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
                   "exam_sitting_id": "4z3cy1rp9cucq7qo1g9mq94dj3",
                   "id": "yftfs48pasu5fd6czhcwz6b4x3",
@@ -9506,6 +9510,7 @@
                   "private_reason": "Preserve records until the institution concludes its review.",
                   "reason_code": "institution_request",
                   "revision": 1,
+                  "until": "2027-09-01T00:00:00Z",
                   "work_retired_submission_count": 0
                 }
               ]
@@ -9602,6 +9607,7 @@
               "browser_activity": {
                 "awaiting_deadline": 0,
                 "eligible": 0,
+                "eligible_exams": 0,
                 "export_protected": 0,
                 "held": 0,
                 "incomplete": 0,
@@ -9616,6 +9622,7 @@
               "integrity": {
                 "awaiting_deadline": 0,
                 "eligible": 0,
+                "eligible_exams": 0,
                 "export_protected": 0,
                 "held": 0,
                 "incomplete": 0,
@@ -9625,6 +9632,7 @@
                 "unconfigured": 0
               },
               "policy_revision": 1,
+              "proposed": false,
               "receipts": {
                 "awaiting_deadline": 0,
                 "eligible": 0,
@@ -9639,6 +9647,7 @@
               "security_operational": {
                 "awaiting_deadline": 0,
                 "eligible": 0,
+                "eligible_exams": 0,
                 "export_protected": 0,
                 "held": 0,
                 "incomplete": 0,
@@ -9650,6 +9659,7 @@
               "work": {
                 "awaiting_deadline": 0,
                 "eligible": 0,
+                "eligible_exams": 0,
                 "export_protected": 0,
                 "held": 0,
                 "incomplete": 0,
@@ -9684,6 +9694,10 @@
                   "completion_current": true,
                   "completion_revision": 2,
                   "eligible_at": "2027-06-01T12:00:00Z",
+                  "exam": {
+                    "id": "xpq79ar61ncrjiouey6d9tgp91",
+                    "title": "Algorithms final"
+                  },
                   "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
                   "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
                   "has_integrity": true,
@@ -9698,6 +9712,10 @@
                   "completion_current": true,
                   "completion_revision": 2,
                   "eligible_at": "2027-06-01T12:00:00Z",
+                  "exam": {
+                    "id": "xpq79ar61ncrjiouey6d9tgp91",
+                    "title": "Algorithms final"
+                  },
                   "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
                   "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
                   "has_integrity": true,
@@ -9712,6 +9730,10 @@
                   "completion_current": true,
                   "completion_revision": 2,
                   "eligible_at": "2026-08-30T12:00:00Z",
+                  "exam": {
+                    "id": "xpq79ar61ncrjiouey6d9tgp91",
+                    "title": "Algorithms final"
+                  },
                   "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
                   "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
                   "has_integrity": true,
@@ -9736,6 +9758,10 @@
                   "completed_at": "2026-06-01T12:00:00Z",
                   "completion_current": true,
                   "completion_revision": 2,
+                  "exam": {
+                    "id": "xpq79ar61ncrjiouey6d9tgp91",
+                    "title": "Algorithms final"
+                  },
                   "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
                   "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
                   "has_integrity": true,
@@ -18892,6 +18918,11 @@
           "submission_id": {
             "$ref": "#/components/schemas/ID",
             "description": "Submission to hold. Needs `exam_sitting_id`."
+          },
+          "until": {
+            "description": "Optional. When the hold is due for review, which must be in the future. When it passes the hold shows `due_for_review: true` and stays in force until a person releases it. Null is rejected.",
+            "format": "date-time",
+            "type": "string"
           }
         },
         "required": [
@@ -33123,6 +33154,83 @@
         ],
         "type": "object"
       },
+      "RetentionExam": {
+        "additionalProperties": false,
+        "description": "An Exam named by its draft title.",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "title": {
+            "description": "The Exam's draft title. Empty if the Exam has no draft.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "RetentionExamSummariesResponse": {
+        "additionalProperties": false,
+        "description": "One page of the Exams that have records, by Exam ID. In each, `eligible_exams` is 1 when the Exam has an eligible record in that category.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RetentionExamSummary"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          },
+          "policy_revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policy_revision",
+          "as_of",
+          "items"
+        ],
+        "type": "object"
+      },
+      "RetentionExamSummary": {
+        "additionalProperties": false,
+        "description": "One Exam's retention records, counted by category as a preview counts them.",
+        "properties": {
+          "browser_activity": {
+            "$ref": "#/components/schemas/RetentionPreviewCounts"
+          },
+          "exam": {
+            "$ref": "#/components/schemas/RetentionExam"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/RetentionPreviewCounts"
+          },
+          "security_operational": {
+            "$ref": "#/components/schemas/RetentionPreviewCounts"
+          },
+          "work": {
+            "$ref": "#/components/schemas/RetentionPreviewCounts"
+          }
+        },
+        "required": [
+          "exam",
+          "work",
+          "integrity",
+          "browser_activity",
+          "security_operational"
+        ],
+        "type": "object"
+      },
       "RetentionExpiryCounts": {
         "additionalProperties": false,
         "description": "Counts for audit records or retirement receipts. Each record is counted once, under the first reason that applies, so the other counts add up to `total`.",
@@ -33195,6 +33303,106 @@
         ],
         "type": "object"
       },
+      "RetentionHoldListItem": {
+        "additionalProperties": false,
+        "description": "One Retention Hold of the Institution. It carries the reason codes but never the private reasons, which stay on the Exam's own hold listing.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "due_for_review": {
+            "description": "True when the hold is unreleased and `until` has passed. It still protects its records.",
+            "type": "boolean"
+          },
+          "exam": {
+            "$ref": "#/components/schemas/RetentionExam"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "Held Sitting, or the Sitting of the held Submission. Omitted for an Exam hold."
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "reason_code": {
+            "enum": [
+              "institution_request",
+              "integrity_review",
+              "records_review",
+              "review_not_required",
+              "case_closed",
+              "mistake",
+              "other"
+            ],
+            "type": "string"
+          },
+          "release_reason_code": {
+            "enum": [
+              "institution_request",
+              "integrity_review",
+              "records_review",
+              "review_not_required",
+              "case_closed",
+              "mistake",
+              "other"
+            ],
+            "type": "string"
+          },
+          "released_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "released_by": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "Held Submission. Present only for a Submission hold."
+          },
+          "until": {
+            "description": "When the hold is due for review. Omitted when none was set.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "exam",
+          "revision",
+          "created_at",
+          "created_by",
+          "reason_code",
+          "due_for_review"
+        ],
+        "type": "object"
+      },
+      "RetentionHoldListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RetentionHoldListItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "RetentionHoldPageResponse": {
         "additionalProperties": false,
         "description": "One page of Retention Holds.",
@@ -33234,6 +33442,10 @@
           "created_by_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "User who created the hold."
+          },
+          "due_for_review": {
+            "description": "True when the hold is unreleased and `until` has passed. The hold still protects its records.",
+            "type": "boolean"
           },
           "exam_id": {
             "$ref": "#/components/schemas/ID",
@@ -33314,6 +33526,11 @@
             "$ref": "#/components/schemas/ID",
             "description": "Held Submission. Present only for a Submission hold."
           },
+          "until": {
+            "description": "When the hold is due for review. Omitted when none was set. It never releases the hold: only a person does.",
+            "format": "date-time",
+            "type": "string"
+          },
           "work_retired_submission_count": {
             "description": "Number of Submissions in the hold's scope whose work was already retired when the hold was created. The hold can't restore them.",
             "format": "int64",
@@ -33327,6 +33544,7 @@
           "revision",
           "created_at",
           "created_by_user_id",
+          "due_for_review",
           "reason_code",
           "private_reason",
           "work_retired_submission_count",
@@ -33634,6 +33852,12 @@
             "minimum": 0,
             "type": "integer"
           },
+          "eligible_exams": {
+            "description": "How many distinct Exams have at least one `eligible` record in this category.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "export_protected": {
             "description": "Records protected because an export that includes them is being built.",
             "format": "int64",
@@ -33686,7 +33910,8 @@
           "unconfigured",
           "supporting_work",
           "export_protected",
-          "retired"
+          "retired",
+          "eligible_exams"
         ],
         "type": "object"
       },
@@ -33699,6 +33924,9 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "proposed_policy": {
+            "$ref": "#/components/schemas/RetentionProposedPolicy"
           }
         },
         "required": [
@@ -33742,6 +33970,10 @@
             "minimum": 1,
             "type": "integer"
           },
+          "proposed": {
+            "description": "True when the preview counted unsaved settings from `proposed_policy` against this revision's records. A proposed preview shows what a change would do and can't be used to approve cleanup.",
+            "type": "boolean"
+          },
           "receipts": {
             "$ref": "#/components/schemas/RetentionExpiryCounts",
             "description": "Counts for Record Retirement receipts."
@@ -33758,6 +33990,7 @@
         "required": [
           "id",
           "policy_revision",
+          "proposed",
           "created_at",
           "expires_at",
           "work",
@@ -33767,6 +34000,68 @@
           "browser_activity",
           "security_operational"
         ],
+        "type": "object"
+      },
+      "RetentionProposedPolicy": {
+        "additionalProperties": false,
+        "description": "Optional settings to preview before saving them, with the same members as the Retention Policy PUT body except `expected_revision`. Every member must be present and not null, or the request is refused with `request.invalid`. The preview counts the current records under these settings and is marked `proposed`.",
+        "properties": {
+          "audit_retention_days": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "browser_activity_retention_days": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "candidate_notices": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "deletion_grace_days": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "export_retention_days": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "integrity_retention_days": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "security_operational_retention_days": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "submission_retention_days": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "RetentionRecord": {
@@ -33817,6 +34112,9 @@
             "format": "date-time",
             "type": "string"
           },
+          "exam": {
+            "$ref": "#/components/schemas/RetentionExam"
+          },
           "exam_id": {
             "$ref": "#/components/schemas/ID",
             "description": "Exam the records belong to."
@@ -33860,6 +34158,7 @@
         },
         "required": [
           "exam_id",
+          "exam",
           "exam_sitting_id",
           "submission_id",
           "category",
@@ -60545,6 +60844,236 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/retention/exam-summaries": {
+      "get": {
+        "description": "Lists the Exams that have retention records, by Exam ID, each with its title and its records counted by category and status the way a Retention Preview counts the Institution. The caller needs `retention_policy.view`. `limit` counts Exams.",
+        "operationId": "listRetentionExamSummaries",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionExamSummariesResponse"
+                }
+              }
+            },
+            "description": "One page of Exam summaries",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/PrivateNoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Count retention records by Exam",
+        "tags": [
+          "Data retention"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "retention.invalid",
+          "retention.unavailable",
+          "retention_policy.unavailable",
+          "resource.not_found",
+          "retention_policy.revision_conflict",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/retention/holds": {
+      "get": {
+        "description": "Lists every Retention Hold of the Institution by ID, each with its Exam and who placed it. Released holds are left out unless `include_released=true`. The caller needs `retention_policy.view`. Private reasons stay on the Exam's own hold listing. A hold whose `until` has passed shows `due_for_review: true` and still protects its records.",
+        "operationId": "listInstitutionRetentionHolds",
+        "parameters": [
+          {
+            "description": "Keeps the holds on this Exam.",
+            "in": "query",
+            "name": "exam_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_released",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reason_code",
+            "required": false,
+            "schema": {
+              "enum": [
+                "institution_request",
+                "integrity_review",
+                "records_review",
+                "review_not_required",
+                "case_closed",
+                "mistake",
+                "other"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "created_at": "2026-09-01T10:00:00Z",
+                      "created_by": {
+                        "display_name": "Priya Raman",
+                        "id": "dpbj4ddm3hw8fkicm7nuazihkg"
+                      },
+                      "due_for_review": true,
+                      "exam": {
+                        "id": "xpq79ar61ncrjiouey6d9tgp91",
+                        "title": "Algorithms final"
+                      },
+                      "exam_sitting_id": "4z3cy1rp9cucq7qo1g9mq94dj3",
+                      "id": "yftfs48pasu5fd6czhcwz6b4x3",
+                      "reason_code": "institution_request",
+                      "revision": 1,
+                      "until": "2026-12-01T00:00:00Z"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionHoldListResponse"
+                }
+              }
+            },
+            "description": "One page of Retention Holds",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/PrivateNoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the Institution's Retention Holds",
+        "tags": [
+          "Data retention"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "retention.invalid",
+          "retention.unavailable",
+          "retention_policy.unavailable",
+          "resource.not_found",
+          "retention_policy.revision_conflict",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/retention/previews": {
       "post": {
         "description": "Creates a Retention Preview for the given current policy revision. The caller needs `retention_policy.view`, and the request is written to the critical audit log. The preview lasts one hour and holds counts only, never content. The counts show records that are incomplete, waiting for their deadline, held, needed as supporting integrity evidence, protected by an export or already retired. Creating a preview never schedules anything for deletion.",
@@ -60770,6 +61299,86 @@
           }
         ],
         "summary": "List retention eligibility and retirement status",
+        "tags": [
+          "Data retention"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "retention.invalid",
+          "retention.unavailable",
+          "retention_policy.unavailable",
+          "resource.not_found",
+          "retention_policy.revision_conflict",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/retention/records/export": {
+      "get": {
+        "description": "Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe.",
+        "operationId": "exportRetentionRecords",
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "example": "exam_id,exam_title,exam_sitting_id,submission_id,category,blocker,eligible_at,held,completion_current,retired_at,policy_revision,as_of\nxpq79ar61ncrjiouey6d9tgp91,Algorithms final,17778cuf6b17rhtapprfjozet8,zq993bky9h3uj4saw8iywi38cy,work,retention_period,2027-06-01T12:00:00Z,false,true,,3,2026-09-01T12:00:00Z\n",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The records as CSV",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/PrivateNoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Download every retention record as CSV",
         "tags": [
           "Data retention"
         ],

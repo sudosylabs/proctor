@@ -33,6 +33,11 @@ func testMailRekeyStore(t *testing.T, ctx context.Context, ss store.Store, user 
 	state, err := ss.Mail().InspectKeyState(ctx)
 	require.NoError(t, err)
 	require.Empty(t, state.RequiredPrimaryKeyID)
+	require.NotEmpty(t, state.Active, "the enqueued delivery's key is in use")
+	for _, usage := range state.Active {
+		require.False(t, usage.CreatedAt.IsZero(), "a key in use says when its use began")
+		require.False(t, usage.CreatedAt.After(model.NowUTC()), "a key's use cannot begin in the future")
+	}
 	operation := mailRekeyStartFixture(t, ctx, ss, user, institution, "22222222222222222222222222222222", "11111111111111111111111111111111")
 	started, err := ss.Mail().StartRekey(ctx, operation)
 	require.NoError(t, err)

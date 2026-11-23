@@ -303,6 +303,39 @@ func testRecordsHolds(t *testing.T, ctx context.Context, ss store.Store, f examA
 	all, err = records.ListHolds(ctx, store.ExamRecordsHoldListOptions{Scope: submissionScope, Limit: 200, IncludeReleased: true})
 	require.NoError(t, err)
 	require.Len(t, all.Holds, 3)
+	// A hold may carry a review date; it must follow creation and never
+	// releases the hold.
+	until := model.NowUTC().Add(24 * time.Hour)
+	dated := &store.ExamRecordsHoldCreation{ExamRecordsMutation: recordsMutation(t, ctx, ss, f.unitID, examScope, principal, model.ActionExamRecordsHold),
+		HoldID: model.NewRetentionHoldID(), ReasonCode: "records_review", PrivateReason: "Review next year.", Until: model.OptionalTimeFrom(until)}
+	datedResult, err := records.CreateHold(ctx, dated, examCommand(f.manager.ID, store.ExamRecordsCreateHoldOperation, "hold-dated", "hold-dated"))
+	require.NoError(t, err)
+	require.True(t, datedResult.Hold.Until.Valid)
+	require.False(t, datedResult.Hold.DueForReview(model.NowUTC()))
+	require.True(t, datedResult.Hold.DueForReview(until), "the hold is due at its date")
+	past := &store.ExamRecordsHoldCreation{ExamRecordsMutation: recordsMutation(t, ctx, ss, f.unitID, examScope, principal, model.ActionExamRecordsHold),
+		HoldID: model.NewRetentionHoldID(), ReasonCode: "records_review", PrivateReason: "Too late.", Until: model.OptionalTimeFrom(model.NowUTC().Add(-time.Hour))}
+	_, err = records.CreateHold(ctx, past, examCommand(f.manager.ID, store.ExamRecordsCreateHoldOperation, "hold-past", "hold-past"))
+	require.Error(t, err, "a review date before creation was accepted")
+
+	reviewed, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, ReasonCode: "records_review", Limit: 200})
+	require.NoError(t, err)
+	require.Len(t, reviewed.Holds, 1, "the reason filter narrows the Institution's holds")
+	require.Equal(t, datedResult.Hold.ID, reviewed.Holds[0].ID)
+	require.NotEmpty(t, reviewed.ExamTitles[examScope.ExamID], "each hold's Exam is named")
+	unreleased, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, Limit: 200})
+	require.NoError(t, err)
+	require.Len(t, unreleased.Holds, 3)
+	withReleased, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, IncludeReleased: true, Limit: 200})
+	require.NoError(t, err)
+	require.Len(t, withReleased.Holds, 4, "released holds appear only when asked for")
+	firstPage, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, IncludeReleased: true, Limit: 3})
+	require.NoError(t, err)
+	require.True(t, firstPage.HasMore)
+	rest, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, IncludeReleased: true, After: firstPage.Holds[2].ID, Limit: 3})
+	require.NoError(t, err)
+	require.Len(t, rest.Holds, 1)
+
 	for _, probe := range probes {
 		if probe.ConcurrentPeer == nil {
 			continue

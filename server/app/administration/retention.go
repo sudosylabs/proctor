@@ -22,7 +22,10 @@ import (
 
 type CreateRetentionPreviewCommand struct {
 	ExpectedPolicyRevision int64
-	IdempotencyKey         string
+	// Proposed, when set, previews these unsaved settings; the preview can't
+	// approve cleanup.
+	Proposed       *model.RetentionPolicySettings
+	IdempotencyKey string
 }
 
 type ChangeRetentionControlCommand struct {
@@ -42,6 +45,8 @@ type RetentionRecordPage struct {
 	AsOf           time.Time
 	Items          []RetentionRecordView
 	HasMore        bool
+	// ExamTitles names each listed record's Exam.
+	ExamTitles map[model.ExamID]string
 }
 
 // RetentionRecordView pairs a record with its eligibility at the page's AsOf.
@@ -105,7 +110,7 @@ func (s *Service) CreateRetentionPreview(
 	if err != nil {
 		return nil, err
 	}
-	if command.ExpectedPolicyRevision < 1 {
+	if command.ExpectedPolicyRevision < 1 || (command.Proposed != nil && command.Proposed.Validate() != nil) {
 		return nil, apperror.New("retention.invalid")
 	}
 	if command.IdempotencyKey == "" {
@@ -119,7 +124,8 @@ func (s *Service) CreateRetentionPreview(
 		struct {
 			InstitutionID  model.InstitutionID
 			PolicyRevision int64
-		}{inst.ID, command.ExpectedPolicyRevision},
+			Proposed       *model.RetentionPolicySettings
+		}{inst.ID, command.ExpectedPolicyRevision, command.Proposed},
 	)
 	if err != nil {
 		return nil, err
@@ -135,7 +141,7 @@ func (s *Service) CreateRetentionPreview(
 			ScopeType:  model.RoleScopeInstitution,
 			ScopeID:    inst.ID.String(),
 			Operation:  "preview",
-			Value:      map[string]any{"policy_revision": command.ExpectedPolicyRevision},
+			Value:      map[string]any{"policy_revision": command.ExpectedPolicyRevision, "proposed": command.Proposed != nil},
 			At:         s.now(),
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.RetentionPreview, error) {
@@ -147,6 +153,7 @@ func (s *Service) CreateRetentionPreview(
 				},
 				PreviewID:              model.NewRetentionPreviewID(),
 				ExpectedPolicyRevision: command.ExpectedPolicyRevision,
+				Proposed:               command.Proposed,
 			}, idempotency)
 		},
 		retentionError,
@@ -286,6 +293,7 @@ func (s *Service) ListRetentionRecords(
 		AsOf:           stored.AsOf,
 		Items:          make([]RetentionRecordView, len(stored.Items)),
 		HasMore:        stored.HasMore,
+		ExamTitles:     stored.ExamTitles,
 	}
 	for i, item := range stored.Items {
 		page.Items[i] = RetentionRecordView{Record: item.Record, Eligibility: item.Eligibility, Retirement: item.Retirement}

@@ -81,6 +81,41 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	p := preview("eligible")
 	require.Equal(t, int64(1), p.Work.Eligible)
 	require.Equal(t, int64(1), p.Integrity.Eligible)
+	require.Equal(t, int64(1), p.Work.EligibleExams, "the eligible record's Exam is counted once")
+	require.False(t, p.Proposed)
+
+	// A proposed policy counts the same records under unsaved settings and
+	// can never approve cleanup.
+	keepLonger := settings
+	keepLonger.SubmissionRetentionDays, keepLonger.IntegrityRetentionDays = 3650, 3650
+	proposedKey := examCommand(f.manager.ID, store.RetentionPreviewOperation, "proposed", "proposed")
+	proposed, err := ss.Retention().CreatePreview(ctx, &store.RetentionPreviewCreation{RetentionMutation: mutation(model.ActionRetentionPolicyView),
+		PreviewID: model.NewRetentionPreviewID(), ExpectedPolicyRevision: policy.Revision, Proposed: &keepLonger}, proposedKey)
+	require.NoError(t, err)
+	require.True(t, proposed.Proposed)
+	require.Equal(t, int64(0), proposed.Work.Eligible, "the proposed settings keep the work longer")
+	require.Equal(t, int64(0), proposed.Work.EligibleExams)
+	stored, err := ss.Retention().GetPreview(ctx, proposed.ID)
+	require.NoError(t, err)
+	require.True(t, stored.Proposed)
+	currentControl, err := ss.Retention().GetControl(ctx)
+	require.NoError(t, err)
+	_, err = ss.Retention().ChangeControl(ctx, &store.RetentionControlChange{RetentionMutation: mutation(model.ActionRetentionCleanupManage),
+		ExpectedRevision: currentControl.Revision, ExpectedPolicyRevision: policy.Revision, State: model.RetentionControlEnabled, PreviewID: proposed.ID},
+		examCommand(f.manager.ID, store.RetentionControlOperation, "proposed-enable", "proposed-enable"))
+	require.True(t, store.IsConflict(err), "a proposed preview approved cleanup: %v", err)
+
+	records, err := ss.Retention().ListRecords(ctx, store.RetentionRecordListOptions{Limit: 10})
+	require.NoError(t, err)
+	require.NotEmpty(t, records.Items)
+	require.NotEmpty(t, records.ExamTitles[f.examID], "the records page names its Exams")
+	summaries, err := ss.Retention().SummarizeRecordsByExam(ctx, store.RetentionExamSummaryOptions{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, summaries.Items, 1)
+	require.Equal(t, f.examID, summaries.Items[0].ExamID)
+	require.Equal(t, records.ExamTitles[f.examID], summaries.Items[0].Title)
+	require.Equal(t, int64(1), summaries.Items[0].Work.Total)
+	require.Equal(t, int64(1), summaries.Items[0].Work.Eligible)
 	change := func(state model.RetentionControlState, key string) *model.RetentionControl {
 		current, retentionErr := ss.Retention().GetControl(ctx)
 		require.NoError(t, retentionErr)

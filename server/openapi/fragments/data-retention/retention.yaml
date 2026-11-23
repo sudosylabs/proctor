@@ -241,6 +241,229 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
         "409":
           $ref: '#/components/responses/Conflict'
+  /api/v1/retention/records/export:
+    get:
+      operationId: exportRetentionRecords
+      summary: Download every retention record as CSV
+      tags:
+        - Data retention
+      description: >-
+        Returns every retention record of the Institution as CSV, one row per category of each Submission, with
+        the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no
+        content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is
+        refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a
+        formula start with an apostrophe.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - retention.invalid
+        - retention.unavailable
+        - retention_policy.unavailable
+        - resource.not_found
+        - retention_policy.revision_conflict
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The records as CSV
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/PrivateNoStore'
+          content:
+            text/csv:
+              schema:
+                type: string
+              example: |
+                exam_id,exam_title,exam_sitting_id,submission_id,category,blocker,eligible_at,held,completion_current,retired_at,policy_revision,as_of
+                xpq79ar61ncrjiouey6d9tgp91,Algorithms final,17778cuf6b17rhtapprfjozet8,zq993bky9h3uj4saw8iywi38cy,work,retention_period,2027-06-01T12:00:00Z,false,true,,3,2026-09-01T12:00:00Z
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/retention/exam-summaries:
+    get:
+      operationId: listRetentionExamSummaries
+      summary: Count retention records by Exam
+      tags:
+        - Data retention
+      description: >-
+        Lists the Exams that have retention records, by Exam ID, each with its title and its records counted by
+        category and status the way a Retention Preview counts the Institution. The caller needs
+        `retention_policy.view`. `limit` counts Exams.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - retention.invalid
+        - retention.unavailable
+        - retention_policy.unavailable
+        - resource.not_found
+        - retention_policy.revision_conflict
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          description: One page of Exam summaries
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/PrivateNoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionExamSummariesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/retention/holds:
+    get:
+      operationId: listInstitutionRetentionHolds
+      summary: List the Institution's Retention Holds
+      tags:
+        - Data retention
+      description: >-
+        Lists every Retention Hold of the Institution by ID, each with its Exam and who placed it. Released holds
+        are left out unless `include_released=true`. The caller needs `retention_policy.view`. Private reasons
+        stay on the Exam's own hold listing. A hold whose `until` has passed shows `due_for_review: true` and
+        still protects its records.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - retention.invalid
+        - retention.unavailable
+        - retention_policy.unavailable
+        - resource.not_found
+        - retention_policy.revision_conflict
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: exam_id
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ID'
+          description: Keeps the holds on this Exam.
+        - name: include_released
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: reason_code
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - institution_request
+              - integrity_review
+              - records_review
+              - review_not_required
+              - case_closed
+              - mistake
+              - other
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          description: One page of Retention Holds
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/PrivateNoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionHoldListResponse'
+              example:
+                items:
+                  - id: yftfs48pasu5fd6czhcwz6b4x3
+                    exam:
+                      id: xpq79ar61ncrjiouey6d9tgp91
+                      title: Algorithms final
+                    exam_sitting_id: 4z3cy1rp9cucq7qo1g9mq94dj3
+                    revision: 1
+                    created_at: '2026-09-01T10:00:00Z'
+                    created_by:
+                      id: dpbj4ddm3hw8fkicm7nuazihkg
+                      display_name: Priya Raman
+                    reason_code: institution_request
+                    until: '2026-12-01T00:00:00Z'
+                    due_for_review: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/retention/records:
     get:
       operationId: listRetentionRecords
@@ -365,6 +588,7 @@ components:
             policy_revision: 1
             created_at: '2026-09-01T12:00:00Z'
             expires_at: '2026-09-01T13:00:00Z'
+            proposed: false
             work:
               total: 0
               eligible: 0
@@ -375,6 +599,7 @@ components:
               supporting_work: 0
               export_protected: 0
               retired: 0
+              eligible_exams: 0
             integrity:
               total: 0
               eligible: 0
@@ -385,6 +610,7 @@ components:
               supporting_work: 0
               export_protected: 0
               retired: 0
+              eligible_exams: 0
             audit:
               total: 0
               eligible: 0
@@ -415,6 +641,7 @@ components:
               supporting_work: 0
               export_protected: 0
               retired: 0
+              eligible_exams: 0
             security_operational:
               total: 0
               eligible: 0
@@ -425,6 +652,7 @@ components:
               supporting_work: 0
               export_protected: 0
               retired: 0
+              eligible_exams: 0
     RetentionRecordsOK:
       description: One page of retention records. Each Submission adds four items, one per category.
       headers:
@@ -439,6 +667,9 @@ components:
             as_of: '2026-09-01T12:00:00Z'
             items:
               - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam:
+                  id: xpq79ar61ncrjiouey6d9tgp91
+                  title: Algorithms final
                 exam_sitting_id: 17778cuf6b17rhtapprfjozet8
                 submission_id: zq993bky9h3uj4saw8iywi38cy
                 category: work
@@ -451,6 +682,9 @@ components:
                 blocker: retention_period
                 eligible_at: '2027-06-01T12:00:00Z'
               - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam:
+                  id: xpq79ar61ncrjiouey6d9tgp91
+                  title: Algorithms final
                 exam_sitting_id: 17778cuf6b17rhtapprfjozet8
                 submission_id: zq993bky9h3uj4saw8iywi38cy
                 category: integrity
@@ -463,6 +697,9 @@ components:
                 blocker: retention_period
                 eligible_at: '2027-06-01T12:00:00Z'
               - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam:
+                  id: xpq79ar61ncrjiouey6d9tgp91
+                  title: Algorithms final
                 exam_sitting_id: 17778cuf6b17rhtapprfjozet8
                 submission_id: zq993bky9h3uj4saw8iywi38cy
                 category: browser_activity
@@ -485,6 +722,9 @@ components:
                   purge_pending: 0
                   purge_verified: 0
               - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam:
+                  id: xpq79ar61ncrjiouey6d9tgp91
+                  title: Algorithms final
                 exam_sitting_id: 17778cuf6b17rhtapprfjozet8
                 submission_id: zq993bky9h3uj4saw8iywi38cy
                 category: security_operational
@@ -538,6 +778,56 @@ components:
           format: int64
           minimum: 1
           description: The current policy revision to assess. The request fails if the policy changed since.
+        proposed_policy:
+          $ref: '#/components/schemas/RetentionProposedPolicy'
+    RetentionProposedPolicy:
+      description: >-
+        Optional settings to preview before saving them, with the same members as the Retention Policy PUT body
+        except `expected_revision`. Every member must be present and not null, or the request is refused with
+        `request.invalid`. The preview counts the current records under these
+        settings and is marked `proposed`.
+      type: object
+      additionalProperties: false
+      properties:
+        submission_retention_days:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        integrity_retention_days:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        browser_activity_retention_days:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        security_operational_retention_days:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        audit_retention_days:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        export_retention_days:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        deletion_grace_days:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        candidate_notices:
+          type:
+            - boolean
+            - "null"
     RetentionControlResponse:
       description: Whether recurring cleanup is approved, and for which policy revision.
       type: object
@@ -589,6 +879,7 @@ components:
         - supporting_work
         - export_protected
         - retired
+        - eligible_exams
       properties:
         total:
           type: integer
@@ -635,6 +926,11 @@ components:
           format: int64
           minimum: 0
           description: Records already retired.
+        eligible_exams:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many distinct Exams have at least one `eligible` record in this category.
     RetentionPreviewResponse:
       description: A one-hour Retention Preview of one policy revision. It holds counts only, never content.
       type: object
@@ -642,6 +938,7 @@ components:
       required:
         - id
         - policy_revision
+        - proposed
         - created_at
         - expires_at
         - work
@@ -665,6 +962,11 @@ components:
           format: int64
           minimum: 1
           description: Policy revision the preview assessed.
+        proposed:
+          type: boolean
+          description: >-
+            True when the preview counted unsaved settings from `proposed_policy` against this revision's records. A
+            proposed preview shows what a change would do and can't be used to approve cleanup.
         created_at:
           type: string
           format: date-time
@@ -816,12 +1118,149 @@ components:
           description: >-
             Number of stored objects confirmed gone from current storage. This doesn't cover backups or
             earlier object versions.
+    RetentionExam:
+      description: An Exam named by its draft title.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        title:
+          type: string
+          description: The Exam's draft title. Empty if the Exam has no draft.
+    RetentionExamSummary:
+      description: One Exam's retention records, counted by category as a preview counts them.
+      type: object
+      additionalProperties: false
+      required:
+        - exam
+        - work
+        - integrity
+        - browser_activity
+        - security_operational
+      properties:
+        exam:
+          $ref: '#/components/schemas/RetentionExam'
+        work:
+          $ref: '#/components/schemas/RetentionPreviewCounts'
+        integrity:
+          $ref: '#/components/schemas/RetentionPreviewCounts'
+        browser_activity:
+          $ref: '#/components/schemas/RetentionPreviewCounts'
+        security_operational:
+          $ref: '#/components/schemas/RetentionPreviewCounts'
+    RetentionExamSummariesResponse:
+      description: >-
+        One page of the Exams that have records, by Exam ID. In each, `eligible_exams` is 1 when the Exam has an
+        eligible record in that category.
+      type: object
+      additionalProperties: false
+      required:
+        - policy_revision
+        - as_of
+        - items
+      properties:
+        policy_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        as_of:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RetentionExamSummary'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    RetentionHoldListItem:
+      description: >-
+        One Retention Hold of the Institution. It carries the reason codes but never the private reasons, which stay
+        on the Exam's own hold listing.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - exam
+        - revision
+        - created_at
+        - created_by
+        - reason_code
+        - due_for_review
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        exam:
+          $ref: '#/components/schemas/RetentionExam'
+        exam_sitting_id:
+          $ref: '#/components/schemas/ID'
+          description: Held Sitting, or the Sitting of the held Submission. Omitted for an Exam hold.
+        submission_id:
+          $ref: '#/components/schemas/ID'
+          description: Held Submission. Present only for a Submission hold.
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          $ref: '#/components/schemas/PersonRef'
+        reason_code:
+          type: string
+          enum:
+            - institution_request
+            - integrity_review
+            - records_review
+            - review_not_required
+            - case_closed
+            - mistake
+            - other
+        until:
+          type: string
+          format: date-time
+          description: When the hold is due for review. Omitted when none was set.
+        due_for_review:
+          type: boolean
+          description: True when the hold is unreleased and `until` has passed. It still protects its records.
+        released_at:
+          type: string
+          format: date-time
+        released_by:
+          $ref: '#/components/schemas/PersonRef'
+        release_reason_code:
+          type: string
+          enum:
+            - institution_request
+            - integrity_review
+            - records_review
+            - review_not_required
+            - case_closed
+            - mistake
+            - other
+    RetentionHoldListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RetentionHoldListItem'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
     RetentionRecord:
       description: Retention status of one category of one Submission's records. It contains no content.
       type: object
       additionalProperties: false
       required:
         - exam_id
+        - exam
         - exam_sitting_id
         - submission_id
         - category
@@ -832,6 +1271,8 @@ components:
         - shared_published_objects
         - blocker
       properties:
+        exam:
+          $ref: '#/components/schemas/RetentionExam'
         exam_id:
           $ref: '#/components/schemas/ID'
           description: Exam the records belong to.

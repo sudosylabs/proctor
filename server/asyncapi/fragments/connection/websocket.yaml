@@ -27,6 +27,8 @@ channels:
         $ref: '#/components/messages/user_profile_picture_changed'
       access_policy_changed:
         $ref: '#/components/messages/access_policy_changed'
+      desktop_compatibility_policy.changed:
+        $ref: '#/components/messages/desktop_compatibility_policy.changed'
       plugin_settings_changed:
         $ref: '#/components/messages/plugin_settings_changed'
       job.changed:
@@ -215,6 +217,7 @@ operations:
       - $ref: '#/channels/websocket/messages/user_settings_changed'
       - $ref: '#/channels/websocket/messages/user_profile_picture_changed'
       - $ref: '#/channels/websocket/messages/access_policy_changed'
+      - $ref: '#/channels/websocket/messages/desktop_compatibility_policy.changed'
       - $ref: '#/channels/websocket/messages/plugin_settings_changed'
       - $ref: '#/channels/websocket/messages/job.changed'
       - $ref: '#/channels/websocket/messages/onboarding_import.changed'

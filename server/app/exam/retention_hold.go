@@ -19,9 +19,12 @@ import (
 )
 
 type CreateRetentionHoldCommand struct {
-	Scope          model.RetentionHoldScope
-	ReasonCode     string
-	PrivateReason  string
+	Scope         model.RetentionHoldScope
+	ReasonCode    string
+	PrivateReason string
+	// Until, when set, is when the hold is due for review. It never releases
+	// the hold.
+	Until          model.OptionalTime
 	IdempotencyKey string
 }
 
@@ -85,6 +88,9 @@ func (r *Records) CreateRetentionHold(
 	if model.ValidateRecordsReason(command.ReasonCode, command.PrivateReason) != nil {
 		return nil, apperror.Invalid("exam.invalid", "retention_hold")
 	}
+	if command.Until.Valid && !command.Until.Time.After(r.now()) {
+		return nil, apperror.Invalid("exam.invalid", "until")
+	}
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
@@ -109,7 +115,7 @@ func (r *Records) CreateRetentionHold(
 		scope,
 		action,
 		"create_hold",
-		map[string]any{"retention_hold_id": holdID.String(), "reason_code": command.ReasonCode},
+		map[string]any{"retention_hold_id": holdID.String(), "reason_code": command.ReasonCode, "until_set": command.Until.Valid},
 	)
 	if err != nil {
 		return nil, err
@@ -120,6 +126,7 @@ func (r *Records) CreateRetentionHold(
 		HoldID:              holdID,
 		ReasonCode:          command.ReasonCode,
 		PrivateReason:       command.PrivateReason,
+		Until:               command.Until,
 	}, commandIdempotency)
 	if err != nil {
 		return nil, r.failMutation(ctx, mutation, err)

@@ -38,10 +38,10 @@ func (s *classStoreFake) Get(context.Context, model.ClassID) (*model.Class, erro
 	*s.events = append(*s.events, "get-class")
 	return s.current, nil
 }
-func (*classStoreFake) ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, store.AcademicNameListOptions) ([]*model.Class, error) {
+func (*classStoreFake) ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, store.ClassListOptions) ([]*model.Class, error) {
 	return nil, nil
 }
-func (*classStoreFake) SearchByAcademicUnit(context.Context, model.AcademicUnitID, store.AcademicNameListOptions) ([]*model.Class, error) {
+func (*classStoreFake) SearchByAcademicUnit(context.Context, model.AcademicUnitID, store.ClassListOptions) ([]*model.Class, error) {
 	return nil, nil
 }
 func (s *classStoreFake) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {

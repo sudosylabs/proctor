@@ -156,6 +156,10 @@ components:
                 name: level-100
                 display_name: Level 100
                 description: First year of the programme.
+                class_count: 3
+                class_count_is_lower_bound: false
+                student_count: 138
+                student_count_is_lower_bound: false
               - revision: 1
                 id: p6y6sf8ac6m5if373fkkebj7j6
                 created_at: '2026-08-03T10:05:00Z'

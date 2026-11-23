@@ -11,6 +11,21 @@ import (
 	"time"
 )
 
+// ProgrammeKind classifies a programme for people reading the structure. It
+// is a label only: it changes no rule about the programme's levels.
+type ProgrammeKind string
+
+const (
+	ProgrammeKindUndergraduate ProgrammeKind = "undergraduate"
+	ProgrammeKindPostgraduate  ProgrammeKind = "postgraduate"
+	ProgrammeKindOther         ProgrammeKind = "other"
+)
+
+// IsValid reports whether k is a known kind.
+func (k ProgrammeKind) IsValid() bool {
+	return k == ProgrammeKindUndergraduate || k == ProgrammeKindPostgraduate || k == ProgrammeKindOther
+}
+
 // Programme is a course of study owned by one academic unit, such as Bachelor
 // of Computer Science. It describes the curriculum apart from academic years
 // and rosters.
@@ -21,6 +36,7 @@ type Programme struct {
 	ArchivedAt     OptionalTime
 	Revision       int64
 	AcademicUnitID AcademicUnitID
+	Kind           ProgrammeKind
 	Name           string
 	DisplayName    string
 	Description    string
@@ -40,6 +56,9 @@ func (p *Programme) PrepareCreate(id ProgrammeID, at time.Time) {
 	if p.Revision <= 0 {
 		p.Revision = 1
 	}
+	if p.Kind == "" {
+		p.Kind = ProgrammeKindOther
+	}
 	sanitizeNamed(&p.Name, &p.DisplayName, &p.Description)
 }
 
@@ -53,6 +72,9 @@ func (p *Programme) PrepareUpdate(at time.Time) {
 		p.Revision = 1
 	}
 	p.Revision++
+	if p.Kind == "" {
+		p.Kind = ProgrammeKindOther
+	}
 	sanitizeNamed(&p.Name, &p.DisplayName, &p.Description)
 }
 
@@ -108,7 +130,13 @@ func (p *Programme) Validate() error {
 	if p.ArchivedAt.Valid && p.ArchivedAt.Time.Before(p.CreatedAt) {
 		return invalidModelError(where, "programme", "archived_at", "must not precede created_at", details)
 	}
-	return validateNamed(where, "programme", p.ID.String(), p.Name, p.DisplayName, p.Description)
+	if err := validateNamed(where, "programme", p.ID.String(), p.Name, p.DisplayName, p.Description); err != nil {
+		return err
+	}
+	if !p.Kind.IsValid() {
+		return invalidModelError(where, "programme", "kind", "must be a known programme kind", details)
+	}
+	return nil
 }
 
 // Auditable returns the fields that are safe to record in the audit log.
@@ -123,6 +151,7 @@ func (p *Programme) Auditable() map[string]any {
 		"archived_at":      p.ArchivedAt.Millis(),
 		"revision":         p.Revision,
 		"academic_unit_id": p.AcademicUnitID.String(),
+		"kind":             string(p.Kind),
 		"name":             p.Name,
 		"display_name":     p.DisplayName,
 	}

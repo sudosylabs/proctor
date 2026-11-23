@@ -11,6 +11,13 @@ paths:
       - $ref: '#/components/parameters/ProgrammeLevelID'
     get:
       parameters:
+        - name: academic_period_id
+          in: query
+          required: false
+          description: >-
+            Keeps the Classes of this Academic Period. A cursor doesn't remember it, so repeat it on every page.
+          schema:
+            $ref: '#/components/schemas/ID'
         - name: dir
           in: query
           required: false

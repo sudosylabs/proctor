@@ -315,10 +315,30 @@ components:
             created_at: '2026-08-01T09:00:00Z'
             updated_at: '2026-08-12T11:45:00Z'
             institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+            kind: department
             parent_id: ih1r84kij94nrwis97rft6rduh
             name: computer-science
             display_name: School of Computer Science
             description: Computing teaching and research.
+            member_count: 412
+            member_count_is_lower_bound: false
+            member_counts_by_affiliation:
+              student: 376
+              student_is_lower_bound: false
+              staff: 36
+              staff_is_lower_bound: false
+              teacher: 21
+              teacher_is_lower_bound: false
+              external: 0
+              external_is_lower_bound: false
+            administrators:
+              - id: 4ufo8k7p1h3m5bxj9y6rqwtzse
+                display_name: Priya Raman
+                username: praman
+                profile_picture_url: /api/v1/users/4ufo8k7p1h3m5bxj9y6rqwtzse/profile-picture
+              - id: n3c8xa5hk1ymqpz7rj6wtf4ub9
+                display_name: Ahmed Farouk
+            administrators_more: 0
     AcademicUnitArchived:
       description: Academic Unit archived
       headers:
@@ -346,6 +366,18 @@ components:
           description: >-
             The Academic Unit to move this one under. An empty string makes it top-level. Omitted or null leaves the
             parent unchanged.
+        kind:
+          type:
+            - string
+            - "null"
+          enum:
+            - faculty
+            - school
+            - department
+            - office
+            - other
+            - null
+          description: The new kind of Academic Unit. Omitted or null leaves it unchanged.
         name:
           type:
             - string

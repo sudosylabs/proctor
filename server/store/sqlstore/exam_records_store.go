@@ -1094,6 +1094,7 @@ type retentionHoldRow struct {
 	Revision              int64          `db:"revision"`
 	CreatedAt             time.Time      `db:"created_at"`
 	CreatedBy             string         `db:"created_by_user_id"`
+	Until                 sql.NullTime   `db:"until"`
 	ReasonCode            string         `db:"reason_code"`
 	PrivateReason         string         `db:"private_reason"`
 	ReleasedAt            sql.NullTime   `db:"released_at"`
@@ -1105,7 +1106,7 @@ type retentionHoldRow struct {
 }
 
 const retentionHoldColumns = `id, exam_id, exam_sitting_id, submission_id, revision, created_at,
-	created_by_user_id, reason_code, private_reason, released_at, released_by_user_id,
+	created_by_user_id, until, reason_code, private_reason, released_at, released_by_user_id,
 	release_reason_code, release_private_reason, work_retired_submission_count,
 	integrity_retired_submission_count`
 
@@ -1120,6 +1121,7 @@ func (r retentionHoldRow) value() (*model.RetentionHold, error) {
 		Revision:                        r.Revision,
 		CreatedAt:                       model.TimeUTC(r.CreatedAt),
 		CreatedByUserID:                 model.UserID(r.CreatedBy),
+		Until:                           optionalTime(r.Until),
 		ReasonCode:                      r.ReasonCode,
 		PrivateReason:                   r.PrivateReason,
 		ReleasedAt:                      optionalTime(r.ReleasedAt),
@@ -1218,8 +1220,12 @@ func (s *SQLExamRecordsStore) CreateHold(
 				Revision:        1,
 				CreatedAt:       at,
 				CreatedByUserID: input.Principal.UserID,
+				Until:           input.Until.UTC(),
 				ReasonCode:      input.ReasonCode,
 				PrivateReason:   input.PrivateReason,
+			}
+			if h.Until.Valid && !h.Until.Time.After(at) {
+				return nil, store.NewErrInvalidInput("retention_hold", "until", nil)
 			}
 			var coverage struct {
 				Work      int64 `db:"work"`
@@ -1257,16 +1263,17 @@ func (s *SQLExamRecordsStore) CreateHold(
 				ctx,
 				`INSERT INTO retention_holds(
 					id, exam_id, exam_sitting_id, submission_id, revision, created_at,
-					created_by_user_id, reason_code, private_reason, creation_audit_event_id,
+					created_by_user_id, until, reason_code, private_reason, creation_audit_event_id,
 					work_retired_submission_count, integrity_retired_submission_count
 				)
-				VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+				VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				h.ID.String(),
 				h.Scope.ExamID.String(),
 				nullableID(h.Scope.SittingID.String()),
 				nullableID(h.Scope.SubmissionID.String()),
 				at,
 				h.CreatedByUserID.String(),
+				h.Until.Ptr(),
 				h.ReasonCode,
 				h.PrivateReason,
 				input.AuditEventID,

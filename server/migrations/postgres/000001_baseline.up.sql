@@ -50,6 +50,8 @@ CREATE TABLE academic_units (
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     institution_id varchar(26) NOT NULL REFERENCES institutions(id),
     parent_id varchar(26) REFERENCES academic_units(id),
+    kind varchar(32) NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('faculty', 'school', 'department', 'office', 'other')),
     name varchar(64) NOT NULL,
     display_name varchar(512) NOT NULL,
     description varchar(4096) NOT NULL DEFAULT '',
@@ -72,6 +74,8 @@ CREATE TABLE programmes (
     archived_at timestamptz,
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     academic_unit_id varchar(26) NOT NULL REFERENCES academic_units(id),
+    kind varchar(32) NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('undergraduate', 'postgraduate', 'other')),
     name varchar(64) NOT NULL,
     display_name varchar(512) NOT NULL,
     description varchar(4096) NOT NULL DEFAULT '',
@@ -125,6 +129,9 @@ CREATE TABLE academic_periods (
     CONSTRAINT academic_periods_lifecycle_check CHECK (updated_at >= created_at)
 );
 
+-- Period pages order by start, and the active_at filter narrows by it.
+CREATE INDEX academic_periods_start_at_idx
+    ON academic_periods (start_at, name, id) WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX academic_periods_institution_id_name_key
     ON academic_periods (institution_id, name)
     WHERE owner_type = 'institution' AND archived_at IS NULL;
@@ -851,7 +858,10 @@ CREATE INDEX mail_deliveries_terminal_retention_idx
 -- decrement when ciphertext is destroyed or retained history is deleted.
 CREATE TABLE mail_payload_keys (
     key_id char(32) PRIMARY KEY CHECK (key_id ~ '^[0-9a-f]{32}$'),
-    active_references bigint NOT NULL CHECK (active_references >= 0)
+    active_references bigint NOT NULL CHECK (active_references >= 0),
+    -- When the key's current use began: its first reference since it last had
+    -- none. A key with no references has no row.
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
 -- Fan-out expansion is delivered in later mail slices, but its frozen bundle
@@ -1538,6 +1548,9 @@ CREATE INDEX exam_sittings_lifecycle_deadline_due_idx
     ON exam_sittings (scheduled_end_at, id) WHERE state IN ('open', 'paused');
 CREATE INDEX exam_sittings_lifecycle_closing_due_idx
     ON exam_sittings (closing_at, id) WHERE state = 'closing';
+-- The administration counts show how many Sittings are under way.
+CREATE INDEX exam_sittings_under_way_idx
+    ON exam_sittings (state) WHERE state IN ('open', 'paused', 'closing');
 
 -- Resource bytes staged for a live correction remain pending and invisible
 -- until the named correction transaction consumes them. Exact command replay
@@ -3962,6 +3975,11 @@ CREATE INDEX external_second_factor_states_password_idx
 
 
 CREATE INDEX audit_events_created_at_id_idx ON audit_events (created_at DESC, id DESC);
+-- An audit page counts how often each event repeated in the ten minutes up to
+-- it: the same actor, action and resource.
+CREATE INDEX audit_events_repeat_idx
+    ON audit_events (actor_id, action, resource_type, resource_id, created_at)
+    WHERE actor_id IS NOT NULL;
 CREATE INDEX audit_events_actor_id_created_at_id_idx
     ON audit_events (actor_id, created_at DESC, id DESC)
     WHERE actor_id IS NOT NULL;
@@ -4193,9 +4211,10 @@ CREATE TABLE desktop_compatibility_policies (
     institution_id varchar(26) NOT NULL UNIQUE REFERENCES institutions(id),
     revision bigint NOT NULL CHECK (revision > 0),
     minimum_desktop_release varchar(64) NOT NULL,
-    revoked_desktop_build_ids jsonb NOT NULL CHECK (
-        jsonb_typeof(revoked_desktop_build_ids) = 'array' AND
-        jsonb_array_length(revoked_desktop_build_ids) <= 256
+    -- Each entry is {build_id, reason, revoked_at, revoked_by_user_id}.
+    revoked_desktop_builds jsonb NOT NULL CHECK (
+        jsonb_typeof(revoked_desktop_builds) = 'array' AND
+        jsonb_array_length(revoked_desktop_builds) <= 256
     ),
     administrator_message varchar(2048) NOT NULL CHECK (
         char_length(administrator_message) <= 500 AND
@@ -5230,6 +5249,8 @@ CREATE TABLE retention_holds (
     integrity_retired_submission_count bigint NOT NULL DEFAULT 0 CHECK (integrity_retired_submission_count >= 0),
     created_at timestamptz NOT NULL,
     created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
+    -- When the hold is due for review. It never releases the hold.
+    until timestamptz CHECK (until IS NULL OR until > created_at),
     reason_code varchar(64) NOT NULL CHECK (reason_code IN ('institution_request','integrity_review','records_review','review_not_required','case_closed','mistake','other')),
     private_reason text NOT NULL CHECK (private_reason = btrim(private_reason) AND char_length(private_reason) BETWEEN 1 AND 1000 AND octet_length(private_reason) <= 4000),
     creation_audit_event_id varchar(26) NOT NULL REFERENCES audit_events(id),
@@ -5249,6 +5270,8 @@ CREATE TABLE retention_holds (
     )
 );
 CREATE INDEX retention_holds_exam_id_id_idx ON retention_holds (exam_id, id);
+-- The Institution-wide hold list pages by ID, mostly over unreleased holds.
+CREATE INDEX retention_holds_unreleased_id_idx ON retention_holds (id) WHERE released_at IS NULL;
 CREATE INDEX retention_holds_active_scope_idx ON retention_holds (exam_id, exam_sitting_id, submission_id) WHERE released_at IS NULL;
 
 -- Configuration and authorization of recurring retirement are independent.
@@ -5256,6 +5279,9 @@ CREATE TABLE retention_previews (
     id varchar(26) PRIMARY KEY,
     institution_id varchar(26) NOT NULL REFERENCES institutions(id),
     policy_revision bigint NOT NULL CHECK (policy_revision > 0),
+    -- A proposed preview counted unsaved settings; it can never approve
+    -- cleanup.
+    proposed boolean NOT NULL DEFAULT false,
     created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
     created_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL CHECK (expires_at > created_at AND expires_at <= created_at + interval '1 hour'),
@@ -6239,7 +6265,8 @@ CREATE INDEX class_members_user_id_academic_period_id_idx
 -- of a current binding, which start_at and end_at narrow at read time.
 CREATE INDEX role_bindings_role_id_created_at_idx
     ON role_bindings (role_id, created_at DESC, id DESC) WHERE archived_at IS NULL;
--- The holders of roles bound at one scope, such as a Class's teachers.
+-- The holders of roles bound at one scope, such as a Class's teachers or an
+-- Academic Unit's administrators.
 CREATE INDEX role_bindings_scope_type_scope_id_idx
     ON role_bindings (scope_type, scope_id) WHERE archived_at IS NULL;
 CREATE INDEX role_bindings_origin_academic_unit_member_id_idx

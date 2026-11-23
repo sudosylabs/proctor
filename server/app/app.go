@@ -67,10 +67,12 @@ type App struct {
 	// AdministrationPeople names people for the directory and the academic
 	// structure, whose endpoints report administration.unavailable.
 	AdministrationPeople *people.Resolver
-	OnboardingPeople     *people.Resolver
-	ProgressionPeople    *people.Resolver
-	Realtime             *realtime.Service
-	RealtimeAdmission    *RealtimeAdmission
+	// DesktopPolicyPeople names who revoked a Desktop build.
+	DesktopPolicyPeople *people.Resolver
+	OnboardingPeople    *people.Resolver
+	ProgressionPeople   *people.Resolver
+	Realtime            *realtime.Service
+	RealtimeAdmission   *RealtimeAdmission
 	// Jobs is nil when the graph has no job store.
 	Jobs *job.Operations
 	// Mail is nil when the graph has no job or mail store.

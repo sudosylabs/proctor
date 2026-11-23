@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -181,6 +182,7 @@ type createRetentionHoldRequest struct {
 	SubmissionID  route.Optional[string] `json:"submission_id"`
 	ReasonCode    string                 `json:"reason_code"`
 	PrivateReason string                 `json:"private_reason"`
+	Until         route.Optional[string] `json:"until"`
 }
 type releaseRetentionHoldRequest struct {
 	SittingID        route.Optional[string] `json:"exam_sitting_id"`
@@ -268,6 +270,8 @@ type retentionHoldResponse struct {
 	CreatedAt                       string             `json:"created_at"`
 	CreatedByUserID                 string             `json:"created_by_user_id"`
 	CreatedBy                       *personRefResponse `json:"created_by,omitempty"`
+	Until                           string             `json:"until,omitempty"`
+	DueForReview                    bool               `json:"due_for_review"`
 	ReasonCode                      string             `json:"reason_code"`
 	PrivateReason                   string             `json:"private_reason"`
 	ReleasedAt                      string             `json:"released_at,omitempty"`
@@ -445,11 +449,23 @@ func (h examRecordsHandlers) createHold(request route.Request) (route.Result, er
 	if err = model.ValidateRecordsReason(body.ReasonCode, body.PrivateReason); err != nil {
 		return route.Result{}, route.InvalidRequest(err)
 	}
+	if body.Until.IsNull() {
+		return route.Result{}, apperror.Invalid("request.invalid", "until")
+	}
+	var until model.OptionalTime
+	if raw := body.Until.ValuePointer(); raw != nil {
+		parsed, parseErr := model.ParseRFC3339(*raw)
+		if parseErr != nil || parsed.IsZero() {
+			return route.Result{}, apperror.Invalid("request.invalid", "until")
+		}
+		until = model.OptionalTimeFrom(parsed)
+	}
 
 	value, err := h.app.CreateRetentionHold(request.Context, request.Invocation(), exam.CreateRetentionHoldCommand{
 		Scope:          scope,
 		ReasonCode:     body.ReasonCode,
 		PrivateReason:  body.PrivateReason,
+		Until:          until,
 		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
@@ -692,6 +708,8 @@ func recordsHoldResponse(value model.RetentionHold) retentionHoldResponse {
 		Revision:                        value.Revision,
 		CreatedAt:                       model.FormatRFC3339(value.CreatedAt),
 		CreatedByUserID:                 value.CreatedByUserID.String(),
+		Until:                           value.Until.FormatRFC3339(),
+		DueForReview:                    value.DueForReview(model.NowUTC()),
 		ReasonCode:                      value.ReasonCode,
 		PrivateReason:                   value.PrivateReason,
 		ReleasedByUserID:                value.ReleasedByUserID.String(),

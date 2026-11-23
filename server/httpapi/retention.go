@@ -12,15 +12,34 @@ import (
 	"net/http"
 	"time"
 
+	"bytes"
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"io"
+	"slices"
 )
 
-type retentionHandlers struct{ app *administration.Service }
+type retentionHandlers struct {
+	app    *administration.Service
+	people *people.Resolver
+}
 
-func retentionResource(app *administration.Service) route.Resource {
-	h := retentionHandlers{app: app}
+func retentionResource(app *administration.Service, resolver *people.Resolver) route.Resource {
+	h := retentionHandlers{app: app, people: resolver}
+	readErrors := []string{
+		"authorization.denied",
+		"authorization.request.invalid",
+		"authorization.unavailable",
+		"request.invalid",
+		"retention.invalid",
+		"retention.unavailable",
+		"retention_policy.unavailable",
+		"resource.not_found",
+		"retention_policy.revision_conflict",
+	}
 	mutationErrors := operatorMutationErrorCodes(
 		"request.invalid",
 		"retention.invalid",
@@ -105,6 +124,29 @@ func retentionResource(app *administration.Service) route.Resource {
 			Handle: h.records,
 		},
 		route.Endpoint{
+			Method:       http.MethodGet,
+			Path:         "/retention/records/export",
+			Auth:         route.AuthSessionRequired,
+			ProtocolName: "retention-records-export",
+			ProtocolKind: route.ProtocolBinaryDownload,
+			Errors:       readErrors,
+			Protocol:     h.exportRecords,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/retention/exam-summaries",
+			Auth:   route.AuthSessionRequired,
+			Errors: readErrors,
+			Handle: h.examSummaries,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/retention/holds",
+			Auth:   route.AuthSessionRequired,
+			Errors: readErrors,
+			Handle: h.holds,
+		},
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/me/retention-notices",
 			Auth:   route.AuthSessionRequired,
@@ -123,6 +165,20 @@ func retentionResource(app *administration.Service) route.Resource {
 
 type retentionPreviewRequest struct {
 	ExpectedPolicyRevision int64 `json:"expected_revision"`
+	// ProposedPolicy previews unsaved settings, spelled as the policy PUT
+	// body spells them.
+	ProposedPolicy *retentionProposedPolicyRequest `json:"proposed_policy,omitempty"`
+}
+
+type retentionProposedPolicyRequest struct {
+	SubmissionRetentionDays          route.Optional[int]  `json:"submission_retention_days"`
+	IntegrityRetentionDays           route.Optional[int]  `json:"integrity_retention_days"`
+	BrowserActivityRetentionDays     route.Optional[int]  `json:"browser_activity_retention_days"`
+	SecurityOperationalRetentionDays route.Optional[int]  `json:"security_operational_retention_days"`
+	AuditRetentionDays               route.Optional[int]  `json:"audit_retention_days"`
+	ExportRetentionDays              route.Optional[int]  `json:"export_retention_days"`
+	DeletionGraceDays                route.Optional[int]  `json:"deletion_grace_days"`
+	CandidateNotices                 route.Optional[bool] `json:"candidate_notices"`
 }
 type retentionControlRequest struct {
 	ExpectedRevision       int64  `json:"expected_revision"`
@@ -147,6 +203,7 @@ type retentionPreviewCountsResponse struct {
 	SupportingWork   int64 `json:"supporting_work"`
 	ExportProtected  int64 `json:"export_protected"`
 	Retired          int64 `json:"retired"`
+	EligibleExams    int64 `json:"eligible_exams"`
 }
 type retentionExpiryCountsResponse struct {
 	Total            int64 `json:"total"`
@@ -165,6 +222,7 @@ type retentionPreviewResponse struct {
 	Receipts            retentionExpiryCountsResponse  `json:"receipts"`
 	ID                  string                         `json:"id"`
 	PolicyRevision      int64                          `json:"policy_revision"`
+	Proposed            bool                           `json:"proposed"`
 	CreatedAt           string                         `json:"created_at"`
 	ExpiresAt           string                         `json:"expires_at"`
 	Work                retentionPreviewCountsResponse `json:"work"`
@@ -185,22 +243,100 @@ type retirementResponse struct {
 	PurgeVerified      int64   `json:"purge_verified"`
 }
 type retentionRecordResponse struct {
-	ExamID                 string              `json:"exam_id"`
-	SittingID              string              `json:"exam_sitting_id"`
-	SubmissionID           string              `json:"submission_id"`
-	Category               string              `json:"category"`
-	CompletionRevision     int64               `json:"completion_revision"`
-	CompletedAt            *string             `json:"completed_at,omitempty"`
-	CompletionCurrent      bool                `json:"completion_current"`
-	HasIntegrity           bool                `json:"has_integrity"`
-	Held                   bool                `json:"held"`
-	ExportProtectedUntil   *string             `json:"export_protected_until,omitempty"`
-	RetiredAt              *string             `json:"retired_at,omitempty"`
-	SharedPublishedObjects int64               `json:"shared_published_objects"`
-	Blocker                string              `json:"blocker"`
-	EligibleAt             *string             `json:"eligible_at,omitempty"`
-	Retirement             *retirementResponse `json:"retirement,omitempty"`
+	ExamID                 string                `json:"exam_id"`
+	Exam                   retentionExamResponse `json:"exam"`
+	SittingID              string                `json:"exam_sitting_id"`
+	SubmissionID           string                `json:"submission_id"`
+	Category               string                `json:"category"`
+	CompletionRevision     int64                 `json:"completion_revision"`
+	CompletedAt            *string               `json:"completed_at,omitempty"`
+	CompletionCurrent      bool                  `json:"completion_current"`
+	HasIntegrity           bool                  `json:"has_integrity"`
+	Held                   bool                  `json:"held"`
+	ExportProtectedUntil   *string               `json:"export_protected_until,omitempty"`
+	RetiredAt              *string               `json:"retired_at,omitempty"`
+	SharedPublishedObjects int64                 `json:"shared_published_objects"`
+	Blocker                string                `json:"blocker"`
+	EligibleAt             *string               `json:"eligible_at,omitempty"`
+	Retirement             *retirementResponse   `json:"retirement,omitempty"`
 }
+
+// retentionExamResponse names an Exam by its draft title.
+type retentionExamResponse struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+type retentionExamSummaryResponse struct {
+	Exam                retentionExamResponse          `json:"exam"`
+	Work                retentionPreviewCountsResponse `json:"work"`
+	Integrity           retentionPreviewCountsResponse `json:"integrity"`
+	BrowserActivity     retentionPreviewCountsResponse `json:"browser_activity"`
+	SecurityOperational retentionPreviewCountsResponse `json:"security_operational"`
+}
+
+type retentionExamSummariesResponse struct {
+	PolicyRevision int64                          `json:"policy_revision"`
+	AsOf           string                         `json:"as_of"`
+	Items          []retentionExamSummaryResponse `json:"items"`
+	NextCursor     string                         `json:"next_cursor,omitempty"`
+}
+
+// retentionHoldListItemResponse is one hold of the Institution-wide list. It
+// carries reason codes but never the private reasons, which stay on the
+// Exam's own records.
+type retentionHoldListItemResponse struct {
+	ID                string                `json:"id"`
+	Exam              retentionExamResponse `json:"exam"`
+	SittingID         string                `json:"exam_sitting_id,omitempty"`
+	SubmissionID      string                `json:"submission_id,omitempty"`
+	Revision          int64                 `json:"revision"`
+	CreatedAt         string                `json:"created_at"`
+	CreatedBy         personRefResponse     `json:"created_by"`
+	ReasonCode        string                `json:"reason_code"`
+	Until             string                `json:"until,omitempty"`
+	DueForReview      bool                  `json:"due_for_review"`
+	ReleasedAt        string                `json:"released_at,omitempty"`
+	ReleasedBy        *personRefResponse    `json:"released_by,omitempty"`
+	ReleaseReasonCode string                `json:"release_reason_code,omitempty"`
+}
+
+type retentionHoldCursor struct {
+	After string `json:"after"`
+}
+
+func retentionHoldCursorSpec() route.CursorSpec[retentionHoldCursor] {
+	return route.CursorSpec[retentionHoldCursor]{
+		Label:                "retention hold",
+		MaximumEncodedLength: 256,
+		Members:              []string{"after"},
+		Validate: func(cursor retentionHoldCursor) error {
+			if !model.RetentionHoldID(cursor.After).IsValid() {
+				return errors.New("invalid retention hold keyset")
+			}
+			return nil
+		},
+	}
+}
+
+type retentionExamCursor struct {
+	AfterExamID string `json:"after_exam_id"`
+}
+
+func retentionExamCursorSpec() route.CursorSpec[retentionExamCursor] {
+	return route.CursorSpec[retentionExamCursor]{
+		Label:                "retention exam summary",
+		MaximumEncodedLength: 256,
+		Members:              []string{"after_exam_id"},
+		Validate: func(cursor retentionExamCursor) error {
+			if !model.ExamID(cursor.AfterExamID).IsValid() {
+				return errors.New("invalid retention exam keyset")
+			}
+			return nil
+		},
+	}
+}
+
 type retentionRecordsResponse struct {
 	PolicyRevision int64                     `json:"policy_revision"`
 	AsOf           string                    `json:"as_of"`
@@ -239,11 +375,27 @@ func (h retentionHandlers) preview(request route.Request) (route.Result, error) 
 	if err := request.DecodeJSON(&body); err != nil {
 		return route.Result{}, err
 	}
-
+	var proposed *model.RetentionPolicySettings
+	if body.ProposedPolicy != nil {
+		settings, settingsErr := requiredRetentionPolicySettings(retentionPolicyRequest{
+			SubmissionRetentionDays:          body.ProposedPolicy.SubmissionRetentionDays,
+			IntegrityRetentionDays:           body.ProposedPolicy.IntegrityRetentionDays,
+			BrowserActivityRetentionDays:     body.ProposedPolicy.BrowserActivityRetentionDays,
+			SecurityOperationalRetentionDays: body.ProposedPolicy.SecurityOperationalRetentionDays,
+			AuditRetentionDays:               body.ProposedPolicy.AuditRetentionDays,
+			ExportRetentionDays:              body.ProposedPolicy.ExportRetentionDays,
+			DeletionGraceDays:                body.ProposedPolicy.DeletionGraceDays,
+			CandidateNotices:                 body.ProposedPolicy.CandidateNotices,
+		})
+		if settingsErr != nil {
+			return route.Result{}, settingsErr
+		}
+		proposed = &settings
+	}
 	p, err := h.app.CreateRetentionPreview(
 		request.Context,
 		request.Invocation(),
-		administration.CreateRetentionPreviewCommand{ExpectedPolicyRevision: body.ExpectedPolicyRevision, IdempotencyKey: request.IdempotencyKey},
+		administration.CreateRetentionPreviewCommand{ExpectedPolicyRevision: body.ExpectedPolicyRevision, Proposed: proposed, IdempotencyKey: request.IdempotencyKey},
 	)
 	if err != nil {
 		return route.Result{}, err
@@ -305,6 +457,7 @@ func (h retentionHandlers) records(request route.Request) (route.Result, error) 
 		r := item.Record
 		value := retentionRecordResponse{
 			ExamID:                 r.Scope.ExamID.String(),
+			Exam:                   retentionExamResponse{ID: r.Scope.ExamID.String(), Title: page.ExamTitles[r.Scope.ExamID]},
 			SittingID:              r.Scope.SittingID.String(),
 			SubmissionID:           r.Scope.SubmissionID.String(),
 			Category:               string(r.Category),
@@ -397,6 +550,7 @@ func retentionPreviewCountsDTO(c model.RetentionPreviewCounts) retentionPreviewC
 		SupportingWork:   c.SupportingWork,
 		ExportProtected:  c.ExportProtected,
 		Retired:          c.Retired,
+		EligibleExams:    c.EligibleExams,
 	}
 }
 func retentionPreviewDTO(p *model.RetentionPreview) retentionPreviewResponse {
@@ -408,6 +562,7 @@ func retentionPreviewDTO(p *model.RetentionPreview) retentionPreviewResponse {
 		Receipts:            retentionExpiryCountsDTO(p.Receipts),
 		ID:                  p.ID.String(),
 		PolicyRevision:      p.PolicyRevision,
+		Proposed:            p.Proposed,
 		CreatedAt:           retentionTime(p.CreatedAt),
 		ExpiresAt:           retentionTime(p.ExpiresAt),
 		Work:                retentionPreviewCountsDTO(p.Work),
@@ -429,4 +584,137 @@ func retentionExpiryCountsDTO(c model.RetentionExpiryCounts) retentionExpiryCoun
 		PurgePending:     c.PurgePending,
 		SourceProtected:  c.SourceProtected,
 	}
+}
+
+// examSummaries pages the Exams that have records, each with its counts.
+func (h retentionHandlers) examSummaries(request route.Request) (route.Result, error) {
+	values := request.HTTP.URL.Query()
+	for key, items := range values {
+		if len(items) != 1 || (key != "limit" && key != "cursor") {
+			return route.Result{}, route.InvalidRequest(nil)
+		}
+	}
+	limit, err := request.QueryLimit()
+	if err != nil {
+		return route.Result{}, err
+	}
+	var after model.ExamID
+	if raw := request.HTTP.URL.Query().Get("cursor"); raw != "" {
+		cursor, err := route.DecodeCursor(raw, retentionExamCursorSpec())
+		if err != nil {
+			return route.Result{}, route.InvalidRequest(err)
+		}
+		after = model.ExamID(cursor.AfterExamID)
+	}
+	page, err := h.app.SummarizeRetentionRecordsByExam(request.Context, request.Invocation(), after, limit)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := retentionExamSummariesResponse{
+		PolicyRevision: page.PolicyRevision,
+		AsOf:           retentionTime(page.AsOf),
+		Items:          make([]retentionExamSummaryResponse, 0, len(page.Items)),
+	}
+	for _, item := range page.Items {
+		response.Items = append(response.Items, retentionExamSummaryResponse{
+			Exam:                retentionExamResponse{ID: item.ExamID.String(), Title: item.Title},
+			Work:                retentionPreviewCountsDTO(item.Work),
+			Integrity:           retentionPreviewCountsDTO(item.Integrity),
+			BrowserActivity:     retentionPreviewCountsDTO(item.BrowserActivity),
+			SecurityOperational: retentionPreviewCountsDTO(item.SecurityOperational),
+		})
+	}
+	if page.HasMore {
+		response.NextCursor, err = route.EncodeCursor(retentionExamCursor{AfterExamID: page.Items[len(page.Items)-1].ExamID.String()}, retentionExamCursorSpec())
+		if err != nil {
+			return route.Result{}, route.Unpresentable(err)
+		}
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func (h retentionHandlers) exportRecords(request route.Request) (route.ProtocolResult, error) {
+	if len(request.HTTP.URL.Query()) > 0 {
+		return route.ProtocolResult{}, route.InvalidRequest(nil)
+	}
+	var body bytes.Buffer
+	if err := h.app.ExportRetentionRecords(request.Context, request.Invocation(), &body); err != nil {
+		return route.ProtocolResult{}, err
+	}
+	headers := privateNoStoreHeaders()
+	headers.Set("Content-Type", "text/csv; charset=utf-8")
+	headers.Set("Content-Disposition", `attachment; filename="retention-records.csv"`)
+	headers.Set("X-Content-Type-Options", "nosniff")
+	return route.BinaryDownload(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).WithHeaders(headers), nil
+}
+
+func (h retentionHandlers) holds(request route.Request) (route.Result, error) {
+	values := request.HTTP.URL.Query()
+	for key, items := range values {
+		if len(items) != 1 || !slices.Contains([]string{"limit", "cursor", "exam_id", "include_released", "reason_code"}, key) {
+			return route.Result{}, route.InvalidRequest(nil)
+		}
+	}
+	limit, err := request.QueryLimit()
+	if err != nil {
+		return route.Result{}, err
+	}
+	query := administration.ListRetentionHoldsQuery{Limit: limit, ReasonCode: values.Get("reason_code")}
+	if raw := values.Get("exam_id"); raw != "" {
+		if query.ExamID, err = model.ParseExamID(raw); err != nil {
+			return route.Result{}, apperror.Invalid("request.invalid", "exam_id")
+		}
+	}
+	switch values.Get("include_released") {
+	case "", "false":
+	case "true":
+		query.IncludeReleased = true
+	default:
+		return route.Result{}, apperror.Invalid("request.invalid", "include_released")
+	}
+	if raw := values.Get("cursor"); raw != "" {
+		cursor, cursorErr := route.DecodeCursor(raw, retentionHoldCursorSpec())
+		if cursorErr != nil {
+			return route.Result{}, route.InvalidRequest(cursorErr)
+		}
+		query.After = model.RetentionHoldID(cursor.After)
+	}
+
+	page, err := h.app.ListRetentionHolds(request.Context, request.Invocation(), query)
+	if err != nil {
+		return route.Result{}, err
+	}
+	ids := make([]model.UserID, 0, 2*len(page.Holds))
+	for _, hold := range page.Holds {
+		ids = append(ids, hold.CreatedByUserID, hold.ReleasedByUserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	now := model.NowUTC()
+	response, err := route.NewList(page.Holds, page.HasMore, func(hold model.RetentionHold) retentionHoldListItemResponse {
+		item := retentionHoldListItemResponse{
+			ID:                hold.ID.String(),
+			Exam:              retentionExamResponse{ID: hold.Scope.ExamID.String(), Title: page.ExamTitles[hold.Scope.ExamID]},
+			SittingID:         hold.Scope.SittingID.String(),
+			SubmissionID:      hold.Scope.SubmissionID.String(),
+			Revision:          hold.Revision,
+			CreatedAt:         model.FormatRFC3339(hold.CreatedAt),
+			CreatedBy:         *personRef(refs, hold.CreatedByUserID),
+			ReasonCode:        hold.ReasonCode,
+			Until:             hold.Until.FormatRFC3339(),
+			DueForReview:      hold.DueForReview(now),
+			ReleasedAt:        hold.ReleasedAt.FormatRFC3339(),
+			ReleasedBy:        personRef(refs, hold.ReleasedByUserID),
+			ReleaseReasonCode: hold.ReleaseReasonCode,
+		}
+		return item
+	}, func(last model.RetentionHold) (string, error) {
+		return route.EncodeCursor(retentionHoldCursor{After: last.ID.String()}, retentionHoldCursorSpec())
+	})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }

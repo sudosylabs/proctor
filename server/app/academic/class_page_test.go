@@ -28,17 +28,20 @@ type classPageStoreFake struct {
 	listed  []*model.Class
 	options store.AcademicNameListOptions
 	counted store.AcademicNameListOptions
+	// period and countedPeriod are the Academic Period each read narrowed to.
+	period        model.AcademicPeriodID
+	countedPeriod model.AcademicPeriodID
 }
 
-func (s *classPageStoreFake) SearchByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s *classPageStoreFake) SearchByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.ClassListOptions) ([]*model.Class, error) {
 	*s.events = append(*s.events, "search")
-	s.options = options
+	s.options, s.period = options.AcademicNameListOptions, options.AcademicPeriodID
 	return s.listed, nil
 }
 
-func (s *classPageStoreFake) CountByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions, maximum int) (int, error) {
+func (s *classPageStoreFake) CountByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.ClassListOptions, maximum int) (int, error) {
 	*s.events = append(*s.events, "count")
-	s.counted = options
+	s.counted, s.countedPeriod = options.AcademicNameListOptions, options.AcademicPeriodID
 	return min(len(s.listed), maximum), nil
 }
 

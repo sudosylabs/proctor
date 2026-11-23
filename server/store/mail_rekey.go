@@ -32,6 +32,8 @@ type MailRekeyOperation struct {
 type MailPayloadKeyUsage struct {
 	KeyID            string
 	ActiveReferences int64
+	// CreatedAt is when the key's current use began.
+	CreatedAt time.Time
 }
 
 type MailKeyState struct {

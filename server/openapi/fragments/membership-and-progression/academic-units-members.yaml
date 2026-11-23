@@ -48,6 +48,25 @@ paths:
         - dpopAuth: []
         - sessionCookie: []
       parameters:
+        - name: affiliation
+          in: query
+          required: false
+          description: >-
+            Keeps members who hold a current Affiliation of any listed kind: at `active_at`, or now for the full
+            history. Repeat the parameter for several kinds, each kind at most once. It also narrows `total`.
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 4
+            items:
+              type: string
+              enum:
+                - student
+                - teacher
+                - staff
+                - external
         - name: active_at
           in: query
           required: false

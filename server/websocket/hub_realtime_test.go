@@ -264,3 +264,40 @@ func TestHubAssistantEventsStayWithinTheOriginatingSession(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "session_id")
 }
+
+// TestHubDeliversDesktopPolicyChangesOnlyToThePolicyManagers pins that a
+// connection watching another Institution-wide action, such as reading the
+// access policy, never receives desktop_compatibility_policy.changed.
+func TestHubDeliversDesktopPolicyChangesOnlyToThePolicyManagers(t *testing.T) {
+	t.Parallel()
+
+	hub := newInternalTestHub(t)
+	require.NoError(t, hub.Start(context.Background()))
+	defer func() { _ = hub.Close(context.Background()) }()
+	managerSocket, _ := newSocketPair(t)
+	readerSocket, _ := newSocketPair(t)
+	manager, _ := hub.register(managerSocket,
+		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
+	reader, _ := hub.register(readerSocket,
+		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
+	institutionID := model.NewInstitutionID()
+	institution := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}
+	subscribe := func(runtime *connectionRuntime, action model.Action) {
+		t.Helper()
+		subscription := Subscription{Action: action, Resource: resourceFromModel(institution)}
+		require.True(t, subscription.IsValid(), "%s accepts the Institution", action)
+		runtime.mu.Lock()
+		defer runtime.mu.Unlock()
+		runtime.subscriptions[subscription.Key()] = subscription
+	}
+	subscribe(manager, model.ActionDesktopCompatibilityPolicyManage)
+	subscribe(reader, model.ActionAccessPolicyView)
+
+	event, err := realtime.NewDesktopCompatibilityPolicyChangedEvent(institutionID)
+	require.NoError(t, err)
+	event.ID = model.NewID()
+	hub.PublishLocal(context.Background(), event)
+
+	require.Equal(t, []string{event.ID}, deliveredEventIDs(manager))
+	require.Empty(t, deliveredEventIDs(reader), "an access policy reader received the Desktop policy change")
+}

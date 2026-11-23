@@ -87,6 +87,9 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"access_policy_changed": func() (Event, error) {
 			return NewAccessPolicyChangedEvent(model.NewInstitutionID(), 7)
 		},
+		"desktop_compatibility_policy.changed": func() (Event, error) {
+			return NewDesktopCompatibilityPolicyChangedEvent(model.NewInstitutionID())
+		},
 		"plugin_settings_changed": func() (Event, error) {
 			return NewPluginSettingsChangedEvent(model.NewInstitutionID(), "display-topology", 3)
 		},

@@ -25,6 +25,8 @@ type administrationCountsResponse struct {
 	FailedMailDeliveriesIsLowerBound  *bool `json:"failed_mail_deliveries_is_lower_bound,omitempty"`
 	OpenOnboardingImports             *int  `json:"open_onboarding_imports,omitempty"`
 	OpenOnboardingImportsIsLowerBound *bool `json:"open_onboarding_imports_is_lower_bound,omitempty"`
+	OpenSittings                      *int  `json:"open_sittings,omitempty"`
+	OpenSittingsIsLowerBound          *bool `json:"open_sittings_is_lower_bound,omitempty"`
 }
 
 type administrationCountsHandlers struct {
@@ -44,6 +46,8 @@ func administrationCountsResource(application *administration.Counts) route.Reso
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
+				"desktop_compatibility_policy.revision_conflict",
+				"desktop_compatibility_policy.unavailable",
 				"invitation.unavailable",
 				"job.query.invalid",
 				"job.unavailable",
@@ -70,6 +74,7 @@ func (h administrationCountsHandlers) get(request route.Request) (route.Result, 
 	response.FailedJobs, response.FailedJobsIsLowerBound = administrationCountMembers(counts.FailedJobs)
 	response.FailedMailDeliveries, response.FailedMailDeliveriesIsLowerBound = administrationCountMembers(counts.FailedMailDeliveries)
 	response.OpenOnboardingImports, response.OpenOnboardingImportsIsLowerBound = administrationCountMembers(counts.OpenOnboardingImports)
+	response.OpenSittings, response.OpenSittingsIsLowerBound = administrationCountMembers(counts.OpenSittings)
 	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 

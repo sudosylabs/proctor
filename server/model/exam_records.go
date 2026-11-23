@@ -198,13 +198,15 @@ func (s RetentionHoldScope) Resource() Resource {
 }
 
 // RetentionHold protects its scope and future descendants until an authorized
-// release. It never expires on its own.
+// release. It never expires on its own: Until only marks when it is due for a
+// person to review, because releasing a hold is a records decision.
 type RetentionHold struct {
 	ID                   RetentionHoldID
 	Scope                RetentionHoldScope
 	Revision             int64
 	CreatedAt            time.Time
 	CreatedByUserID      UserID
+	Until                OptionalTime
 	ReasonCode           string
 	PrivateReason        string
 	ReleasedAt           OptionalTime
@@ -226,6 +228,7 @@ func (h *RetentionHold) Validate() error {
 		(h.Scope.SubmissionID.IsValid() && (h.WorkRetiredSubmissionCount > 1 || h.IntegrityRetiredSubmissionCount > 1)) ||
 		h.CreatedAt.IsZero() ||
 		!h.CreatedByUserID.IsValid() ||
+		(h.Until.Valid && !h.Until.Time.After(h.CreatedAt)) ||
 		ValidateRecordsReason(h.ReasonCode, h.PrivateReason) != nil ||
 		(h.ReleasedAt.Valid != h.ReleasedByUserID.IsValid()) ||
 		(h.ReleasedAt.Valid &&
@@ -235,6 +238,12 @@ func (h *RetentionHold) Validate() error {
 	}
 
 	return nil
+}
+
+// DueForReview reports whether an unreleased hold's Until has passed at at.
+// The hold still protects its scope; only a person releases it.
+func (h *RetentionHold) DueForReview(at time.Time) bool {
+	return h != nil && !h.ReleasedAt.Valid && h.Until.Valid && !TimeUTC(at).Before(h.Until.Time)
 }
 
 func (h *RetentionHold) Release(expected int64, actor UserID, code, reason string, at time.Time) error {
@@ -258,9 +267,7 @@ func (h *RetentionHold) Release(expected int64, actor UserID, code, reason strin
 // ValidateRecordsReason checks code against the closed audit vocabulary and
 // bounds the private rationale, which is never ordinary audit data.
 func ValidateRecordsReason(code, private string) error {
-	switch code {
-	case "institution_request", "integrity_review", "records_review", "review_not_required", "case_closed", "mistake", "other":
-	default:
+	if !ValidRecordsReasonCode(code) {
 		return invalidModelError("ValidateRecordsReason", "exam_records", "", "invalid records reason code", "")
 	}
 
@@ -273,4 +280,14 @@ func ValidateRecordsReason(code, private string) error {
 	}
 
 	return nil
+}
+
+// ValidRecordsReasonCode reports whether code is in the closed records reason
+// vocabulary.
+func ValidRecordsReasonCode(code string) bool {
+	switch code {
+	case "institution_request", "integrity_review", "records_review", "review_not_required", "case_closed", "mistake", "other":
+		return true
+	}
+	return false
 }

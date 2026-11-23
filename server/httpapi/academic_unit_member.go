@@ -9,8 +9,10 @@ package httpapi
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -123,9 +125,19 @@ func (h academicUnitMemberHandlers) list(request route.Request) (route.Result, e
 		return route.Result{}, err
 	}
 
+	var affiliations []model.AffiliationKind
+	for _, raw := range request.HTTP.URL.Query()["affiliation"] {
+		kind := model.AffiliationKind(raw)
+		if !kind.IsValid() || slices.Contains(affiliations, kind) {
+			return route.Result{}, apperror.Invalid("request.invalid", "affiliation")
+		}
+		affiliations = append(affiliations, kind)
+	}
+
 	afterStartAt, afterUserID := after.after()
 	page, err := h.app.ListAcademicUnitMembersPage(request.Context, request.Invocation(), academic.ListAcademicUnitMembersPageQuery{
 		AcademicUnitID:      unitID,
+		Affiliations:        affiliations,
 		MembershipPageQuery: query,
 		AfterStartAt:        afterStartAt,
 		AfterUserID:         afterUserID,

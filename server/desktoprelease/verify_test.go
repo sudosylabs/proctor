@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -38,7 +39,8 @@ func fixture(t *testing.T) releaseFixture {
 	f.expected = Expectation{Build: model.DesktopBuildTuple{DesktopRelease: "1.0.0", DesktopBuildID: "synthetic-test-build",
 		DesktopTarget: "synthetic-darwin-arm64", Platform: model.DesktopPlatformDarwin, Architecture: model.DesktopArchitectureARM64, RealtimeProtocol: 1,
 		DesktopSettingsRegistryFingerprint: "fnv1a64:aaaaaaaaaaaaaaaa", ConfigurationManifest: manifest,
-		AttemptConfigurationManifestFingerprint: manifest.Fingerprint(), CapabilityMatrixIdentity: "synthetic-test-matrix"}, ApplicationReleaseID: "synthetic-release"}
+		AttemptConfigurationManifestFingerprint: manifest.Fingerprint(), CapabilityMatrixIdentity: "synthetic-test-matrix"}, ApplicationReleaseID: "synthetic-release",
+		ReleasedAt: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)}
 	registry, err := os.ReadFile("../model/testdata/native_capability_registry.json")
 	require.NoError(t, err)
 	f.artifacts = Artifacts{Registry: registry, ConfigurationManifest: manifest.Canonical(), Matrix: SignedMatrix{KeyID: "synthetic-test-only"}}
@@ -80,6 +82,7 @@ func TestVerifyExactReleaseAndItsCertification(t *testing.T) {
 	f := fixture(t)
 	build, err := Verify(f.expected, f.artifacts, f.keys)
 	require.NoError(t, err)
+	require.True(t, f.expected.ReleasedAt.Equal(build.ReleasedAt), "the release date travels with the build")
 	agreement := build.NativeAgreement
 	require.True(t, agreement.EnforceCertified("display"))
 	require.False(t, agreement.EnforceCertified("camera"), "an uncertified capability is reported as such")
@@ -157,4 +160,12 @@ func TestVerifyRefusesASignedRegistryItCannotParse(t *testing.T) {
 	f.sign(t)
 	_, err := Verify(f.expected, f.artifacts, f.keys)
 	require.ErrorIs(t, err, ErrInvalidArtifact, "an exact, signed registry must still be one the server understands")
+}
+
+func TestVerifyRequiresAReleaseDate(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.expected.ReleasedAt = time.Time{}
+	_, err := Verify(f.expected, f.artifacts, f.keys)
+	require.ErrorIs(t, err, ErrInvalidArtifact)
 }

@@ -66,7 +66,7 @@ func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *tes
 			p := principal
 			test.alter(&p)
 			fixture := newAdministrationFixture(t, institutionWide(p.UserID, model.ActionRetentionCleanupManage))
-			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(fixture.service))
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(fixture.service, nil))
 			r := serveRetentionHTTP(t, api, "PUT", "/api/v1/retention/control", body, test.key)
 			require.Equal(t, test.want, r.Code, "status=%d body=%s", r.Code, r.Body.String())
 			if test.want != 200 {
@@ -91,7 +91,7 @@ func TestRetentionHTTPRejectsUnknownFieldsAndCrossPurposeCursors(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := retentionHTTPPrincipal()
 	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRetentionPolicyView))
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, nil))
 	r := serveRetentionHTTP(t, api, "POST", "/api/v1/retention/previews", `{"expected_revision":1,"delete_now":true}`, "preview")
 	require.Equal(t, 400, r.Code, "unknown destructive parameter reached the Store")
 	require.Equal(t, 0, fixture.retention.callCount(), "unknown destructive parameter reached the Store")
@@ -112,7 +112,7 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	following.RetirementID = model.NewRetentionRetirementID()
 	fixture := newAdministrationFixture(t)
 	fixture.retention.notices = []model.RetentionNotice{notice, following}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(fixture.service))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(fixture.service, nil))
 	r := serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
 	var page retentionNoticesResponse
 	require.Equal(t, 200, r.Code, "notice=%d %s", r.Code, r.Body.String())
@@ -163,7 +163,7 @@ func TestRetentionHTTPRecordsPresentsFullPageOfSubmissions(t *testing.T) {
 	principal := retentionHTTPPrincipal()
 	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRetentionPolicyView))
 	fixture.retention.records = page
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, nil))
 	r := serveRetentionHTTP(t, api, "GET", "/api/v1/retention/records?limit=10", "", "")
 	require.Equal(t, 200, r.Code, "records=%d %s", r.Code, r.Body.String())
 	require.Equal(t, store.RetentionRecordListOptions{Limit: 10}, fixture.retention.recordOptions, "the page reached the Store")
@@ -175,4 +175,87 @@ func TestRetentionHTTPRecordsPresentsFullPageOfSubmissions(t *testing.T) {
 	}
 	require.Equal(t, want, got)
 	require.NotEmpty(t, response.NextCursor)
+}
+
+func TestRetentionHTTPHoldsNameTheExamAndKeepPrivateReasons(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := retentionHTTPPrincipal()
+	examID, creator := model.NewExamID(), model.NewUserID()
+	due := model.RetentionHold{ID: model.NewRetentionHoldID(), Scope: model.RetentionHoldScope{ExamID: examID}, Revision: 1,
+		CreatedAt: model.NowUTC().Add(-48 * time.Hour), CreatedByUserID: creator, Until: model.OptionalTimeFrom(model.NowUTC().Add(-time.Hour)),
+		ReasonCode: "records_review", PrivateReason: "A private rationale that must stay on the Exam."}
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRetentionPolicyView))
+	fixture.retention.holds = &store.RetentionHoldPage{Holds: []model.RetentionHold{due}, ExamTitles: map[model.ExamID]string{examID: "Algorithms final"}}
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, testPeople(fixture.users, fixture.access.Authorizer)))
+
+	r := serveRetentionHTTP(t, api, "GET", "/api/v1/retention/holds?exam_id="+examID.String()+"&reason_code=records_review&include_released=true", "", "")
+	require.Equal(t, 200, r.Code, r.Body.String())
+	require.Equal(t, []store.RetentionHoldListOptions{{ExamID: examID, ReasonCode: "records_review", IncludeReleased: true, Limit: 50}}, fixture.retention.holdOptions)
+	require.NotContains(t, r.Body.String(), due.PrivateReason, "the Institution-wide list leaked a private reason")
+	var page struct {
+		Items []map[string]any `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, map[string]any{"id": examID.String(), "title": "Algorithms final"}, page.Items[0]["exam"])
+	require.Equal(t, true, page.Items[0]["due_for_review"], "a passed review date shows the hold is due")
+	require.Equal(t, map[string]any{"id": creator.String()}, page.Items[0]["created_by"])
+
+	r = serveRetentionHTTP(t, api, "GET", "/api/v1/retention/holds?reason_code=whim", "", "")
+	assertHTTPProblem(t, r, http.StatusBadRequest, "retention.invalid")
+}
+
+func TestRetentionHTTPHoldsNeedInstitutionWideRetentionView(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := retentionHTTPPrincipal()
+	fixture := newAdministrationFixture(t, inAcademicUnit(principal.UserID, model.NewAcademicUnitID(), model.ActionRetentionPolicyView))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, nil))
+	for _, path := range []string{"/api/v1/retention/holds", "/api/v1/retention/records/export", "/api/v1/retention/exam-summaries"} {
+		r := serveRetentionHTTP(t, api, "GET", path, "", "")
+		assertHTTPProblem(t, r, http.StatusForbidden, "authorization.denied")
+	}
+	require.Equal(t, 0, fixture.retention.callCount(), "a unit-scoped grant reached the Store")
+}
+
+func TestRetentionHTTPExportsRecordsAsCSV(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := retentionHTTPPrincipal()
+	examID := model.NewExamID()
+	scope := model.RetentionHoldScope{ExamID: examID, SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRetentionPolicyView))
+	fixture.retention.records = &store.RetentionRecordPage{PolicyRevision: 3, AsOf: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+		Items:      []store.RetentionRecordItem{{Record: model.RetentionRecord{Scope: scope, Category: model.RetentionCategoryWork}, Eligibility: model.RetentionEligibility{Blocker: model.RetentionBlockerNone}}},
+		ExamTitles: map[model.ExamID]string{examID: "=HYPERLINK(1)"}}
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, nil))
+	r := serveRetentionHTTP(t, api, "GET", "/api/v1/retention/records/export", "", "")
+	require.Equal(t, 200, r.Code, r.Body.String())
+	require.Equal(t, "text/csv; charset=utf-8", r.Header().Get("Content-Type"))
+	lines := strings.Split(strings.TrimSpace(r.Body.String()), "\n")
+	require.Len(t, lines, 2)
+	require.True(t, strings.HasPrefix(lines[0], "exam_id,exam_title,"))
+	require.Contains(t, lines[1], scope.SubmissionID.String())
+	require.Contains(t, lines[1], "'=HYPERLINK(1)", "a formula-like title is neutralized")
+}
+
+func TestRetentionHTTPPreviewsAProposedPolicy(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := retentionHTTPPrincipal()
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRetentionPolicyView))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, nil))
+	body := `{"expected_revision":2,"proposed_policy":{"submission_retention_days":365,"integrity_retention_days":365,"browser_activity_retention_days":30,` +
+		`"security_operational_retention_days":30,"audit_retention_days":365,"export_retention_days":7,"deletion_grace_days":14,"candidate_notices":true}}`
+	r := serveRetentionHTTP(t, api, "POST", "/api/v1/retention/previews", body, "proposed-preview")
+	require.Equal(t, 201, r.Code, r.Body.String())
+	require.NotNil(t, fixture.retention.preview)
+	require.NotNil(t, fixture.retention.preview.Proposed)
+	require.Equal(t, 365, fixture.retention.preview.Proposed.SubmissionRetentionDays)
+	require.True(t, fixture.retention.preview.Proposed.CandidateNotices)
+
+	missing := `{"expected_revision":2,"proposed_policy":{"submission_retention_days":365}}`
+	r = serveRetentionHTTP(t, api, "POST", "/api/v1/retention/previews", missing, "proposed-preview-2")
+	require.Equal(t, 400, r.Code, "an incomplete proposal was previewed: %s", r.Body.String())
 }

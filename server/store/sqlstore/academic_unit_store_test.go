@@ -91,6 +91,7 @@ func TestAcademicUnitRowConversion(t *testing.T) {
 		Revision:      7,
 		InstitutionID: institutionID,
 		ParentID:      parentID,
+		Kind:          model.AcademicUnitKindSchool,
 		Name:          "computing",
 		DisplayName:   "Computing",
 		Description:   "School",

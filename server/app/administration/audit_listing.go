@@ -56,7 +56,18 @@ type AuditEventPage struct {
 	// Actors names who did each event. Who acted is part of the record, so
 	// every reader of the event gets their presented name.
 	Actors people.Refs
+	// Repeats holds, for an event repeated more than once in
+	// AuditRepeatWindow up to and including it, how many times, counting only
+	// events the caller can see, capped at MaximumAuditRepeat.
+	Repeats map[model.AuditEventID]int
 }
+
+// AuditRepeatWindow and MaximumAuditRepeat bound an audit event's repeat
+// count: the same actor, action and resource within ten minutes.
+const (
+	AuditRepeatWindow  = 10 * time.Minute
+	MaximumAuditRepeat = 100
+)
 
 // ListAuditEvents returns a page of audit events within the caller's audit
 // visibility; an academic-only reader receives redacted events.
@@ -150,7 +161,39 @@ func (s *Service) ListAuditEvents(
 			page.Names.Users[id] = actor.DisplayName
 		}
 	}
+	if page.Repeats, err = s.auditRepeats(ctx, page.Items, visibility); err != nil {
+		return AuditEventPage{}, err
+	}
 	return page, nil
+}
+
+func (s *Service) auditRepeats(
+	ctx context.Context,
+	events []*model.AuditEvent,
+	visibility store.AuditVisibilityScope,
+) (map[model.AuditEventID]int, error) {
+	repeats := map[model.AuditEventID]int{}
+	ids := make([]model.AuditEventID, 0, len(events))
+	for _, event := range events {
+		if !event.ActorID.IsZero() {
+			ids = append(ids, event.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return repeats, nil
+	}
+	counted, err := s.audits.CountRepeats(ctx, store.AuditRepeatOptions{
+		EventIDs: ids, Visibility: visibility, Window: AuditRepeatWindow, Maximum: MaximumAuditRepeat,
+	})
+	if err != nil {
+		return nil, auditListingError(err)
+	}
+	for _, repeat := range counted {
+		if repeat.Count > 1 {
+			repeats[repeat.EventID] = repeat.Count
+		}
+	}
+	return repeats, nil
 }
 
 // auditNames names actors, subjects and resources only inside the caller's

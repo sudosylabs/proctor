@@ -106,7 +106,7 @@ func New(deps Dependencies) (*App, error) {
 		ClassAuthorization: authorizer,
 		Classes:            deps.Store.Class(),
 	})
-	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, runtime))
+	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, runtime, identities))
 	terminals, err := newTerminals(deps, exams.attempts)
 	if err != nil {
 		return nil, err
@@ -128,6 +128,7 @@ func New(deps Dependencies) (*App, error) {
 		AttemptPeople:        people.New(deps.Store, authorizer).Reporting("exam.attempt.unavailable"),
 		InvitationPeople:     people.New(deps.Store, authorizer).Reporting("invitation.unavailable"),
 		AdministrationPeople: people.New(deps.Store, authorizer).Reporting("administration.unavailable"),
+		DesktopPolicyPeople:  people.New(deps.Store, authorizer).Reporting("desktop_compatibility_policy.unavailable"),
 		OnboardingPeople:     people.New(deps.Store, authorizer).Reporting("onboarding_import.unavailable"),
 		ProgressionPeople:    people.New(deps.Store, authorizer).Reporting("student_progression.unavailable"),
 		Terminals:            terminals,

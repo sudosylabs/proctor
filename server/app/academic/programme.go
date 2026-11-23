@@ -29,6 +29,7 @@ type ListProgrammesQuery struct {
 // CreateProgrammeCommand is the input of CreateProgramme.
 type CreateProgrammeCommand struct {
 	AcademicUnitID model.AcademicUnitID
+	Kind           model.ProgrammeKind
 	Name           string
 	DisplayName    string
 	Description    string
@@ -38,6 +39,7 @@ type CreateProgrammeCommand struct {
 type UpdateProgrammeCommand struct {
 	ExpectedRevision *int64
 	ID               model.ProgrammeID
+	Kind             *model.ProgrammeKind
 	Name             *string
 	DisplayName      *string
 	Description      *string
@@ -50,7 +52,7 @@ type ArchiveProgrammeCommand struct {
 }
 
 // GetProgramme needs programme.view.
-func (s *Service) GetProgramme(ctx context.Context, inv invocation.Invocation, id model.ProgrammeID) (*model.Programme, error) {
+func (s *Service) GetProgramme(ctx context.Context, inv invocation.Invocation, id model.ProgrammeID) (*ProgrammeView, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_id")
 	}
@@ -62,7 +64,11 @@ func (s *Service) GetProgramme(ctx context.Context, inv invocation.Invocation, i
 	if err != nil {
 		return nil, programmeStoreErrors.Translate(err)
 	}
-	return programme, nil
+	counts, err := s.programmeCounts(ctx, inv, programme.AcademicUnitID, []*model.Programme{programme})
+	if err != nil {
+		return nil, err
+	}
+	return &ProgrammeView{Programme: programme, StructureCounts: counts}, nil
 }
 
 // ListProgrammes lists a unit's programmes; it needs programme.view on the
@@ -71,15 +77,15 @@ func (s *Service) ListProgrammes(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListProgrammesQuery,
-) (paging.Counted[*model.Programme], error) {
+) (ProgrammePage, error) {
 	unitID := query.AcademicUnitID
 	if !unitID.IsValid() {
-		return paging.Counted[*model.Programme]{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
+		return ProgrammePage{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
 
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Counted[*model.Programme]{}, err
+		return ProgrammePage{}, err
 	}
 
 	if err = s.authorizer.Authorize(
@@ -88,7 +94,7 @@ func (s *Service) ListProgrammes(
 		model.ActionProgrammeView,
 		model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
 	); err != nil {
-		return paging.Counted[*model.Programme]{}, err
+		return ProgrammePage{}, err
 	}
 
 	options := store.AcademicNameListOptions{
@@ -99,7 +105,7 @@ func (s *Service) ListProgrammes(
 	}
 	programmes, err := s.programmes.SearchByAcademicUnit(ctx, unitID, options)
 	if err != nil {
-		return paging.Counted[*model.Programme]{}, programmeStoreErrors.Translate(err)
+		return ProgrammePage{}, programmeStoreErrors.Translate(err)
 	}
 
 	page := paging.Counted[*model.Programme]{Page: paging.New(programmes, limit)}
@@ -107,14 +113,18 @@ func (s *Service) ListProgrammes(
 		return s.programmes.CountByAcademicUnit(ctx, unitID, options, maximum)
 	})
 	if err != nil {
-		return paging.Counted[*model.Programme]{}, programmeStoreErrors.Translate(err)
+		return ProgrammePage{}, programmeStoreErrors.Translate(err)
 	}
 	if !consistent {
-		return paging.Counted[*model.Programme]{}, apperror.New("administration.unavailable").WithField("resource", "programme")
+		return ProgrammePage{}, apperror.New("administration.unavailable").WithField("resource", "programme")
 	}
 
 	page.Total = total
-	return page, nil
+	counts, err := s.programmeCounts(ctx, inv, unitID, page.Items)
+	if err != nil {
+		return ProgrammePage{}, err
+	}
+	return ProgrammePage{Counted: page, StructureCounts: counts}, nil
 }
 
 // CreateProgramme needs programme.manage.
@@ -142,6 +152,7 @@ func (s *Service) CreateProgramme(
 
 	academicUnitID := unitID
 	candidate := &model.Programme{
+		Kind:           command.Kind,
 		AcademicUnitID: academicUnitID,
 		Name:           command.Name,
 		DisplayName:    command.DisplayName,
@@ -191,6 +202,9 @@ func (s *Service) UpdateProgramme(
 	}
 
 	candidate := *current
+	if command.Kind != nil {
+		candidate.Kind = *command.Kind
+	}
 	if command.Name != nil {
 		candidate.Name = *command.Name
 	}

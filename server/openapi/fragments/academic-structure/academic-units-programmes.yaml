@@ -137,6 +137,7 @@ components:
             created_at: '2026-08-02T09:30:00Z'
             updated_at: '2026-08-02T09:30:00Z'
             academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+            kind: undergraduate
             name: bsc-computer-science
             display_name: BSc Computer Science
             description: Undergraduate computer science programme.
@@ -153,14 +154,22 @@ components:
                 created_at: '2026-08-02T09:30:00Z'
                 updated_at: '2026-08-02T09:30:00Z'
                 academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+                kind: undergraduate
                 name: bsc-computer-science
                 display_name: BSc Computer Science
                 description: Undergraduate computer science programme.
+                level_count: 3
+                level_count_is_lower_bound: false
+                class_count: 9
+                class_count_is_lower_bound: false
+                student_count: 412
+                student_count_is_lower_bound: false
               - revision: 2
                 id: 889766ufjgio6kbpzjbufozksq
                 created_at: '2026-08-02T09:40:00Z'
                 updated_at: '2026-08-15T13:05:00Z'
                 academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+                kind: postgraduate
                 name: msc-data-science
                 display_name: MSc Data Science
                 description: Taught postgraduate programme in data science.
@@ -199,6 +208,9 @@ components:
         - name
         - display_name
       properties:
+        kind:
+          $ref: '#/components/schemas/ProgrammeKind'
+          description: Optional. The kind of Programme. Omitted or empty means `other`.
         name:
           type: string
           description: >-

@@ -24,13 +24,17 @@ import (
 // ListClassesQuery is the input of ListClasses.
 type ListClassesQuery struct {
 	ProgrammeLevelID model.ProgrammeLevelID
+	// AcademicPeriodID, when set, keeps the classes of that Academic Period.
+	AcademicPeriodID model.AcademicPeriodID
 	paging.NameQuery
 }
 
 // SearchClassesQuery is the input of SearchClasses.
 type SearchClassesQuery struct {
 	AcademicUnitID model.AcademicUnitID
-	Query          string
+	// AcademicPeriodID, when set, keeps the classes of that Academic Period.
+	AcademicPeriodID model.AcademicPeriodID
+	Query            string
 	paging.NameQuery
 }
 
@@ -163,12 +167,15 @@ func (s *Service) ListClasses(
 		return ClassPage{}, err
 	}
 
-	options := store.AcademicNameListOptions{
+	if !query.AcademicPeriodID.IsZero() && !query.AcademicPeriodID.IsValid() {
+		return ClassPage{}, apperror.New("request.invalid").WithField("field", "academic_period_id")
+	}
+	options := store.ClassListOptions{AcademicPeriodID: query.AcademicPeriodID, AcademicNameListOptions: store.AcademicNameListOptions{
 		Descending: query.Descending,
 		AfterName:  query.AfterName,
 		AfterID:    query.AfterID,
 		Limit:      probe,
-	}
+	}}
 	classes, err := s.classes.ListByProgrammeLevel(ctx, levelID, options)
 	if err != nil {
 		return ClassPage{}, classStoreErrors.Translate(err)
@@ -204,13 +211,16 @@ func (s *Service) SearchClasses(
 		return ClassPage{}, err
 	}
 
-	options := store.AcademicNameListOptions{
+	if !query.AcademicPeriodID.IsZero() && !query.AcademicPeriodID.IsValid() {
+		return ClassPage{}, apperror.New("request.invalid").WithField("field", "academic_period_id")
+	}
+	options := store.ClassListOptions{AcademicPeriodID: query.AcademicPeriodID, AcademicNameListOptions: store.AcademicNameListOptions{
 		Term:       strings.TrimSpace(query.Query),
 		Descending: query.Descending,
 		AfterName:  query.AfterName,
 		AfterID:    query.AfterID,
 		Limit:      probe,
-	}
+	}}
 	classes, err := s.classes.SearchByAcademicUnit(ctx, unitID, options)
 	if err != nil {
 		return ClassPage{}, classStoreErrors.Translate(err)

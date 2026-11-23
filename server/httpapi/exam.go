@@ -494,8 +494,8 @@ func (h examHandlers) list(request route.Request) (route.Result, error) {
 		summary := examSummaryResponseFromApplication(item)
 		summary.Creator, summary.Owner = personRef(refs, item.CreatorUserID), personRef(refs, item.OwnerUserID)
 		actions := page.Actions[item.ID]
-		summary.NeedsAttentionCount, summary.NeedsAttentionCountIsLowerBound = cappedCount(actions.NeedsAttention)
-		summary.PendingReviewCount, summary.PendingReviewCountIsLowerBound = cappedCount(actions.PendingReview)
+		summary.NeedsAttentionCount, summary.NeedsAttentionCountIsLowerBound = optionalCappedCount(actions.NeedsAttention)
+		summary.PendingReviewCount, summary.PendingReviewCountIsLowerBound = optionalCappedCount(actions.PendingReview)
 		response.Items = append(response.Items, summary)
 	}
 
@@ -743,8 +743,8 @@ func examCatalogCursorSpec() route.CursorSpec[examCatalogCursor] {
 	}
 }
 
-// cappedCount presents an optional count stopped at store.MaximumListCount.
-func cappedCount(count *int) (*int, *bool) {
+// optionalCappedCount presents an optional count stopped at store.MaximumListCount.
+func optionalCappedCount(count *int) (*int, *bool) {
 	if count == nil {
 		return nil, nil
 	}

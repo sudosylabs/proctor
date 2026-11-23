@@ -903,3 +903,55 @@ func (v *jsonValue) Scan(source any) error {
 }
 
 var _ store.AuditStore = (*SQLAuditStore)(nil)
+
+// CountRepeats reads every event of the page in one statement. Each count
+// reads the repeated key through its index and stops one row past maximum;
+// the visibility filter is List's, so a repeat the caller can't list never
+// counts.
+func (s SQLAuditStore) CountRepeats(ctx context.Context, options store.AuditRepeatOptions) ([]store.AuditRepeat, error) {
+	if len(options.EventIDs) > 201 || !validVisibilityIDs(options.EventIDs) ||
+		options.Window <= 0 || options.Maximum < 1 || options.Maximum > 1000 {
+		return nil, store.NewErrInvalidInput("audit_event", "repeats", nil)
+	}
+	if len(options.EventIDs) == 0 {
+		return []store.AuditRepeat{}, nil
+	}
+
+	visible, err := filterAuditList(sq.Select("1").From("audit_events"), store.AuditListOptions{Visibility: options.Visibility})
+	if err != nil {
+		return nil, err
+	}
+	visible = visible.Where(`audit_events.actor_id = listed.actor_id
+		AND audit_events.action = listed.action
+		AND audit_events.resource_type = listed.resource_type
+		AND audit_events.resource_id = listed.resource_id
+		AND audit_events.created_at > listed.created_at - make_interval(secs => ?)
+		AND audit_events.created_at <= listed.created_at`, options.Window.Seconds()).
+		Limit(uint64(options.Maximum + 1)) //nolint:gosec // G115: Maximum is 1..1000.
+	inner, innerArgs, err := visible.PlaceholderFormat(sq.Question).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build audit repeat count: %w", err)
+	}
+
+	rows := []struct {
+		EventID string `db:"event_id"`
+		Count   int    `db:"count"`
+	}{}
+	args := append(innerArgs, pq.Array(idStrings(options.EventIDs)))
+	if err := s.GetMaster().Select(ctx, &rows, `
+		SELECT listed.id AS event_id, counted.count
+		FROM audit_events listed
+		CROSS JOIN LATERAL (
+			SELECT LEAST(count(*), `+strconv.Itoa(options.Maximum)+`) AS count FROM (`+inner+`) bounded
+		) counted
+		WHERE listed.id = ANY(?) AND listed.actor_id IS NOT NULL
+		ORDER BY listed.id`, args...); err != nil {
+		return nil, fmt.Errorf("count audit repeats: %w", err)
+	}
+
+	repeats := make([]store.AuditRepeat, 0, len(rows))
+	for _, row := range rows {
+		repeats = append(repeats, store.AuditRepeat{EventID: model.AuditEventID(row.EventID), Count: row.Count})
+	}
+	return repeats, nil
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -251,7 +252,7 @@ func (s *Service) AssessDesktopBuilds(ctx context.Context, builds []model.Deskto
 func (s *Service) GetDesktopCompatibilityPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
-) (*model.DesktopCompatibilityPolicy, error) {
+) (*DesktopCompatibilityPolicyView, error) {
 	if _, _, err := s.authorizeInstitutionAction(ctx, inv, model.ActionAccessPolicyView); err != nil {
 		return nil, err
 	}
@@ -259,7 +260,7 @@ func (s *Service) GetDesktopCompatibilityPolicy(
 	if err != nil || policy == nil {
 		return nil, desktopCompatibilityPolicyError(err)
 	}
-	return policy.Clone(), nil
+	return s.describePolicy(policy.Clone()), nil
 }
 
 // ReplaceDesktopCompatibilityPolicy replaces the current policy; it requires
@@ -268,7 +269,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
 	command ReplaceDesktopCompatibilityPolicyCommand,
-) (*model.DesktopCompatibilityPolicy, error) {
+) (*DesktopCompatibilityPolicyView, error) {
 	if err := access.RequireStrongRecentSession(
 		inv.Principal(),
 		s.now(),
@@ -321,7 +322,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 			Value: map[string]any{
 				"expected_revision":         command.ExpectedRevision,
 				"minimum_desktop_release":   command.Settings.MinimumDesktopRelease,
-				"revoked_build_count":       len(command.Settings.RevokedDesktopBuildIDs),
+				"revoked_build_count":       len(command.Settings.RevokedDesktopBuilds),
 				"administrator_message_set": command.Settings.AdministratorMessage != "",
 				"availability":              command.Settings.Availability,
 				"retry_at_set":              command.Settings.RetryAt.Valid,
@@ -352,8 +353,17 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	if stored == nil || stored.Policy == nil || stored.Policy.Validate() != nil {
 		return nil, apperror.New("desktop_compatibility_policy.unavailable")
 	}
+	if stored.Changed && !stored.Replayed && s.publisher != nil {
+		event, eventErr := realtime.NewDesktopCompatibilityPolicyChangedEvent(institution.ID)
+		if eventErr == nil {
+			eventErr = s.publisher.Publish(ctx, event)
+		}
+		if eventErr != nil {
+			s.publisher.Report(ctx, "desktop_compatibility_policy.changed", eventErr)
+		}
+	}
 
-	return stored.Policy.Clone(), nil
+	return s.describePolicy(stored.Policy.Clone()), nil
 }
 
 func (s *Service) authorizeInstitutionAction(
@@ -444,7 +454,7 @@ func (c *desktopBuildCatalog) evaluate(
 		return result, nil
 	}
 
-	if _, revoked := slices.BinarySearch(policy.RevokedDesktopBuildIDs, query.DesktopBuildID); revoked {
+	if _, revoked := slices.BinarySearch(policy.RevokedBuildIDs(), query.DesktopBuildID); revoked {
 		result.Compatibility = DesktopCompatibilityUpdateRequired
 		result.Reason = "build_revoked"
 		return result, nil

@@ -36,7 +36,7 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
 	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
-		academicUnitResource(academics), institutionResource(academics), roleResource(fixture.service))
+		academicUnitResource(academics, nil), institutionResource(academics), roleResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	body, _ := json.Marshal(map[string]any{

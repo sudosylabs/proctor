@@ -1721,7 +1721,7 @@ func (s *classStore) GetByName(ctx context.Context, arg1 model.ProgrammeLevelID,
 	})
 }
 
-func (s *classStore) ListByProgrammeLevel(ctx context.Context, arg1 model.ProgrammeLevelID, arg2 store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s *classStore) ListByProgrammeLevel(ctx context.Context, arg1 model.ProgrammeLevelID, arg2 store.ClassListOptions) ([]*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) {
 		return s.ClassStore.ListByProgrammeLevel(ctx, arg1, arg2)
 	})
@@ -1733,7 +1733,7 @@ func (s *classStore) ListByAcademicPeriod(ctx context.Context, arg1 model.Academ
 	})
 }
 
-func (s *classStore) SearchByAcademicUnit(ctx context.Context, arg1 model.AcademicUnitID, arg2 store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s *classStore) SearchByAcademicUnit(ctx context.Context, arg1 model.AcademicUnitID, arg2 store.ClassListOptions) ([]*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) {
 		return s.ClassStore.SearchByAcademicUnit(ctx, arg1, arg2)
 	})

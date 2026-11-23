@@ -8,6 +8,44 @@
 # Access Policy and Academic Unit events.
 components:
   messages:
+    desktop_compatibility_policy.changed:
+      name: desktop_compatibility_policy.changed
+      title: Desktop Compatibility Policy changed
+      summary: Refetch the Desktop Compatibility Policy and the Desktop release list. The event has no data.
+      description: >-
+        Sent after a replacement changes the Desktop Compatibility Policy, including its revoked builds. The policy
+        is Institution-wide, so the event names no ID beyond its resource. Delivered to connections that subscribe
+        to desktop_compatibility_policy.manage on the Institution, checked again when it is sent.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+            properties:
+              event:
+                type: string
+                const: desktop_compatibility_policy.changed
+              action:
+                type: string
+                const: desktop_compatibility_policy.manage
+            not:
+              required:
+                - data
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: desktop_compatibility_policy.changed
+            sequence: 42
+            action: desktop_compatibility_policy.manage
+            resource:
+              type: institution
+              id: wj3drgzdpnf54rxf5d8qd3dqne
     access_policy_changed:
       name: access_policy_changed
       title: Access Policy changed
@@ -125,7 +163,11 @@ components:
       name: academic_unit_updated
       title: Academic Unit updated
       summary: Refetch the Academic Unit. The event names it and its parent.
-      description: Refetch the Academic Unit. The event names it and its parent. Delivered to connections that subscribe to academic_unit.view on the academic unit.
+      description: >-
+        Refetch the Academic Unit. The event names it and its parent. Sent when the Academic Unit itself changes, and
+        when a member joins or leaves it outside a batch, since its member counts moved; a change to who administers
+        it arrives as role_binding.changed. Delivered to connections that subscribe to academic_unit.view on the
+        academic unit.
       tags:
         - name: event
         - name: Institution

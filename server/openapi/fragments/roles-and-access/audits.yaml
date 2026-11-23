@@ -175,6 +175,25 @@ components:
             total: 1
             total_is_lower_bound: false
   schemas:
+    AuditRepeat:
+      description: >-
+        Present when the same actor did the same action to the same resource more than once in the ten minutes up to
+        and including this event. It counts only events you can see in this listing, this one included, and stops at
+        100.
+      type: object
+      additionalProperties: false
+      required:
+        - count
+        - window_seconds
+      properties:
+        count:
+          type: integer
+          minimum: 2
+          maximum: 100
+        window_seconds:
+          type: integer
+          enum:
+            - 600
     AuditEventResponse:
       description: One audit record you can see, without sensitive detail.
       type: object
@@ -188,6 +207,8 @@ components:
         - status
         - summary
       properties:
+        repeat:
+          $ref: '#/components/schemas/AuditRepeat'
         id:
           $ref: '#/components/schemas/ID'
         created_at:

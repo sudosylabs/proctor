@@ -32,18 +32,21 @@ func TestDesktopCompatibilityPolicyStore(t *testing.T, stores store.Store) {
 	require.Equal(t, bootstrap.Institution.ID, initial.InstitutionID)
 	require.Equal(t, int64(1), initial.Revision)
 	require.Empty(t, initial.MinimumDesktopRelease)
-	require.Empty(t, initial.RevokedDesktopBuildIDs)
+	require.Empty(t, initial.RevokedDesktopBuilds)
 	require.Empty(t, initial.AdministratorMessage)
 	require.Equal(t, model.DesktopAvailabilityReady, initial.Availability)
 	require.False(t, initial.RetryAt.Valid)
 
 	retryAt := time.Unix(2_000_000_000, 0).UTC()
 	settings := model.DesktopCompatibilityPolicySettings{
-		MinimumDesktopRelease:  "1.2.0",
-		RevokedDesktopBuildIDs: []string{"desktop-build-17", "desktop-build-23"},
-		AdministratorMessage:   "Update Proctor Desktop before your next exam.",
-		Availability:           model.DesktopAvailabilityMaintenance,
-		RetryAt:                model.OptionalTimeFrom(retryAt),
+		MinimumDesktopRelease: "1.2.0",
+		RevokedDesktopBuilds: []model.DesktopBuildRevocationRequest{
+			{BuildID: "desktop-build-17", Reason: "Crashes on wake"},
+			{BuildID: "desktop-build-23", Reason: "Leaks focus"},
+		},
+		AdministratorMessage: "Update Proctor Desktop before your next exam.",
+		Availability:         model.DesktopAvailabilityMaintenance,
+		RetryAt:              model.OptionalTimeFrom(retryAt),
 	}
 	replacement := &store.DesktopCompatibilityPolicyReplacement{
 		ActorID:          bootstrap.Administrator.ID,
@@ -58,7 +61,14 @@ func TestDesktopCompatibilityPolicyStore(t *testing.T, stores store.Store) {
 	require.True(t, result.Changed)
 	require.Equal(t, int64(2), result.Policy.Revision)
 	require.Equal(t, settings.MinimumDesktopRelease, result.Policy.MinimumDesktopRelease)
-	require.Len(t, result.Policy.RevokedDesktopBuildIDs, 2)
+	require.Len(t, result.Policy.RevokedDesktopBuilds, 2)
+	for _, revocation := range result.Policy.RevokedDesktopBuilds {
+		require.Equal(t, bootstrap.Administrator.ID, revocation.RevokedByUserID, "the revocation names who revoked it")
+		require.True(t, revocation.RevokedAt.Equal(result.Policy.UpdatedAt), "a new revocation is stamped at the change")
+	}
+	reread, err := stores.DesktopCompatibilityPolicy().Get(ctx)
+	require.NoError(t, err)
+	require.Equal(t, result.Policy.RevokedDesktopBuilds, reread.RevokedDesktopBuilds, "the stamps survive a read")
 	require.Equal(t, settings.AdministratorMessage, result.Policy.AdministratorMessage)
 	require.Equal(t, model.DesktopAvailabilityMaintenance, result.Policy.Availability)
 	require.True(t, result.Policy.RetryAt.Valid)
@@ -212,9 +222,13 @@ func assertDesktopCompatibilityPolicyAuditIsSafe(
 	var result map[string]any
 	require.NoError(t, json.Unmarshal(event.Result, &result))
 	encoded := string(event.Result)
-	for _, sensitive := range append(settings.RevokedDesktopBuildIDs, settings.AdministratorMessage) {
-		require.NotContains(t, encoded, sensitive, "audit result exposed policy content")
+	sensitive := []string{settings.AdministratorMessage}
+	for _, revocation := range settings.RevokedDesktopBuilds {
+		sensitive = append(sensitive, revocation.BuildID, revocation.Reason)
 	}
-	require.Equal(t, float64(len(settings.RevokedDesktopBuildIDs)), result["revoked_build_count"])
+	for _, value := range sensitive {
+		require.NotContains(t, encoded, value, "audit result exposed policy content")
+	}
+	require.Equal(t, float64(len(settings.RevokedDesktopBuilds)), result["revoked_build_count"])
 	require.Equal(t, true, result["administrator_message_set"])
 }

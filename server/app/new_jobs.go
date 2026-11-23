@@ -283,10 +283,13 @@ func buildApplicationJobDefinitions(
 
 // administrationCountsDependencies leaves out the counts of services a
 // reduced test graph lacks.
-func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime jobRuntime) administration.CountsDependencies {
+func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime jobRuntime, identities *identity.Service) administration.CountsDependencies {
 	deps := administration.CountsDependencies{
 		PendingInvitations:    onboardingPorts.CountPendingInvitations,
 		OpenOnboardingImports: onboardingPorts.CountOpenImports,
+	}
+	if identities != nil {
+		deps.OpenSittings = identities.CountOpenSittings
 	}
 	if runtime.operations != nil {
 		deps.RecentJobFailures = runtime.operations.CountRecentJobFailures

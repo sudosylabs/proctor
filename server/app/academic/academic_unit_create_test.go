@@ -201,3 +201,29 @@ func assertAcademicUnitCreateEvents(t *testing.T, got []string, want ...string) 
 		require.Equal(t, want[index], got[index], "events = %v, want %v", got, want)
 	}
 }
+
+func TestAcademicUnitCreateKeepsKindAndDefaultsToOther(t *testing.T) {
+	t.Parallel()
+
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, nil, nil, institutionGrant(principal.UserID, model.ActionAcademicUnitManage))
+	creator := &academicUnitCreateStore{result: &model.AcademicUnit{ID: model.NewAcademicUnitID()}}
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&[]string{})})
+
+	_, err := service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{
+		Kind: model.AcademicUnitKindFaculty, Name: "engineering", DisplayName: "Engineering",
+	})
+	require.NoError(t, err)
+	require.Equal(t, model.AcademicUnitKindFaculty, creator.input.Unit.Kind)
+
+	_, err = service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{Name: "science", DisplayName: "Science"})
+	require.NoError(t, err)
+	require.Equal(t, model.AcademicUnitKindOther, creator.input.Unit.Kind, "an omitted kind is other")
+
+	creator.input = nil
+	_, err = service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{
+		Kind: "campus", Name: "arts", DisplayName: "Arts",
+	})
+	require.True(t, apperror.Is(err, "academic_unit.invalid"), "unknown kind error = %v", err)
+	require.Nil(t, creator.input, "an unknown kind reaches no store")
+}

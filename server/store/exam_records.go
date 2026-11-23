@@ -91,6 +91,8 @@ type ExamRecordsHoldCreation struct {
 	HoldID        model.RetentionHoldID
 	ReasonCode    string
 	PrivateReason string
+	// Until, when set, must follow the hold's creation on the database clock.
+	Until model.OptionalTime
 }
 
 type ExamRecordsHoldRelease struct {

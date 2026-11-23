@@ -279,11 +279,15 @@ func (s SQLAcademicPeriodStore) ListVisible(
 	visibility store.AcademicPeriodVisibilityScope,
 	options store.AcademicPeriodListOptions,
 ) ([]*model.AcademicPeriod, error) {
+	byName := options.Order == store.AcademicPeriodOrderName
 	if !visibility.InstitutionID.IsValid() ||
 		options.Limit < 1 ||
 		options.Limit > maximumAcademicPageProbe ||
-		options.AfterID.IsZero() != options.AfterStartAt.IsZero() ||
+		(options.Order != "" && options.Order != store.AcademicPeriodOrderStart && !byName) ||
+		(!byName && options.AfterID.IsZero() != options.AfterStartAt.IsZero()) ||
+		(byName && !options.AfterStartAt.IsZero()) ||
 		(!options.AfterID.IsZero() && !options.AfterID.IsValid()) ||
+		!validAcademicPeriodOwnerFilter(options.OwnerType, options.OwnerID) ||
 		len(visibility.AcademicUnitRootIDs) > 256 ||
 		!validVisibilityIDs(visibility.AcademicUnitRootIDs) {
 		return nil, store.NewErrInvalidInput("academic_period", "visibility", visibility)
@@ -342,16 +346,44 @@ func (s SQLAcademicPeriodStore) ListVisible(
 		query = query.Where("(academic_periods.name ILIKE ? ESCAPE '!' OR academic_periods.display_name ILIKE ? ESCAPE '!')", pattern, pattern)
 	}
 
-	if !options.AfterID.IsZero() {
-		query = query.Where(
-			"(academic_periods.start_at, academic_periods.name, academic_periods.id) > (?, ?, ?)",
-			model.TimeUTC(options.AfterStartAt),
-			options.AfterName,
-			options.AfterID,
-		)
+	switch {
+	case options.OwnerType == model.ResourceInstitution:
+		query = query.Where(sq.Eq{"academic_periods.owner_type": model.ResourceInstitution})
+		if options.OwnerID != "" {
+			query = query.Where(sq.Eq{"academic_periods.institution_id": options.OwnerID})
+		}
+	case options.OwnerType == model.ResourceAcademicUnit:
+		query = query.Where(sq.Eq{"academic_periods.owner_type": model.ResourceAcademicUnit})
+		if options.OwnerID != "" {
+			query = query.Where(sq.Eq{"academic_periods.academic_unit_id": options.OwnerID})
+		}
+	}
+	if !options.ActiveAt.IsZero() {
+		at := model.TimeUTC(options.ActiveAt)
+		query = query.Where(sq.LtOrEq{"academic_periods.start_at": at}).Where(sq.Gt{"academic_periods.end_at": at})
 	}
 
-	query = query.OrderBy("academic_periods.start_at", "academic_periods.name", "academic_periods.id").Limit(uint64(options.Limit))
+	comparison, direction := ">", ""
+	if options.Descending {
+		comparison, direction = "<", " DESC"
+	}
+	if byName {
+		if !options.AfterID.IsZero() {
+			query = query.Where("(academic_periods.name, academic_periods.id) "+comparison+" (?, ?)", options.AfterName, options.AfterID)
+		}
+		query = query.OrderBy("academic_periods.name"+direction, "academic_periods.id"+direction)
+	} else {
+		if !options.AfterID.IsZero() {
+			query = query.Where(
+				"(academic_periods.start_at, academic_periods.name, academic_periods.id) "+comparison+" (?, ?, ?)",
+				model.TimeUTC(options.AfterStartAt),
+				options.AfterName,
+				options.AfterID,
+			)
+		}
+		query = query.OrderBy("academic_periods.start_at"+direction, "academic_periods.name"+direction, "academic_periods.id"+direction)
+	}
+	query = query.Limit(uint64(options.Limit))
 	rows := []academicPeriodRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list visible academic periods: %w", err)
@@ -617,3 +649,17 @@ func (row academicPeriodRow) model() (*model.AcademicPeriod, error) {
 }
 
 var _ store.AcademicPeriodStore = (*SQLAcademicPeriodStore)(nil)
+
+// validAcademicPeriodOwnerFilter accepts no owner filter, either owner kind
+// alone, or an owner kind with its canonical owner ID.
+func validAcademicPeriodOwnerFilter(ownerType model.ResourceType, ownerID string) bool {
+	switch ownerType {
+	case "":
+		return ownerID == ""
+	case model.ResourceInstitution:
+		return ownerID == "" || model.InstitutionID(ownerID).IsValid()
+	case model.ResourceAcademicUnit:
+		return ownerID == "" || model.AcademicUnitID(ownerID).IsValid()
+	}
+	return false
+}

@@ -57,8 +57,17 @@ type auditEventResponse struct {
 	// receive it; academic-scoped readers never do because their projection
 	// drops parameters.
 	Reason string `json:"reason,omitempty"`
+	// Repeat is present when the same actor did the same action to the same
+	// resource more than once in the ten minutes up to and including this
+	// event, counting only events the caller can see.
+	Repeat *auditRepeatResponse `json:"repeat,omitempty"`
 	// prior_state, result and the other parameters are operator-only and
 	// deliberately left out.
+}
+
+type auditRepeatResponse struct {
+	Count         int `json:"count"`
+	WindowSeconds int `json:"window_seconds"`
 }
 
 type auditResourceResponse struct {
@@ -145,7 +154,11 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, listErr
 	}
 	present := func(event *model.AuditEvent) auditEventResponse {
-		return auditEventResponseFromModel(request.HTTP, event, page.Names, page.Actors)
+		response := auditEventResponseFromModel(request.HTTP, event, page.Names, page.Actors)
+		if count, repeated := page.Repeats[event.ID]; repeated {
+			response.Repeat = &auditRepeatResponse{Count: count, WindowSeconds: int(administration.AuditRepeatWindow.Seconds())}
+		}
+		return response
 	}
 	envelope, err := route.NewList(page.Items, page.HasMore, present, func(last *model.AuditEvent) (string, error) {
 		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order})

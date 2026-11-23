@@ -102,12 +102,13 @@ func TestClassMemberPagingAuthorizesEveryPage(t *testing.T) {
 	persistence := &classMemberStoreFake{events: &events, pageResult: &store.ClassMemberPage{Members: []*model.ClassMember{member}, HasMore: true}}
 	now := model.TimeFromMillis(1000)
 	clock := func() time.Time { return now }
-	service := mustNew(Dependencies{Store: &catalogFake{classMember: persistence, class: classes}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: clock})
+	service := mustNew(Dependencies{Store: &catalogFake{classMember: persistence, class: classes, user: relationshipUserStoreTestFake{}}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: clock})
 	first, err := service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, MembershipPageQuery: MembershipPageQuery{Limit: 1}})
 	require.NoError(t, err, "first page = %#v", first)
 	require.True(t, first.HasMore, "first page = %#v", first)
-	// The get-class resolves the Class's scope for the decision.
-	require.Equal(t, []string{"get-class", "grants", "decision:class.members.view:success", "list-page", "count-page"}, events)
+	// The get-class resolves the Class's scope for the decision; the second
+	// grants read decides whether the member's email is shown and searched.
+	require.Equal(t, []string{"get-class", "grants", "decision:class.members.view:success", "grants", "list-page", "count-page"}, events)
 	require.Equal(t, paging.Total{Counted: true, Total: 1}, first.Total, "the first page counts its memberships")
 	require.Equal(t, store.ClassMemberPageOptions{ClassID: scopeID, ActiveAt: now, Limit: 1}, persistence.countOptions,
 		"the count reads the page's Class and instant")
@@ -128,7 +129,7 @@ func TestClassMemberPagingAuthorizesEveryPage(t *testing.T) {
 	// before it is read.
 	events = nil
 	revoked := world.access(t, &events, classes)
-	service = mustNew(Dependencies{Store: &catalogFake{classMember: persistence, class: classes}, Authorizer: revoked.Authorizer, Auditor: revoked.Auditor, Now: clock})
+	service = mustNew(Dependencies{Store: &catalogFake{classMember: persistence, class: classes, user: relationshipUserStoreTestFake{}}, Authorizer: revoked.Authorizer, Auditor: revoked.Auditor, Now: clock})
 	_, err = service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
 	require.True(t, apperror.Is(err, "authorization.denied"), "revoked membership read: %v, events", err)
 	require.Equal(t, []string{"get-class", "grants", "decision:class.members.view:fail"}, events, "revoked membership read: %v, events", err)

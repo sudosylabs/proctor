@@ -8,18 +8,23 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestAcademicUnitResponsePreservesExistingWireShape(t *testing.T) {
@@ -69,7 +74,7 @@ func TestAcademicUnitHTTPReadMapsDTOWithoutPermissionPreflight(t *testing.T) {
 		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unit.ID, model.ActionAcademicUnitView)},
 		Units:  []*model.AcademicUnit{unit},
 	})
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service, nil))
 
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet, "/api/v1/academic-units/"+unit.ID.String(), nil,
@@ -94,7 +99,7 @@ func TestAcademicUnitHTTPErrorUsesProblemDetailsContract(t *testing.T) {
 	principal := academicCaller()
 	// The caller may view every unit; the unit it asks for does not exist.
 	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionAcademicUnitView)}})
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service, nil))
 
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID(), nil)
 	request.Header.Set("Authorization", "Bearer test-credential")
@@ -138,13 +143,14 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{grant}})
 			settings := validHTTPSettings(t)
 			settings.Logger = logger
-			httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service), institutionResource(fixture.service))
+			httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service, nil), institutionResource(fixture.service))
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = httpAPI.Close() })
 
 			request := httptest.NewRequestWithContext(t.Context(),
 				http.MethodPost, tt.path,
 				strings.NewReader(`{
+					"kind":"school",
 					"name":"computing",
 					"display_name":"Computing",
 					"description":"School"
@@ -161,8 +167,10 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			require.Equal(t, "computing", created.Name)
 			require.Equal(t, "Computing", created.DisplayName)
 			require.Equal(t, "School", created.Description)
+			require.Equal(t, model.AcademicUnitKindSchool, created.Kind)
 			var got academicUnitResponse
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &got))
+			require.Equal(t, "school", got.Kind)
 			require.Equal(t, created.ID.String(), got.ID)
 			require.Equal(t, tt.wantParentID, got.ParentID)
 		})
@@ -184,14 +192,14 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	logger, _ := routetest.NewLogger(t)
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
-	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service), institutionResource(fixture.service))
+	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service, nil), institutionResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 
 	name := "engineering"
 	patchRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/academic-units/"+unit.ID.String(),
-		strings.NewReader(`{"parent_id":"`+destination.ID.String()+`","name":"`+name+`"}`),
+		strings.NewReader(`{"parent_id":"`+destination.ID.String()+`","name":"`+name+`","kind":"department"}`),
 	)
 	patchRequest.Header.Set("Authorization", "Bearer test-credential")
 	patchRequest.Header.Set("Content-Type", "application/json")
@@ -203,6 +211,7 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	require.Equal(t, unit.ID, updated.ID)
 	require.Equal(t, destination.ID, updated.ParentID)
 	require.Equal(t, name, updated.Name)
+	require.Equal(t, model.AcademicUnitKindDepartment, updated.Kind)
 
 	archiveRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete, "/api/v1/academic-units/"+unit.ID.String(), nil,
@@ -224,3 +233,107 @@ func TestAcademicUnitOpenAPIDocument(t *testing.T) {
 	requireOpenAPIListEnvelope(t, document.Components.Schemas["AcademicUnitListResponse"], "#/components/schemas/AcademicUnitResponse")
 	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["AcademicUnitArchived"].Headers["Cache-Control"].Ref)
 }
+
+type unitSummaryMembers struct {
+	*academicUnitMemberRecords
+	count store.AcademicUnitMemberCount
+}
+
+func (s *unitSummaryMembers) CountCurrentByAcademicUnits(_ context.Context, options store.AcademicUnitMemberCountOptions) ([]store.AcademicUnitMemberCount, error) {
+	counts := []store.AcademicUnitMemberCount{}
+	for _, id := range options.AcademicUnitIDs {
+		count := s.count
+		count.AcademicUnitID = id
+		counts = append(counts, count)
+	}
+	return counts, nil
+}
+
+type unitSummaryBindings struct {
+	*academicBindingRecords
+	administrators []model.UserID
+}
+
+func (s *unitSummaryBindings) ListAcademicUnitAdministrators(_ context.Context, options store.AcademicUnitAdministratorOptions) ([]store.AcademicUnitAdministrators, error) {
+	return []store.AcademicUnitAdministrators{{AcademicUnitID: options.AcademicUnitIDs[0], UserIDs: s.administrators, More: 4}}, nil
+}
+
+func (s *academicUnitRecords) ListWithinSubtrees(_ context.Context, ids, roots []model.AcademicUnitID) ([]model.AcademicUnitID, error) {
+	within := []model.AcademicUnitID{}
+	for _, id := range ids {
+		for unit, ok := s.byID[id]; ok; unit, ok = s.byID[unit.ParentID] {
+			if slices.Contains(roots, unit.ID) {
+				within = append(within, id)
+				break
+			}
+		}
+	}
+	return within, nil
+}
+
+func TestAcademicUnitHTTPReadShowsCountsAndAdministratorsOnlyWithTheirGrants(t *testing.T) {
+	t.Parallel()
+
+	world := newAcademicWorld()
+	unit := world.unit
+	principal := academicCaller()
+	present, removed := &model.User{ID: model.NewUserID(), Username: "praman", DisplayName: "Priya Raman"}, model.NewUserID()
+	users := &directoryUserStore{byID: map[model.UserID]*model.User{present.ID: present}}
+
+	read := func(t *testing.T, grants ...accesstest.Grant) map[string]any {
+		t.Helper()
+		fixture := newAcademicFixture(t, academicOptions{Grants: grants, Units: []*model.AcademicUnit{unit}})
+		members := &unitSummaryMembers{academicUnitMemberRecords: fixture.unitMembers, count: store.AcademicUnitMemberCount{
+			Members: store.MaximumListCount, ByAffiliation: map[model.AffiliationKind]int{model.AffiliationStudent: 376, model.AffiliationStaff: 36},
+		}}
+		bindings := &unitSummaryBindings{academicBindingRecords: fixture.bindings, administrators: []model.UserID{present.ID, removed}}
+		service, err := academic.New(academic.Dependencies{
+			Store:      &academicSummaryCatalog{Catalog: academicCatalog{fixture: fixture}, members: members, bindings: bindings},
+			Authorizer: fixture.access.Authorizer, Auditor: fixture.access.Auditor, Now: time.Now, NewID: model.NewID,
+			Publisher: fixture.publisher,
+		})
+		require.NoError(t, err)
+		logger, _ := routetest.NewLogger(t)
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
+			academicUnitResource(service, testPeople(users, fixture.access.Authorizer)))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unit.ID.String(), nil)
+		request.Header.Set("Authorization", "Bearer test-credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		return body
+	}
+
+	viewOnly := read(t, inAcademicUnit(principal.UserID, unit.ID, model.ActionAcademicUnitView))
+	for _, field := range []string{"member_count", "member_count_is_lower_bound", "member_counts_by_affiliation", "administrators", "administrators_more"} {
+		require.NotContains(t, viewOnly, field, "academic_unit.view alone shows no %s", field)
+	}
+
+	full := read(t,
+		inAcademicUnit(principal.UserID, unit.ID, model.ActionAcademicUnitView),
+		inAcademicUnit(principal.UserID, unit.ID, model.ActionAcademicUnitMembersView),
+		inAcademicUnit(principal.UserID, unit.ID, model.ActionRoleBindingView))
+	require.InDelta(t, store.MaximumListCount, full["member_count"], 0)
+	require.Equal(t, true, full["member_count_is_lower_bound"])
+	byKind := full["member_counts_by_affiliation"].(map[string]any)
+	require.InDelta(t, 376, byKind["student"], 0)
+	require.Equal(t, false, byKind["student_is_lower_bound"])
+	require.InDelta(t, 0, byKind["external"], 0)
+	administrators := full["administrators"].([]any)
+	require.Len(t, administrators, 2)
+	require.Equal(t, map[string]any{"id": present.ID.String(), "display_name": "Priya Raman"}, administrators[0],
+		"a person outside the caller's directory is named without their username")
+	require.Equal(t, map[string]any{"id": removed.String()}, administrators[1], "a removed account has no name")
+	require.InDelta(t, 4, full["administrators_more"], 0)
+}
+
+type academicSummaryCatalog struct {
+	store.Catalog
+	members  store.AcademicUnitMemberStore
+	bindings store.RoleBindingStore
+}
+
+func (c *academicSummaryCatalog) AcademicUnitMember() store.AcademicUnitMemberStore { return c.members }
+func (c *academicSummaryCatalog) RoleBinding() store.RoleBindingStore               { return c.bindings }

@@ -277,7 +277,8 @@ func TestAuthorizationInvalidationClosesTheUserAndExactUserViewWatchers(t *testi
 	subjectID := model.NewUserID()
 	resource := model.Resource{Type: model.ResourceUser, ID: subjectID.String()}
 	register := func(userID model.UserID) *connectionRuntime {
-		socket, _ := newSocketPair(t)
+		socket, peer := newSocketPair(t)
+		peer.listen()
 		connection, _ := hub.register(socket, model.Principal{UserID: userID, SessionID: model.NewSessionID()},
 			model.RequestMetadata{}, "", 0, "")
 		require.NotNil(t, connection)

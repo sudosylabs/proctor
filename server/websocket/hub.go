@@ -615,8 +615,11 @@ func (h *Hub) closeMatching(
 		}
 		shard.mu.RUnlock()
 	}
+	// A slow peer must not spend another full write budget before the next
+	// subscription is invalidated.
+	deadline := time.Now().Add(shutdownControlWait)
 	for _, connection := range connections {
-		connection.close(code, localizedCloseReason(connection.localizer, connection.locale, reason), false)
+		connection.closeWithDeadline(code, localizedCloseReason(connection.localizer, connection.locale, reason), false, deadline)
 		connection.release()
 	}
 }

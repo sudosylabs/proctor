@@ -91,7 +91,7 @@ func validExamAuthoringRow(t *testing.T) examAuthoringRow {
 		ID: model.NewID(), AcademicUnitID: model.NewID(), CreatorUserID: model.NewID(), OwnerUserID: model.NewID(),
 		DefaultRevisionID: sql.NullString{}, CreatedAt: at, UpdatedAt: at, ExamRevision: 1,
 		DraftTitle: "Test", Policy: jsonValue(policy), BrowserPolicy: jsonValue(browserPolicy),
-		BaseRevisionID: sql.NullString{}, DraftUpdatedAt: at,
+		BaseRevisionID: sql.NullString{}, DraftUpdatedAt: at, DraftUpdatedBy: model.NewUserID().String(),
 		DraftRevision: 1, ManagerCount: 1, ActorIsManager: true,
 		OwnerIsManager: true,
 	}

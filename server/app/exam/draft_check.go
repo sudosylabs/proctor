@@ -23,7 +23,7 @@ import (
 // at fault.
 type DraftProblem struct {
 	Reason     store.ExamPublicationProblemReason
-	Code       apperror.Code
+	Code       string
 	Field      string
 	ResourceID model.ExamResourceID
 }
@@ -114,7 +114,7 @@ func (p *Publication) CheckExamDraft(
 		}
 		check.Problems = append(check.Problems, DraftProblem{
 			Reason:     problem.Reason,
-			Code:       apperror.Code(apperror.CodeOf(examStoreErrors.Translate(problem.PublicationError()), "exam.unavailable")),
+			Code:       apperror.CodeOf(examStoreErrors.Translate(problem.PublicationError()), "exam.unavailable"),
 			Field:      field,
 			ResourceID: problem.ResourceID,
 		})

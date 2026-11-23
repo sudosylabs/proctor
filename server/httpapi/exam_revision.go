@@ -207,10 +207,10 @@ func (h examRevisionHandlers) checkDraft(request route.Request) (route.Result, e
 	}
 	for _, problem := range check.Problems {
 		response.Problems = append(response.Problems, examDraftProblemEntry{
-			Code:       string(problem.Code),
+			Code:       problem.Code,
 			Field:      problem.Field,
 			ResourceID: problem.ResourceID.String(),
-			Message:    route.Translate(request.HTTP, examDraftProblemLocalizationID(problem.Reason), string(problem.Code)),
+			Message:    route.Translate(request.HTTP, examDraftProblemLocalizationID(problem.Reason), problem.Code),
 		})
 	}
 	return route.JSON(http.StatusOK, response), nil

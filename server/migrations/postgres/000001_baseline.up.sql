@@ -50,6 +50,8 @@ CREATE TABLE academic_units (
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     institution_id varchar(26) NOT NULL REFERENCES institutions(id),
     parent_id varchar(26) REFERENCES academic_units(id),
+    kind varchar(32) NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('faculty', 'school', 'department', 'office', 'other')),
     name varchar(64) NOT NULL,
     display_name varchar(512) NOT NULL,
     description varchar(4096) NOT NULL DEFAULT '',

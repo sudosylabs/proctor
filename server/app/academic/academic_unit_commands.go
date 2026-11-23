@@ -23,6 +23,7 @@ import (
 // and lifecycle fields are not inputs.
 type CreateAcademicUnitCommand struct {
 	ParentID       model.AcademicUnitID
+	Kind           model.AcademicUnitKind
 	Name           string
 	DisplayName    string
 	Description    string
@@ -34,6 +35,7 @@ type UpdateAcademicUnitCommand struct {
 	ExpectedRevision *int64
 	ID               model.AcademicUnitID
 	ParentID         *model.AcademicUnitID
+	Kind             *model.AcademicUnitKind
 	Name             *string
 	DisplayName      *string
 	Description      *string
@@ -97,6 +99,7 @@ func (s *Service) CreateAcademicUnit(
 	candidate := &model.AcademicUnit{
 		InstitutionID: institutionID,
 		ParentID:      parentUnitID,
+		Kind:          command.Kind,
 		Name:          command.Name,
 		DisplayName:   command.DisplayName,
 		Description:   command.Description,
@@ -107,8 +110,8 @@ func (s *Service) CreateAcademicUnit(
 	}
 
 	idempotency, err := idempotency.Prepare(inv, "academic_unit.create", command.IdempotencyKey, struct {
-		ParentID, Name, DisplayName, Description string
-	}{command.ParentID.String(), command.Name, command.DisplayName, command.Description})
+		ParentID, Kind, Name, DisplayName, Description string
+	}{command.ParentID.String(), string(candidate.Kind), command.Name, command.DisplayName, command.Description})
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +200,9 @@ func (s *Service) UpdateAcademicUnit(
 		}
 	}
 
+	if command.Kind != nil {
+		candidate.Kind = *command.Kind
+	}
 	if command.Name != nil {
 		candidate.Name = *command.Name
 	}

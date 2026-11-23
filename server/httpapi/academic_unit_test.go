@@ -145,6 +145,7 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			request := httptest.NewRequestWithContext(t.Context(),
 				http.MethodPost, tt.path,
 				strings.NewReader(`{
+					"kind":"school",
 					"name":"computing",
 					"display_name":"Computing",
 					"description":"School"
@@ -161,8 +162,10 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			require.Equal(t, "computing", created.Name)
 			require.Equal(t, "Computing", created.DisplayName)
 			require.Equal(t, "School", created.Description)
+			require.Equal(t, model.AcademicUnitKindSchool, created.Kind)
 			var got academicUnitResponse
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &got))
+			require.Equal(t, "school", got.Kind)
 			require.Equal(t, created.ID.String(), got.ID)
 			require.Equal(t, tt.wantParentID, got.ParentID)
 		})
@@ -191,7 +194,7 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	name := "engineering"
 	patchRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/academic-units/"+unit.ID.String(),
-		strings.NewReader(`{"parent_id":"`+destination.ID.String()+`","name":"`+name+`"}`),
+		strings.NewReader(`{"parent_id":"`+destination.ID.String()+`","name":"`+name+`","kind":"department"}`),
 	)
 	patchRequest.Header.Set("Authorization", "Bearer test-credential")
 	patchRequest.Header.Set("Content-Type", "application/json")
@@ -203,6 +206,7 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	require.Equal(t, unit.ID, updated.ID)
 	require.Equal(t, destination.ID, updated.ParentID)
 	require.Equal(t, name, updated.Name)
+	require.Equal(t, model.AcademicUnitKindDepartment, updated.Kind)
 
 	archiveRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete, "/api/v1/academic-units/"+unit.ID.String(), nil,

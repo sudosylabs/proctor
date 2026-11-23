@@ -24,12 +24,14 @@ type academicUnitResponse struct {
 	ArchivedAt    string `json:"archived_at,omitempty"`
 	InstitutionID string `json:"institution_id"`
 	ParentID      string `json:"parent_id,omitempty"`
+	Kind          string `json:"kind"`
 	Name          string `json:"name"`
 	DisplayName   string `json:"display_name"`
 	Description   string `json:"description"`
 }
 
 type createAcademicUnitRequest struct {
+	Kind        string `json:"kind,omitempty"`
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
@@ -41,6 +43,7 @@ type createAcademicUnitRequest struct {
 type updateAcademicUnitRequest struct {
 	ExpectedRevision route.Optional[int64] `json:"expected_revision"`
 	ParentID         *string               `json:"parent_id"`
+	Kind             *string               `json:"kind"`
 	Name             *string               `json:"name"`
 	DisplayName      *string               `json:"display_name"`
 	Description      *string               `json:"description"`
@@ -179,6 +182,7 @@ func (h academicUnitHandlers) createRoot(request route.Request) (route.Result, e
 		request.Context,
 		request.Invocation(),
 		academic.CreateAcademicUnitCommand{
+			Kind:           model.AcademicUnitKind(body.Kind),
 			Name:           body.Name,
 			DisplayName:    body.DisplayName,
 			Description:    body.Description,
@@ -229,6 +233,7 @@ func (h academicUnitHandlers) patch(request route.Request) (route.Result, error)
 			ExpectedRevision: body.ExpectedRevision.ValuePointer(),
 			ID:               id,
 			ParentID:         route.OptionalID[model.AcademicUnitID](body.ParentID),
+			Kind:             (*model.AcademicUnitKind)(body.Kind),
 			Name:             body.Name,
 			DisplayName:      body.DisplayName,
 			Description:      body.Description,
@@ -299,6 +304,7 @@ func (h academicUnitHandlers) createChild(request route.Request) (route.Result, 
 		request.Invocation(),
 		academic.CreateAcademicUnitCommand{
 			ParentID:    id,
+			Kind:        model.AcademicUnitKind(body.Kind),
 			Name:        body.Name,
 			DisplayName: body.DisplayName,
 			Description: body.Description,
@@ -323,6 +329,7 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 		ArchivedAt:    unit.ArchivedAt.FormatRFC3339(),
 		InstitutionID: unit.InstitutionID.String(),
 		ParentID:      unit.ParentID.String(),
+		Kind:          string(unit.Kind),
 		Name:          unit.Name,
 		DisplayName:   unit.DisplayName,
 		Description:   unit.Description,

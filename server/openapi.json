@@ -1132,6 +1132,7 @@
             "example": {
               "description": "Teaching and research in computing.",
               "display_name": "Computer Science",
+              "kind": "department",
               "name": "computer-science"
             },
             "schema": {
@@ -2913,6 +2914,7 @@
               "display_name": "Computer Science",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
               "institution_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+              "kind": "department",
               "name": "computer-science",
               "revision": 1,
               "updated_at": "2026-08-01T09:00:00Z"
@@ -2935,6 +2937,7 @@
                   "display_name": "School of Computer Science",
                   "id": "14j8umgczgrdp95w77zuxmxfu9",
                   "institution_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                  "kind": "department",
                   "name": "computer-science",
                   "parent_id": "ih1r84kij94nrwis97rft6rduh",
                   "revision": 2,
@@ -2946,6 +2949,7 @@
                   "display_name": "Software Engineering",
                   "id": "1asb7sk89dp1ex339fkh3te5t4",
                   "institution_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                  "kind": "department",
                   "name": "software-engineering",
                   "parent_id": "ih1r84kij94nrwis97rft6rduh",
                   "revision": 1,
@@ -3064,6 +3068,7 @@
               "display_name": "School of Computer Science",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
               "institution_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+              "kind": "department",
               "name": "computer-science",
               "parent_id": "ih1r84kij94nrwis97rft6rduh",
               "revision": 3,
@@ -11778,6 +11783,17 @@
         ],
         "type": "object"
       },
+      "AcademicUnitKind": {
+        "description": "What kind of Academic Unit this is, for people reading the tree. It is only a label: it changes no rule about what the Academic Unit may contain.",
+        "enum": [
+          "faculty",
+          "school",
+          "department",
+          "office",
+          "other"
+        ],
+        "type": "string"
+      },
       "AcademicUnitListResponse": {
         "additionalProperties": false,
         "description": "One page of Academic Units, ordered by name and then by identifier.",
@@ -12021,6 +12037,9 @@
             "$ref": "#/components/schemas/ID",
             "description": "The Institution the Academic Unit belongs to."
           },
+          "kind": {
+            "$ref": "#/components/schemas/AcademicUnitKind"
+          },
           "name": {
             "description": "Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among the Institution's active Academic Units.",
             "type": "string"
@@ -12047,6 +12066,7 @@
           "created_at",
           "updated_at",
           "institution_id",
+          "kind",
           "name",
           "display_name",
           "description"
@@ -18119,6 +18139,10 @@
           "display_name": {
             "description": "Name shown to people, 1 to 128 characters.",
             "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AcademicUnitKind",
+            "description": "Optional. The kind of Academic Unit. Omitted or empty means `other`."
           },
           "name": {
             "description": "Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at most 64 characters. It must be unique among the Institution's active Academic Units.",
@@ -35906,6 +35930,21 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "kind": {
+            "description": "The new kind of Academic Unit. Omitted or null leaves it unchanged.",
+            "enum": [
+              "faculty",
+              "school",
+              "department",
+              "office",
+              "other",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "description": "New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Omitted or null leaves it unchanged. An empty string is checked like any other value, so it is rejected.",

@@ -54,6 +54,7 @@ components:
           schema:
             $ref: '#/components/schemas/CreateAcademicUnitRequest'
           example:
+            kind: department
             name: computer-science
             display_name: Computer Science
             description: Teaching and research in computing.
@@ -73,6 +74,7 @@ components:
             created_at: '2026-08-01T09:00:00Z'
             updated_at: '2026-08-01T09:00:00Z'
             institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+            kind: department
             name: computer-science
             display_name: Computer Science
             description: Teaching and research in computing.
@@ -89,6 +91,7 @@ components:
                 created_at: '2026-08-01T09:00:00Z'
                 updated_at: '2026-08-03T14:20:00Z'
                 institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+                kind: department
                 parent_id: ih1r84kij94nrwis97rft6rduh
                 name: computer-science
                 display_name: School of Computer Science
@@ -98,6 +101,7 @@ components:
                 created_at: '2026-08-02T10:15:00Z'
                 updated_at: '2026-08-02T10:15:00Z'
                 institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+                kind: department
                 parent_id: ih1r84kij94nrwis97rft6rduh
                 name: software-engineering
                 display_name: Software Engineering
@@ -157,6 +161,7 @@ components:
         - created_at
         - updated_at
         - institution_id
+        - kind
         - name
         - display_name
         - description
@@ -189,6 +194,8 @@ components:
         parent_id:
           $ref: '#/components/schemas/ID'
           description: The Academic Unit this one sits directly under. Omitted for a top-level Academic Unit.
+        kind:
+          $ref: '#/components/schemas/AcademicUnitKind'
         name:
           type: string
           description: >-
@@ -214,6 +221,17 @@ components:
           description: The Academic Units on this page.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+    AcademicUnitKind:
+      type: string
+      enum:
+        - faculty
+        - school
+        - department
+        - office
+        - other
+      description: >-
+        What kind of Academic Unit this is, for people reading the tree. It is only a label: it changes no rule about
+        what the Academic Unit may contain.
     CreateAcademicUnitRequest:
       type: object
       additionalProperties: false
@@ -221,6 +239,9 @@ components:
         - name
         - display_name
       properties:
+        kind:
+          $ref: '#/components/schemas/AcademicUnitKind'
+          description: Optional. The kind of Academic Unit. Omitted or empty means `other`.
         name:
           type: string
           description: >-

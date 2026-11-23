@@ -11,6 +11,28 @@ import (
 	"time"
 )
 
+// AcademicUnitKind classifies a unit for people reading the tree. It is a
+// label only: it changes no rule about what a unit may contain.
+type AcademicUnitKind string
+
+const (
+	AcademicUnitKindFaculty    AcademicUnitKind = "faculty"
+	AcademicUnitKindSchool     AcademicUnitKind = "school"
+	AcademicUnitKindDepartment AcademicUnitKind = "department"
+	AcademicUnitKindOffice     AcademicUnitKind = "office"
+	AcademicUnitKindOther      AcademicUnitKind = "other"
+)
+
+// IsValid reports whether k is a known kind.
+func (k AcademicUnitKind) IsValid() bool {
+	switch k {
+	case AcademicUnitKindFaculty, AcademicUnitKindSchool, AcademicUnitKindDepartment,
+		AcademicUnitKindOffice, AcademicUnitKindOther:
+		return true
+	}
+	return false
+}
+
 // AcademicUnit is one node in the institution's tree of faculties, schools and
 // departments. ParentID is zero for a root unit.
 type AcademicUnit struct {
@@ -21,6 +43,7 @@ type AcademicUnit struct {
 	Revision      int64
 	InstitutionID InstitutionID
 	ParentID      AcademicUnitID // zero for root units
+	Kind          AcademicUnitKind
 	Name          string
 	DisplayName   string
 	Description   string
@@ -42,6 +65,7 @@ func NewAcademicUnit(
 		Revision:      1,
 		InstitutionID: institutionID,
 		ParentID:      parentID,
+		Kind:          AcademicUnitKindOther,
 		Name:          name,
 		DisplayName:   displayName,
 		Description:   description,
@@ -67,6 +91,9 @@ func (au *AcademicUnit) PrepareCreate(id AcademicUnitID, at time.Time) {
 	if au.Revision <= 0 {
 		au.Revision = 1
 	}
+	if au.Kind == "" {
+		au.Kind = AcademicUnitKindOther
+	}
 	sanitizeNamed(&au.Name, &au.DisplayName, &au.Description)
 }
 
@@ -80,6 +107,9 @@ func (au *AcademicUnit) PrepareUpdate(at time.Time) {
 		au.Revision = 1
 	}
 	au.Revision++
+	if au.Kind == "" {
+		au.Kind = AcademicUnitKindOther
+	}
 	sanitizeNamed(&au.Name, &au.DisplayName, &au.Description)
 }
 
@@ -171,6 +201,9 @@ func (au *AcademicUnit) Validate() error {
 	if !au.ParentID.IsZero() && au.ParentID == au.ID {
 		return invalidModelError(where, "academic_unit", "parent_id", "must not reference the unit itself", details)
 	}
+	if !au.Kind.IsValid() {
+		return invalidModelError(where, "academic_unit", "kind", "must be a known unit kind", details)
+	}
 	if au.Revision < 0 {
 		return invalidModelError(where, "academic_unit", "revision", "must not be negative", details)
 	}
@@ -194,6 +227,7 @@ func (au *AcademicUnit) Auditable() map[string]any {
 		"revision":       au.Revision,
 		"institution_id": au.InstitutionID.String(),
 		"parent_id":      au.ParentID.String(),
+		"kind":           string(au.Kind),
 		"name":           au.Name,
 		"display_name":   au.DisplayName,
 	}

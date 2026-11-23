@@ -43,6 +43,35 @@ func TestAcademicUnitStore(t *testing.T, ss store.Store) {
 	t.Run("SearchAndArchive", func(t *testing.T) {
 		testAcademicUnitStoreSearchAndArchive(t, ss)
 	})
+	t.Run("Kind", func(t *testing.T) { testAcademicUnitStoreKind(t, ss) })
+}
+
+func testAcademicUnitStoreKind(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	institution := saveInstitution(t, ctx, ss)
+	unit, err := SaveAcademicUnit(ctx, ss, &model.AcademicUnit{
+		InstitutionID: institution.ID, Kind: model.AcademicUnitKindFaculty,
+		Name: "kind-faculty", DisplayName: "Kind Faculty",
+	})
+	require.NoError(t, err)
+	unclassified := saveAcademicUnit(t, ctx, ss, institution.ID.String(), unit.ID.String(), "kind-unclassified")
+	require.Equal(t, model.AcademicUnitKindOther, unclassified.Kind, "an omitted kind is other")
+
+	got, err := ss.AcademicUnit().Get(ctx, unit.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.AcademicUnitKindFaculty, got.Kind)
+
+	got.Kind = model.AcademicUnitKindSchool
+	_, err = UpdateAcademicUnit(ctx, ss, got)
+	require.NoError(t, err)
+	ancestors, err := ss.AcademicUnit().ListAncestors(ctx, unclassified.ID)
+	require.NoError(t, err)
+	require.Len(t, ancestors, 2)
+	require.Equal(t, model.AcademicUnitKindSchool, ancestors[1].Kind, "ListAncestors reads the kind")
+	children, err := ss.AcademicUnit().ListChildren(ctx, institution.ID, unit.ID, store.AcademicNameListOptions{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, children, 1)
+	require.Equal(t, model.AcademicUnitKindOther, children[0].Kind)
 }
 
 func saveAcademicUnitAuditAttempt(

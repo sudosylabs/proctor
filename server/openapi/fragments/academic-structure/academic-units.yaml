@@ -315,6 +315,7 @@ components:
             created_at: '2026-08-01T09:00:00Z'
             updated_at: '2026-08-12T11:45:00Z'
             institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+            kind: department
             parent_id: ih1r84kij94nrwis97rft6rduh
             name: computer-science
             display_name: School of Computer Science
@@ -346,6 +347,18 @@ components:
           description: >-
             The Academic Unit to move this one under. An empty string makes it top-level. Omitted or null leaves the
             parent unchanged.
+        kind:
+          type:
+            - string
+            - "null"
+          enum:
+            - faculty
+            - school
+            - department
+            - office
+            - other
+            - null
+          description: The new kind of Academic Unit. Omitted or null leaves it unchanged.
         name:
           type:
             - string

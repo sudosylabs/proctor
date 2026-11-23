@@ -2174,6 +2174,12 @@ func (s *timedExamIntegrityReviewStore) Release(arg0 context.Context, arg1 *stor
 	})
 }
 
+func (s *timedExamIntegrityReviewStore) Reopen(arg0 context.Context, arg1 *store.ExamIntegrityReviewReopen, arg2 *store.CommandIdempotency) (*store.ExamIntegrityReviewMutationResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodReopen), func(callCtx context.Context) (*store.ExamIntegrityReviewMutationResult, error) {
+		return s.next.Reopen(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamIntegrityReviewStore) GetReleasedStudentResult(arg0 context.Context, arg1 model.ExamAttemptID, arg2 model.UserID) (*model.StudentResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodGetReleasedStudentResult), func(callCtx context.Context) (*model.StudentResult, error) {
 		return s.next.GetReleasedStudentResult(callCtx, arg1, arg2)

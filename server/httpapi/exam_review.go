@@ -76,6 +76,12 @@ type updateExamIntegrityReviewRequest struct {
 	StudentRemarksMarkdown string `json:"student_remarks_markdown"`
 }
 
+type reopenExamIntegrityReviewRequest struct {
+	ReviewID               string `json:"submission_review_id"`
+	ExpectedReviewRevision int64  `json:"expected_revision"`
+	Reason                 string `json:"reason"`
+}
+
 type terminalExamIntegrityReviewRequest struct {
 	ReviewID               string `json:"submission_review_id"`
 	ExpectedReviewRevision int64  `json:"expected_revision"`
@@ -345,6 +351,7 @@ func examIntegrityReviewResource(app *review.Service, resolver *people.Resolver)
 	decision := "/submissions/{submission_id}/review/decisions/{integrity_flag_id}"
 	finalize := "/submissions/{submission_id}/review/finalize"
 	release := "/submissions/{submission_id}/review/release"
+	reopen := "/submissions/{submission_id}/review/reopen"
 	candidateResult := "/exam-attempts/{exam_attempt_id}/result"
 	studentErrors := personalAccessTokenSessionCodes(
 		"request.invalid",
@@ -600,6 +607,31 @@ func examIntegrityReviewResource(app *review.Service, resolver *people.Resolver)
 				"exam.sitting.unavailable",
 			},
 			Handle: h.release,
+		},
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        reopen,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.revision_conflict",
+				"exam.integrity_review.state_conflict",
+				"exam.integrity_review.result_released",
+				"exam.integrity_review.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.reopen,
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
@@ -940,6 +972,36 @@ func (h examIntegrityReviewHandlers) terminal(request route.Request,
 		result, err = h.app.FinalizeExamIntegrityReview(request.Context, request.Invocation(), command)
 	}
 
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	return h.reviewMutationResult(request, result)
+}
+
+func (h examIntegrityReviewHandlers) reopen(request route.Request) (route.Result, error) {
+	submissionID, err := reviewSubmissionID(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	var body reopenExamIntegrityReviewRequest
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
+	}
+
+	reviewID, err := model.ParseSubmissionReviewID(body.ReviewID)
+	if err != nil {
+		return route.Result{}, route.InvalidRequest(err)
+	}
+
+	result, err := h.app.ReopenExamIntegrityReview(request.Context, request.Invocation(), review.ReopenCommand{
+		SubmissionID:           submissionID,
+		ReviewID:               reviewID,
+		ExpectedReviewRevision: body.ExpectedReviewRevision,
+		Reason:                 body.Reason,
+		IdempotencyKey:         request.IdempotencyKey,
+	})
 	if err != nil {
 		return route.Result{}, err
 	}

@@ -1,0 +1,111 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/submissions/{submission_id}/review/reopen:
+    parameters:
+      - $ref: '#/components/parameters/SubmissionID'
+    post:
+      operationId: reopenExamIntegrityReview
+      summary: Return a finalized Review to draft so its decisions can be revised
+      tags:
+        - Integrity review
+      description: >-
+        Returns a finalized Review to draft, keeping every decision, so a manager can revise it and finalize it
+        again. The reason is kept privately with the Review and is never shown to the candidate. A Review whose
+        result is released can't be reopened, because release is final. Needs the same permission as reviewing.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.revision_conflict
+        - exam.integrity_review.state_conflict
+        - exam.integrity_review.result_released
+        - exam.integrity_review.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReopenExamIntegrityReview'
+      responses:
+        '200':
+          $ref: '#/components/responses/ExamIntegrityReviewMutationOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  requestBodies:
+    ReopenExamIntegrityReview:
+      description: The Review to reopen, its current revision and why.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReopenExamIntegrityReviewRequest'
+          example:
+            submission_review_id: ybndrfg8ejkmcpqxot1uwisza3
+            expected_revision: 8
+            reason: The second flag needs another look at the clip.
+  schemas:
+    ReopenExamIntegrityReviewRequest:
+      description: The Review to reopen, its current revision and why.
+      type: object
+      additionalProperties: false
+      required:
+        - submission_review_id
+        - expected_revision
+        - reason
+      properties:
+        submission_review_id:
+          $ref: '#/components/schemas/ID'
+          description: The Review's ID.
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >-
+            The Review's current revision, as last read. The request fails with a conflict if the Review has
+            changed since.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Why the Review is reopened, in the manager's words. Kept privately; never shown to the candidate.

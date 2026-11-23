@@ -263,6 +263,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ExamRevisionListResponse":                       reflect.TypeOf(examRevisionListResponse{}),
 	"ExamRevisionResponse":                           reflect.TypeOf(examRevisionResponse{}),
 	"ExamDraftCheckResponse":                         reflect.TypeOf(examDraftCheckResponse{}),
+	"ReopenExamIntegrityReviewRequest":               reflect.TypeOf(reopenExamIntegrityReviewRequest{}),
 	"ExamDraftProblem":                               reflect.TypeOf(examDraftProblemEntry{}),
 	"ExamRevisionContentResponse":                    reflect.TypeOf(examRevisionContentResponse{}),
 	"ExamRevisionResourceResponse":                   reflect.TypeOf(examRevisionResourceResponse{}),

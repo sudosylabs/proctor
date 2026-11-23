@@ -1984,6 +1984,22 @@
         "description": "The device name the current User chose for the Session.",
         "required": true
       },
+      "ReopenExamIntegrityReview": {
+        "content": {
+          "application/json": {
+            "example": {
+              "expected_revision": 8,
+              "reason": "The second flag needs another look at the clip.",
+              "submission_review_id": "ybndrfg8ejkmcpqxot1uwisza3"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ReopenExamIntegrityReviewRequest"
+            }
+          }
+        },
+        "description": "The Review to reopen, its current revision and why.",
+        "required": true
+      },
       "ReorderExamResources": {
         "content": {
           "application/json": {
@@ -32525,6 +32541,34 @@
         ],
         "type": "object"
       },
+      "ReopenExamIntegrityReviewRequest": {
+        "additionalProperties": false,
+        "description": "The Review to reopen, its current revision and why.",
+        "properties": {
+          "expected_revision": {
+            "description": "The Review's current revision, as last read. The request fails with a conflict if the Review has changed since.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "description": "Why the Review is reopened, in the manager's words. Kept privately; never shown to the candidate.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "submission_review_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Review's ID."
+          }
+        },
+        "required": [
+          "submission_review_id",
+          "expected_revision",
+          "reason"
+        ],
+        "type": "object"
+      },
       "ReorderExamResourcesRequest": {
         "additionalProperties": false,
         "properties": {
@@ -63028,6 +63072,95 @@
           "exam.integrity_review.state_conflict",
           "exam.integrity_review.incomplete",
           "exam.integrity_review.too_large",
+          "exam.integrity_review.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/submissions/{submission_id}/review/reopen": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubmissionID"
+        }
+      ],
+      "post": {
+        "description": "Returns a finalized Review to draft, keeping every decision, so a manager can revise it and finalize it again. The reason is kept privately with the Review and is never shown to the candidate. A Review whose result is released can't be reopened, because release is final. Needs the same permission as reviewing.",
+        "operationId": "reopenExamIntegrityReview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReopenExamIntegrityReview"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamIntegrityReviewMutationOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Return a finalized Review to draft so its decisions can be revised",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.revision_conflict",
+          "exam.integrity_review.state_conflict",
+          "exam.integrity_review.result_released",
           "exam.integrity_review.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",

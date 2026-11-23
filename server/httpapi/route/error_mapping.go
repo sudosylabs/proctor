@@ -216,6 +216,7 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"exam.integrity_review.incomplete":                            {status: http.StatusConflict},
 	"exam.integrity_review.invalid":                               {status: http.StatusBadRequest},
 	"exam.integrity_review.not_found":                             {status: http.StatusNotFound},
+	"exam.integrity_review.result_released":                       {status: http.StatusConflict},
 	"exam.integrity_review.revision_conflict":                     {status: http.StatusConflict},
 	"exam.integrity_review.state_conflict":                        {status: http.StatusConflict},
 	"exam.integrity_review.too_large":                             {status: http.StatusConflict},

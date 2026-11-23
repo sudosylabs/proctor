@@ -13,7 +13,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -941,6 +943,106 @@ func (s *SQLExamIntegrityReviewStore) Release(
 			return completeIntegrityReviewAudit(ctx, tx, value, input.AuditEventID, input.AuditAt, true, original)
 		},
 	)
+}
+
+func (s *SQLExamIntegrityReviewStore) Reopen(
+	ctx context.Context,
+	input *store.ExamIntegrityReviewReopen,
+	command *store.CommandIdempotency,
+) (*store.ExamIntegrityReviewMutationResult, error) {
+	if input == nil {
+		return nil, store.NewErrInvalidInput("submission_review", "reopen", nil)
+	}
+	probe := &store.ExamIntegrityReviewFinalize{
+		SubmissionID:     input.SubmissionID,
+		ReviewID:         input.ReviewID,
+		ActorUserID:      input.ActorUserID,
+		ManagerOverride:  input.ManagerOverride,
+		ExpectedRevision: input.ExpectedRevision,
+		ChangedAt:        input.ChangedAt,
+		AuditEventID:     input.AuditEventID,
+		AuditAt:          input.AuditAt,
+	}
+	if err := validateReviewFinalizeInput(probe, command, store.ExamIntegrityReviewReopenOperation); err != nil {
+		return nil, err
+	}
+	if reason := strings.TrimSpace(input.Reason); reason != input.Reason || reason == "" ||
+		utf8.RuneCountInString(reason) > model.SubmissionReviewReopenReasonMaxRunes {
+		return nil, store.NewErrInvalidInput("submission_review", "reason", nil)
+	}
+
+	return s.runReviewMutation(
+		ctx,
+		"reopen Integrity Review",
+		command,
+		input.AuditEventID,
+		input.AuditAt,
+		input.ActorUserID,
+		input.ManagerOverride,
+		func(ctx context.Context, tx *sqlxTxWrapper) (examIntegrityReviewOutcome, error) {
+			return reopenReview(ctx, tx, input)
+		},
+		func(ctx context.Context, tx *sqlxTxWrapper, value examIntegrityReviewOutcome, original string) error {
+			if err := guardExamSittingManagerExam(ctx, tx, value.Authorization.ExamID, input.ActorUserID, input.ManagerOverride, true); err != nil {
+				return err
+			}
+			return completeIntegrityReviewAudit(ctx, tx, value, input.AuditEventID, input.AuditAt, true, original)
+		},
+	)
+}
+
+// reopenReview keeps the decisions and the earlier finalization's inventory
+// and snapshot, which stay keyed by their finalization revision. A pending
+// release reservation belongs to the finalized revision, so it goes.
+func reopenReview(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamIntegrityReviewReopen) (examIntegrityReviewOutcome, error) {
+	auth, err := lockReviewScope(ctx, tx, input.SubmissionID, input.ActorUserID, input.ManagerOverride)
+	if err != nil {
+		return examIntegrityReviewOutcome{}, err
+	}
+
+	review, err := loadReviewForMutation(ctx, tx, input.SubmissionID)
+	if err != nil {
+		return examIntegrityReviewOutcome{}, err
+	}
+	if review.ID != input.ReviewID || review.Revision != input.ExpectedRevision {
+		return examIntegrityReviewOutcome{}, store.NewErrConflict("submission_review", "integrity_review_revision", nil)
+	}
+	if review.ReleaseState == model.SubmissionReviewReleased {
+		return examIntegrityReviewOutcome{}, store.NewErrConflict("submission_review", "integrity_review_released", nil)
+	}
+
+	var databaseNow time.Time
+	if err = tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
+		return examIntegrityReviewOutcome{}, fmt.Errorf("read Integrity Review reopen time: %w", err)
+	}
+	at := transitionInstant(databaseNow, review.CreatedAt, review.UpdatedAt)
+	if err = review.Reopen(input.ExpectedRevision, at); err != nil {
+		return examIntegrityReviewOutcome{}, store.NewErrConflict("submission_review", "integrity_review_state", err)
+	}
+	if err = persistReview(ctx, tx, review, input.ExpectedRevision); err != nil {
+		return examIntegrityReviewOutcome{}, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM submission_review_release_preparations
+		WHERE submission_review_id = ?`, input.ReviewID.String()); err != nil {
+		return examIntegrityReviewOutcome{}, fmt.Errorf("drop Student Result release preparation: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO submission_review_reopenings (
+			submission_review_id, review_revision, actor_user_id, reason, reopened_at
+		)
+		VALUES (?, ?, ?, ?, ?)`,
+		review.ID.String(), review.Revision, input.ActorUserID.String(), input.Reason, review.UpdatedAt); err != nil {
+		return examIntegrityReviewOutcome{}, fmt.Errorf("record Integrity Review reopening: %w", err)
+	}
+	if err = invalidateSittingRecordsForIntegrity(ctx, tx, auth.SittingID, review.UpdatedAt); err != nil {
+		return examIntegrityReviewOutcome{}, err
+	}
+
+	out := examIntegrityReviewOutcome{Authorization: *auth, Review: *review}
+	if err = completeIntegrityReviewAudit(ctx, tx, out, input.AuditEventID, input.AuditAt, false, ""); err != nil {
+		return examIntegrityReviewOutcome{}, err
+	}
+
+	return out, nil
 }
 
 // PrepareRelease fences the finalized review at the input revision and records the PostgreSQL release instant the following Release must use.

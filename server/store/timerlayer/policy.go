@@ -406,6 +406,7 @@ const (
 	methodUpdateDraft                               methodName = "update_draft"
 	methodFinalize                                  methodName = "finalize"
 	methodRelease                                   methodName = "release"
+	methodReopen                                    methodName = "reopen"
 	methodPrepareRelease                            methodName = "prepare_release"
 	methodGetReleasedStudentResult                  methodName = "get_released_student_result"
 	methodUpdateMetadata                            methodName = "update_metadata"

@@ -19,6 +19,7 @@ const (
 	ExamIntegrityReviewDraftOperation         = "exam.integrity_review.draft"
 	ExamIntegrityReviewFinalizeOperation      = "exam.integrity_review.finalize"
 	ExamIntegrityReviewReleaseOperation       = "exam.integrity_review.release"
+	ExamIntegrityReviewReopenOperation        = "exam.integrity_review.reopen"
 	ExamIntegrityReviewEvidenceReadMaximum    = 100
 	ExamIntegrityReviewDiscrepancyReadMaximum = 100
 	ExamIntegrityReviewFlagReadMaximum        = 200
@@ -146,6 +147,21 @@ type ExamIntegrityReviewFinalize struct {
 	AuditAt          time.Time
 }
 
+// ExamIntegrityReviewReopen returns a finalized, unreleased review to draft.
+// Reason is the manager's private explanation, kept with the review and never
+// shown to the candidate.
+type ExamIntegrityReviewReopen struct {
+	SubmissionID     model.SubmissionID
+	ReviewID         model.SubmissionReviewID
+	ActorUserID      model.UserID
+	ManagerOverride  bool
+	ExpectedRevision int64
+	Reason           string
+	ChangedAt        time.Time
+	AuditEventID     model.AuditEventID
+	AuditAt          time.Time
+}
+
 type ExamIntegrityReviewRelease struct {
 	SubmissionID     model.SubmissionID
 	ReviewID         model.SubmissionReviewID
@@ -225,6 +241,10 @@ type ExamIntegrityReviewStore interface {
 	Finalize(context.Context, *ExamIntegrityReviewFinalize, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
 	PrepareRelease(context.Context, *ExamIntegrityReviewReleasePrepare) (*ExamIntegrityReviewReleasePreparation, error)
 	Release(context.Context, *ExamIntegrityReviewRelease, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
+	// Reopen returns a finalized review to draft, keeping its decisions, and
+	// refuses one whose result is released (integrity_review_released). It
+	// reopens the sitting's records completion like late evidence does.
+	Reopen(context.Context, *ExamIntegrityReviewReopen, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
 	GetReleasedStudentResult(context.Context, model.ExamAttemptID, model.UserID) (*model.StudentResult, error)
 }
 

@@ -184,6 +184,7 @@ func (e *examAuthoringEntry) snapshot(actorID model.UserID) *store.ExamAuthoring
 // archival and Manager changes under the same manager, archive and revision
 // fences as the SQL Store. It records every request it is asked.
 type examAuthoringRecords struct {
+	actionCounts map[model.ExamID]store.ExamActionCounts
 	store.ExamAuthoringStore
 	byID map[model.ExamID]*examAuthoringEntry
 	// listed and managersListed are what List and ListManagers answer.
@@ -331,6 +332,11 @@ func (s *examAuthoringRecords) UpdateDraftAssistant(_ context.Context, input *st
 func (s *examAuthoringRecords) List(_ context.Context, options store.ExamListOptions) ([]store.ExamSummary, error) {
 	s.lists = append(s.lists, options)
 	return slices.Clone(s.listed), nil
+}
+
+// CountExamActions reports the fixture's action counts.
+func (s *examAuthoringRecords) CountExamActions(context.Context, store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	return s.actionCounts, nil
 }
 
 // Count counts the listed summaries, as the first page's total.

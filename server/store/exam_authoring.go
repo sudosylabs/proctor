@@ -142,6 +142,28 @@ type ExamSummary struct {
 	SittingSummary          *ExamCatalogSittingSummary
 }
 
+// ExamActionCountOptions asks for the action counts of one page of exams.
+// SittingVisibility is where the viewer holds exam.sitting.view and
+// ReviewVisibility where they hold submission.review, as ExamManagerScopes
+// reports them. The viewer is never counted as their own candidate.
+type ExamActionCountOptions struct {
+	ExamIDs           []model.ExamID
+	ViewerUserID      model.UserID
+	SittingVisibility ExamListVisibility
+	ReviewVisibility  ExamListVisibility
+	Maximum           int
+}
+
+// ExamActionCounts is what waits for a manager on one exam. NeedsAttention
+// counts candidates of its open and paused sittings who need a manager;
+// PendingReview counts its sealed Submissions with no finalized review. Each
+// is nil where the viewer's visibility does not reach the exam, and stops at
+// the asked maximum.
+type ExamActionCounts struct {
+	NeedsAttention *int
+	PendingReview  *int
+}
+
 type ExamCatalogSittingSummary struct {
 	ID               model.ExamSittingID
 	ExamRevisionID   model.ExamRevisionID
@@ -326,6 +348,9 @@ type ExamAuthoringStore interface {
 	// Count counts what List pages through, ignoring the cursor and limit,
 	// stopping at maximum (1..MaximumListCount).
 	Count(context.Context, ExamListOptions, int) (int, error)
+	// CountExamActions reads the action counts of one page of exams, one
+	// grouped query per count.
+	CountExamActions(context.Context, ExamActionCountOptions) (map[model.ExamID]ExamActionCounts, error)
 	// Archive resolves a replay first. Otherwise it locks the exam, rechecks
 	// the manager relationship unless overridden, rejects archived or stale
 	// state, and records the archive time without deleting rows. Of concurrent

@@ -288,6 +288,8 @@ type authoringStoreFake struct {
 	archive            *store.ExamArchive
 	listOptions        store.ExamListOptions
 	countOptions       *store.ExamListOptions
+	actionOptions      *store.ExamActionCountOptions
+	actionCounts       map[model.ExamID]store.ExamActionCounts
 	summaries          []store.ExamSummary
 	managerSummaries   []store.ExamManagerSummary
 	managerListOptions store.ExamManagerListOptions
@@ -334,6 +336,12 @@ func (f *authoringStoreFake) List(_ context.Context, options store.ExamListOptio
 	*f.order = append(*f.order, "store.list")
 	f.listOptions = options
 	return append([]store.ExamSummary(nil), f.summaries...), f.err
+}
+
+// CountExamActions returns the fixture's counts and records what was asked.
+func (f *authoringStoreFake) CountExamActions(_ context.Context, options store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	f.actionOptions = &options
+	return f.actionCounts, f.err
 }
 
 // Count counts the listed summaries; it is a read, so it joins no order log.

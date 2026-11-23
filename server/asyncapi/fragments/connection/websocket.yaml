@@ -59,6 +59,8 @@ channels:
         $ref: '#/components/messages/academic_unit_archived'
       exam_created:
         $ref: '#/components/messages/exam_created'
+      exam.counts.changed:
+        $ref: '#/components/messages/exam.counts.changed'
       exam_draft_updated:
         $ref: '#/components/messages/exam_draft_updated'
       exam_starter_workspace_changed:
@@ -229,6 +231,7 @@ operations:
       - $ref: '#/channels/websocket/messages/academic_unit_updated'
       - $ref: '#/channels/websocket/messages/academic_unit_archived'
       - $ref: '#/channels/websocket/messages/exam_created'
+      - $ref: '#/channels/websocket/messages/exam.counts.changed'
       - $ref: '#/channels/websocket/messages/exam_draft_updated'
       - $ref: '#/channels/websocket/messages/exam_starter_workspace_changed'
       - $ref: '#/channels/websocket/messages/exam_archived'

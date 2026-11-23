@@ -59,6 +59,7 @@ ExamAuthoringStore.UpdateDraftExecution                    command
 ExamAuthoringStore.UpdateDraftAssistant command
 ExamAuthoringStore.List                                    always
 ExamAuthoringStore.Count                                   always
+ExamAuthoringStore.CountExamActions                        always
 ExamAuthoringStore.Archive                                 command
 ExamAuthoringStore.Access                                  always
 ExamAuthoringStore.Get                                     always

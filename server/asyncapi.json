@@ -41,6 +41,9 @@
         "current_user.sessions.changed": {
           "$ref": "#/components/messages/current_user.sessions.changed"
         },
+        "exam.counts.changed": {
+          "$ref": "#/components/messages/exam.counts.changed"
+        },
         "exam_archived": {
           "$ref": "#/components/messages/exam_archived"
         },
@@ -879,6 +882,66 @@
           }
         ],
         "title": "Current user Sessions changed"
+      },
+      "exam.counts.changed": {
+        "description": "Refetch one Exam's needs_attention_count and pending_review_count, because a board or a submission list of one of its Sittings changed. At most one per Exam every 5 seconds; the last change in a window is always followed by one. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "data": {
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
+              "event": "exam.counts.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "exam.counts.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_counts_changed"
+                },
+                "event": {
+                  "const": "exam.counts.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch one Exam's catalogue counts.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Exam counts changed"
       },
       "exam_archived": {
         "description": "The Exam was archived. Delivered to connections that subscribe to exam.view on the exam.",
@@ -6597,6 +6660,20 @@
         "title": "Attempt Workspace changed",
         "type": "object"
       },
+      "exam_counts_changed": {
+        "additionalProperties": false,
+        "description": "Names the Exam whose catalogue counts should be refetched. No count, candidate or Submission is named.",
+        "properties": {
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id"
+        ],
+        "title": "Exam counts changed",
+        "type": "object"
+      },
       "exam_created": {
         "additionalProperties": false,
         "description": "Names the new Exam and the Academic Unit that owns it.",
@@ -8050,6 +8127,9 @@
         },
         {
           "$ref": "#/channels/websocket/messages/exam_created"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam.counts.changed"
         },
         {
           "$ref": "#/channels/websocket/messages/exam_draft_updated"

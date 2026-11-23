@@ -70,6 +70,8 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 		ID: examID, AcademicUnitID: unitID, CreatorUserID: principal.UserID, OwnerUserID: principal.UserID,
 		Title: "Systems", UpdatedAt: time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC), Revision: 2, ManagerCount: 1,
 	}}
+	waiting := 3
+	f.exams.actionCounts = map[model.ExamID]store.ExamActionCounts{examID: {NeedsAttention: &waiting}}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?academic_unit_id="+unitID.String()+"&q=systems+design&archive_state=all&limit=25", nil)
 	request.Header.Set("Authorization", "Bearer credential")
@@ -82,6 +84,9 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	require.Equal(t, store.ExamArchiveAll, f.exams.lists[0].ArchiveFilter)
 	require.Equal(t, 26, f.exams.lists[0].Limit, "the catalog reads one past the limit")
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"title":"Systems"`)))
+	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"needs_attention_count":3,"needs_attention_count_is_lower_bound":false`)))
+	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("pending_review_count")), "a count the viewer can't see is left out")
+	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"total":1,"total_is_lower_bound":false`)))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("instructions_markdown")))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("policy")))
 	before := time.Date(2026, 8, 13, 7, 6, 5, 432123789, time.UTC)

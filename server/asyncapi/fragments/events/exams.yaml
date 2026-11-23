@@ -8,6 +8,46 @@
 # Exam authoring events, sent to subscribers holding exam.view.
 components:
   messages:
+    exam.counts.changed:
+      name: exam.counts.changed
+      title: Exam counts changed
+      summary: Refetch one Exam's catalogue counts.
+      description: >-
+        Refetch one Exam's needs_attention_count and pending_review_count, because a board or a submission
+        list of one of its Sittings changed. At most one per Exam every 5 seconds; the last change in a window
+        is always followed by one. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam.counts.changed
+              action:
+                type: string
+                const: exam.view
+              data:
+                $ref: '../../../schemas/realtime/exam_counts_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam.counts.changed
+            sequence: 41
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
     exam_created:
       name: exam_created
       title: Exam created

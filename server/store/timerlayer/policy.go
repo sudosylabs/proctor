@@ -260,6 +260,7 @@ const (
 	methodCountSelf                                 methodName = "count_self"
 	methodListNames                                 methodName = "list_names"
 	methodCount                                     methodName = "count"
+	methodCountExamActions                          methodName = "count_exam_actions"
 	methodChangeCount                               methodName = "change_count"
 	methodListDirectorySummaries                    methodName = "list_directory_summaries"
 	methodListIdentities                            methodName = "list_identities"

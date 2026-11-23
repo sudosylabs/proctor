@@ -26034,6 +26034,16 @@
             "minimum": 0,
             "type": "integer"
           },
+          "needs_attention_count": {
+            "description": "How many candidates of the Exam's open and paused Sittings need a manager: suspended, failing a check or with unresolved integrity attention. Present only when you may view the Exam's Sittings. Counting stops at 10,000.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "needs_attention_count_is_lower_bound": {
+            "description": "True when counting stopped at its bound. Present with needs_attention_count.",
+            "type": "boolean"
+          },
           "owner": {
             "$ref": "#/components/schemas/PersonRef",
             "description": "The Exam's owner, named."
@@ -26041,6 +26051,16 @@
           "owner_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The User who currently owns the Exam."
+          },
+          "pending_review_count": {
+            "description": "How many of the Exam's Submissions have no finalized review. Present only when you may review its Submissions. Counting stops at 10,000.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pending_review_count_is_lower_bound": {
+            "description": "True when counting stopped at its bound. Present with pending_review_count.",
+            "type": "boolean"
           },
           "revision": {
             "description": "The Exam's current revision number. Send it as expected_revision when you archive the Exam or change its Managers or owner.",

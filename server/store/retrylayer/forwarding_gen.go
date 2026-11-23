@@ -1262,6 +1262,12 @@ func (s *examAuthoringStore) Count(ctx context.Context, arg1 store.ExamListOptio
 	})
 }
 
+func (s *examAuthoringStore) CountExamActions(ctx context.Context, arg1 store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.ExamID]store.ExamActionCounts, error) {
+		return s.ExamAuthoringStore.CountExamActions(ctx, arg1)
+	})
+}
+
 func (s *examAuthoringStore) Archive(ctx context.Context, arg1 *store.ExamArchive, command *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.Archive(ctx, arg1, command)

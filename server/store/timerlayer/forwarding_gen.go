@@ -1376,6 +1376,12 @@ func (s *timedExamAuthoringStore) Count(arg0 context.Context, arg1 store.ExamLis
 	})
 }
 
+func (s *timedExamAuthoringStore) CountExamActions(arg0 context.Context, arg1 store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodCountExamActions), func(callCtx context.Context) (map[model.ExamID]store.ExamActionCounts, error) {
+		return s.next.CountExamActions(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAuthoringStore) Archive(arg0 context.Context, arg1 *store.ExamArchive, arg2 *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodArchive), func(callCtx context.Context) (*store.ExamArchiveCommandResult, error) {
 		return s.next.Archive(callCtx, arg1, arg2)

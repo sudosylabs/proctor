@@ -88,6 +88,10 @@ type searchExamRecords struct {
 	lists  []store.ExamListOptions
 }
 
+func (s *searchExamRecords) CountExamActions(context.Context, store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	return map[model.ExamID]store.ExamActionCounts{}, nil
+}
+
 func (s *searchExamRecords) Count(_ context.Context, _ store.ExamListOptions, maximum int) (int, error) {
 	return min(len(s.listed), maximum), nil
 }

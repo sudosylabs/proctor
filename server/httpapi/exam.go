@@ -56,6 +56,12 @@ type examSummaryResponse struct {
 	SittingCount            int                         `json:"sitting_count"`
 	MatchingSittingCount    int                         `json:"matching_sitting_count"`
 	SittingSummary          *examCatalogSittingResponse `json:"sitting_summary"`
+	// The action counts are present only where the viewer may see what they
+	// count; each stops at 10,000.
+	NeedsAttentionCount             *int  `json:"needs_attention_count,omitempty"`
+	NeedsAttentionCountIsLowerBound *bool `json:"needs_attention_count_is_lower_bound,omitempty"`
+	PendingReviewCount              *int  `json:"pending_review_count,omitempty"`
+	PendingReviewCountIsLowerBound  *bool `json:"pending_review_count_is_lower_bound,omitempty"`
 }
 
 type examCatalogSittingResponse struct {
@@ -487,6 +493,9 @@ func (h examHandlers) list(request route.Request) (route.Result, error) {
 	for _, item := range page.Items {
 		summary := examSummaryResponseFromApplication(item)
 		summary.Creator, summary.Owner = personRef(refs, item.CreatorUserID), personRef(refs, item.OwnerUserID)
+		actions := page.Actions[item.ID]
+		summary.NeedsAttentionCount, summary.NeedsAttentionCountIsLowerBound = cappedCount(actions.NeedsAttention)
+		summary.PendingReviewCount, summary.PendingReviewCountIsLowerBound = cappedCount(actions.PendingReview)
 		response.Items = append(response.Items, summary)
 	}
 
@@ -732,6 +741,15 @@ func examCatalogCursorSpec() route.CursorSpec[examCatalogCursor] {
 			return nil
 		},
 	}
+}
+
+// cappedCount presents an optional count stopped at store.MaximumListCount.
+func cappedCount(count *int) (*int, *bool) {
+	if count == nil {
+		return nil, nil
+	}
+	value, lowerBound := *count, *count == store.MaximumListCount
+	return &value, &lowerBound
 }
 
 func examSummaryResponseFromApplication(summary store.ExamSummary) examSummaryResponse {

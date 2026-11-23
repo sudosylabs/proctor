@@ -333,20 +333,10 @@ func (s *SQLExamIntegrityReviewStore) ListFlags(
 		return nil, store.NewErrInvalidInput("integrity_flag", "list_options", nil)
 	}
 
-	query := `SELECT f.id, f.exam_attempt_id AS attempt_id, f.generation, f.policy_kind AS kind,
-			COALESCE(f.native_rule_id, '') AS native_rule_id, f.state, f.created_at, COUNT(ev.id) AS evidence_count,
-			COALESCE(bg.overflow_count, eval.overflow_count, 0) AS overflow_count,
-			bg.participation_id AS browser_participation_id,
-			bg.policy_revision_id AS browser_policy_revision_id, bg.rule_id AS browser_rule_id,
-			bg.overflow_first_received_at, bg.overflow_last_received_at,
-			COALESCE(eval.unresolved_missing_count, 0) AS unresolved_missing_count
+	query := `SELECT ` + integrityFlagSummaryColumns + `
 		FROM exam_submissions sub
 		JOIN integrity_flags f ON f.exam_attempt_id = sub.exam_attempt_id
-		LEFT JOIN integrity_evidence ev ON ev.integrity_flag_id = f.id
-		LEFT JOIN browser_integrity_groups bg ON bg.integrity_flag_id = f.id
-		LEFT JOIN exam_attempt_focus_loss_evaluations eval ON eval.exam_attempt_id = f.exam_attempt_id
-			AND eval.generation = f.generation
-			AND f.policy_kind = 'focus_loss'
+		` + integrityFlagSummaryJoins + `
 		WHERE sub.id = ?
 			AND sub.sealed = true
 			AND sub.integrity_retired_at IS NULL`
@@ -356,28 +346,11 @@ func (s *SQLExamIntegrityReviewStore) ListFlags(
 		args = append(args, options.AfterFlagID.String())
 	}
 
-	query += ` GROUP BY f.id, f.exam_attempt_id, f.generation, f.policy_kind, f.native_rule_id, f.state, f.created_at,
-			eval.overflow_count, eval.unresolved_missing_count, bg.integrity_flag_id
+	query += ` GROUP BY ` + integrityFlagSummaryGroup + `
 		ORDER BY f.id
 		LIMIT ?`
 	args = append(args, options.Limit+1)
-	var rows []struct {
-		ID                     string         `db:"id"`
-		BrowserPart            sql.NullString `db:"browser_participation_id"`
-		BrowserPolicy          sql.NullString `db:"browser_policy_revision_id"`
-		BrowserRule            sql.NullString `db:"browser_rule_id"`
-		OverflowFirst          sql.NullTime   `db:"overflow_first_received_at"`
-		OverflowLast           sql.NullTime   `db:"overflow_last_received_at"`
-		AttemptID              string         `db:"attempt_id"`
-		Kind                   string         `db:"kind"`
-		NativeRuleID           string         `db:"native_rule_id"`
-		State                  string         `db:"state"`
-		Generation             int64          `db:"generation"`
-		EvidenceCount          int            `db:"evidence_count"`
-		OverflowCount          int64          `db:"overflow_count"`
-		UnresolvedMissingCount int64          `db:"unresolved_missing_count"`
-		CreatedAt              time.Time      `db:"created_at"`
-	}
+	var rows []integrityFlagSummaryRow
 	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("list Integrity Flags: %w", err)
 	}
@@ -389,57 +362,102 @@ func (s *SQLExamIntegrityReviewStore) ListFlags(
 
 	page.Items = make([]store.ExamIntegrityFlagSummary, 0, len(rows))
 	for _, row := range rows {
-		flagID, err := model.ParseIntegrityFlagID(row.ID)
+		summary, err := row.summary()
 		if err != nil {
-			return nil, invalidPersistedState("integrity_flag", "id", err)
+			return nil, err
 		}
-
-		attemptID, err := model.ParseExamAttemptID(row.AttemptID)
-		if err != nil {
-			return nil, invalidPersistedState("integrity_flag", "attempt_id", err)
-		}
-
-		flag := model.IntegrityFlag{
-			ID:           flagID,
-			AttemptID:    attemptID,
-			Generation:   row.Generation,
-			Kind:         model.IntegrityPolicyKind(row.Kind),
-			NativeRuleID: row.NativeRuleID,
-			State:        model.IntegrityFlagState(row.State),
-			CreatedAt:    model.TimeUTC(row.CreatedAt),
-		}
-		if err = flag.Validate(); err != nil {
-			return nil, invalidPersistedState("integrity_flag", "value", err)
-		}
-
-		var browser *model.BrowserIntegrityGroup
-		if row.BrowserPart.Valid {
-			browser = &model.BrowserIntegrityGroup{
-				ParticipationID:  model.AttemptParticipationID(row.BrowserPart.String),
-				PolicyRevisionID: model.ExamRevisionID(row.BrowserPolicy.String),
-				RuleID:           row.BrowserRule.String,
-			}
-			if row.OverflowFirst.Valid {
-				v := model.TimeUTC(row.OverflowFirst.Time)
-				browser.OverflowFirstReceivedAt = &v
-			}
-
-			if row.OverflowLast.Valid {
-				v := model.TimeUTC(row.OverflowLast.Time)
-				browser.OverflowLastReceivedAt = &v
-			}
-		}
-
-		page.Items = append(page.Items, store.ExamIntegrityFlagSummary{
-			Browser:                browser,
-			Flag:                   flag,
-			EvidenceCount:          row.EvidenceCount,
-			OverflowCount:          row.OverflowCount,
-			UnresolvedMissingCount: row.UnresolvedMissingCount,
-		})
+		page.Items = append(page.Items, summary)
 	}
 
 	return page, nil
+}
+
+// integrityFlagSummaryColumns and integrityFlagSummaryJoins read one flag
+// summary per integrity_flags row f; group by integrityFlagSummaryGroup.
+const (
+	integrityFlagSummaryColumns = `f.id, f.exam_attempt_id AS attempt_id, f.generation, f.policy_kind AS kind,
+			COALESCE(f.native_rule_id, '') AS native_rule_id, f.state, f.created_at, COUNT(ev.id) AS evidence_count,
+			COALESCE(bg.overflow_count, eval.overflow_count, 0) AS overflow_count,
+			bg.participation_id AS browser_participation_id,
+			bg.policy_revision_id AS browser_policy_revision_id, bg.rule_id AS browser_rule_id,
+			bg.overflow_first_received_at, bg.overflow_last_received_at,
+			COALESCE(eval.unresolved_missing_count, 0) AS unresolved_missing_count`
+	integrityFlagSummaryJoins = `LEFT JOIN integrity_evidence ev ON ev.integrity_flag_id = f.id
+		LEFT JOIN browser_integrity_groups bg ON bg.integrity_flag_id = f.id
+		LEFT JOIN exam_attempt_focus_loss_evaluations eval ON eval.exam_attempt_id = f.exam_attempt_id
+			AND eval.generation = f.generation
+			AND f.policy_kind = 'focus_loss'`
+	integrityFlagSummaryGroup = `f.id, f.exam_attempt_id, f.generation, f.policy_kind, f.native_rule_id, f.state, f.created_at,
+			eval.overflow_count, eval.unresolved_missing_count, bg.integrity_flag_id`
+)
+
+type integrityFlagSummaryRow struct {
+	ID                     string         `db:"id"`
+	BrowserPart            sql.NullString `db:"browser_participation_id"`
+	BrowserPolicy          sql.NullString `db:"browser_policy_revision_id"`
+	BrowserRule            sql.NullString `db:"browser_rule_id"`
+	OverflowFirst          sql.NullTime   `db:"overflow_first_received_at"`
+	OverflowLast           sql.NullTime   `db:"overflow_last_received_at"`
+	AttemptID              string         `db:"attempt_id"`
+	Kind                   string         `db:"kind"`
+	NativeRuleID           string         `db:"native_rule_id"`
+	State                  string         `db:"state"`
+	Generation             int64          `db:"generation"`
+	EvidenceCount          int            `db:"evidence_count"`
+	OverflowCount          int64          `db:"overflow_count"`
+	UnresolvedMissingCount int64          `db:"unresolved_missing_count"`
+	CreatedAt              time.Time      `db:"created_at"`
+}
+
+func (row integrityFlagSummaryRow) summary() (store.ExamIntegrityFlagSummary, error) {
+	flagID, err := model.ParseIntegrityFlagID(row.ID)
+	if err != nil {
+		return store.ExamIntegrityFlagSummary{}, invalidPersistedState("integrity_flag", "id", err)
+	}
+
+	attemptID, err := model.ParseExamAttemptID(row.AttemptID)
+	if err != nil {
+		return store.ExamIntegrityFlagSummary{}, invalidPersistedState("integrity_flag", "attempt_id", err)
+	}
+
+	flag := model.IntegrityFlag{
+		ID:           flagID,
+		AttemptID:    attemptID,
+		Generation:   row.Generation,
+		Kind:         model.IntegrityPolicyKind(row.Kind),
+		NativeRuleID: row.NativeRuleID,
+		State:        model.IntegrityFlagState(row.State),
+		CreatedAt:    model.TimeUTC(row.CreatedAt),
+	}
+	if err = flag.Validate(); err != nil {
+		return store.ExamIntegrityFlagSummary{}, invalidPersistedState("integrity_flag", "value", err)
+	}
+
+	var browser *model.BrowserIntegrityGroup
+	if row.BrowserPart.Valid {
+		browser = &model.BrowserIntegrityGroup{
+			ParticipationID:  model.AttemptParticipationID(row.BrowserPart.String),
+			PolicyRevisionID: model.ExamRevisionID(row.BrowserPolicy.String),
+			RuleID:           row.BrowserRule.String,
+		}
+		if row.OverflowFirst.Valid {
+			v := model.TimeUTC(row.OverflowFirst.Time)
+			browser.OverflowFirstReceivedAt = &v
+		}
+
+		if row.OverflowLast.Valid {
+			v := model.TimeUTC(row.OverflowLast.Time)
+			browser.OverflowLastReceivedAt = &v
+		}
+	}
+
+	return store.ExamIntegrityFlagSummary{
+		Browser:                browser,
+		Flag:                   flag,
+		EvidenceCount:          row.EvidenceCount,
+		OverflowCount:          row.OverflowCount,
+		UnresolvedMissingCount: row.UnresolvedMissingCount,
+	}, nil
 }
 
 func (s *SQLExamIntegrityReviewStore) ListEvidence(

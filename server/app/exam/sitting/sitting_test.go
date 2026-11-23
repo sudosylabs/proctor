@@ -195,6 +195,13 @@ type sittingStoreFake struct {
 	items         []store.ExamSittingSnapshot
 	err           error
 	getErr        error
+	acrossOptions []store.ExamSittingAcrossListOptions
+	across        []store.ExamSittingAcrossItem
+}
+
+func (s *sittingStoreFake) ListAcrossExams(_ context.Context, options store.ExamSittingAcrossListOptions) (*store.ExamSittingAcrossPage, error) {
+	s.acrossOptions = append(s.acrossOptions, options)
+	return &store.ExamSittingAcrossPage{ServerTime: testNow, Items: append([]store.ExamSittingAcrossItem{}, s.across...)}, nil
 }
 
 // scheduleMailWorld is the mail a Sitting schedule change prepares through

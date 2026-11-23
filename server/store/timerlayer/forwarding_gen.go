@@ -1460,6 +1460,12 @@ func (s *timedExamSittingStore) List(arg0 context.Context, arg1 store.ExamSittin
 	})
 }
 
+func (s *timedExamSittingStore) ListAcrossExams(arg0 context.Context, arg1 store.ExamSittingAcrossListOptions) (*store.ExamSittingAcrossPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodListAcrossExams), func(callCtx context.Context) (*store.ExamSittingAcrossPage, error) {
+		return s.next.ListAcrossExams(callCtx, arg1)
+	})
+}
+
 func (s *timedExamSittingStore) ListInvalidationTargetsByClass(arg0 context.Context, arg1 model.ClassID, arg2 model.ExamSittingID, arg3 int) ([]store.ExamSittingInvalidationTarget, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodListInvalidationTargetsByClass), func(callCtx context.Context) ([]store.ExamSittingInvalidationTarget, error) {
 		return s.next.ListInvalidationTargetsByClass(callCtx, arg1, arg2, arg3)
@@ -2177,6 +2183,42 @@ func (s *timedExamIntegrityReviewStore) Release(arg0 context.Context, arg1 *stor
 func (s *timedExamIntegrityReviewStore) GetReleasedStudentResult(arg0 context.Context, arg1 model.ExamAttemptID, arg2 model.UserID) (*model.StudentResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodGetReleasedStudentResult), func(callCtx context.Context) (*model.StudentResult, error) {
 		return s.next.GetReleasedStudentResult(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ListSubmissions(arg0 context.Context, arg1 store.SubmissionListOptions) (*store.SubmissionListPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListSubmissions), func(callCtx context.Context) (*store.SubmissionListPage, error) {
+		return s.next.ListSubmissions(callCtx, arg1)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ResolveLiveEvidence(arg0 context.Context, arg1 model.ExamAttemptID) (*store.LiveEvidenceScope, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodResolveLiveEvidence), func(callCtx context.Context) (*store.LiveEvidenceScope, error) {
+		return s.next.ResolveLiveEvidence(callCtx, arg1)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ListLiveFlags(arg0 context.Context, arg1 store.LiveFlagListOptions) (*store.ExamIntegrityFlagPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListLiveFlags), func(callCtx context.Context) (*store.ExamIntegrityFlagPage, error) {
+		return s.next.ListLiveFlags(callCtx, arg1)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ListLiveEvidence(arg0 context.Context, arg1 store.LiveEvidenceListOptions) (*store.ExamIntegrityEvidencePage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListLiveEvidence), func(callCtx context.Context) (*store.ExamIntegrityEvidencePage, error) {
+		return s.next.ListLiveEvidence(callCtx, arg1)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ListLiveNativeConditions(arg0 context.Context, arg1 store.LiveNativeConditionListOptions) (*store.NativeConditionPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListLiveNativeConditions), func(callCtx context.Context) (*store.NativeConditionPage, error) {
+		return s.next.ListLiveNativeConditions(callCtx, arg1)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ListLiveTimeline(arg0 context.Context, arg1 store.LiveTimelineListOptions) (*store.LiveTimelinePage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListLiveTimeline), func(callCtx context.Context) (*store.LiveTimelinePage, error) {
+		return s.next.ListLiveTimeline(callCtx, arg1)
 	})
 }
 

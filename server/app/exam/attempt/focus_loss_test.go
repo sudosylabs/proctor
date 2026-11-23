@@ -73,6 +73,7 @@ func TestEvaluateFocusLossHashesCredentialAuditsSafeScopeAndPublishesCommittedWa
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
 		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, result.ReceivedAt)),
 	}, f.publisher.Calls())
 	principal := f.inv.Principal()
 	focusAccess := f.persistence.focusAccess
@@ -290,6 +291,7 @@ func TestEvaluateFocusLossProjectsCommittedPolicySuspensionAndPublishesOnce(t *t
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 		pub(realtime.NewCandidateExamActivityChangedEvent(result.CandidateUserID)),
 		{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.Connection.ID},
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, result.ReceivedAt)),
 	}, f.publisher.Calls())
 }
 
@@ -468,6 +470,7 @@ func TestEvaluateFocusLossAsksDesktopForTheFlagsScreenClip(t *testing.T) {
 		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, result.ReceivedAt)),
 		pub(realtime.NewCandidateScreenClipsRequestedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
 	}, f.publisher.Calls(), "the Flag is announced, then Desktop is told to read its clip requests")
 }

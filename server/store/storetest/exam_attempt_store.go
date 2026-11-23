@@ -1511,4 +1511,28 @@ func testSittingCandidateStatusFilters(t *testing.T, ctx context.Context, ss sto
 	require.Len(t, list(store.SittingCandidateStatusFilter{Query: strings.ToUpper(fixture.candidate.Username[:3])}).Items, 1,
 		"the name search ignores case")
 	require.Empty(t, list(store.SittingCandidateStatusFilter{Query: "%"}).Items, "the name search is literal")
+
+	across := func(visibility store.ExamListVisibility) *store.ExamSittingAcrossItem {
+		t.Helper()
+		page, err := ss.ExamSitting().ListAcrossExams(ctx, store.ExamSittingAcrossListOptions{
+			Visibility: visibility, ReaderUserID: fixture.manager.ID, States: []model.ExamSittingState{model.ExamSittingOpen},
+			AcademicUnitID: fixture.unitID, Limit: 201,
+		})
+		require.NoError(t, err)
+		require.False(t, page.ServerTime.IsZero())
+		for i := range page.Items {
+			if page.Items[i].SittingID == fixture.sitting.ID {
+				return &page.Items[i]
+			}
+		}
+		return nil
+	}
+	everyone := across(store.ExamListVisibility{ActorUserID: fixture.manager.ID, OverrideInstitutionWide: true})
+	require.NotNil(t, everyone)
+	require.Equal(t, fixture.examID, everyone.ExamID)
+	require.NotEmpty(t, everyone.ExamTitle)
+	require.NotEmpty(t, everyone.ClassDisplayName)
+	require.NotNil(t, everyone.Counts, "an open sitting is counted")
+	require.Equal(t, *counts, *everyone.Counts, "the list across exams counts a sitting exactly as its board does")
+	require.Nil(t, across(store.ExamListVisibility{ActorUserID: fixture.manager.ID}), "a viewer with no scope sees no sitting")
 }

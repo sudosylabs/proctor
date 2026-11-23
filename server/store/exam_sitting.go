@@ -334,6 +334,9 @@ type ExamSittingStore interface {
 	// List returns snapshots in descending (ScheduledStartAt, SittingID)
 	// order. Limit is at most 201: a page of 200 plus one look-ahead row.
 	List(context.Context, ExamSittingListOptions) ([]ExamSittingSnapshot, error)
+	// ListAcrossExams returns one page of sittings of every exam the
+	// visibility reaches, with candidate counts for the open ones.
+	ListAcrossExams(context.Context, ExamSittingAcrossListOptions) (*ExamSittingAcrossPage, error)
 	// ListInvalidationTargetsByClass orders by sitting ID after the exclusive
 	// cursor; the limit is 1..201.
 	ListInvalidationTargetsByClass(context.Context, model.ClassID, model.ExamSittingID, int) ([]ExamSittingInvalidationTarget, error)

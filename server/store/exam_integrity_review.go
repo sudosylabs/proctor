@@ -226,6 +226,16 @@ type ExamIntegrityReviewStore interface {
 	PrepareRelease(context.Context, *ExamIntegrityReviewReleasePrepare) (*ExamIntegrityReviewReleasePreparation, error)
 	Release(context.Context, *ExamIntegrityReviewRelease, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
 	GetReleasedStudentResult(context.Context, model.ExamAttemptID, model.UserID) (*model.StudentResult, error)
+	// ListSubmissions returns one page of sealed submissions with their
+	// candidates, flag counts and reviews.
+	ListSubmissions(context.Context, SubmissionListOptions) (*SubmissionListPage, error)
+	// ResolveLiveEvidence names an attempt for the live evidence reads, which
+	// page its flags, evidence and native conditions while it runs.
+	ResolveLiveEvidence(context.Context, model.ExamAttemptID) (*LiveEvidenceScope, error)
+	ListLiveFlags(context.Context, LiveFlagListOptions) (*ExamIntegrityFlagPage, error)
+	ListLiveEvidence(context.Context, LiveEvidenceListOptions) (*ExamIntegrityEvidencePage, error)
+	ListLiveNativeConditions(context.Context, LiveNativeConditionListOptions) (*NativeConditionPage, error)
+	ListLiveTimeline(context.Context, LiveTimelineListOptions) (*LiveTimelinePage, error)
 }
 
 // NativeConditionListOptions pages native condition records, which are

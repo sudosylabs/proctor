@@ -25,6 +25,9 @@ type Result struct {
 	Review        *model.SubmissionReview
 	Decision      *model.IntegrityReviewDecision
 	Replayed      bool
+	// inBatch marks a result of a bulk release, which refreshes the sitting's
+	// submission list once for the whole batch.
+	inBatch bool
 }
 
 func (s *Service) authorizeReviewMutation(

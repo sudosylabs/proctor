@@ -81,7 +81,8 @@ func connectionOpenedCalls(t *testing.T, result ConnectionResult) []realtimetest
 }
 
 // expiryCalls are the calls of an expired Participation. When the expiry
-// closed the Attempt Connection the close leads and the unbinding ends them.
+// closed the Attempt Connection the close leads and the unbinding follows;
+// the managers' live evidence hint ends them.
 func expiryCalls(t *testing.T, result ParticipationExpiry, closedConnection bool) []realtimetest.Call {
 	t.Helper()
 	pub := published(t)
@@ -100,7 +101,7 @@ func expiryCalls(t *testing.T, result ParticipationExpiry, closedConnection bool
 	if closedConnection {
 		calls = append(calls, realtimetest.Call{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.Connection.ID})
 	}
-	return calls
+	return append(calls, pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.Attempt.ID, result.DatabaseTime)))
 }
 
 // reallowedCalls are the calls of a re-allowed Attempt: managers, then the
@@ -144,7 +145,8 @@ func manualSuspensionCalls(t *testing.T, result ManualSuspensionResult, closedCo
 }
 
 // submittedCalls are the calls of a sealed Submission: the manager fact, the
-// candidate fact, the closed Attempt Connection when sealing for a closed
+// candidate fact, the Sitting's submission list refresh, the closed Attempt
+// Connection when sealing for a closed
 // Sitting closed one, the operational invalidations, then the unbinding of
 // the submitting Connection.
 func submittedCalls(t *testing.T, result SubmissionResult, sittingClosedConnection bool) []realtimetest.Call {
@@ -155,6 +157,7 @@ func submittedCalls(t *testing.T, result SubmissionResult, sittingClosedConnecti
 			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Receipt.AssistantTranscriptDigest, result.Provenance, result.Receipt.SubmittedAt)),
 		pub(realtime.NewCandidateExamAttemptSubmittedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID, result.Receipt.SubmissionID,
 			result.Receipt.WorkspaceCursor, result.Receipt.ManifestDigest, result.Receipt.AssistantTranscriptDigest, result.Provenance, result.Receipt.SubmittedAt)),
+		pub(realtime.NewSittingSubmissionsChangedEvent(result.ExamID, result.SittingID)),
 	}
 	if sittingClosedConnection {
 		calls = append(calls, pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.Receipt.AttemptID, result.CandidateUserID,
@@ -220,7 +223,7 @@ func requireEventDataOmits(t *testing.T, calls []realtimetest.Call, forbidden ..
 func TestConnectionOpenedEffectRevokesSupersededSessionsBeforeAnnouncingTheConnection(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	at := time.Date(2026, time.August, 18, 9, 0, 0, 0, time.UTC)
 	result := ConnectionResult{
 		Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(),
@@ -241,7 +244,7 @@ func TestConnectionOpenedEffectRevokesSupersededSessionsBeforeAnnouncingTheConne
 func TestParticipationExpiryEffectPublishesCloseManagerSuspensionAndCandidateSuspension(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	at := time.Date(2026, time.August, 18, 10, 0, 0, 0, time.UTC)
 	result := ParticipationExpiry{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(), DatabaseTime: at,
 		Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), Revision: 2},
@@ -257,7 +260,7 @@ func TestParticipationExpiryEffectPublishesCloseManagerSuspensionAndCandidateSus
 	// the candidate learns of the Suspension next, the operational
 	// invalidations follow, and the Connection is unbound last.
 	require.Equal(t, expiryCalls(t, result, true), calls)
-	require.Len(t, calls, 7)
+	require.Len(t, calls, 8)
 	require.Equal(t, "exam_attempt_connection_closed", calls[0].Event.Name)
 	require.Equal(t, model.ActionExamSittingView, calls[0].Event.Action)
 	require.Equal(t, "exam_attempt_suspended", calls[1].Event.Name)
@@ -276,7 +279,7 @@ func TestParticipationExpiryEffectPublishesCloseManagerSuspensionAndCandidateSus
 func TestManualSuspensionEffectPublishesKickedCloseAndSafeCandidateReason(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	at := time.Date(2026, time.August, 18, 10, 0, 0, 0, time.UTC)
 	result := ManualSuspensionResult{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(),
 		CandidateUserID: model.NewUserID(), Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), Revision: 3},
@@ -305,7 +308,7 @@ func TestManualSuspensionEffectPublishesKickedCloseAndSafeCandidateReason(t *tes
 func TestSubmissionEffectPublishesSafeManagerAndCandidateFactsThenUnbindsExactConnection(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	result := SubmissionResult{Receipt: store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID(), State: model.ExamAttemptSubmitted,
 		WorkspaceCursor: 13, ManifestDigest: strings.Repeat("d", 64),
@@ -319,22 +322,24 @@ func TestSubmissionEffectPublishesSafeManagerAndCandidateFactsThenUnbindsExactCo
 	// operational invalidations follow, and the submitting Connection is
 	// unbound last.
 	require.Equal(t, submittedCalls(t, result, false), calls)
-	require.Len(t, calls, 6)
+	require.Len(t, calls, 7)
 	require.Equal(t, "exam_attempt_submitted", calls[0].Event.Name)
 	require.Empty(t, calls[0].Event.UserID)
 	require.Equal(t, "exam_attempt_submitted", calls[1].Event.Name)
 	require.Equal(t, result.CandidateUserID, calls[1].Event.UserID)
-	require.Equal(t, "candidate.exam_activity.changed", calls[2].Event.Name)
-	require.Equal(t, "manager.sitting_board.changed", calls[3].Event.Name)
-	require.Equal(t, realtimetest.Call{Method: realtimetest.InvalidateCurrentUserContext, UserID: result.CandidateUserID}, calls[4])
-	require.Equal(t, realtimetest.Call{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.ConnectionID}, calls[5])
+	require.Equal(t, "exam_sitting.submissions.changed", calls[2].Event.Name)
+	require.Empty(t, calls[2].Event.UserID)
+	require.Equal(t, "candidate.exam_activity.changed", calls[3].Event.Name)
+	require.Equal(t, "manager.sitting_board.changed", calls[4].Event.Name)
+	require.Equal(t, realtimetest.Call{Method: realtimetest.InvalidateCurrentUserContext, UserID: result.CandidateUserID}, calls[5])
+	require.Equal(t, realtimetest.Call{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.ConnectionID}, calls[6])
 	requireEventDataOmits(t, calls, "path", "content", "source", "evidence", "sequence", "credential", "session", "private")
 }
 
 func TestAutomaticSubmissionEffectPublishesSittingClosedFactsAndUnbindsExactConnection(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	result := AutomaticSubmissionResult{SubmissionResult: SubmissionResult{
 		Receipt: store.ExamSubmissionReceipt{AssistantTranscriptDigest: model.NewAssistantInventory().Digest, BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID(),
 			State: model.ExamAttemptSubmitted, WorkspaceCursor: 21, ManifestDigest: strings.Repeat("e", 64),
@@ -347,24 +352,25 @@ func TestAutomaticSubmissionEffectPublishesSittingClosedFactsAndUnbindsExactConn
 	// Contract: the Submission facts precede the Connection close, the
 	// operational invalidations follow, and the Connection is unbound last.
 	require.Equal(t, submittedCalls(t, result.SubmissionResult, true), calls)
-	require.Len(t, calls, 7)
+	require.Len(t, calls, 8)
 	require.Equal(t, "exam_attempt_submitted", calls[0].Event.Name)
 	require.Empty(t, calls[0].Event.UserID)
 	require.Equal(t, "exam_attempt_submitted", calls[1].Event.Name)
 	require.Equal(t, result.CandidateUserID, calls[1].Event.UserID)
-	require.Equal(t, "exam_attempt_connection_closed", calls[2].Event.Name)
-	require.Equal(t, "candidate.exam_activity.changed", calls[3].Event.Name)
-	require.Equal(t, "manager.sitting_board.changed", calls[4].Event.Name)
-	require.Equal(t, realtimetest.Call{Method: realtimetest.InvalidateCurrentUserContext, UserID: result.CandidateUserID}, calls[5])
-	require.Equal(t, realtimetest.Call{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.ConnectionID}, calls[6])
-	require.Contains(t, string(calls[2].Event.Data), `"close_reason":"sitting_closed"`)
+	require.Equal(t, "exam_sitting.submissions.changed", calls[2].Event.Name)
+	require.Equal(t, "exam_attempt_connection_closed", calls[3].Event.Name)
+	require.Equal(t, "candidate.exam_activity.changed", calls[4].Event.Name)
+	require.Equal(t, "manager.sitting_board.changed", calls[5].Event.Name)
+	require.Equal(t, realtimetest.Call{Method: realtimetest.InvalidateCurrentUserContext, UserID: result.CandidateUserID}, calls[6])
+	require.Equal(t, realtimetest.Call{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.ConnectionID}, calls[7])
+	require.Contains(t, string(calls[3].Event.Data), `"close_reason":"sitting_closed"`)
 	requireEventDataOmits(t, calls, "path", "content", "source", "evidence", "sequence", "credential", "session", "private")
 }
 
 func TestFocusLossWarningEffectPublishesBoundedManagerFlagAndNeutralCandidateWarning(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	at := time.Date(2026, time.August, 20, 10, 0, 0, 0, time.UTC)
 	result := FocusLossEvaluation{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(),
 		AttemptID: model.NewExamAttemptID(), ReceivedAt: at, PolicyOutcome: model.IntegrityOutcomeFlagAndWarn,
@@ -374,12 +380,14 @@ func TestFocusLossWarningEffectPublishesBoundedManagerFlagAndNeutralCandidateWar
 	calls := publisher.Calls()
 	pub := published(t)
 	// Contract: managers learn of the Integrity Flag before the candidate is
-	// warned, and the Sitting board is invalidated after both.
+	// warned, the Sitting board is invalidated after both, and the managers'
+	// live evidence is hinted last.
 	require.Equal(t, []realtimetest.Call{
 		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
 			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, at)),
 		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.SittingID, result.AttemptID, result.CandidateUserID, at)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, at)),
 	}, calls)
 	require.Equal(t, "exam_attempt_integrity_flagged", calls[0].Event.Name)
 	require.Equal(t, "exam_attempt_focus_warning", calls[1].Event.Name)
@@ -391,7 +399,7 @@ func TestFocusLossWarningEffectPublishesBoundedManagerFlagAndNeutralCandidateWar
 func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	at := time.Date(2026, time.August, 20, 10, 5, 0, 0, time.UTC)
 	flagID := model.NewIntegrityFlagID()
 	result := FocusLossEvaluation{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(),
@@ -408,8 +416,8 @@ func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *t
 	pub := published(t)
 	// Contract: the Connection close leads, the Integrity Flag and the
 	// Suspension reach managers before the candidate's Suspension, the Sitting
-	// board and the candidate's Exam activity are invalidated next, and the
-	// closed Connection is unbound last.
+	// board and the candidate's Exam activity are invalidated next, the closed
+	// Connection is unbound, and the managers' live evidence is hinted last.
 	require.Equal(t, []realtimetest.Call{
 		pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			result.Connection.CloseReason, result.Connection.ClosedAt.Time)),
@@ -422,6 +430,7 @@ func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *t
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 		pub(realtime.NewCandidateExamActivityChangedEvent(result.CandidateUserID)),
 		{Method: realtimetest.UnbindExamAttemptConnection, ConnectionID: result.Connection.ID},
+		pub(realtime.NewAttemptEvidenceChangedEvent(result.ExamID, result.SittingID, result.AttemptID, at)),
 	}, calls)
 	require.Equal(t, "exam_attempt_connection_closed", calls[0].Event.Name)
 	require.Equal(t, "exam_attempt_integrity_flagged", calls[1].Event.Name)
@@ -437,7 +446,7 @@ func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *t
 func TestParticipationExpiryEffectOmitsDuplicateCloseAfterTransportTeardown(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{publisher: publisher}
+	service := effectService(t, publisher)
 	at := time.Date(2026, time.August, 18, 10, 0, 0, 0, time.UTC)
 	result := ParticipationExpiry{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(), DatabaseTime: at,
 		Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), Revision: 2},
@@ -452,7 +461,7 @@ func TestParticipationExpiryEffectOmitsDuplicateCloseAfterTransportTeardown(t *t
 	// as closed again nor unbound; the Suspension reaches managers, then the
 	// candidate, and the operational invalidations follow.
 	require.Equal(t, expiryCalls(t, result, false), calls)
-	require.Len(t, calls, 5)
+	require.Len(t, calls, 6)
 	require.Equal(t, "exam_attempt_suspended", calls[0].Event.Name)
 	require.Equal(t, "exam_attempt_access_suspended", calls[1].Event.Name)
 	require.Equal(t, "candidate.exam_activity.changed", calls[2].Event.Name)
@@ -501,4 +510,13 @@ func TestSealedSessionEffectKillsOnlyTheSessionsTheSealEnded(t *testing.T) {
 	for _, call := range publisher.Calls() {
 		require.Equal(t, "exam_attempt_assistant_session_ended", call.Event.Name)
 	}
+}
+
+// effectService publishes effects through publisher, with the live evidence
+// throttle a real Service has.
+func effectService(t *testing.T, publisher *realtimetest.Publisher) *Service {
+	t.Helper()
+	hints, err := realtime.NewThrottledPublisher(publisher, evidenceHintWindow, nil, nil)
+	require.NoError(t, err)
+	return &Service{publisher: publisher, evidenceHints: hints}
 }

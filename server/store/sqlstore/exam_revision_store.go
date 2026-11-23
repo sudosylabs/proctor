@@ -234,7 +234,7 @@ func publishExamRevision(
 		return examRevisionPublicationOutcomeRow{}, err
 	}
 	if len(problems) > 0 {
-		return examRevisionPublicationOutcomeRow{}, examPublicationProblemErr(problems[0])
+		return examRevisionPublicationOutcomeRow{}, problems[0].PublicationError()
 	}
 
 	if err = recordExamRevisionPublication(ctx, tx, revision, draft); err != nil {
@@ -466,35 +466,6 @@ func checkExamPublication(
 		return nil, problems, nil
 	}
 	return revision, problems, nil
-}
-
-// examPublicationProblemErr is the error Publish has always returned for a
-// failed check.
-func examPublicationProblemErr(problem store.ExamPublicationProblem) error {
-	switch problem.Reason {
-	case store.ExamPublicationExamArchived:
-		return store.NewErrConflict("exam", "exam_archived", nil)
-	case store.ExamPublicationExecutionDisabled:
-		return store.NewErrConflict("exam_revision", "execution_disabled", nil)
-	case store.ExamPublicationEnvironmentProfileUnusable:
-		return store.NewErrConflict("exam_draft", "environment_profile_unusable", nil)
-	case store.ExamPublicationAssistantDisabled:
-		return store.NewErrConflict("exam_revision", "assistant_disabled", nil)
-	case store.ExamPublicationAssistantProfileUnusable:
-		return store.NewErrConflict("exam_revision", "assistant_profile_unusable", nil)
-	case store.ExamPublicationTooManyResources,
-		store.ExamPublicationResourceTooLarge,
-		store.ExamPublicationTooManyStarterEntries,
-		store.ExamPublicationStarterFileTooLarge,
-		store.ExamPublicationStarterWorkspaceTooLarge:
-		return store.NewErrConflict("exam_revision", "exam_revision_capacity", nil)
-	case store.ExamPublicationBrowserPolicyOriginMismatch:
-		return store.NewErrInvalidInput("exam_revision", "browser_policy", nil)
-	case store.ExamPublicationNoChanges:
-		return store.NewErrConflict("exam_revision", "exam_revision_no_changes", nil)
-	default:
-		return invalidPersistedState("exam_revision", "publication_problem", errors.New("unknown publication problem"))
-	}
 }
 
 const examRevisionDraftSelect = `SELECT e.academic_unit_id, e.archived_at, e.revision AS exam_revision,

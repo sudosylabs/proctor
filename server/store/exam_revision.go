@@ -94,6 +94,34 @@ type ExamPublicationProblem struct {
 	ResourceID model.ExamResourceID
 }
 
+// PublicationError is the Store error Publish returns for a failed check.
+func (problem ExamPublicationProblem) PublicationError() error {
+	switch problem.Reason {
+	case ExamPublicationExamArchived:
+		return NewErrConflict("exam", "exam_archived", nil)
+	case ExamPublicationExecutionDisabled:
+		return NewErrConflict("exam_revision", "execution_disabled", nil)
+	case ExamPublicationEnvironmentProfileUnusable:
+		return NewErrConflict("exam_draft", "environment_profile_unusable", nil)
+	case ExamPublicationAssistantDisabled:
+		return NewErrConflict("exam_revision", "assistant_disabled", nil)
+	case ExamPublicationAssistantProfileUnusable:
+		return NewErrConflict("exam_revision", "assistant_profile_unusable", nil)
+	case ExamPublicationTooManyResources,
+		ExamPublicationResourceTooLarge,
+		ExamPublicationTooManyStarterEntries,
+		ExamPublicationStarterFileTooLarge,
+		ExamPublicationStarterWorkspaceTooLarge:
+		return NewErrConflict("exam_revision", "exam_revision_capacity", nil)
+	case ExamPublicationBrowserPolicyOriginMismatch:
+		return NewErrInvalidInput("exam_revision", "browser_policy", nil)
+	case ExamPublicationNoChanges:
+		return NewErrConflict("exam_revision", "exam_revision_no_changes", nil)
+	default:
+		return NewErrInvalidInput("exam_revision", "publication_problem", nil)
+	}
+}
+
 // ExamPublicationCheckResult lists every failed check in check order, for the
 // draft at DraftRevision. An empty list means Publish would succeed now.
 type ExamPublicationCheckResult struct {

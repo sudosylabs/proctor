@@ -37,24 +37,20 @@ type DraftCheck struct {
 // Publishable reports whether publishing the checked draft would succeed.
 func (c DraftCheck) Publishable() bool { return len(c.Problems) == 0 }
 
-// draftProblemPresentation is the code and field each reason is reported
-// with. The codes are the ones PublishExamRevision returns for the same check.
-var draftProblemPresentation = map[store.ExamPublicationProblemReason]struct {
-	code  apperror.Code
-	field string
-}{
-	store.ExamPublicationExamArchived:                {"exam.archived", "exam"},
-	store.ExamPublicationExecutionDisabled:           {"exam.execution.disabled", "policy.execution"},
-	store.ExamPublicationEnvironmentProfileUnusable:  {"exam.execution.profile_unusable", "policy.execution.profile_id"},
-	store.ExamPublicationAssistantDisabled:           {"exam.assistant.disabled", "policy.assistant"},
-	store.ExamPublicationAssistantProfileUnusable:    {"exam.assistant.profile_unusable", "policy.assistant.profile_id"},
-	store.ExamPublicationTooManyResources:            {"exam.revision.capacity_exceeded", "resources"},
-	store.ExamPublicationResourceTooLarge:            {"exam.revision.capacity_exceeded", "resources.size_bytes"},
-	store.ExamPublicationTooManyStarterEntries:       {"exam.revision.capacity_exceeded", "starter_workspace"},
-	store.ExamPublicationStarterFileTooLarge:         {"exam.revision.capacity_exceeded", "starter_workspace.size_bytes"},
-	store.ExamPublicationStarterWorkspaceTooLarge:    {"exam.revision.capacity_exceeded", "starter_workspace.total_bytes"},
-	store.ExamPublicationBrowserPolicyOriginMismatch: {"exam.invalid", "browser_policy"},
-	store.ExamPublicationNoChanges:                   {"exam.revision.no_changes", "draft"},
+// draftProblemFields maps a failed publication check to the field to edit.
+var draftProblemFields = map[store.ExamPublicationProblemReason]string{
+	store.ExamPublicationExamArchived:                "exam",
+	store.ExamPublicationExecutionDisabled:           "policy.execution",
+	store.ExamPublicationEnvironmentProfileUnusable:  "policy.execution.profile_id",
+	store.ExamPublicationAssistantDisabled:           "policy.assistant",
+	store.ExamPublicationAssistantProfileUnusable:    "policy.assistant.profile_id",
+	store.ExamPublicationTooManyResources:            "resources",
+	store.ExamPublicationResourceTooLarge:            "resources.size_bytes",
+	store.ExamPublicationTooManyStarterEntries:       "starter_workspace",
+	store.ExamPublicationStarterFileTooLarge:         "starter_workspace.size_bytes",
+	store.ExamPublicationStarterWorkspaceTooLarge:    "starter_workspace.total_bytes",
+	store.ExamPublicationBrowserPolicyOriginMismatch: "browser_policy",
+	store.ExamPublicationNoChanges:                   "draft",
 }
 
 // CheckExamDraft runs the checks PublishExamRevision runs on the current
@@ -112,14 +108,14 @@ func (p *Publication) CheckExamDraft(
 
 	check := DraftCheck{DraftRevision: result.DraftRevision, Problems: make([]DraftProblem, 0, len(result.Problems))}
 	for _, problem := range result.Problems {
-		presentation, known := draftProblemPresentation[problem.Reason]
+		field, known := draftProblemFields[problem.Reason]
 		if !known || (problem.Reason == store.ExamPublicationResourceTooLarge) != problem.ResourceID.IsValid() {
 			return DraftCheck{}, apperror.New("exam.unavailable").Wrap(errors.New("Exam Revision store returned an unknown publication problem"))
 		}
 		check.Problems = append(check.Problems, DraftProblem{
 			Reason:     problem.Reason,
-			Code:       presentation.code,
-			Field:      presentation.field,
+			Code:       apperror.Code(apperror.CodeOf(examStoreErrors.Translate(problem.PublicationError()), "exam.unavailable")),
+			Field:      field,
 			ResourceID: problem.ResourceID,
 		})
 	}

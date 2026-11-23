@@ -48,8 +48,10 @@ func TestCheckExamDraftReportsEveryProblemWithPublishingsCodes(t *testing.T) {
 func TestCheckExamDraftEveryReasonHasAPresentation(t *testing.T) {
 	t.Parallel()
 	for _, reason := range store.ExamPublicationProblemReasons() {
-		_, known := draftProblemPresentation[reason]
-		require.True(t, known, "reason %q has no code or field", reason)
+		require.NotEmpty(t, draftProblemFields[reason], "reason %q has no field", reason)
+		problem := store.ExamPublicationProblem{Reason: reason}
+		code := apperror.CodeOf(examStoreErrors.Translate(problem.PublicationError()), "exam.unavailable")
+		require.NotEqual(t, "exam.unavailable", code, "reason %q has no publication code", reason)
 	}
 }
 

@@ -43,7 +43,7 @@ test('an event page states its wire name and its data members', () => {
 });
 
 test('an event without data says so', () => {
-  const page = renderReference(document).get('exam-created.mdx');
+  const page = renderReference(document).get('desktop-compatibility-policy-changed.mdx');
   assert.match(page, /This event has no data\./);
 });
 

@@ -139,7 +139,6 @@ func desktopCompatibilityPolicyResource(app *identity.Service, resolver *people.
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
-				"desktop_compatibility_policy.revision_conflict",
 				"desktop_compatibility_policy.unavailable",
 				"request.invalid",
 				"resource.not_found",

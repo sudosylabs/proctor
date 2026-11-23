@@ -23,7 +23,6 @@ paths:
         - authorization.denied
         - authorization.request.invalid
         - authorization.unavailable
-        - desktop_compatibility_policy.revision_conflict
         - desktop_compatibility_policy.unavailable
         - request.invalid
         - resource.not_found
@@ -73,8 +72,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
-        "409":
-          $ref: '#/components/responses/Conflict'
         "500":
           $ref: '#/components/responses/InternalError'
         "503":

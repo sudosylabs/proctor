@@ -63,6 +63,7 @@ paths:
           explode: true
           schema:
             type: array
+            uniqueItems: true
             maxItems: 7
             items:
               $ref: '#/components/schemas/SittingCandidatePresenceState'
@@ -77,15 +78,13 @@ paths:
         - name: attention
           in: query
           required: false
-          description: true keeps candidates with unresolved integrity attention.
+          description: True keeps candidates with unresolved integrity attention. False leaves the list unfiltered.
           schema:
-            type: string
-            enum:
-              - 'true'
+            type: boolean
         - name: q
           in: query
           required: false
-          description: Keep candidates whose display name or username contains this text, ignoring case.
+          description: Keep candidates whose display name contains this text, ignoring case.
           schema:
             type: string
             maxLength: 100
@@ -138,7 +137,7 @@ components:
               with_attention: 0
             items:
               - candidate:
-                  user_id: nybc6xhg593upqice3sdeyro5k
+                  id: nybc6xhg593upqice3sdeyro5k
                   username: student.ada
                   display_name: Ada Student
                 current_class_membership: true
@@ -172,7 +171,7 @@ components:
                     ready: 1
                     failed: 0
               - candidate:
-                  user_id: dfa1x1n7mkthyoziwxnupsmyia
+                  id: dfa1x1n7mkthyoziwxnupsmyia
                   username: student.bo
                   display_name: Bo Student
                 current_class_membership: true
@@ -194,7 +193,7 @@ components:
         - with_attention
       properties:
         total:
-          description: Every candidate of the Sitting.
+          description: Exact number of candidates in the Sitting visible on this board, before filters.
           type: integer
           format: int64
           minimum: 0
@@ -263,25 +262,6 @@ components:
         - lease_expired
         - suspended
         - submitted
-    SittingCandidateIdentityResponse:
-      description: The candidate User.
-      type: object
-      additionalProperties: false
-      required:
-        - user_id
-        - username
-        - display_name
-      properties:
-        user_id:
-          description: ID of the candidate User.
-          $ref: '#/components/schemas/ID'
-        username:
-          description: Username of the candidate.
-          type: string
-          minLength: 1
-        display_name:
-          description: Display name of the candidate.
-          type: string
     SittingCandidateSubmissionResponse:
       description: The candidate's Submission.
       type: object
@@ -397,7 +377,7 @@ components:
       properties:
         candidate:
           description: The candidate User.
-          $ref: '#/components/schemas/SittingCandidateIdentityResponse'
+          $ref: '#/components/schemas/PersonRef'
         current_class_membership:
           description: Whether the candidate is still a member of the Sitting's Class.
           type: boolean

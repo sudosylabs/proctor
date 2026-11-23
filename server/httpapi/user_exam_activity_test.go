@@ -59,8 +59,12 @@ func TestCandidateExamActivityShowsJoinWindowReceiptAndAttemptTimes(t *testing.T
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
 	item := page.Items[0]
-	assert.JSONEq(t, `"`+model.FormatRFC3339(start.Add(-10*time.Minute))+`"`, string(item["join_opens_at"]))
-	assert.JSONEq(t, `"`+model.FormatRFC3339(start.Add(30*time.Minute))+`"`, string(item["join_closes_at"]))
+	var window map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(item["join_window"], &window))
+	assert.JSONEq(t, `"`+model.FormatRFC3339(start.Add(-10*time.Minute))+`"`, string(window["opens_at"]))
+	assert.JSONEq(t, `"`+model.FormatRFC3339(start.Add(30*time.Minute))+`"`, string(window["closes_at"]))
+	assert.NotContains(t, item, "join_opens_at")
+	assert.NotContains(t, item, "join_closes_at")
 	var attempt map[string]any
 	require.NoError(t, json.Unmarshal(item["attempt"], &attempt))
 	assert.Equal(t, model.FormatRFC3339(suspendedAt), attempt["suspended_at"])
@@ -96,7 +100,7 @@ func TestCandidateExamActivityLeavesOutTimesThatNeverHappened(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
-	for _, absent := range []string{"join_opens_at", "join_closes_at"} {
+	for _, absent := range []string{"join_window", "join_opens_at", "join_closes_at"} {
 		_, present := page.Items[0][absent]
 		assert.False(t, present, "an unset %s is omitted, never null", absent)
 	}

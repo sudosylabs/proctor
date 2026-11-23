@@ -343,8 +343,9 @@ components:
     PersonRef:
       description: >-
         A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the
-        record gets the person's presented name: their display name, or their username when it is empty. The
-        username and profile picture are included only when the reader can see that User in the directory.
+        record gets the person's display name when one is set. A username can fill in for an unset display name
+        only when the reader can see that User in the directory. The same visibility controls the username and
+        profile picture fields.
       type: object
       additionalProperties: false
       required:
@@ -356,7 +357,7 @@ components:
         display_name:
           type: string
           maxLength: 512
-          description: The person's presented name. Omitted when the account has been removed.
+          description: The person's presented name, if the account has a visible one.
         username:
           type: string
           maxLength: 64
@@ -675,6 +676,52 @@ components:
         scopes_is_lower_bound:
           type: boolean
           description: True when `scopes` may be higher than reported, because counting stopped at 10,000 Bindings.
+    RoleRef:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          maxLength: 512
+          description: The Role's display name, localized for the protected System Administrator role.
+    ScopeRef:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [institution, academic_unit, class]
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          maxLength: 512
+          description: The scope's display name, if available.
+    ExamRef:
+      type: object
+      additionalProperties: false
+      required: [id, display_name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          description: The Exam title.
+    ClassRef:
+      type: object
+      additionalProperties: false
+      required: [id, display_name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          maxLength: 512
+          description: The Class's display name.
     RoleBindingResponse:
       description: >-
         A grant of one Role to one User at one scope: the Institution, an Academic Unit or a Class. It is in effect
@@ -729,53 +776,27 @@ components:
           format: date-time
           description: Time the grant stops. Omitted for a grant with no end.
         role:
-          type: object
-          additionalProperties: false
-          description: The Role granted, named.
-          required:
-            - id
-          properties:
-            id:
-              $ref: '#/components/schemas/ID'
-            display_name:
-              type: string
-              maxLength: 512
-              description: The Role's display name, localized for the protected System Administrator role. Omitted for an archived Role.
+          $ref: '#/components/schemas/RoleRef'
+          description: The Role granted, with its display name.
         scope:
-          type: object
-          additionalProperties: false
-          description: The scope the grant applies to, named.
-          required:
-            - type
-            - id
-          properties:
-            type:
-              type: string
-              enum:
-                - institution
-                - academic_unit
-                - class
-              description: Kind of scope.
-            id:
-              $ref: '#/components/schemas/ID'
-            name:
-              type: string
-              maxLength: 512
-              description: The Institution, Academic Unit or Class display name. Omitted when it is archived.
+          $ref: '#/components/schemas/ScopeRef'
+          description: Where the grant applies.
         granted_by:
           $ref: '#/components/schemas/PersonRef'
           description: >-
             Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is
-            the importer for an imported invitation. Omitted only for the grant made at installation.
+            the importer for an imported invitation. For a direct CSV grant, this is the importer.
+            Omitted only for the grant made at installation.
         granted_via:
           type: string
           enum:
             - manual
             - invitation
+            - import
             - bootstrap
           description: >-
             How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`),
-            or at installation (`bootstrap`).
+            through a CSV import (`import`), or at installation (`bootstrap`).
     JobStatus:
       type: string
       description: >-
@@ -1004,9 +1025,11 @@ components:
       properties:
         display_name:
           type: string
+          maxLength: 513
           description: The file's display name, or its first and last names. Omitted when the file gave none.
         email_masked:
           type: string
+          maxLength: 256
           description: >-
             The file's email address masked the way mail deliveries mask a recipient, such as `a***@example.edu`.
             Omitted when the row holds no address.
@@ -1431,6 +1454,7 @@ components:
         - exam.integrity_review.incomplete
         - exam.integrity_review.invalid
         - exam.integrity_review.not_found
+        - exam.integrity_review.result_released
         - exam.integrity_review.revision_conflict
         - exam.integrity_review.state_conflict
         - exam.integrity_review.too_large
@@ -1732,6 +1756,7 @@ components:
         - academic_unit
         - class
         - exam
+        - exam_attempt
         - exam_sitting
         - institution
         - mail_delivery

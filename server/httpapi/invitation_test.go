@@ -406,7 +406,7 @@ func TestInvitationAdministrationNamesInviterAndScope(t *testing.T) {
 	require.NotNil(t, got.Inviter)
 	require.Equal(t, fixture.callerID.String(), got.Inviter.ID)
 	require.Equal(t, "Priya Raman", got.Inviter.DisplayName)
-	require.Equal(t, roleBindingScopeResponse{Type: model.RoleScopeClass, ID: class.ID.String()}, got.Scope,
+	require.Equal(t, scopeRefResponse{Type: model.RoleScopeClass, ID: class.ID.String()}, got.Scope,
 		"the scope is named only when the lookup finds it")
 	require.Nil(t, got.Role, "a student Invitation grants no Role")
 }

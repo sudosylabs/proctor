@@ -88,8 +88,9 @@ components:
                   display_name: CS201 Group A
                 scheduled_start_at: '2026-09-14T09:00:00Z'
                 scheduled_end_at: '2026-09-14T11:00:00Z'
-                join_opens_at: '2026-09-14T08:50:00Z'
-                join_closes_at: '2026-09-14T09:30:00Z'
+                join_window:
+                  opens_at: '2026-09-14T08:50:00Z'
+                  closes_at: '2026-09-14T09:30:00Z'
                 sitting_state: open
                 sitting_reason_code: null
                 activity_state: in_progress
@@ -316,18 +317,9 @@ components:
           type: string
           format: date-time
           description: Scheduled end of the Sitting.
-        join_opens_at:
-          type: string
-          format: date-time
-          description: >-
-            When the candidate can join to prepare: run the readiness checks and read the instructions. The Attempt
-            still starts at scheduled_start_at. Absent when there is no early join.
-        join_closes_at:
-          type: string
-          format: date-time
-          description: >-
-            When the Sitting stops admitting candidates who have not started. Absent when they can start until the
-            end. A candidate who has started can carry on until the end.
+        join_window:
+          $ref: '#/components/schemas/ExamSittingJoinWindow'
+          description: The join window, when either bound is set.
         sitting_state:
           $ref: '#/components/schemas/ExamSittingState'
         sitting_reason_code:

@@ -107,7 +107,7 @@ components:
             scope:
               type: class
               id: ybndrfg8ejkmcpqxot1uwisza3
-              name: Year 1 Mathematics A
+              display_name: Year 1 Mathematics A
             created_at: '2026-08-22T14:00:00Z'
             updated_at: '2026-08-22T14:00:00Z'
             revision: 1

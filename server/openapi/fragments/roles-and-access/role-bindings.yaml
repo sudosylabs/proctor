@@ -251,7 +251,7 @@ components:
                 scope:
                   type: academic_unit
                   id: 14j8umgczgrdp95w77zuxmxfu9
-                  name: Mathematics
+                  display_name: Mathematics
                 granted_by:
                   id: sjebyge5cpbop1xwo4eds74ejb
                   display_name: Priya Raman
@@ -271,7 +271,7 @@ components:
                 scope:
                   type: class
                   id: fotnmte5o3j9wftdm5rtbfofqr
-                  name: Year 2 Statistics
+                  display_name: Year 2 Statistics
                 granted_by:
                   id: sjebyge5cpbop1xwo4eds74ejb
                   display_name: Priya Raman
@@ -299,7 +299,7 @@ components:
             scope:
               type: academic_unit
               id: 14j8umgczgrdp95w77zuxmxfu9
-              name: Mathematics
+              display_name: Mathematics
             granted_by:
               id: sjebyge5cpbop1xwo4eds74ejb
               display_name: Priya Raman
@@ -326,7 +326,7 @@ components:
             scope:
               type: academic_unit
               id: 14j8umgczgrdp95w77zuxmxfu9
-              name: Mathematics
+              display_name: Mathematics
             granted_by:
               id: sjebyge5cpbop1xwo4eds74ejb
               display_name: Priya Raman

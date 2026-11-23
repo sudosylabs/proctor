@@ -209,7 +209,11 @@ components:
         - display_name
       properties:
         kind:
-          $ref: '#/components/schemas/ProgrammeKind'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/ProgrammeKind'
+            - type: string
+              const: ""
           description: Optional. The kind of Programme. Omitted or empty means `other`.
         name:
           type: string

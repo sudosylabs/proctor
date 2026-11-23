@@ -15,7 +15,8 @@ paths:
       description: >-
         Applies one operation to 1 to 200 existing Users in a single request. Each item runs on its own, with the same
         authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not
-        stop the others. The response reports every item's outcome in request order.
+        stop the others. The response reports every item's outcome in request order. A direct `user.disable` batch
+        also records one audit entry with its overall outcome.
 
         Item keys must be unique within the request; repeated keys fail those items with `request.invalid`. An item
         that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. Role

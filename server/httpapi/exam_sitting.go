@@ -175,29 +175,40 @@ func decodeDuplicateFreeExamSittingObject(encoded []byte, target any) error {
 // examSittingResponse exposes only the candidate-safe reason code. Private
 // manager reasons, authorization decisions and audit provenance stay out.
 type examSittingResponse struct {
-	ID               string `json:"id"`
-	ExamID           string `json:"exam_id"`
-	ExamRevisionID   string `json:"exam_revision_id"`
-	ClassID          string `json:"class_id"`
-	ScheduledStartAt string `json:"scheduled_start_at"`
-	ScheduledEndAt   string `json:"scheduled_end_at"`
-	JoinOpensAt      string `json:"join_opens_at,omitempty"`
-	JoinClosesAt     string `json:"join_closes_at,omitempty"`
-	State            string `json:"state"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
-	OpenedAt         string `json:"opened_at,omitempty"`
-	PausedAt         string `json:"paused_at,omitempty"`
-	ClosingAt        string `json:"closing_at,omitempty"`
-	ClosedAt         string `json:"closed_at,omitempty"`
-	CanceledAt       string `json:"canceled_at,omitempty"`
-	ReasonCode       string `json:"reason_code,omitempty"`
-	Revision         int64  `json:"revision"`
+	ID               string                         `json:"id"`
+	ExamID           string                         `json:"exam_id"`
+	ExamRevisionID   string                         `json:"exam_revision_id"`
+	ClassID          string                         `json:"class_id"`
+	ScheduledStartAt string                         `json:"scheduled_start_at"`
+	ScheduledEndAt   string                         `json:"scheduled_end_at"`
+	JoinWindow       *examSittingJoinWindowResponse `json:"join_window,omitempty"`
+	State            string                         `json:"state"`
+	CreatedAt        string                         `json:"created_at"`
+	UpdatedAt        string                         `json:"updated_at"`
+	OpenedAt         string                         `json:"opened_at,omitempty"`
+	PausedAt         string                         `json:"paused_at,omitempty"`
+	ClosingAt        string                         `json:"closing_at,omitempty"`
+	ClosedAt         string                         `json:"closed_at,omitempty"`
+	CanceledAt       string                         `json:"canceled_at,omitempty"`
+	ReasonCode       string                         `json:"reason_code,omitempty"`
+	Revision         int64                          `json:"revision"`
 	// The members below are present on reads, not on a mutation's result.
 	CandidateCount             *int                          `json:"candidate_count,omitempty"`
 	CandidateCountIsLowerBound *bool                         `json:"candidate_count_is_lower_bound,omitempty"`
 	Corrections                []examSittingCorrectionEntry  `json:"corrections,omitempty"`
 	History                    []examSittingHistoryEntryWire `json:"history,omitempty"`
+}
+
+type examSittingJoinWindowResponse struct {
+	OpensAt  string `json:"opens_at,omitempty"`
+	ClosesAt string `json:"closes_at,omitempty"`
+}
+
+func joinWindowResponse(window model.ExamSittingJoinWindow) *examSittingJoinWindowResponse {
+	if !window.OpensAt.Valid && !window.ClosesAt.Valid {
+		return nil
+	}
+	return &examSittingJoinWindowResponse{OpensAt: window.OpensAt.FormatRFC3339(), ClosesAt: window.ClosesAt.FormatRFC3339()}
 }
 
 // examSittingCorrectionEntry is one live correction and how many of the
@@ -214,11 +225,11 @@ type examSittingCorrectionEntry struct {
 // examSittingHistoryEntryWire is one manager action with the manager's
 // private reason, for the sitting's managers only.
 type examSittingHistoryEntryWire struct {
-	Kind   string             `json:"kind"`
-	At     string             `json:"at"`
-	ByID   string             `json:"by_user_id"`
-	By     *personRefResponse `json:"by,omitempty"`
-	Reason string             `json:"reason"`
+	Kind    string             `json:"kind"`
+	At      string             `json:"at"`
+	ActorID string             `json:"actor_user_id"`
+	Actor   *personRefResponse `json:"actor,omitempty"`
+	Reason  string             `json:"reason"`
 }
 
 type examSittingListResponse struct {
@@ -227,9 +238,9 @@ type examSittingListResponse struct {
 }
 
 type examSittingNoShowResponse struct {
-	CandidateUserID  string                           `json:"candidate_user_id"`
-	Candidate        sittingCandidateIdentityResponse `json:"candidate"`
-	ClassMemberSince string                           `json:"class_member_since"`
+	CandidateUserID  string            `json:"candidate_user_id"`
+	Candidate        personRefResponse `json:"candidate"`
+	ClassMemberSince string            `json:"class_member_since"`
 }
 
 type examSittingNoShowListResponse struct {
@@ -521,15 +532,23 @@ func (h examSittingHandlers) listNoShows(request route.Request) (route.Result, e
 		return route.Result{}, err
 	}
 
+	ids := make([]model.UserID, 0, len(page.Items))
+	for _, item := range page.Items {
+		if !item.CandidateUserID.IsValid() {
+			return route.Result{}, route.ErrUnpresentable
+		}
+		ids = append(ids, item.CandidateUserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	response := examSittingNoShowListResponse{Items: make([]examSittingNoShowResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, examSittingNoShowResponse{
-			CandidateUserID: item.CandidateUserID.String(),
-			Candidate: sittingCandidateIdentityResponse{
-				UserID:      item.CandidateUserID.String(),
-				Username:    item.Username,
-				DisplayName: item.DisplayName,
-			},
+			CandidateUserID:  item.CandidateUserID.String(),
+			Candidate:        *personRef(refs, item.CandidateUserID),
 			ClassMemberSince: model.FormatRFC3339(item.ClassMemberSince),
 		})
 	}
@@ -669,11 +688,11 @@ func (h examSittingHandlers) get(request route.Request) (route.Result, error) {
 		response.History = make([]examSittingHistoryEntryWire, 0, len(read.History))
 		for _, entry := range read.History {
 			response.History = append(response.History, examSittingHistoryEntryWire{
-				Kind:   string(entry.Kind),
-				At:     model.FormatRFC3339(entry.At),
-				ByID:   entry.ActorUserID.String(),
-				By:     personRef(refs, entry.ActorUserID),
-				Reason: entry.Reason,
+				Kind:    string(entry.Kind),
+				At:      model.FormatRFC3339(entry.At),
+				ActorID: entry.ActorUserID.String(),
+				Actor:   personRef(refs, entry.ActorUserID),
+				Reason:  entry.Reason,
 			})
 		}
 	}
@@ -1089,8 +1108,7 @@ func examSittingResponseFromView(view store.ExamSittingSnapshot) examSittingResp
 		ClassID:          record.ClassID.String(),
 		ScheduledStartAt: model.FormatRFC3339(record.ScheduledStartAt),
 		ScheduledEndAt:   model.FormatRFC3339(record.ScheduledEndAt),
-		JoinOpensAt:      record.JoinWindow.OpensAt.FormatRFC3339(),
-		JoinClosesAt:     record.JoinWindow.ClosesAt.FormatRFC3339(),
+		JoinWindow:       joinWindowResponse(record.JoinWindow),
 		State:            string(record.State),
 		CreatedAt:        model.FormatRFC3339(record.CreatedAt),
 		UpdatedAt:        model.FormatRFC3339(record.UpdatedAt),

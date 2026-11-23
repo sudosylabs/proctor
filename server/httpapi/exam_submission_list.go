@@ -26,7 +26,6 @@ type submissionListCursor struct {
 	Kind         string `json:"kind"`
 	Sort         string `json:"sort"`
 	SubmittedAt  string `json:"submitted_at,omitempty"`
-	Name         string `json:"name,omitempty"`
 	SubmissionID string `json:"submission_id"`
 }
 
@@ -34,29 +33,24 @@ func submissionListCursorSpec(sort store.SubmissionListSort) route.CursorSpec[su
 	return route.CursorSpec[submissionListCursor]{
 		Label:                "Submission list",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"kind", "sort", "submitted_at", "name", "submission_id"},
+		Members:              []string{"kind", "sort", "submitted_at", "submission_id"},
 		Validate: func(cursor submissionListCursor) error {
 			if cursor.Kind != submissionListCursorKind || cursor.Sort != string(sort) ||
 				!model.SubmissionID(cursor.SubmissionID).IsValid() {
 				return errors.New("invalid Submission list keyset")
 			}
 			if sort == store.SubmissionListByName {
-				if cursor.Name == "" || cursor.SubmittedAt != "" {
+				if cursor.SubmittedAt != "" {
 					return errors.New("invalid Submission list keyset")
 				}
 				return nil
 			}
-			if _, err := model.ParseRFC3339(cursor.SubmittedAt); err != nil || cursor.Name != "" {
+			if _, err := model.ParseRFC3339(cursor.SubmittedAt); err != nil {
 				return errors.New("invalid Submission list keyset")
 			}
 			return nil
 		},
 	}
-}
-
-type submissionListExamResponse struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
 }
 
 // submissionListReviewResponse is a row's review, present only for a reader
@@ -73,18 +67,18 @@ type submissionListReviewResponse struct {
 }
 
 type submissionListItemResponse struct {
-	SubmissionID             string                           `json:"submission_id"`
-	Exam                     *submissionListExamResponse      `json:"exam,omitempty"`
-	ExamID                   string                           `json:"exam_id"`
-	ExamSittingID            string                           `json:"exam_sitting_id"`
-	ExamAttemptID            string                           `json:"exam_attempt_id"`
-	Candidate                sittingCandidateIdentityResponse `json:"candidate"`
-	SubmittedAt              string                           `json:"submitted_at"`
-	ReceiptCode              string                           `json:"receipt_code"`
-	FlagCount                int64                            `json:"flag_count"`
-	UnresolvedIntegrityCount int64                            `json:"unresolved_integrity_count"`
-	IntegrityState           string                           `json:"integrity_state"`
-	Review                   *submissionListReviewResponse    `json:"review,omitempty"`
+	SubmissionID             string                        `json:"submission_id"`
+	Exam                     *examRefResponse              `json:"exam,omitempty"`
+	ExamID                   string                        `json:"exam_id"`
+	ExamSittingID            string                        `json:"exam_sitting_id"`
+	ExamAttemptID            string                        `json:"exam_attempt_id"`
+	Candidate                personRefResponse             `json:"candidate"`
+	SubmittedAt              string                        `json:"submitted_at"`
+	ReceiptCode              string                        `json:"receipt_code"`
+	FlagCount                int64                         `json:"flag_count"`
+	UnresolvedIntegrityCount int64                         `json:"unresolved_integrity_count"`
+	IntegrityState           string                        `json:"integrity_state"`
+	Review                   *submissionListReviewResponse `json:"review,omitempty"`
 }
 
 // submissionListCountsResponse counts the whole list, whatever the filter.
@@ -142,13 +136,17 @@ func (h examIntegrityReviewHandlers) submissionListResult(
 	page review.SubmissionListPage,
 	acrossExams bool,
 ) (route.Result, error) {
-	finalizers := make([]model.UserID, 0, len(page.Items))
+	ids := make([]model.UserID, 0, 2*len(page.Items))
 	for _, item := range page.Items {
+		if !item.Candidate.UserID.IsValid() {
+			return route.Result{}, route.ErrUnpresentable
+		}
+		ids = append(ids, item.Candidate.UserID)
 		if item.Review != nil {
-			finalizers = append(finalizers, item.Review.FinalizedByUserID)
+			ids = append(ids, item.Review.FinalizedByUserID)
 		}
 	}
-	refs, err := namePeople(request, h.people, finalizers...)
+	refs, err := namePeople(request, h.people, ids...)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -162,14 +160,13 @@ func (h examIntegrityReviewHandlers) submissionListResult(
 		row := submissionListItemResponse{
 			SubmissionID: item.SubmissionID.String(), ExamID: item.ExamID.String(),
 			ExamSittingID: item.SittingID.String(), ExamAttemptID: item.AttemptID.String(),
-			Candidate: sittingCandidateIdentityResponse{UserID: item.Candidate.UserID.String(),
-				Username: item.Candidate.Username, DisplayName: item.Candidate.DisplayName},
+			Candidate:   *personRef(refs, item.Candidate.UserID),
 			SubmittedAt: model.FormatRFC3339(item.SubmittedAt), ReceiptCode: item.ReceiptCode.Display(),
 			FlagCount: item.FlagCount, UnresolvedIntegrityCount: item.UnresolvedIntegrityCount,
 			IntegrityState: string(item.IntegrityState),
 		}
 		if acrossExams {
-			row.Exam = &submissionListExamResponse{ID: item.ExamID.String(), Title: item.ExamTitle}
+			row.Exam = &examRefResponse{ID: item.ExamID.String(), DisplayName: item.ExamTitle}
 		}
 		if item.ReviewVisible {
 			row.Review = &submissionListReviewResponse{State: string(store.SubmissionListReviewNone),
@@ -197,9 +194,7 @@ func (h examIntegrityReviewHandlers) submissionListResult(
 		}
 		last := page.Items[len(page.Items)-1]
 		cursor := submissionListCursor{Kind: submissionListCursorKind, Sort: string(sort), SubmissionID: last.SubmissionID.String()}
-		if sort == store.SubmissionListByName {
-			cursor.Name = last.Candidate.DisplayName
-		} else {
+		if sort == store.SubmissionListBySubmitted {
 			cursor.SubmittedAt = model.FormatRFC3339(last.SubmittedAt)
 		}
 		if response.NextCursor, err = route.EncodeCursor(cursor, submissionListCursorSpec(sort)); err != nil {
@@ -253,7 +248,7 @@ func submissionListQuery(values url.Values) (review.SubmissionListQuery, error) 
 		if err != nil {
 			return query, err
 		}
-		after := &store.SubmissionListCursor{SubmissionID: model.SubmissionID(cursor.SubmissionID), Name: cursor.Name}
+		after := &store.SubmissionListCursor{SubmissionID: model.SubmissionID(cursor.SubmissionID)}
 		if cursor.SubmittedAt != "" {
 			after.SubmittedAt, _ = model.ParseRFC3339(cursor.SubmittedAt)
 		}

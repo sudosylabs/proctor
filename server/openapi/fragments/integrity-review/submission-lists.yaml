@@ -51,6 +51,7 @@ paths:
           explode: true
           schema:
             type: array
+            uniqueItems: true
             maxItems: 3
             items:
               type: string
@@ -66,6 +67,7 @@ paths:
           explode: true
           schema:
             type: array
+            uniqueItems: true
             maxItems: 2
             items:
               type: string
@@ -77,14 +79,13 @@ paths:
           required: false
           description: true keeps Submissions with at least one integrity Flag, false those with none.
           schema:
-            type: string
-            enum:
-              - 'true'
-              - 'false'
+            type: boolean
         - name: sort
           in: query
           required: false
-          description: submitted lists the earliest Submission first; name lists by the candidate's display name.
+          description: >-
+            submitted lists the earliest Submission first; name lists by display name, using the username as
+            a sort key when the display name is empty.
           schema:
             type: string
             enum:
@@ -95,7 +96,9 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters.
+          description: >-
+            Send next_cursor from the previous page unchanged with the same sort and filters. Restart without a
+            cursor if its anchor is unavailable.
           schema:
             type: string
       responses:
@@ -121,7 +124,7 @@ paths:
                     exam_sitting_id: 14j8umgczgrdp95w77zuxmxfu9
                     exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
                     candidate:
-                      user_id: nybc6xhg593upqice3sdeyro5k
+                      id: nybc6xhg593upqice3sdeyro5k
                       username: student.ada
                       display_name: Ada Student
                     submitted_at: '2026-12-14T10:48:09Z'
@@ -147,8 +150,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
@@ -163,7 +164,7 @@ paths:
         Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each
         with its Exam. A row's review appears, and review_state and release_state match it, only where you also
         hold submission.review on its Exam; so review_state=none&review_state=draft lists what is waiting for your
-        review. Bounded and cursor-paged; there are no counts.
+        review. Bounded and cursor-paged; there are no counts. Restart without a cursor if its anchor is unavailable.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -201,12 +202,12 @@ paths:
                   - submission_id: 39kqk53i4cswfzbi7hbai1r8qg
                     exam:
                       id: wj3drgzdpnf54rxf5d8qd3dqne
-                      title: Algorithms final
+                      display_name: Algorithms final
                     exam_id: wj3drgzdpnf54rxf5d8qd3dqne
                     exam_sitting_id: 14j8umgczgrdp95w77zuxmxfu9
                     exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
                     candidate:
-                      user_id: nybc6xhg593upqice3sdeyro5k
+                      id: nybc6xhg593upqice3sdeyro5k
                       username: student.ada
                       display_name: Ada Student
                     submitted_at: '2026-12-14T10:48:09Z'
@@ -225,8 +226,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
@@ -245,8 +244,9 @@ paths:
         with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission
         goes through the same checks, audit, notice and events as a single release and commits on its own, and
         one more audit entry records the batch. Each item reports released, already_released, not_finalized,
-        denied, or failed with an error code. Replaying the same Idempotency-Key releases nothing twice: an item
-        this batch released reports released again. A replayed all_finalized batch looks the set up again.
+        denied, or failed with an error code. Replaying the same Idempotency-Key returns the original
+        selection and outcomes. Reusing it with a different request conflicts. A request still being
+        processed returns an in-progress conflict.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -259,6 +259,8 @@ paths:
         - exam.integrity_review.unavailable
         - idempotency.key_required
         - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
         - exam.sitting.invalid
         - exam.sitting.unavailable
         - authentication.required
@@ -336,7 +338,7 @@ components:
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     SubmissionListCounts:
-      description: The Sitting's Submissions, other than your own, whatever the filters.
+      description: Exact counts within this Sitting, excluding your own Submission and independent of the filters.
       type: object
       additionalProperties: false
       required:
@@ -388,7 +390,7 @@ components:
           $ref: '#/components/schemas/ID'
         exam:
           description: The Submission's Exam. Present on the list across Exams.
-          $ref: '#/components/schemas/SubmissionListExam'
+          $ref: '#/components/schemas/ExamRef'
         exam_id:
           $ref: '#/components/schemas/ID'
         exam_sitting_id:
@@ -397,7 +399,7 @@ components:
           $ref: '#/components/schemas/ID'
         candidate:
           description: The candidate, as the Sitting's candidate board names them.
-          $ref: '#/components/schemas/SittingCandidateIdentityResponse'
+          $ref: '#/components/schemas/PersonRef'
         submitted_at:
           type: string
           format: date-time
@@ -424,17 +426,6 @@ components:
         review:
           description: The review, present only where you hold submission.review.
           $ref: '#/components/schemas/SubmissionListReviewResponse'
-    SubmissionListExam:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - title
-      properties:
-        id:
-          $ref: '#/components/schemas/ID'
-        title:
-          type: string
     SubmissionListReviewResponse:
       description: Where a Submission's review stands. state is none until a manager opens one.
       type: object

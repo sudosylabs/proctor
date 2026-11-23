@@ -192,11 +192,11 @@ func sittingCandidateStatusFilter(values url.Values) (store.SittingCandidateStat
 		return filter, errors.New("check must be failing")
 	}
 	switch values.Get("attention") {
-	case "":
+	case "", "false":
 	case "true":
 		filter.Attention = true
 	default:
-		return filter, errors.New("attention must be true")
+		return filter, errors.New("attention must be true or false")
 	}
 	filter.Query = values.Get("q")
 	return filter, nil
@@ -266,7 +266,7 @@ func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuri
 type sittingCandidateStatusItemResponse struct {
 	NativeSecurity          *nativeSecuritySummaryResponse       `json:"native_security,omitempty"`
 	Environment             *sittingCandidateEnvironmentResponse `json:"environment,omitempty"`
-	Candidate               sittingCandidateIdentityResponse     `json:"candidate"`
+	Candidate               personRefResponse                    `json:"candidate"`
 	CurrentClassMembership  bool                                 `json:"current_class_membership"`
 	Attempt                 *sittingCandidateAttemptResponse     `json:"attempt"`
 	Presence                sittingCandidatePresenceResponse     `json:"presence"`
@@ -289,12 +289,6 @@ type sittingCandidateDesktopSetupResponse struct {
 	State    string `json:"state"`
 	Platform string `json:"platform,omitempty"`
 	Release  string `json:"release,omitempty"`
-}
-
-type sittingCandidateIdentityResponse struct {
-	UserID      string `json:"user_id"`
-	Username    string `json:"username"`
-	DisplayName string `json:"display_name"`
 }
 
 type sittingCandidateAttemptResponse struct {
@@ -554,6 +548,18 @@ func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route
 		return route.Result{}, err
 	}
 
+	ids := make([]model.UserID, 0, len(page.Items))
+	for _, item := range page.Items {
+		if !item.Candidate.UserID.IsValid() {
+			return route.Result{}, route.ErrUnpresentable
+		}
+		ids = append(ids, item.Candidate.UserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	response := sittingCandidateStatusListResponse{
 		ServerTime:                  model.FormatRFC3339(page.ServerTime),
 		ExamID:                      page.ExamID.String(),
@@ -566,11 +572,7 @@ func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route
 	}
 	for _, item := range page.Items {
 		mapped := sittingCandidateStatusItemResponse{
-			Candidate: sittingCandidateIdentityResponse{
-				UserID:      item.Candidate.UserID.String(),
-				Username:    item.Candidate.Username,
-				DisplayName: item.Candidate.DisplayName,
-			},
+			Candidate:               *personRef(refs, item.Candidate.UserID),
 			CurrentClassMembership:  item.CurrentClassMembership,
 			Presence:                sittingCandidatePresenceResponse{State: item.Presence.State},
 			NativeSecurity:          nativeSecuritySummaryFrom(item.NativeSecurity),

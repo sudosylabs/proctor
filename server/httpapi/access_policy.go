@@ -480,7 +480,7 @@ func accessPolicyActors(view administration.AccessPolicyView) []model.UserID {
 // setting in the request's locale.
 func accessPolicyTransitionSummary(request *http.Request, actors people.Refs, transition *model.AccessPolicyTransition) string {
 	actor := route.Translate(request, accessPolicyHistoryActorUnknown, "")
-	if ref, ok := actors.Get(transition.ActorID); ok && !ref.Removed() {
+	if ref, ok := actors.Get(transition.ActorID); ok && ref.Named() {
 		actor = ref.DisplayName
 	}
 	fields := make([]string, 0, len(transition.ChangedFields))

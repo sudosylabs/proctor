@@ -19,8 +19,9 @@ paths:
       description: >-
         Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state:
         requested, recording the future part of its range, uploading, ready or failed. An incident clip names its
-        integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to
-        a caller who manages the Sitting, never to a reviewer.
+        integrity Flag and a manager clip names who asked for it. A Sitting manager with submission view can read
+        clips before or after submission and sees the private reason. A reviewer of a submitted Attempt can read
+        the clips without the reason. The candidate cannot use this endpoint for their own Attempt.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -181,8 +182,9 @@ paths:
       tags:
         - Attempts and workspaces
       description: >-
-        Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed
-        to review its Submission, whole or by one byte range so a player can seek.
+        Streams a ready clip to a Sitting manager with submission view or, once the Attempt is submitted, a reviewer
+        of its Submission. The candidate cannot use this endpoint for their own Attempt. It supports a single byte
+        range so a player can seek.
         Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's
         end, are refused.
       x-proctor-auth: principal_required
@@ -873,15 +875,19 @@ components:
         - revision
       properties:
         id:
+          description: ID of the clip.
           $ref: '#/components/schemas/ID'
         exam_attempt_id:
+          description: Attempt that requested or captured the clip.
           $ref: '#/components/schemas/ID'
         source:
+          description: Whether a manager or an integrity incident requested the clip.
           type: string
           enum:
             - manager
             - incident
         state:
+          description: Current recording and upload state.
           type: string
           enum:
             - requested
@@ -898,14 +904,18 @@ components:
             - rejected
           description: Why the clip failed; present only when state is failed.
         range:
+          description: Time range requested from the screen recorder.
           $ref: '#/components/schemas/ScreenClipRange'
         requested_at:
+          description: When the clip was requested.
           type: string
           format: date-time
         updated_at:
+          description: When the clip state last changed.
           type: string
           format: date-time
         revision:
+          description: Monotonic revision of the clip.
           type: integer
           format: int64
           minimum: 1

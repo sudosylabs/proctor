@@ -199,9 +199,10 @@ components:
                 user_id: 5ebqfbnezgahdbx9oy7rfr6oro
                 start_at: '2026-09-01T00:00:00Z'
                 user:
+                  id: 5ebqfbnezgahdbx9oy7rfr6oro
                   display_name: Amara Okafor
                   username: aokafor
-                  email: amara.okafor@example.edu
+                email: amara.okafor@example.edu
               - id: xpq79ar61ncrjiouey6d9tgp91
                 created_at: '2026-07-28T10:00:02Z'
                 updated_at: '2026-07-28T10:00:02Z'
@@ -211,13 +212,14 @@ components:
                 start_at: '2026-09-01T00:00:00Z'
                 end_at: '2027-01-11T00:00:00Z'
                 user:
+                  id: 17778cuf6b17rhtapprfjozet8
                   display_name: Tomas Lindqvist
                   username: tlindqvist
-                  email: tomas.lindqvist@example.edu
+                email: tomas.lindqvist@example.edu
                 transfer:
                   to_class:
                     id: 8kpous3h9nfemqtwz47ydgjcx1
-                    name: Year 1, Group B
+                    display_name: Year 1, Group B
                   at: '2027-01-11T00:00:00Z'
             next_cursor: eyJhZnRlciI6InhwcTc5YXI2MW5jcmppb3VleTZkOXRncDkxIn0
             total: 28
@@ -319,10 +321,12 @@ components:
           format: date-time
           description: When the enrollment stops being in effect. Omitted while it has no end.
         user:
-          $ref: '#/components/schemas/AcademicUnitMemberUser'
-          description: >-
-            Who the student is, named exactly as an Academic Unit member is. `email` is included only if you hold
-            Institution-wide user.view.
+          $ref: '#/components/schemas/PersonRef'
+          description: The enrolled student. Directory visibility controls the username and profile picture.
+        email:
+          type: string
+          format: email
+          description: The student email, present with Institution-wide user.view.
         transfer:
           $ref: '#/components/schemas/ClassMemberTransfer'
     ClassMemberTransfer:
@@ -336,18 +340,8 @@ components:
         - at
       properties:
         to_class:
-          type: object
-          additionalProperties: false
-          required:
-            - id
-            - name
-          description: The Class the student moves to.
-          properties:
-            id:
-              $ref: '#/components/schemas/ID'
-            name:
-              type: string
-              description: The Class's display name.
+          $ref: '#/components/schemas/ClassRef'
+          description: The Class the student moves to, when visible to the reader.
         at:
           type: string
           format: date-time

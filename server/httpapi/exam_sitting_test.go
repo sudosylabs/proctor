@@ -91,8 +91,11 @@ func TestExamSittingHTTPJoinWindowIsSetShownAndCleared(t *testing.T) {
 	require.Equal(t, model.OptionalTimeFrom(time.Date(2026, 8, 15, 11, 0, 0, 0, time.UTC)), window.ClosesAt)
 	var created map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &created))
-	assert.Equal(t, "2026-08-15T10:20:00Z", created["join_opens_at"])
-	assert.Equal(t, "2026-08-15T11:00:00Z", created["join_closes_at"])
+	assert.Equal(t, map[string]any{
+		"opens_at": "2026-08-15T10:20:00Z", "closes_at": "2026-08-15T11:00:00Z",
+	}, created["join_window"])
+	assert.NotContains(t, created, "join_opens_at")
+	assert.NotContains(t, created, "join_closes_at")
 
 	path := examSittingMemberPath(f.examID, f.sitting.ID)
 	patch := newJSONRequest(http.MethodPatch, path, strings.NewReader(`{"expected_revision":1,"join_window":{"closes_at":"2026-08-15T11:00:00Z"}}`))
@@ -107,9 +110,8 @@ func TestExamSittingHTTPJoinWindowIsSetShownAndCleared(t *testing.T) {
 	require.Equal(t, model.OptionalTimeFrom(time.Date(2026, 8, 15, 11, 0, 0, 0, time.UTC)), update.JoinWindow.ClosesAt)
 	var updated map[string]any
 	require.NoError(t, json.Unmarshal(patched.Body.Bytes(), &updated))
-	_, present := updated["join_opens_at"]
-	assert.False(t, present, "an absent bound is omitted, never null")
-	assert.Equal(t, "2026-08-15T11:00:00Z", updated["join_closes_at"])
+	assert.Equal(t, map[string]any{"closes_at": "2026-08-15T11:00:00Z"}, updated["join_window"],
+		"an absent bound is omitted, never null")
 
 	for name, body := range map[string]string{
 		"malformed bound": `{"expected_revision":2,"join_window":{"closes_at":"later"}}`,

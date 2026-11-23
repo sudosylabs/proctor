@@ -326,12 +326,17 @@ func TestCandidateStatusBoardFiltersAndCountsTheFirstPage(t *testing.T) {
 			"lease_expired": 0.0, "suspended": 1.0, "submitted": 0.0},
 	}, page["counts"], "every presence state is counted, zero or not")
 
-	for _, query := range []string{"presence_state=away", "presence_state=ready&presence_state=ready", "check=passing", "attention=false"} {
+	for _, query := range []string{"presence_state=away", "presence_state=ready&presence_state=ready", "check=passing", "attention=maybe"} {
 		refused := httptest.NewRecorder()
 		httpAPI.ServeHTTP(refused, f.managerRequest(t, http.MethodGet, base+"?"+query, nil))
 		assertHTTPProblem(t, refused, http.StatusBadRequest, "request.invalid")
 	}
 	require.Len(t, f.attemptStore.statusLists, 1, "a refused filter reads nothing")
+	unfiltered := httptest.NewRecorder()
+	httpAPI.ServeHTTP(unfiltered, f.managerRequest(t, http.MethodGet, base+"?attention=false", nil))
+	require.Equal(t, http.StatusOK, unfiltered.Code, unfiltered.Body.String())
+	require.Len(t, f.attemptStore.statusLists, 2)
+	require.False(t, f.attemptStore.statusLists[1].Filter.Attention)
 }
 
 func TestManagedBrowserActivityIsNestedMinimizedNoStoreAndKeysetPaginated(t *testing.T) {

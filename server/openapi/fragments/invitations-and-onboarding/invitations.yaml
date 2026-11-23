@@ -505,7 +505,7 @@ components:
                 scope:
                   type: class
                   id: sjebyge5cpbop1xwo4eds74ejb
-                  name: Year 1 Mathematics A
+                  display_name: Year 1 Mathematics A
                 created_at: '2026-08-20T10:00:00Z'
                 updated_at: '2026-08-20T10:00:03Z'
                 revision: 1
@@ -538,7 +538,7 @@ components:
                 scope:
                   type: academic_unit
                   id: 889766ufjgio6kbpzjbufozksq
-                  name: Computer Science
+                  display_name: Computer Science
                 accepted_user_id: xgqjjg7fnyeqnueo58grucaoqy
                 created_at: '2026-08-10T09:00:00Z'
                 updated_at: '2026-08-11T15:42:10Z'

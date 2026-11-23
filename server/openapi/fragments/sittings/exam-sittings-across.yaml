@@ -93,7 +93,7 @@ paths:
                   - id: 889766ufjgio6kbpzjbufozksq
                     exam:
                       id: 39kqk53i4cswfzbi7hbai1r8qg
-                      title: Algorithms final
+                      display_name: Algorithms final
                     academic_unit_id: wj3drgzdpnf54rxf5d8qd3dqne
                     class:
                       id: 14j8umgczgrdp95w77zuxmxfu9
@@ -123,8 +123,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
@@ -165,12 +163,12 @@ components:
         id:
           $ref: '#/components/schemas/ID'
         exam:
-          $ref: '#/components/schemas/SubmissionListExam'
+          $ref: '#/components/schemas/ExamRef'
         academic_unit_id:
           description: The Academic Unit that owns the Exam.
           $ref: '#/components/schemas/ID'
         class:
-          $ref: '#/components/schemas/ExamSittingAcrossClass'
+          $ref: '#/components/schemas/ClassRef'
         state:
           $ref: '#/components/schemas/ExamSittingState'
         revision:
@@ -188,19 +186,8 @@ components:
           $ref: '#/components/schemas/SittingCandidateStatusCounts'
         needs_attention_count:
           description: >-
-            Candidates who are suspended, fail an enforced native check, or have unresolved integrity attention,
-            for an open or paused Sitting only.
+            Exact count within one open or paused Sitting. Includes candidates who are suspended, fail an enforced
+            native check, or have unresolved integrity attention.
           type: integer
           format: int64
           minimum: 0
-    ExamSittingAcrossClass:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - display_name
-      properties:
-        id:
-          $ref: '#/components/schemas/ID'
-        display_name:
-          type: string

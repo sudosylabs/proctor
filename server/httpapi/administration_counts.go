@@ -46,7 +46,6 @@ func administrationCountsResource(application *administration.Counts) route.Reso
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
-				"desktop_compatibility_policy.revision_conflict",
 				"desktop_compatibility_policy.unavailable",
 				"invitation.unavailable",
 				"job.query.invalid",

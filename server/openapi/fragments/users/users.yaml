@@ -125,12 +125,10 @@ paths:
           description: >-
             With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with
             `mfa=disabled` it lists exactly the role holders the access policy preflight counts in
-            `role_holders_without_mfa_count`. Only Institution-wide user.view can use it; anyone else gets
-            `request.invalid` on `role_holder`. The only accepted value is `true`.
+            `role_holders_without_mfa_count`. Using `true` requires Institution-wide `user.view`. Omit the
+            filter or send `false` to leave the list unfiltered.
           schema:
             type: boolean
-            enum:
-              - true
         - name: never_signed_in
           in: query
           required: false
@@ -729,7 +727,10 @@ components:
           description: True while the account has an active Proctor authenticator app.
         method:
           type: string
-          enum: [authenticator_app]
+          anyOf:
+            - type: string
+              enum: [authenticator_app]
+            - type: string
           description: The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later.
         enabled_at:
           type: string

@@ -163,7 +163,7 @@ components:
               scope:
                 type: institution
                 id: p6y6sf8ac6m5if373fkkebj7j6
-                name: Northbridge Institute
+                display_name: Northbridge Institute
               granted_via: bootstrap
             access_policy:
               id: 39kqk53i4cswfzbi7hbai1r8qg

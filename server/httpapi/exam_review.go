@@ -211,6 +211,7 @@ type examIntegrityReviewResponse struct {
 	CandidateUserID           string                                `json:"candidate_user_id"`
 	IntegrityState            string                                `json:"integrity_state"`
 	UnresolvedIntegrityCount  int64                                 `json:"unresolved_integrity_count"`
+	LatestReopeningReason     string                                `json:"latest_reopening_reason,omitempty"`
 	Review                    *examSubmissionReviewResponse         `json:"review,omitempty"`
 	Decisions                 []examIntegrityReviewDecisionResponse `json:"decisions"`
 }
@@ -674,6 +675,8 @@ func examIntegrityReviewResource(app *review.Service, resolver *people.Resolver)
 				"exam.integrity_review.unavailable",
 				"idempotency.key_required",
 				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
@@ -768,7 +771,7 @@ func examIntegrityFlagResponseFrom(request *http.Request, item store.ExamIntegri
 		ExamAttemptID:          item.Flag.AttemptID.String(),
 		Generation:             item.Flag.Generation,
 		PolicyKind:             string(item.Flag.Kind),
-		Summary:                integrityFlagSummary(request, item.Flag.Kind, item.Flag.NativeRuleID, item.Browser, item.EvidenceCount, item.OverflowCount),
+		Summary:                integrityFlagSummary(request, item.Flag.Kind, item.Flag.NativeRuleID, item.Browser, item.BrowserRuleLabel, item.EvidenceCount, item.OverflowCount),
 		State:                  string(item.Flag.State),
 		CreatedAt:              model.FormatRFC3339(item.Flag.CreatedAt),
 		EvidenceCount:          item.EvidenceCount,
@@ -1133,6 +1136,7 @@ func examIntegrityReviewSnapshotResponse(snapshot *store.ExamSubmissionReviewSna
 		CandidateUserID:           snapshot.Authorization.CandidateUserID.String(),
 		IntegrityState:            string(snapshot.Submission.IntegrityState),
 		UnresolvedIntegrityCount:  snapshot.Submission.UnresolvedIntegrityCount,
+		LatestReopeningReason:     snapshot.LatestReopeningReason,
 		Decisions:                 make([]examIntegrityReviewDecisionResponse, 0, len(snapshot.Decisions)),
 	}
 	if snapshot.Review != nil {

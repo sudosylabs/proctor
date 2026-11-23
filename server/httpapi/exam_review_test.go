@@ -87,6 +87,35 @@ func TestIntegrityReviewHTTPReopenSendsTheReasonToTheStore(t *testing.T) {
 	require.Equal(t, sha256.Sum256([]byte("reopen-once")), f.reviewStore.commands[0].KeyDigest)
 }
 
+func TestIntegrityReviewHTTPShowsTheLatestReopeningReasonOnlyToSittingManagers(t *testing.T) {
+	t.Parallel()
+	const reason = "The clip needs another look."
+	for _, test := range []struct {
+		name    string
+		actions []model.Action
+		want    string
+	}{
+		{name: "sitting manager", actions: []model.Action{model.ActionSubmissionView, model.ActionExamSittingManage}, want: reason},
+		{name: "submission reviewer", actions: []model.Action{model.ActionSubmissionView, model.ActionSubmissionReview}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := newReviewFixture(t, test.actions...)
+			f.reviewStore.reopeningReason = reason
+			response := httptest.NewRecorder()
+			path := "/api/v1/submissions/" + f.submission.ID.String() + "/review"
+			f.api(t).ServeHTTP(response, f.request(t, http.MethodGet, path, "credential"))
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			var body examIntegrityReviewResponse
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			require.Equal(t, test.want, body.LatestReopeningReason)
+			if test.want == "" {
+				require.NotContains(t, response.Body.String(), "latest_reopening_reason")
+			}
+		})
+	}
+}
+
 func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
@@ -202,7 +231,7 @@ func TestSittingSubmissionListMapsFiltersAndShowsTheReview(t *testing.T) {
 	require.False(t, acrossOptions.IncludeCounts, "the list across exams is not counted")
 	require.NoError(t, json.Unmarshal(across.Body.Bytes(), &page))
 	require.NotNil(t, page.Items[0].Exam, "a row across exams names its exam")
-	require.Equal(t, "Algorithms", page.Items[0].Exam.Title)
+	require.Equal(t, "Algorithms", page.Items[0].Exam.DisplayName)
 }
 
 func TestLiveAttemptTimelineReadsTheWindowAndSaysItIsIncomplete(t *testing.T) {
@@ -227,11 +256,15 @@ func TestLiveAttemptTimelineReadsTheWindowAndSaysItIsIncomplete(t *testing.T) {
 	require.NotNil(t, page.Items[0].Flag)
 	require.NotEmpty(t, page.Items[0].Flag.Summary)
 
-	for _, query := range []string{"from=yesterday", "from=2026-08-15T19:00:00Z&to=2026-08-15T17:00:00Z", "limit=101"} {
+	for _, query := range []string{"from=yesterday", "limit=201"} {
 		refused := httptest.NewRecorder()
 		httpAPI.ServeHTTP(refused, f.request(t, http.MethodGet, base+"?"+query, "credential"))
 		assertHTTPProblem(t, refused, http.StatusBadRequest, "request.invalid")
 	}
+	badWindow := httptest.NewRecorder()
+	httpAPI.ServeHTTP(badWindow, f.request(t, http.MethodGet,
+		base+"?from=2026-08-15T19:00:00Z&to=2026-08-15T17:00:00Z", "credential"))
+	assertHTTPProblem(t, badWindow, http.StatusBadRequest, "exam.integrity_review.invalid")
 	require.Len(t, f.reviewStore.liveTimelines, 1, "a refused window reads nothing")
 
 	candidate := httptest.NewRecorder()
@@ -257,6 +290,10 @@ func TestBulkResultReleaseReportsEachSubmission(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.JSONEq(t, `{"items":[{"submission_id":"`+f.submission.ID.String()+`","outcome":"not_finalized"}]}`, response.Body.String(),
 		"a draft review is not released")
+	require.Len(t, f.reviewStore.batchStarts, 1)
+	require.Equal(t, []model.SubmissionID{f.submission.ID}, f.reviewStore.batchStarts[0].SubmissionIDs)
+	require.Len(t, f.reviewStore.batchCompletions, 1)
+	require.Equal(t, sha256.Sum256([]byte("bulk-release")), f.reviewStore.commands[0].KeyDigest)
 	assertHTTPProblem(t, send(`{"submission_ids":["`+f.submission.ID.String()+`"],"all_finalized":true}`), http.StatusBadRequest, "request.invalid")
 	assertHTTPProblem(t, send(`{}`), http.StatusBadRequest, "request.invalid")
 }

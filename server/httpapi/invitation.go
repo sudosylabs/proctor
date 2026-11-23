@@ -185,8 +185,8 @@ type invitationAdministrationResponse struct {
 	Email            string                      `json:"email"`
 	InviterUserID    string                      `json:"inviter_user_id"`
 	Inviter          *personRefResponse          `json:"inviter,omitempty"`
-	Role             *roleBindingRoleResponse    `json:"role,omitempty"`
-	Scope            roleBindingScopeResponse    `json:"scope"`
+	Role             *roleRefResponse            `json:"role,omitempty"`
+	Scope            scopeRefResponse            `json:"scope"`
 	AcceptedUserID   string                      `json:"accepted_user_id,omitempty"`
 	CreatedAt        string                      `json:"created_at"`
 	UpdatedAt        string                      `json:"updated_at"`
@@ -1151,18 +1151,18 @@ func invitationAdministrationResponseFromView(
 	names invitationNames,
 ) invitationAdministrationResponse {
 	base := invitationResponseFromView(view.InvitationView)
-	scope := roleBindingScopeResponse{Type: view.ScopeType, ID: view.ScopeID}
+	scope := scopeRefResponse{Type: view.ScopeType, ID: view.ScopeID}
 	switch view.ScopeType {
 	case model.RoleScopeInstitution:
-		scope.Name = names.institution
+		scope.DisplayName = names.institution
 	case model.RoleScopeAcademicUnit:
-		scope.Name = names.records.AcademicUnits[model.AcademicUnitID(view.ScopeID)]
+		scope.DisplayName = names.records.AcademicUnits[model.AcademicUnitID(view.ScopeID)]
 	case model.RoleScopeClass:
-		scope.Name = names.records.Classes[model.ClassID(view.ScopeID)]
+		scope.DisplayName = names.records.Classes[model.ClassID(view.ScopeID)]
 	}
-	var role *roleBindingRoleResponse
+	var role *roleRefResponse
 	if !view.RoleID.IsZero() {
-		role = &roleBindingRoleResponse{ID: view.RoleID.String()}
+		role = &roleRefResponse{ID: view.RoleID.String()}
 		if named, ok := names.records.Roles[view.RoleID]; ok {
 			role.DisplayName = named.DisplayName
 			if named.Name == model.SystemAdministratorRoleName {

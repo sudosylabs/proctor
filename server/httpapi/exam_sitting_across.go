@@ -42,20 +42,15 @@ func sittingAcrossCursorSpec() route.CursorSpec[sittingAcrossCursor] {
 	}
 }
 
-type sittingAcrossClassResponse struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"display_name"`
-}
-
 // sittingAcrossItemResponse is one sitting of the list across exams. An open
 // or paused sitting carries its candidate board's counts and how many of its
 // candidates need attention: suspended, failing a check or with unresolved
 // integrity attention.
 type sittingAcrossItemResponse struct {
 	ID                  string                                `json:"id"`
-	Exam                submissionListExamResponse            `json:"exam"`
+	Exam                examRefResponse                       `json:"exam"`
 	AcademicUnitID      string                                `json:"academic_unit_id"`
-	Class               sittingAcrossClassResponse            `json:"class"`
+	Class               classRefResponse                      `json:"class"`
 	State               model.ExamSittingState                `json:"state"`
 	Revision            int64                                 `json:"revision"`
 	ScheduledStartAt    string                                `json:"scheduled_start_at"`
@@ -103,9 +98,9 @@ func (h examSittingHandlers) listAcrossExams(request route.Request) (route.Resul
 		Items: make([]sittingAcrossItemResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		row := sittingAcrossItemResponse{
-			ID: item.SittingID.String(), Exam: submissionListExamResponse{ID: item.ExamID.String(), Title: item.ExamTitle},
+			ID: item.SittingID.String(), Exam: examRefResponse{ID: item.ExamID.String(), DisplayName: item.ExamTitle},
 			AcademicUnitID: item.AcademicUnitID.String(),
-			Class:          sittingAcrossClassResponse{ID: item.ClassID.String(), DisplayName: item.ClassDisplayName},
+			Class:          classRefResponse{ID: item.ClassID.String(), DisplayName: item.ClassDisplayName},
 			State:          item.State, Revision: item.Revision,
 			ScheduledStartAt: model.FormatRFC3339(item.ScheduledStartAt), ScheduledEndAt: model.FormatRFC3339(item.ScheduledEndAt),
 			Counts: sittingCandidateStatusCountsFrom(item.Counts),

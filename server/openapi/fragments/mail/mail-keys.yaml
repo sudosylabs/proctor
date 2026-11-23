@@ -67,10 +67,10 @@ components:
             active:
               - key_id: 7d3e9a10c4b2f6e8a1d5c7b9e3f20a46
                 active_references: 1284
-                created_at: '2026-09-14T08:00:00Z'
+                in_use_since: '2026-09-14T08:00:00Z'
               - key_id: 2b8f4c6a0e1d3957b2c4e6f8a0b1c3d5
                 active_references: 37
-                created_at: '2026-03-02T10:30:00Z'
+                in_use_since: '2026-03-02T10:30:00Z'
   schemas:
     MailPayloadKeyUsage:
       description: How many stored encrypted mail payloads use one configured key.
@@ -79,7 +79,7 @@ components:
       required:
         - key_id
         - active_references
-        - created_at
+        - in_use_since
       properties:
         key_id:
           type: string
@@ -90,7 +90,7 @@ components:
           format: int64
           minimum: 1
           description: Number of stored encrypted mail payloads that are still encrypted with this key.
-        created_at:
+        in_use_since:
           type: string
           format: date-time
           description: >-

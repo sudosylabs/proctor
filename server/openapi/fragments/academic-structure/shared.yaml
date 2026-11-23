@@ -307,7 +307,11 @@ components:
         - display_name
       properties:
         kind:
-          $ref: '#/components/schemas/AcademicUnitKind'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/AcademicUnitKind'
+            - type: string
+              const: ""
           description: Optional. The kind of Academic Unit. Omitted or empty means `other`.
         name:
           type: string

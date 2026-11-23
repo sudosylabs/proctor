@@ -20,8 +20,8 @@ paths:
         imports that are still uploading, parsing, waiting to be committed or running, not counting student
         progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a
         holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window
-        would interrupt. Each count applies the same permission and visibility checks as its resource's own list, and
-        records the permission decision the same way, so it counts only what the caller could list. A count the
+        would interrupt. The other counts apply the same permission and visibility checks as their resource lists,
+        and record permission decisions the same way. A count the
         caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the
         request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is
         true. Only an interactive Session may read the counts.
@@ -32,7 +32,6 @@ paths:
         - authorization.denied
         - authorization.request.invalid
         - authorization.unavailable
-        - desktop_compatibility_policy.revision_conflict
         - desktop_compatibility_policy.unavailable
         - invitation.unavailable
         - job.query.invalid
@@ -63,8 +62,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
-        "409":
-          $ref: '#/components/responses/Conflict'
         "500":
           $ref: '#/components/responses/InternalError'
         "503":

@@ -608,8 +608,8 @@ components:
           minimum: 0
           maximum: 10000
           description: >-
-            How many of the Exam's Submissions have no finalized review. Present only when you may review its
-            Submissions. Counting stops at 10,000.
+            How many of the Exam's Submissions have no finalized review, excluding your own.
+            Present only when you may view and review the Exam's Submissions. Counting stops at 10,000.
         pending_review_count_is_lower_bound:
           type: boolean
           description: True when counting stopped at its bound. Present with pending_review_count.

@@ -68,8 +68,8 @@ func TestRoleBindingListNamesRoleScopeAndGranter(t *testing.T) {
 			require.Len(t, page.Items, 2)
 
 			named := page.Items[0]
-			require.Equal(t, roleBindingRoleResponse{ID: role.String(), DisplayName: "Teacher"}, named.Role)
-			require.Equal(t, roleBindingScopeResponse{Type: model.RoleScopeAcademicUnit, ID: unit.String(), Name: "Mathematics"}, named.Scope)
+			require.Equal(t, roleRefResponse{ID: role.String(), DisplayName: "Teacher"}, named.Role)
+			require.Equal(t, scopeRefResponse{Type: model.RoleScopeAcademicUnit, ID: unit.String(), DisplayName: "Mathematics"}, named.Scope)
 			require.Equal(t, "manual", named.GrantedVia)
 			require.NotNil(t, named.GrantedBy)
 			require.Equal(t, granter.ID.String(), named.GrantedBy.ID)

@@ -33,33 +33,20 @@ type createRoleBindingRequest struct {
 }
 
 type roleBindingResponse struct {
-	ID         string                   `json:"id"`
-	CreatedAt  string                   `json:"created_at"`
-	UpdatedAt  string                   `json:"updated_at"`
-	ArchivedAt string                   `json:"archived_at,omitempty"`
-	UserID     string                   `json:"user_id"`
-	RoleID     string                   `json:"role_id"`
-	ScopeType  model.RoleScopeType      `json:"scope_type"`
-	ScopeID    string                   `json:"scope_id"`
-	StartAt    string                   `json:"start_at"`
-	EndAt      string                   `json:"end_at,omitempty"`
-	Role       roleBindingRoleResponse  `json:"role"`
-	Scope      roleBindingScopeResponse `json:"scope"`
-	GrantedBy  *personRefResponse       `json:"granted_by,omitempty"`
-	GrantedVia string                   `json:"granted_via"`
-}
-
-// roleBindingRoleResponse omits DisplayName for an archived Role.
-type roleBindingRoleResponse struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"display_name,omitempty"`
-}
-
-// roleBindingScopeResponse omits Name for an archived scope.
-type roleBindingScopeResponse struct {
-	Type model.RoleScopeType `json:"type"`
-	ID   string              `json:"id"`
-	Name string              `json:"name,omitempty"`
+	ID         string              `json:"id"`
+	CreatedAt  string              `json:"created_at"`
+	UpdatedAt  string              `json:"updated_at"`
+	ArchivedAt string              `json:"archived_at,omitempty"`
+	UserID     string              `json:"user_id"`
+	RoleID     string              `json:"role_id"`
+	ScopeType  model.RoleScopeType `json:"scope_type"`
+	ScopeID    string              `json:"scope_id"`
+	StartAt    string              `json:"start_at"`
+	EndAt      string              `json:"end_at,omitempty"`
+	Role       roleRefResponse     `json:"role"`
+	Scope      scopeRefResponse    `json:"scope"`
+	GrantedBy  *personRefResponse  `json:"granted_by,omitempty"`
+	GrantedVia string              `json:"granted_via"`
 }
 
 func roleBindingResponseFromModel(
@@ -67,21 +54,21 @@ func roleBindingResponseFromModel(
 	binding *model.RoleBinding,
 	names administration.RoleBindingNames,
 ) roleBindingResponse {
-	role := roleBindingRoleResponse{ID: binding.RoleID.String()}
+	role := roleRefResponse{ID: binding.RoleID.String()}
 	if named, ok := names.Roles[binding.RoleID]; ok {
 		role.DisplayName = named.DisplayName
 		if named.Name == model.SystemAdministratorRoleName {
 			role.DisplayName = route.Translate(request, systemAdministratorRoleNameID, named.DisplayName)
 		}
 	}
-	scope := roleBindingScopeResponse{Type: binding.ScopeType, ID: binding.ScopeID}
+	scope := scopeRefResponse{Type: binding.ScopeType, ID: binding.ScopeID}
 	switch binding.ScopeType {
 	case model.RoleScopeInstitution:
-		scope.Name = names.Institution
+		scope.DisplayName = names.Institution
 	case model.RoleScopeAcademicUnit:
-		scope.Name = names.AcademicUnits[model.AcademicUnitID(binding.ScopeID)]
+		scope.DisplayName = names.AcademicUnits[model.AcademicUnitID(binding.ScopeID)]
 	case model.RoleScopeClass:
-		scope.Name = names.Classes[model.ClassID(binding.ScopeID)]
+		scope.DisplayName = names.Classes[model.ClassID(binding.ScopeID)]
 	}
 	return roleBindingResponse{
 		ID:         binding.ID.String(),

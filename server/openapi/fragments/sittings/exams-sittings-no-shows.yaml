@@ -88,13 +88,13 @@ components:
             items:
               - candidate_user_id: sjebyge5cpbop1xwo4eds74ejb
                 candidate:
-                  user_id: sjebyge5cpbop1xwo4eds74ejb
+                  id: sjebyge5cpbop1xwo4eds74ejb
                   username: arao
                   display_name: Asha Rao
                 class_member_since: "2026-09-04T08:00:00Z"
               - candidate_user_id: hmyjmj68dw6gdxctnghbrhwcth
                 candidate:
-                  user_id: hmyjmj68dw6gdxctnghbrhwcth
+                  id: hmyjmj68dw6gdxctnghbrhwcth
                   username: tkim
                   display_name: Tomas Kim
                 class_member_since: "2026-09-04T08:00:00Z"
@@ -114,7 +114,7 @@ components:
           description: The candidate's user ID.
         candidate:
           description: The candidate, in the same shape the candidate statuses use.
-          $ref: '#/components/schemas/SittingCandidateIdentityResponse'
+          $ref: '#/components/schemas/PersonRef'
         class_member_since:
           type: string
           format: date-time

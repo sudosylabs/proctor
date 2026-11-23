@@ -222,9 +222,10 @@ components:
                 user_id: ybndrfg8ejkmcpqxot1uwisza3
                 start_at: '2026-08-01T00:00:00Z'
                 user:
+                  id: ybndrfg8ejkmcpqxot1uwisza3
                   display_name: Teacher One
                   username: teacher.one
-                  email: teacher.one@example.edu
+                email: teacher.one@example.edu
                 roles_here:
                   - role_id: nybc6xhg593upqice3sdeyro5k
                     display_name: Department Lead
@@ -236,9 +237,10 @@ components:
                 user_id: f6tcxyfofj3n3buuqfjaw9j1jn
                 start_at: '2026-08-15T00:00:00Z'
                 user:
+                  id: f6tcxyfofj3n3buuqfjaw9j1jn
                   display_name: Staff Two
                   username: staff.two
-                  email: staff.two@example.edu
+                email: staff.two@example.edu
                 roles_here: []
                 roles_here_more: 0
             next_cursor: eyJhZnRlciI6ImRmYTF4MW43bWt0aHlveml3eG51cHNteWlhIn0
@@ -316,8 +318,13 @@ components:
             When the membership stops being in effect. The membership is no longer in effect at this instant.
             Omitted while it has no end.
         user:
-          $ref: '#/components/schemas/AcademicUnitMemberUser'
-          description: Who the member is.
+          $ref: '#/components/schemas/PersonRef'
+          description: Who the member is. Username and profile picture follow directory visibility.
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: The member's email address. Present only with Institution-wide user.view.
         roles_here:
           type: array
           maxItems: 5
@@ -330,26 +337,6 @@ components:
           description: >-
             How many more current Role Bindings the member holds on this Academic Unit beyond the five listed.
             Present with `roles_here`.
-    AcademicUnitMemberUser:
-      type: object
-      additionalProperties: false
-      description: >-
-        Who the member is. Anyone who can see the Academic Unit's members sees the display name and username.
-        `email` is present only if you hold Institution-wide user.view.
-      required:
-        - display_name
-        - username
-      properties:
-        display_name:
-          type: string
-          description: The member's display name.
-        username:
-          type: string
-          description: The member's username.
-        email:
-          type: string
-          format: email
-          description: The member's email address. Present only if you hold Institution-wide user.view.
     AcademicUnitMemberRole:
       type: object
       additionalProperties: false

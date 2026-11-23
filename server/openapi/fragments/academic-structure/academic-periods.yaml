@@ -499,7 +499,7 @@ components:
           type: boolean
           description: True when `class_count` stopped at 10,000. Present with `class_count`.
     AcademicPeriodListResponse:
-      description: One page of Academic Periods, ordered by start time, then name, then identifier.
+      description: One page of Academic Periods in the requested sort order and direction.
       type: object
       additionalProperties: false
       required:

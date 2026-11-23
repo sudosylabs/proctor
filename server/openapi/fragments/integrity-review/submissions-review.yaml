@@ -752,6 +752,11 @@ components:
           format: int64
           minimum: 0
           description: The number of unresolved integrity items. While above 0, they can block finalization.
+        latest_reopening_reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: The latest private reopening reason. Only shown with permission to manage the Sitting.
         review:
           $ref: '#/components/schemas/ExamSubmissionReviewResponse'
           description: The Review. Omitted until a manager creates one.

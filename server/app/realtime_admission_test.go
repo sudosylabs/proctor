@@ -84,6 +84,19 @@ func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t 
 	gate.requireOnlyDecision(t, model.ActionExamSittingViewOverride, model.ResourceExamSitting, gate.sitting.ID.String(), model.AuditStatusFail)
 }
 
+// A manage subscription, which clip and live evidence hints need, asks for
+// the manager relationship: a caller who holds only sitting view is refused
+// and the refusal is concealed.
+func TestAuthorizeWebSocketSittingManageSubscriptionUsesRelationshipGate(t *testing.T) {
+	t.Parallel()
+	gate := newRealtimeGateFixture(t)
+	err := gate.admission.AuthorizeWebSocketSubscription(context.Background(),
+		invocation.New(gate.manager, model.RequestMetadata{}), model.ActionExamSittingManage,
+		model.Resource{Type: model.ResourceExamSitting, ID: gate.sitting.ID.String()})
+	require.True(t, apperror.Is(err, "resource.not_found"), "a viewer who may not manage: error = %v", err)
+	gate.requireOnlyDecision(t, model.ActionExamSittingManage, model.ResourceExamSitting, gate.sitting.ID.String(), model.AuditStatusFail)
+}
+
 // subscriptionUsers holds one active User, related to one unit.
 type subscriptionUsers struct {
 	store.UserStore

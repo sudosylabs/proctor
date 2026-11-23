@@ -205,6 +205,13 @@ type sittingStoreFake struct {
 	history        []store.ExamSittingHistoryEntry
 	historyRead    bool
 	corrections    []store.ExamSittingCorrectionSummary
+	acrossOptions  []store.ExamSittingAcrossListOptions
+	across         []store.ExamSittingAcrossItem
+}
+
+func (s *sittingStoreFake) ListAcrossExams(_ context.Context, options store.ExamSittingAcrossListOptions) (*store.ExamSittingAcrossPage, error) {
+	s.acrossOptions = append(s.acrossOptions, options)
+	return &store.ExamSittingAcrossPage{ServerTime: testNow, Items: append([]store.ExamSittingAcrossItem{}, s.across...)}, nil
 }
 
 // scheduleMailWorld is the mail a Sitting schedule change prepares through

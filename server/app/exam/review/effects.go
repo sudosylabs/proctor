@@ -12,6 +12,7 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
 // reviewEventFact deliberately leaves out notes, remarks and rationale; they
@@ -31,13 +32,28 @@ func reviewEventFact(result Result) realtime.ExamIntegrityReviewEventFact {
 	}
 }
 
+// publishSittingBoardChanged also refreshes the sitting's submission list,
+// which shows each review's state; a bulk release publishes that once for its
+// batch instead.
 func (s *Service) publishSittingBoardChanged(ctx context.Context, result Result) error {
-	return realtime.PublishSittingBoardChanged(
+	board := realtime.PublishSittingBoardChanged(
 		ctx,
 		s.publisher,
 		result.Authorization.ExamID,
 		result.Authorization.SittingID,
 	)
+	if result.inBatch {
+		return board
+	}
+	return errors.Join(board, s.publishSittingSubmissionsChanged(ctx, result.Authorization.ExamID, result.Authorization.SittingID))
+}
+
+func (s *Service) publishSittingSubmissionsChanged(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID) error {
+	event, err := realtime.NewSittingSubmissionsChangedEvent(examID, sittingID)
+	if err != nil {
+		return err
+	}
+	return s.publisher.Publish(ctx, event)
 }
 
 func (s *Service) publishReviewChanged(ctx context.Context, result Result) error {

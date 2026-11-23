@@ -323,6 +323,7 @@ components:
             $ref: '#/components/schemas/ExamSubmissionManagerResponse'
           example:
             submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+            receipt_code: 7QXR-4M2K-HV9D-3JNP
             exam_id: wj3drgzdpnf54rxf5d8qd3dqne
             exam_sitting_id: 14j8umgczgrdp95w77zuxmxfu9
             exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
@@ -440,6 +441,7 @@ components:
       additionalProperties: false
       required:
         - submission_id
+        - receipt_code
         - exam_id
         - exam_sitting_id
         - exam_attempt_id
@@ -457,6 +459,12 @@ components:
         submission_id:
           $ref: '#/components/schemas/ID'
           description: The Submission's ID.
+        receipt_code:
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$
+          description: >-
+            The receipt code the candidate was given when the Submission sealed, in groups of four, so a
+            manager can match the code a candidate reads out.
         exam_id:
           $ref: '#/components/schemas/ID'
           description: The Exam the Submission belongs to.

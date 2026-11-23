@@ -57,6 +57,7 @@ func resourceLocalizationDefinitions() []localization.Definition {
 		definitions = append(definitions, localization.Definition{ID: examDraftProblemLocalizationID(reason), Origin: localizationOrigin})
 	}
 	definitions = append(definitions, accessPolicyLocalizationDefinitions()...)
+	definitions = append(definitions, integrityFlagSummaryLocalizationDefinitions()...)
 	return append(definitions, auditSummaryLocalizationDefinitions()...)
 }
 

@@ -106,6 +106,9 @@ func TestExamAttemptScreenClipStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
 	require.Equal(t, first.Clip.ID, listed[0].ID)
+	require.Equal(t, "candidate appeared to read from a second screen", listed[0].PrivateReason,
+		"the attempt's clip list carries the manager's reason for the use case to show or withhold")
+	require.Equal(t, fixture.manager.ID, listed[0].RequestedByUserID)
 	played, err := ss.ExamAttempt().GetAttemptScreenClip(ctx, store.ExamAttemptClips{ExamID: fixture.examID, SittingID: fixture.sitting.ID, AttemptID: connected.Attempt.ID}, first.Clip.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.ScreenClipReady, played.State)
@@ -344,9 +347,15 @@ func testIncidentScreenClip(t *testing.T, ctx context.Context, ss store.Store) {
 	require.NoError(t, err)
 	states := map[model.ScreenClipID]store.ExamAttemptScreenClipView{}
 	for _, clip := range clips {
-		states[clip.ID] = clip
+		states[clip.ID] = clip.ExamAttemptScreenClipView
 	}
 	require.Equal(t, model.ScreenClipFailed, states[incident].State, "a request never taken fails at submission")
+	require.Equal(t, flagged[0].FlagID, states[incident].FlagID, "an incident clip names its Flag")
+	for _, clip := range clips {
+		if clip.ID == incident {
+			require.Empty(t, clip.PrivateReason, "an incident clip has no manager reason")
+		}
+	}
 	require.Equal(t, model.ScreenClipFailureAttemptEnded, states[incident].Failure)
 	require.Equal(t, model.ScreenClipRecording, states[taken.Clip.ID].State, "a taken clip is still owed")
 

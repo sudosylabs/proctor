@@ -70,6 +70,14 @@ type ExamAttemptScreenClipView struct {
 	Revision                 int64
 }
 
+// ExamAttemptManagedScreenClip is a clip as the attempt's clip list reads
+// it: the view and a manager clip's private reason, which only the sitting's
+// managers may be shown.
+type ExamAttemptManagedScreenClip struct {
+	ExamAttemptScreenClipView
+	PrivateReason string
+}
+
 // NewExamAttemptScreenClipView is the clip without its private reason.
 func NewExamAttemptScreenClipView(clip *model.ScreenClip) ExamAttemptScreenClipView {
 	return ExamAttemptScreenClipView{
@@ -119,4 +127,13 @@ type ExamAttemptScreenClipCompletion struct {
 	ClipID        model.ScreenClipID
 	ContentDigest string
 	Signature     string
+}
+
+// ExamAttemptSitting names the exam and sitting an attempt belongs to, for
+// the realtime hints a candidate's clip transitions owe the sitting's
+// managers.
+type ExamAttemptSitting struct {
+	AttemptID model.ExamAttemptID
+	ExamID    model.ExamID
+	SittingID model.ExamSittingID
 }

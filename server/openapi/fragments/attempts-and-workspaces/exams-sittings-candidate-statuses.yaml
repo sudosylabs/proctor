@@ -52,9 +52,43 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Cursor from next_cursor of the previous page. Send it back unchanged.
+          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same filters.
           schema:
             type: string
+        - name: presence_state
+          in: query
+          required: false
+          description: Keep candidates in any of these presence states. Repeat the parameter for more than one state; a state may appear once.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 7
+            items:
+              $ref: '#/components/schemas/SittingCandidatePresenceState'
+        - name: check
+          in: query
+          required: false
+          description: failing keeps candidates whose live participation fails an enforced native rule.
+          schema:
+            type: string
+            enum:
+              - failing
+        - name: attention
+          in: query
+          required: false
+          description: true keeps candidates with unresolved integrity attention.
+          schema:
+            type: string
+            enum:
+              - 'true'
+        - name: q
+          in: query
+          required: false
+          description: Keep candidates whose display name or username contains this text, ignoring case.
+          schema:
+            type: string
+            maxLength: 100
       responses:
         '200':
           $ref: '#/components/responses/ExamSittingCandidateStatusesOK'
@@ -90,6 +124,18 @@ components:
             sitting_state: open
             sitting_revision: 4
             environments_waiting_capacity: 0
+            counts:
+              total: 2
+              by_presence_state:
+                not_started: 1
+                ready: 0
+                connected: 1
+                reconnecting: 0
+                lease_expired: 0
+                suspended: 0
+                submitted: 0
+              with_failed_checks: 0
+              with_attention: 0
             items:
               - candidate:
                   user_id: nybc6xhg593upqice3sdeyro5k
@@ -137,6 +183,75 @@ components:
                 integrity_attention_count: 0
             next_cursor: eyJjYW5kaWRhdGVfdXNlcl9pZCI6ImRmYTF4MW43bWt0aHlveml3eG51cHNteWlhIn0
   schemas:
+    SittingCandidateStatusCounts:
+      description: A Sitting's candidates, other than the reader, counted exactly at one instant.
+      type: object
+      additionalProperties: false
+      required:
+        - total
+        - by_presence_state
+        - with_failed_checks
+        - with_attention
+      properties:
+        total:
+          description: Every candidate of the Sitting.
+          type: integer
+          format: int64
+          minimum: 0
+        by_presence_state:
+          description: Candidates in each presence state. Every state is present.
+          $ref: '#/components/schemas/SittingCandidatePresenceCounts'
+        with_failed_checks:
+          description: Candidates whose live participation fails an enforced native rule.
+          type: integer
+          format: int64
+          minimum: 0
+        with_attention:
+          description: Candidates with unresolved integrity attention.
+          type: integer
+          format: int64
+          minimum: 0
+    SittingCandidatePresenceCounts:
+      description: Candidates in each presence state.
+      type: object
+      additionalProperties: false
+      required:
+        - not_started
+        - ready
+        - connected
+        - reconnecting
+        - lease_expired
+        - suspended
+        - submitted
+      properties:
+        not_started:
+          type: integer
+          format: int64
+          minimum: 0
+        ready:
+          type: integer
+          format: int64
+          minimum: 0
+        connected:
+          type: integer
+          format: int64
+          minimum: 0
+        reconnecting:
+          type: integer
+          format: int64
+          minimum: 0
+        lease_expired:
+          type: integer
+          format: int64
+          minimum: 0
+        suspended:
+          type: integer
+          format: int64
+          minimum: 0
+        submitted:
+          type: integer
+          format: int64
+          minimum: 0
     SittingCandidatePresenceState:
       description: Where a candidate stands in the Sitting. not_started has no Attempt yet. ready has an Attempt in the Ready state. connected is in progress with an open Connection. reconnecting is in progress with a valid lease but no open Connection. lease_expired is in progress but the Participation Lease has run out. suspended and submitted follow the Attempt state.
       type: string
@@ -396,6 +511,9 @@ components:
           format: int64
           minimum: 0
           description: How many of the Sitting's execution environments wait for a host with room, across every page.
+        counts:
+          description: Counts of the whole board at server_time, on the first page only. The filters do not apply to them.
+          $ref: '#/components/schemas/SittingCandidateStatusCounts'
         items:
           description: Candidate rows, in ascending order of candidate User ID.
           type: array

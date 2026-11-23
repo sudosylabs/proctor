@@ -1,0 +1,18 @@
+{
+  "title": "Sitting submissions changed",
+  "description": "Names the Exam Sitting whose submission list should be refetched. No Submission, candidate or review is named.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "exam_sitting_id"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    }
+  }
+}

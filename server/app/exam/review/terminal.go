@@ -116,6 +116,32 @@ func (s *Service) terminalMutation(
 		return Result{}, err
 	}
 
+	return s.authorizedTerminalMutation(ctx, inv, terminalRun{
+		kind: kind, operation: operation, command: commandIdempotency, override: override,
+		authorization: authorization, submissionID: submissionID, reviewID: reviewID, expectedRevision: expectedRevision,
+	})
+}
+
+// terminalRun is one authorized finalization or release.
+type terminalRun struct {
+	kind             terminalMutationKind
+	operation        string
+	command          *store.CommandIdempotency
+	override         bool
+	authorization    *store.ExamIntegrityReviewAuthorization
+	submissionID     model.SubmissionID
+	reviewID         model.SubmissionReviewID
+	expectedRevision int64
+	inBatch          bool
+}
+
+// authorizedTerminalMutation audits and commits a run whose caller is already
+// authorized for it.
+func (s *Service) authorizedTerminalMutation(ctx context.Context, inv invocation.Invocation, run terminalRun) (Result, error) {
+	kind, override, authorization := run.kind, run.override, run.authorization
+	submissionID, reviewID, expectedRevision := run.submissionID, run.reviewID, run.expectedRevision
+	operation, commandIdempotency, principal := run.operation, run.command, inv.Principal()
+
 	action := model.ActionSubmissionReview
 	if kind == terminalRelease {
 		action = model.ActionSubmissionRelease
@@ -226,6 +252,7 @@ func (s *Service) terminalMutation(
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent terminal Review result"))
 	}
 
+	result.inBatch = run.inBatch
 	if kind == terminalRelease {
 		s.publishUnlessReplayed(ctx, "exam_integrity_result_released", result, result.Replayed, s.publishResultReleased)
 	} else {

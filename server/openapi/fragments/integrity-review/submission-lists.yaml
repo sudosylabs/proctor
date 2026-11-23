@@ -1,0 +1,518 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/submissions:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+    get:
+      operationId: listExamSittingSubmissions
+      summary: List a Sitting's Submissions with their flags and reviews
+      tags:
+        - Integrity review
+      description: >-
+        Lists the Sitting's sealed Submissions, other than your own, with each candidate, the receipt code, the
+        number of integrity Flags and the integrity standing. Needs submission.view on the Sitting. Each row's
+        review appears only when you also hold submission.review there, and filtering by review_state or
+        release_state without it is refused. The first page counts the whole Sitting, whatever the filters.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes: &submissionListErrors
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters: &submissionListParameters
+        - name: review_state
+          in: query
+          required: false
+          description: Keep Submissions whose review is in any of these states. Repeat it for more than one.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+              enum:
+                - none
+                - draft
+                - finalized
+        - name: release_state
+          in: query
+          required: false
+          description: Keep Submissions whose result is withheld or released. A Submission with no review is withheld.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 2
+            items:
+              type: string
+              enum:
+                - withheld
+                - released
+        - name: has_flags
+          in: query
+          required: false
+          description: true keeps Submissions with at least one integrity Flag, false those with none.
+          schema:
+            type: string
+            enum:
+              - 'true'
+              - 'false'
+        - name: sort
+          in: query
+          required: false
+          description: submitted lists the earliest Submission first; name lists by the candidate's display name.
+          schema:
+            type: string
+            enum:
+              - submitted
+              - name
+            default: submitted
+        - $ref: '#/components/parameters/PageLimit'
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page of the Sitting's Submissions.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionListResponse'
+              example:
+                counts:
+                  total: 26
+                  reviewed: 20
+                  released: 0
+                  flagged_submissions: 6
+                  flags: 9
+                items:
+                  - submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+                    exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+                    exam_sitting_id: 14j8umgczgrdp95w77zuxmxfu9
+                    exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                    candidate:
+                      user_id: nybc6xhg593upqice3sdeyro5k
+                      username: student.ada
+                      display_name: Ada Student
+                    submitted_at: '2026-12-14T10:48:09Z'
+                    receipt_code: 7QXR-4M2K-HV9D-3JNP
+                    flag_count: 2
+                    unresolved_integrity_count: 0
+                    integrity_state: settled
+                    review:
+                      id: ih1r84kij94nrwis97rft6rduh
+                      state: finalized
+                      release_state: withheld
+                      revision: 4
+                      finalized_at: '2026-12-15T09:12:00Z'
+                      finalized_by_user_id: dfa1x1n7mkthyoziwxnupsmyia
+                      finalized_by:
+                        id: dfa1x1n7mkthyoziwxnupsmyia
+                        display_name: Priya Raman
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/submissions:
+    get:
+      operationId: listSubmissions
+      summary: List Submissions across the Exams you can see
+      tags:
+        - Integrity review
+      description: >-
+        Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each
+        with its Exam. A row's review appears, and review_state and release_state match it, only where you also
+        hold submission.review on its Exam; so review_state=none&review_state=draft lists what is waiting for your
+        review. Bounded and cursor-paged; there are no counts.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters: *submissionListParameters
+      responses:
+        '200':
+          description: One page of Submissions.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionListResponse'
+              example:
+                items:
+                  - submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+                    exam:
+                      id: wj3drgzdpnf54rxf5d8qd3dqne
+                      title: Algorithms final
+                    exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+                    exam_sitting_id: 14j8umgczgrdp95w77zuxmxfu9
+                    exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                    candidate:
+                      user_id: nybc6xhg593upqice3sdeyro5k
+                      username: student.ada
+                      display_name: Ada Student
+                    submitted_at: '2026-12-14T10:48:09Z'
+                    receipt_code: 7QXR-4M2K-HV9D-3JNP
+                    flag_count: 0
+                    unresolved_integrity_count: 0
+                    integrity_state: settled
+                    review:
+                      state: none
+                      release_state: withheld
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+    post:
+      operationId: releaseExamSittingResults
+      summary: Release many results of one Sitting
+      tags:
+        - Integrity review
+      description: >-
+        Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting
+        with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission
+        goes through the same checks, audit, notice and events as a single release and commits on its own, and
+        one more audit entry records the batch. Each item reports released, already_released, not_finalized,
+        denied, or failed with an error code. Replaying the same Idempotency-Key releases nothing twice: an item
+        this batch released reports released again. A replayed all_finalized batch looks the set up again.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseSittingResultsRequest'
+            example:
+              submission_ids:
+                - 39kqk53i4cswfzbi7hbai1r8qg
+                - 6xoche483hwrx5rpu8jzjoe7qg
+      responses:
+        '200':
+          description: Each Submission's outcome, in the order named.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultReleaseBatchResponse'
+              example:
+                items:
+                  - submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+                    outcome: released
+                  - submission_id: 6xoche483hwrx5rpu8jzjoe7qg
+                    outcome: not_finalized
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    SubmissionListResponse:
+      description: One page of Submissions.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        counts:
+          description: Counts of the whole Sitting list, on its first page only.
+          $ref: '#/components/schemas/SubmissionListCounts'
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/SubmissionListItemResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    SubmissionListCounts:
+      description: The Sitting's Submissions, other than your own, whatever the filters.
+      type: object
+      additionalProperties: false
+      required:
+        - total
+        - flagged_submissions
+        - flags
+      properties:
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        reviewed:
+          description: Submissions whose review is finalized. Present only with submission.review.
+          type: integer
+          format: int64
+          minimum: 0
+        released:
+          description: Submissions whose result is released. Present only with submission.review.
+          type: integer
+          format: int64
+          minimum: 0
+        flagged_submissions:
+          description: Submissions with at least one integrity Flag.
+          type: integer
+          format: int64
+          minimum: 0
+        flags:
+          description: Integrity Flags across all of them.
+          type: integer
+          format: int64
+          minimum: 0
+    SubmissionListItemResponse:
+      description: One sealed Submission. A Flag marks something for review; it is not a finding of guilt.
+      type: object
+      additionalProperties: false
+      required:
+        - submission_id
+        - exam_id
+        - exam_sitting_id
+        - exam_attempt_id
+        - candidate
+        - submitted_at
+        - receipt_code
+        - flag_count
+        - unresolved_integrity_count
+        - integrity_state
+      properties:
+        submission_id:
+          $ref: '#/components/schemas/ID'
+        exam:
+          description: The Submission's Exam. Present on the list across Exams.
+          $ref: '#/components/schemas/SubmissionListExam'
+        exam_id:
+          $ref: '#/components/schemas/ID'
+        exam_sitting_id:
+          $ref: '#/components/schemas/ID'
+        exam_attempt_id:
+          $ref: '#/components/schemas/ID'
+        candidate:
+          description: The candidate, as the Sitting's candidate board names them.
+          $ref: '#/components/schemas/SittingCandidateIdentityResponse'
+        submitted_at:
+          type: string
+          format: date-time
+        receipt_code:
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$
+          description: The receipt code the candidate was given, in groups of four.
+        flag_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Integrity Flags raised on the Attempt.
+        unresolved_integrity_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Missing signals still unresolved when collection ended; 0 once integrity data is retired.
+        integrity_state:
+          type: string
+          enum:
+            - settled
+            - gapped
+            - retired
+        review:
+          description: The review, present only where you hold submission.review.
+          $ref: '#/components/schemas/SubmissionListReviewResponse'
+    SubmissionListExam:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        title:
+          type: string
+    SubmissionListReviewResponse:
+      description: Where a Submission's review stands. state is none until a manager opens one.
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - release_state
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        state:
+          type: string
+          enum:
+            - none
+            - draft
+            - finalized
+        release_state:
+          type: string
+          enum:
+            - withheld
+            - released
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        finalized_at:
+          type: string
+          format: date-time
+        finalized_by_user_id:
+          $ref: '#/components/schemas/ID'
+        finalized_by:
+          $ref: '#/components/schemas/PersonRef'
+        released_at:
+          type: string
+          format: date-time
+    ReleaseSittingResultsRequest:
+      description: Give submission_ids or all_finalized, not both.
+      type: object
+      additionalProperties: false
+      properties:
+        submission_ids:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ID'
+        all_finalized:
+          type: boolean
+          description: true releases every finalized, withheld Submission of the Sitting, at most 200.
+    ResultReleaseBatchResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/ResultReleaseItemResponse'
+    ResultReleaseItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - submission_id
+        - outcome
+      properties:
+        submission_id:
+          $ref: '#/components/schemas/ID'
+        outcome:
+          type: string
+          enum:
+            - released
+            - already_released
+            - not_finalized
+            - denied
+            - failed
+        error_code:
+          type: string
+          description: Why a failed item could not be released now; it may be retried.

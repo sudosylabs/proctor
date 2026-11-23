@@ -10,7 +10,10 @@ package attempt
 import (
 	"context"
 	"errors"
+	"maps"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -150,12 +153,30 @@ type ManagedAttemptPage struct {
 }
 
 // SittingCandidateStatusesQuery selects one page of per-candidate statuses
-// after AfterCandidateUserID.
+// after AfterCandidateUserID, narrowed by Filter.
 type SittingCandidateStatusesQuery struct {
 	ExamID               model.ExamID
 	SittingID            model.ExamSittingID
 	AfterCandidateUserID model.UserID
+	Filter               store.SittingCandidateStatusFilter
 	Limit                int
+}
+
+// candidateStatusQueryMaximumRunes bounds the name search.
+const candidateStatusQueryMaximumRunes = 100
+
+func validCandidateStatusFilter(filter store.SittingCandidateStatusFilter) bool {
+	if utf8.RuneCountInString(filter.Query) > candidateStatusQueryMaximumRunes || !utf8.ValidString(filter.Query) {
+		return false
+	}
+	seen := make(map[store.SittingCandidatePresenceState]struct{}, len(filter.PresenceStates))
+	for _, state := range filter.PresenceStates {
+		if _, repeated := seen[state]; repeated || !state.IsValid() {
+			return false
+		}
+		seen[state] = struct{}{}
+	}
+	return true
 }
 
 // SittingCandidateStatusesPage is one page of per-candidate statuses; HasMore
@@ -169,7 +190,7 @@ type SittingCandidateStatusesPage struct {
 
 // ListSittingCandidateStatuses excludes the caller. It requires sitting view;
 // whether the caller also holds sitting management decides if re-allow is
-// offered.
+// offered. The first page also counts the whole board, whatever the filter.
 func (s *Service) ListSittingCandidateStatuses(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -182,7 +203,8 @@ func (s *Service) ListSittingCandidateStatuses(
 		!query.SittingID.IsValid() ||
 		query.Limit < 1 ||
 		query.Limit > 200 ||
-		!query.AfterCandidateUserID.IsZero() && !query.AfterCandidateUserID.IsValid() {
+		!query.AfterCandidateUserID.IsZero() && !query.AfterCandidateUserID.IsValid() ||
+		!validCandidateStatusFilter(query.Filter) {
 		return SittingCandidateStatusesPage{}, apperror.Invalid("exam.attempt.invalid", "candidate_statuses")
 	}
 
@@ -201,13 +223,28 @@ func (s *Service) ListSittingCandidateStatuses(
 		ExcludeCandidateUserID: principal.UserID,
 		AfterCandidateUserID:   query.AfterCandidateUserID,
 		ReallowAuthorized:      reallowAuthorized,
-		Limit:                  query.Limit + 1,
+		Filter: store.SittingCandidateStatusFilter{
+			PresenceStates: append([]store.SittingCandidatePresenceState(nil), query.Filter.PresenceStates...),
+			FailingChecks:  query.Filter.FailingChecks,
+			Attention:      query.Filter.Attention,
+			Query:          strings.TrimSpace(query.Filter.Query),
+		},
+		IncludeCounts: query.AfterCandidateUserID.IsZero(),
+		Limit:         query.Limit + 1,
 	})
 	if err != nil {
 		return SittingCandidateStatusesPage{}, storeError(storeErrors, err)
 	}
 
+	if query.AfterCandidateUserID.IsZero() != (stored.Counts != nil) {
+		return SittingCandidateStatusesPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("candidate status counts mismatch the page"))
+	}
 	page := SittingCandidateStatusesPage{SittingCandidateStatusPage: *stored, HasMore: len(stored.Items) > query.Limit}
+	if stored.Counts != nil {
+		counts := *stored.Counts
+		counts.ByPresenceState = maps.Clone(stored.Counts.ByPresenceState)
+		page.Counts = &counts
+	}
 	page.Items = append([]store.SittingCandidateStatusItem(nil), stored.Items[:min(len(stored.Items), query.Limit)]...)
 	for i := range page.Items {
 		if page.Items[i].NativeSecurity != nil {

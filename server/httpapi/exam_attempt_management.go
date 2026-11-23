@@ -10,6 +10,8 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"time"
 
@@ -127,9 +129,77 @@ type sittingCandidateStatusListResponse struct {
 	SittingRevision int64                  `json:"sitting_revision"`
 	// EnvironmentsWaitingCapacity counts the sitting's execution
 	// environments waiting for a host with room, across every page.
-	EnvironmentsWaitingCapacity int64                                `json:"environments_waiting_capacity"`
-	Items                       []sittingCandidateStatusItemResponse `json:"items"`
-	NextCursor                  string                               `json:"next_cursor,omitempty"`
+	EnvironmentsWaitingCapacity int64 `json:"environments_waiting_capacity"`
+	// Counts is on the first page only and ignores the filters.
+	Counts     *sittingCandidateStatusCountsResponse `json:"counts,omitempty"`
+	Items      []sittingCandidateStatusItemResponse  `json:"items"`
+	NextCursor string                                `json:"next_cursor,omitempty"`
+}
+
+// sittingCandidateStatusCountsResponse counts a sitting's candidates, other
+// than the reader, by presence state.
+type sittingCandidateStatusCountsResponse struct {
+	Total            int64                                  `json:"total"`
+	ByPresenceState  sittingCandidatePresenceCountsResponse `json:"by_presence_state"`
+	WithFailedChecks int64                                  `json:"with_failed_checks"`
+	WithAttention    int64                                  `json:"with_attention"`
+}
+
+type sittingCandidatePresenceCountsResponse struct {
+	NotStarted   int64 `json:"not_started"`
+	Ready        int64 `json:"ready"`
+	Connected    int64 `json:"connected"`
+	Reconnecting int64 `json:"reconnecting"`
+	LeaseExpired int64 `json:"lease_expired"`
+	Suspended    int64 `json:"suspended"`
+	Submitted    int64 `json:"submitted"`
+}
+
+func sittingCandidateStatusCountsFrom(counts *store.SittingCandidateStatusCounts) *sittingCandidateStatusCountsResponse {
+	if counts == nil {
+		return nil
+	}
+	by := counts.ByPresenceState
+	return &sittingCandidateStatusCountsResponse{
+		Total: counts.Total,
+		ByPresenceState: sittingCandidatePresenceCountsResponse{
+			NotStarted: by[store.SittingCandidateNotStarted], Ready: by[store.SittingCandidateReady],
+			Connected: by[store.SittingCandidateConnected], Reconnecting: by[store.SittingCandidateReconnecting],
+			LeaseExpired: by[store.SittingCandidateLeaseExpired], Suspended: by[store.SittingCandidateSuspended],
+			Submitted: by[store.SittingCandidateSubmitted],
+		},
+		WithFailedChecks: counts.WithFailedChecks,
+		WithAttention:    counts.WithAttention,
+	}
+}
+
+// sittingCandidateStatusFilter reads the board filters: presence_state may
+// repeat, check takes only failing and attention only true.
+func sittingCandidateStatusFilter(values url.Values) (store.SittingCandidateStatusFilter, error) {
+	var filter store.SittingCandidateStatusFilter
+	for _, raw := range values["presence_state"] {
+		state := store.SittingCandidatePresenceState(raw)
+		if !state.IsValid() || slices.Contains(filter.PresenceStates, state) {
+			return filter, errors.New("invalid presence_state")
+		}
+		filter.PresenceStates = append(filter.PresenceStates, state)
+	}
+	switch values.Get("check") {
+	case "":
+	case "failing":
+		filter.FailingChecks = true
+	default:
+		return filter, errors.New("check must be failing")
+	}
+	switch values.Get("attention") {
+	case "":
+	case "true":
+		filter.Attention = true
+	default:
+		return filter, errors.New("attention must be true")
+	}
+	filter.Query = values.Get("q")
+	return filter, nil
 }
 
 // sittingCandidateEnvironmentResponse is a candidate's execution
@@ -460,6 +530,9 @@ func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route
 
 	query := attempt.SittingCandidateStatusesQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
 	values := request.HTTP.URL.Query()
+	if query.Filter, err = sittingCandidateStatusFilter(values); err != nil {
+		return route.Result{}, route.InvalidRequest(err)
+	}
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -488,6 +561,7 @@ func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route
 		SittingState:                page.SittingState,
 		SittingRevision:             page.SittingRevision,
 		EnvironmentsWaitingCapacity: page.EnvironmentsWaitingCapacity,
+		Counts:                      sittingCandidateStatusCountsFrom(page.Counts),
 		Items:                       make([]sittingCandidateStatusItemResponse, 0, len(page.Items)),
 	}
 	for _, item := range page.Items {

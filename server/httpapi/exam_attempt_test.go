@@ -302,6 +302,38 @@ func TestManagedExamAttemptListIsBoundedSafeAndOpaque(t *testing.T) {
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "manager exact = %d headers=%#v body=%s", response.Code, response.Header(), response.Body.String())
 }
 
+func TestCandidateStatusBoardFiltersAndCountsTheFirstPage(t *testing.T) {
+	t.Parallel()
+	f := newAttemptFixture(t)
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
+	base := "/api/v1/exams/" + f.examID.String() + "/sittings/" + f.sitting.ID.String() + "/candidate-statuses"
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet,
+		base+"?presence_state=connected&presence_state=suspended&check=failing&attention=true&q=Ada", nil))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Len(t, f.attemptStore.statusLists, 1)
+	listed := f.attemptStore.statusLists[0]
+	require.Equal(t, store.SittingCandidateStatusFilter{
+		PresenceStates: []store.SittingCandidatePresenceState{store.SittingCandidateConnected, store.SittingCandidateSuspended},
+		FailingChecks:  true, Attention: true, Query: "Ada",
+	}, listed.Filter)
+	require.True(t, listed.IncludeCounts)
+	var page map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Equal(t, map[string]any{
+		"total": 4.0, "with_failed_checks": 1.0, "with_attention": 2.0,
+		"by_presence_state": map[string]any{"not_started": 0.0, "ready": 0.0, "connected": 3.0, "reconnecting": 0.0,
+			"lease_expired": 0.0, "suspended": 1.0, "submitted": 0.0},
+	}, page["counts"], "every presence state is counted, zero or not")
+
+	for _, query := range []string{"presence_state=away", "presence_state=ready&presence_state=ready", "check=passing", "attention=false"} {
+		refused := httptest.NewRecorder()
+		httpAPI.ServeHTTP(refused, f.managerRequest(t, http.MethodGet, base+"?"+query, nil))
+		assertHTTPProblem(t, refused, http.StatusBadRequest, "request.invalid")
+	}
+	require.Len(t, f.attemptStore.statusLists, 1, "a refused filter reads nothing")
+}
+
 func TestManagedBrowserActivityIsNestedMinimizedNoStoreAndKeysetPaginated(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
@@ -353,6 +385,10 @@ func TestManagerSubmissionReadManifestAndFileArePurposeSpecificAndProtected(t *t
 		require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "GET %s = %d headers=%v body=%s", path, response.Code, response.Header(), response.Body.String())
 		for _, forbidden := range []string{"starter_object", "attempt_object", "storage_origin", "vfs", "url"} {
 			require.NotContains(t, strings.ToLower(response.Body.String()), forbidden, "GET %s exposed", path)
+		}
+		if path == base {
+			require.Contains(t, response.Body.String(), `"receipt_code":"`+attemptReceiptCode.Display()+`"`,
+				"a manager can match the code a candidate reads out")
 		}
 	}
 	reads := f.submissionStore.manifestReads
@@ -711,6 +747,28 @@ func TestCandidateScreenClipChunksAreNumberedFromOneOnTheWire(t *testing.T) {
 	require.Equal(t, strings.Repeat("d", 64), f.attemptStore.clipCompletions[0].ContentDigest)
 	require.Equal(t, signature, f.attemptStore.clipCompletions[0].Signature)
 	require.Contains(t, completed.Body.String(), `"state":"ready"`)
+}
+
+func TestManagerScreenClipListNamesTheRequesterAndItsReason(t *testing.T) {
+	t.Parallel()
+	f := newAttemptFixture(t)
+	f.attemptStore.deliverClip(model.ScreenClipReady, &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: 1,
+		ChunkSHA256: []string{digestOf([]byte("x"))}})
+	f.attemptStore.clipReason = "candidate looked away for a long time"
+	httpAPI := f.api(t, examAttemptResource(f.service, f.people))
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, f.managerRequest(t, http.MethodGet, f.managerPath("/screen-clips"), nil))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page struct {
+		Items []map[string]any `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, "candidate looked away for a long time", page.Items[0]["reason"], "the sitting's manager sees the reason")
+	requester, ok := page.Items[0]["requested_by"].(map[string]any)
+	require.True(t, ok, "a manager clip names who asked for it: %s", response.Body.String())
+	require.Equal(t, f.caller.UserID.String(), requester["id"])
+	require.NotContains(t, page.Items[0], "integrity_flag_id", "a manager clip has no Flag")
 }
 
 func TestManagersPlayScreenClipsByRange(t *testing.T) {

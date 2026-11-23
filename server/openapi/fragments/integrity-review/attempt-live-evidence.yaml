@@ -1,0 +1,538 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listLiveAttemptIntegrityFlags
+      summary: List a running Attempt's integrity Flags
+      tags:
+        - Integrity review
+      description: >-
+        Lists the Attempt's integrity Flags opened in the window, in the shape the Submission's Flag read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and
+        submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence
+        read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its
+        integrity data is retired; as_of is the database time the page is current as of.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: Keep records at or after this instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Keep records before this instant. With from, it must be later.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          description: Largest number of records on this page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveIntegrityFlagListResponse'
+              example:
+                complete: false
+                as_of: '2026-12-14T09:45:00Z'
+                items:
+                  - id: xpq79ar61ncrjiouey6d9tgp91
+                    exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                    generation: 2
+                    policy_kind: focus_loss
+                    summary: The exam window lost focus 2 times
+                    state: open
+                    created_at: '2026-12-14T09:22:47Z'
+                    evidence_count: 2
+                    evidence_overflow_count: 0
+                    unresolved_missing_count: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags/{integrity_flag_id}/evidence:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/IntegrityFlagID'
+    get:
+      operationId: listLiveAttemptIntegrityEvidence
+      summary: List one Flag's evidence on a running Attempt
+      tags:
+        - Integrity review
+      description: >-
+        Lists the evidence of one of the Attempt's Flags observed in the window, in the shape the Submission's evidence read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and
+        submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence
+        read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its
+        integrity data is retired; as_of is the database time the page is current as of.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: Keep records at or after this instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Keep records before this instant. With from, it must be later.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          description: Largest number of records on this page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveIntegrityEvidenceListResponse'
+              example:
+                complete: false
+                as_of: '2026-12-14T09:45:00Z'
+                items:
+                  - id: zq993bky9h3uj4saw8iywi38cy
+                    exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                    participation_id: o87yi4tenx8kodmcuup1hmtsbo
+                    integrity_flag_id: xpq79ar61ncrjiouey6d9tgp91
+                    generation: 2
+                    policy_kind: focus_loss
+                    signal_id: yu7twx6xxb4udbc94foq5zq9ni
+                    sequence: 1
+                    duration_milliseconds: 8400
+                    source: window_blur
+                    missing_before: 0
+                    observed_at: '2026-12-14T09:22:46Z'
+                    recorded_at: '2026-12-14T09:22:47Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/native-conditions:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listLiveAttemptNativeConditions
+      summary: List a running Attempt's native condition records
+      tags:
+        - Integrity review
+      description: >-
+        Lists the Attempt's native condition records whose rule changed in the window, in the shape the Submission's native condition read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and
+        submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence
+        read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its
+        integrity data is retired; as_of is the database time the page is current as of.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: Keep records at or after this instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Keep records before this instant. With from, it must be later.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          description: Largest number of records on this page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveNativeConditionListResponse'
+              example:
+                complete: true
+                as_of: '2026-12-14T11:05:00Z'
+                items: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/timeline:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listLiveAttemptTimeline
+      summary: List a running Attempt's Flags, evidence and native conditions in time order
+      tags:
+        - Integrity review
+      description: >-
+        Merges the Attempt's Flags (by when they opened), evidence (by when it was observed) and native condition records (by when their rule changed) in time order; each entry holds the record its kind names. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and
+        submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence
+        read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its
+        integrity data is retired; as_of is the database time the page is current as of.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: Keep records at or after this instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Keep records before this instant. With from, it must be later.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          description: Largest number of records on this page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveAttemptTimelineResponse'
+              example:
+                complete: false
+                as_of: '2026-12-14T09:45:00Z'
+                items:
+                  - kind: flag
+                    at: '2026-12-14T09:22:47Z'
+                    flag:
+                      id: xpq79ar61ncrjiouey6d9tgp91
+                      exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                      generation: 2
+                      policy_kind: focus_loss
+                      summary: The exam window lost focus 1 time
+                      state: open
+                      created_at: '2026-12-14T09:22:47Z'
+                      evidence_count: 1
+                      evidence_overflow_count: 0
+                      unresolved_missing_count: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    LiveIntegrityFlagListResponse:
+      description: One page of a running Attempt's Flags.
+      type: object
+      additionalProperties: false
+      required:
+        - complete
+        - as_of
+        - items
+      properties:
+        complete:
+          type: boolean
+          description: True once the Attempt is sealed or its integrity data is retired.
+        as_of:
+          type: string
+          format: date-time
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ExamIntegrityFlagResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    LiveIntegrityEvidenceListResponse:
+      description: One page of a Flag's evidence.
+      type: object
+      additionalProperties: false
+      required:
+        - complete
+        - as_of
+        - items
+      properties:
+        complete:
+          type: boolean
+          description: True once the Attempt is sealed or its integrity data is retired.
+        as_of:
+          type: string
+          format: date-time
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ExamIntegrityEvidenceResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    LiveNativeConditionListResponse:
+      description: One page of native condition records.
+      type: object
+      additionalProperties: false
+      required:
+        - complete
+        - as_of
+        - items
+      properties:
+        complete:
+          type: boolean
+          description: True once the Attempt is sealed or its integrity data is retired.
+        as_of:
+          type: string
+          format: date-time
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/NativeConditionEvidence'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    LiveAttemptTimelineResponse:
+      description: One page of an Attempt's timeline.
+      type: object
+      additionalProperties: false
+      required:
+        - complete
+        - as_of
+        - items
+      properties:
+        complete:
+          type: boolean
+          description: True once the Attempt is sealed or its integrity data is retired.
+        as_of:
+          type: string
+          format: date-time
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/LiveAttemptTimelineItem'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    LiveAttemptTimelineItem:
+      description: One timeline entry. Exactly the member its kind names is present.
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - at
+      properties:
+        kind:
+          type: string
+          enum:
+            - flag
+            - evidence
+            - native_condition
+        at:
+          type: string
+          format: date-time
+        flag:
+          $ref: '#/components/schemas/ExamIntegrityFlagResponse'
+        evidence:
+          $ref: '#/components/schemas/ExamIntegrityEvidenceResponse'
+        native_condition:
+          $ref: '#/components/schemas/NativeConditionEvidence'

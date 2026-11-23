@@ -45,9 +45,50 @@ func TestScreenClipRequestAuthorizesFirstAndKeepsItsReasonPrivate(t *testing.T) 
 	require.Equal(t, store.ExamAttemptScreenClipRequestOperation, f.audit().operation)
 	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "screen_clip", "effects"}, f.order,
 		"authorization precedes the audit, which precedes the request; the candidate is told after it")
-	require.Equal(t, []realtimetest.Call{published(t)(realtime.NewCandidateScreenClipsRequestedEvent(
-		f.sitting.ExamID, f.sitting.ID, f.attemptID, f.userID, input.Clip.RequestedAt))}, f.publisher.Calls(),
-		"the candidate's Desktop is told to read its requests, and nothing more")
+	require.Equal(t, []realtimetest.Call{
+		published(t)(realtime.NewCandidateScreenClipsRequestedEvent(f.sitting.ExamID, f.sitting.ID, f.attemptID, f.userID, input.Clip.RequestedAt)),
+		published(t)(realtime.NewScreenClipChangedEvent(f.sitting.ExamID, f.sitting.ID, f.attemptID, input.Clip.ID)),
+	}, f.publisher.Calls(),
+		"the candidate's Desktop is told to read its requests, and the sitting's managers to refetch the clips; neither hint carries the reason")
+}
+
+func TestScreenClipListShowsTheReasonOnlyToTheSittingsManagers(t *testing.T) {
+	t.Parallel()
+	reason := "candidate seemed to read from a second screen"
+	managerClip := store.ExamAttemptManagedScreenClip{PrivateReason: reason, ExamAttemptScreenClipView: store.ExamAttemptScreenClipView{
+		ID: model.NewScreenClipID(), Source: model.ScreenClipSourceManager, RequestedByUserID: model.NewUserID()}}
+	incidentClip := store.ExamAttemptManagedScreenClip{ExamAttemptScreenClipView: store.ExamAttemptScreenClipView{
+		ID: model.NewScreenClipID(), Source: model.ScreenClipSourceIncident, FlagID: model.NewIntegrityFlagID()}}
+
+	manager := newFixture(t)
+	useManagerCall(manager)
+	manager.persistence.attemptScreenClips = []store.ExamAttemptManagedScreenClip{managerClip, incidentClip}
+	clips, err := manager.service.ListScreenClips(context.Background(), manager.inv, manager.sitting.ExamID, manager.sitting.ID, manager.attemptID)
+	require.NoError(t, err)
+	require.Len(t, clips, 2)
+	require.Equal(t, reason, clips[0].PrivateReason, "a sitting manager sees why the clip was asked for")
+	require.Equal(t, managerClip.RequestedByUserID, clips[0].RequestedByUserID)
+	require.Equal(t, incidentClip.FlagID, clips[1].FlagID)
+
+	reviewer := newFixture(t)
+	useReviewerCall(reviewer)
+	reviewer.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: model.NewSubmissionID(),
+		ExamID: reviewer.sitting.ExamID, SittingID: reviewer.sitting.ID, AttemptID: reviewer.attemptID,
+		CandidateUserID: reviewer.userID, AcademicUnitID: reviewer.otherUnitID}
+	reviewer.persistence.attemptScreenClips = []store.ExamAttemptManagedScreenClip{managerClip, incidentClip}
+	clips, err = reviewer.service.ListScreenClips(context.Background(), reviewer.inv, reviewer.sitting.ExamID, reviewer.sitting.ID, reviewer.attemptID)
+	require.NoError(t, err)
+	require.Len(t, clips, 2)
+	require.Empty(t, clips[0].PrivateReason, "a reviewer sees who asked for a clip, never why")
+	require.Equal(t, managerClip.RequestedByUserID, clips[0].RequestedByUserID)
+	require.NotContains(t, fmt.Sprintf("%#v", clips), reason)
+
+	outsider := newFixture(t)
+	useOutsiderCall(outsider)
+	outsider.submissions.authorization = reviewer.submissions.authorization
+	outsider.persistence.attemptScreenClips = []store.ExamAttemptManagedScreenClip{managerClip}
+	_, err = outsider.service.ListScreenClips(context.Background(), outsider.inv, outsider.sitting.ExamID, outsider.sitting.ID, outsider.attemptID)
+	require.Error(t, err, "a caller who neither manages nor reviews sees no clips")
 }
 
 func TestScreenClipRequestRefusesAManagementOverride(t *testing.T) {

@@ -5994,6 +5994,7 @@
                   "id": "xpq79ar61ncrjiouey6d9tgp91",
                   "policy_kind": "focus_loss",
                   "state": "open",
+                  "summary": "The exam window lost focus 2 times",
                   "unresolved_missing_count": 0
                 },
                 {
@@ -6010,6 +6011,7 @@
                   "id": "17778cuf6b17rhtapprfjozet8",
                   "policy_kind": "browser_navigation",
                   "state": "open",
+                  "summary": "1 page was blocked by the “block-search” browser rule",
                   "unresolved_missing_count": 0
                 }
               ]
@@ -6972,6 +6974,20 @@
         "content": {
           "application/json": {
             "example": {
+              "counts": {
+                "by_presence_state": {
+                  "connected": 1,
+                  "lease_expired": 0,
+                  "not_started": 1,
+                  "ready": 0,
+                  "reconnecting": 0,
+                  "submitted": 0,
+                  "suspended": 0
+                },
+                "total": 2,
+                "with_attention": 0,
+                "with_failed_checks": 0
+              },
               "environments_waiting_capacity": 0,
               "exam_id": "39kqk53i4cswfzbi7hbai1r8qg",
               "exam_sitting_id": "889766ufjgio6kbpzjbufozksq",
@@ -7480,6 +7496,7 @@
               "manifest_entry_count": 3,
               "manifest_schema_version": 1,
               "manifest_total_file_bytes": 2841,
+              "receipt_code": "7QXR-4M2K-HV9D-3JNP",
               "submission_id": "39kqk53i4cswfzbi7hbai1r8qg",
               "submitted_at": "2026-12-14T10:48:09Z",
               "unresolved_integrity_count": 0,
@@ -23453,6 +23470,10 @@
             ],
             "type": "string"
           },
+          "summary": {
+            "description": "One sentence, in the request's language, saying what the policy saw and how often, counting evidence beyond what was kept. It names a browser rule or a desktop check by its identifier and never names an application.",
+            "type": "string"
+          },
           "unresolved_missing_count": {
             "description": "The number of missing signals in the sequence that were still missing when collection ended.",
             "format": "int64",
@@ -23465,6 +23486,7 @@
           "exam_attempt_id",
           "generation",
           "policy_kind",
+          "summary",
           "state",
           "created_at",
           "evidence_count",
@@ -24477,10 +24499,110 @@
         ],
         "type": "object"
       },
+      "ExamSittingAcrossClass": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "type": "object"
+      },
+      "ExamSittingAcrossItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Academic Unit that owns the Exam."
+          },
+          "class": {
+            "$ref": "#/components/schemas/ExamSittingAcrossClass"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/SittingCandidateStatusCounts",
+            "description": "The candidate board's counts, for an open or paused Sitting only."
+          },
+          "exam": {
+            "$ref": "#/components/schemas/SubmissionListExam"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "needs_attention_count": {
+            "description": "Candidates who are suspended, fail an enforced native check, or have unresolved integrity attention, for an open or paused Sitting only.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scheduled_end_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "scheduled_start_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExamSittingState"
+          }
+        },
+        "required": [
+          "id",
+          "exam",
+          "academic_unit_id",
+          "class",
+          "state",
+          "revision",
+          "scheduled_start_at",
+          "scheduled_end_at"
+        ],
+        "type": "object"
+      },
+      "ExamSittingAcrossListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExamSittingAcrossItemResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          },
+          "server_time": {
+            "description": "Server time the counts were worked out at.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_time",
+          "items"
+        ],
+        "type": "object"
+      },
       "ExamSittingCandidateStatusesResponse": {
         "additionalProperties": false,
         "description": "One page of the candidate-status board for a Sitting.",
         "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/SittingCandidateStatusCounts",
+            "description": "Counts of the whole board at server_time, on the first page only. The filters do not apply to them."
+          },
           "environments_waiting_capacity": {
             "description": "How many of the Sitting's execution environments wait for a host with room, across every page.",
             "format": "int64",
@@ -25483,6 +25605,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "receipt_code": {
+            "description": "The receipt code the candidate was given when the Submission sealed, in groups of four, so a manager can match the code a candidate reads out.",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$",
+            "type": "string"
+          },
           "submission_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Submission's ID."
@@ -25511,6 +25638,7 @@
         },
         "required": [
           "submission_id",
+          "receipt_code",
           "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
@@ -27803,6 +27931,158 @@
         ],
         "type": "string"
       },
+      "LiveAttemptTimelineItem": {
+        "additionalProperties": false,
+        "description": "One timeline entry. Exactly the member its kind names is present.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/ExamIntegrityEvidenceResponse"
+          },
+          "flag": {
+            "$ref": "#/components/schemas/ExamIntegrityFlagResponse"
+          },
+          "kind": {
+            "enum": [
+              "flag",
+              "evidence",
+              "native_condition"
+            ],
+            "type": "string"
+          },
+          "native_condition": {
+            "$ref": "#/components/schemas/NativeConditionEvidence"
+          }
+        },
+        "required": [
+          "kind",
+          "at"
+        ],
+        "type": "object"
+      },
+      "LiveAttemptTimelineResponse": {
+        "additionalProperties": false,
+        "description": "One page of an Attempt's timeline.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "complete": {
+            "description": "True once the Attempt is sealed or its integrity data is retired.",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LiveAttemptTimelineItem"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "complete",
+          "as_of",
+          "items"
+        ],
+        "type": "object"
+      },
+      "LiveIntegrityEvidenceListResponse": {
+        "additionalProperties": false,
+        "description": "One page of a Flag's evidence.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "complete": {
+            "description": "True once the Attempt is sealed or its integrity data is retired.",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExamIntegrityEvidenceResponse"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "complete",
+          "as_of",
+          "items"
+        ],
+        "type": "object"
+      },
+      "LiveIntegrityFlagListResponse": {
+        "additionalProperties": false,
+        "description": "One page of a running Attempt's Flags.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "complete": {
+            "description": "True once the Attempt is sealed or its integrity data is retired.",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExamIntegrityFlagResponse"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "complete",
+          "as_of",
+          "items"
+        ],
+        "type": "object"
+      },
+      "LiveNativeConditionListResponse": {
+        "additionalProperties": false,
+        "description": "One page of native condition records.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "complete": {
+            "description": "True once the Attempt is sealed or its integrity data is retired.",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NativeConditionEvidence"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "complete",
+          "as_of",
+          "items"
+        ],
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -28922,6 +29202,103 @@
           "system.mail_test"
         ],
         "type": "string"
+      },
+      "ManagedScreenClipListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedScreenClipResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ManagedScreenClipResponse": {
+        "additionalProperties": false,
+        "description": "A screen clip as the Attempt's managers and reviewers list it.",
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "failure": {
+            "description": "Why the clip failed; present only when state is failed.",
+            "enum": [
+              "attempt_ended",
+              "not_recorded",
+              "upload_deadline",
+              "rejected"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "integrity_flag_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The integrity Flag an incident clip was taken for. Absent for a manager clip."
+          },
+          "range": {
+            "$ref": "#/components/schemas/ScreenClipRange"
+          },
+          "reason": {
+            "description": "The manager's private reason for a manager clip. Present only for a caller who manages the Sitting.",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "requested_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The manager who asked for a manager clip. Absent for an incident clip."
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "manager",
+              "incident"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "requested",
+              "recording",
+              "uploading",
+              "ready",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "exam_attempt_id",
+          "source",
+          "state",
+          "range",
+          "requested_at",
+          "updated_at",
+          "revision"
+        ],
+        "type": "object"
       },
       "MoveExamStarterWorkspaceEntryRequest": {
         "additionalProperties": false,
@@ -32865,6 +33242,26 @@
         ],
         "type": "object"
       },
+      "ReleaseSittingResultsRequest": {
+        "additionalProperties": false,
+        "description": "Give submission_ids or all_finalized, not both.",
+        "properties": {
+          "all_finalized": {
+            "description": "true releases every finalized, withheld Submission of the Sitting, at most 200.",
+            "type": "boolean"
+          },
+          "submission_ids": {
+            "items": {
+              "$ref": "#/components/schemas/ID"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "type": "object"
+      },
       "RemoveExamManagerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -33217,6 +33614,49 @@
           "user"
         ],
         "type": "string"
+      },
+      "ResultReleaseBatchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ResultReleaseItemResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ResultReleaseItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "description": "Why a failed item could not be released now; it may be retried.",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "released",
+              "already_released",
+              "not_finalized",
+              "denied",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "submission_id",
+          "outcome"
+        ],
+        "type": "object"
       },
       "RetentionControlRequest": {
         "additionalProperties": false,
@@ -36086,6 +36526,57 @@
         ],
         "type": "object"
       },
+      "SittingCandidatePresenceCounts": {
+        "additionalProperties": false,
+        "description": "Candidates in each presence state.",
+        "properties": {
+          "connected": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lease_expired": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "not_started": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ready": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reconnecting": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "submitted": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "suspended": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "not_started",
+          "ready",
+          "connected",
+          "reconnecting",
+          "lease_expired",
+          "suspended",
+          "submitted"
+        ],
+        "type": "object"
+      },
       "SittingCandidatePresenceResponse": {
         "additionalProperties": false,
         "description": "The candidate's presence, worked out at server_time.",
@@ -36122,6 +36613,41 @@
           "submitted"
         ],
         "type": "string"
+      },
+      "SittingCandidateStatusCounts": {
+        "additionalProperties": false,
+        "description": "A Sitting's candidates, other than the reader, counted exactly at one instant.",
+        "properties": {
+          "by_presence_state": {
+            "$ref": "#/components/schemas/SittingCandidatePresenceCounts",
+            "description": "Candidates in each presence state. Every state is present."
+          },
+          "total": {
+            "description": "Every candidate of the Sitting.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "with_attention": {
+            "description": "Candidates with unresolved integrity attention.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "with_failed_checks": {
+            "description": "Candidates whose live participation fails an enforced native rule.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_presence_state",
+          "with_failed_checks",
+          "with_attention"
+        ],
+        "type": "object"
       },
       "SittingCandidateStatusItemResponse": {
         "additionalProperties": false,
@@ -36453,6 +36979,207 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "SubmissionListCounts": {
+        "additionalProperties": false,
+        "description": "The Sitting's Submissions, other than your own, whatever the filters.",
+        "properties": {
+          "flagged_submissions": {
+            "description": "Submissions with at least one integrity Flag.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "flags": {
+            "description": "Integrity Flags across all of them.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "released": {
+            "description": "Submissions whose result is released. Present only with submission.review.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reviewed": {
+            "description": "Submissions whose review is finalized. Present only with submission.review.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "flagged_submissions",
+          "flags"
+        ],
+        "type": "object"
+      },
+      "SubmissionListExam": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "SubmissionListItemResponse": {
+        "additionalProperties": false,
+        "description": "One sealed Submission. A Flag marks something for review; it is not a finding of guilt.",
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/SittingCandidateIdentityResponse",
+            "description": "The candidate, as the Sitting's candidate board names them."
+          },
+          "exam": {
+            "$ref": "#/components/schemas/SubmissionListExam",
+            "description": "The Submission's Exam. Present on the list across Exams."
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "flag_count": {
+            "description": "Integrity Flags raised on the Attempt.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "integrity_state": {
+            "enum": [
+              "settled",
+              "gapped",
+              "retired"
+            ],
+            "type": "string"
+          },
+          "receipt_code": {
+            "description": "The receipt code the candidate was given, in groups of four.",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$",
+            "type": "string"
+          },
+          "review": {
+            "$ref": "#/components/schemas/SubmissionListReviewResponse",
+            "description": "The review, present only where you hold submission.review."
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "unresolved_integrity_count": {
+            "description": "Missing signals still unresolved when collection ended; 0 once integrity data is retired.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "submission_id",
+          "exam_id",
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "candidate",
+          "submitted_at",
+          "receipt_code",
+          "flag_count",
+          "unresolved_integrity_count",
+          "integrity_state"
+        ],
+        "type": "object"
+      },
+      "SubmissionListResponse": {
+        "additionalProperties": false,
+        "description": "One page of Submissions.",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/SubmissionListCounts",
+            "description": "Counts of the whole Sitting list, on its first page only."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionListItemResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "SubmissionListReviewResponse": {
+        "additionalProperties": false,
+        "description": "Where a Submission's review stands. state is none until a manager opens one.",
+        "properties": {
+          "finalized_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "finalized_by": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "finalized_by_user_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "release_state": {
+            "enum": [
+              "withheld",
+              "released"
+            ],
+            "type": "string"
+          },
+          "released_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "draft",
+              "finalized"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "release_state"
         ],
         "type": "object"
       },
@@ -49443,6 +50170,176 @@
         }
       ]
     },
+    "/api/v1/exam-sittings": {
+      "get": {
+        "description": "Lists the Sittings of every Exam where you hold exam.sitting.view, earliest start first. An ordinary grant reaches the Exams you manage in a unit you belong to; an override grant reaches every Exam under it. Each row names its Exam and Class. An open or paused Sitting also carries its candidate board's counts, without you, and needs_attention_count: its candidates who are suspended, fail an enforced native check, or have unresolved integrity attention. Bounded and cursor-paged.",
+        "operationId": "listExamSittingsAcrossExams",
+        "parameters": [
+          {
+            "description": "Keep Sittings in any of these states. Repeat it for more than one.",
+            "explode": true,
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/ExamSittingState"
+              },
+              "maxItems": 7,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Keep Sittings scheduled to start before this instant.",
+            "in": "query",
+            "name": "starts_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep Sittings scheduled to end after this instant. With starts_before, it must be earlier.",
+            "in": "query",
+            "name": "ends_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep Sittings of Exams owned by this Academic Unit.",
+            "in": "query",
+            "name": "academic_unit_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same filters.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "academic_unit_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                      "class": {
+                        "display_name": "Computer Science, year 2",
+                        "id": "14j8umgczgrdp95w77zuxmxfu9"
+                      },
+                      "counts": {
+                        "by_presence_state": {
+                          "connected": 57,
+                          "lease_expired": 0,
+                          "not_started": 3,
+                          "ready": 0,
+                          "reconnecting": 3,
+                          "submitted": 2,
+                          "suspended": 1
+                        },
+                        "total": 66,
+                        "with_attention": 2,
+                        "with_failed_checks": 1
+                      },
+                      "exam": {
+                        "id": "39kqk53i4cswfzbi7hbai1r8qg",
+                        "title": "Algorithms final"
+                      },
+                      "id": "889766ufjgio6kbpzjbufozksq",
+                      "needs_attention_count": 3,
+                      "revision": 4,
+                      "scheduled_end_at": "2026-08-01T11:00:00Z",
+                      "scheduled_start_at": "2026-08-01T09:00:00Z",
+                      "state": "open"
+                    }
+                  ],
+                  "server_time": "2026-08-01T09:45:00Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ExamSittingAcrossListResponse"
+                }
+              }
+            },
+            "description": "One page of Sittings.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Sittings across the Exams you can see",
+        "tags": [
+          "Sittings"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
       "get": {
         "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.",
@@ -54107,6 +55004,449 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags": {
+      "get": {
+        "description": "Lists the Attempt's integrity Flags opened in the window, in the shape the Submission's Flag read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+        "operationId": "listLiveAttemptIntegrityFlags",
+        "parameters": [
+          {
+            "description": "Keep records at or after this instant.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep records before this instant. With from, it must be later.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Largest number of records on this page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "as_of": "2026-12-14T09:45:00Z",
+                  "complete": false,
+                  "items": [
+                    {
+                      "created_at": "2026-12-14T09:22:47Z",
+                      "evidence_count": 2,
+                      "evidence_overflow_count": 0,
+                      "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
+                      "generation": 2,
+                      "id": "xpq79ar61ncrjiouey6d9tgp91",
+                      "policy_kind": "focus_loss",
+                      "state": "open",
+                      "summary": "The exam window lost focus 2 times",
+                      "unresolved_missing_count": 0
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/LiveIntegrityFlagListResponse"
+                }
+              }
+            },
+            "description": "One page.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List a running Attempt's integrity Flags",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags/{integrity_flag_id}/evidence": {
+      "get": {
+        "description": "Lists the evidence of one of the Attempt's Flags observed in the window, in the shape the Submission's evidence read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+        "operationId": "listLiveAttemptIntegrityEvidence",
+        "parameters": [
+          {
+            "description": "Keep records at or after this instant.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep records before this instant. With from, it must be later.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Largest number of records on this page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "as_of": "2026-12-14T09:45:00Z",
+                  "complete": false,
+                  "items": [
+                    {
+                      "duration_milliseconds": 8400,
+                      "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
+                      "generation": 2,
+                      "id": "zq993bky9h3uj4saw8iywi38cy",
+                      "integrity_flag_id": "xpq79ar61ncrjiouey6d9tgp91",
+                      "missing_before": 0,
+                      "observed_at": "2026-12-14T09:22:46Z",
+                      "participation_id": "o87yi4tenx8kodmcuup1hmtsbo",
+                      "policy_kind": "focus_loss",
+                      "recorded_at": "2026-12-14T09:22:47Z",
+                      "sequence": 1,
+                      "signal_id": "yu7twx6xxb4udbc94foq5zq9ni",
+                      "source": "window_blur"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/LiveIntegrityEvidenceListResponse"
+                }
+              }
+            },
+            "description": "One page.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List one Flag's evidence on a running Attempt",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/IntegrityFlagID"
+        }
+      ]
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/native-conditions": {
+      "get": {
+        "description": "Lists the Attempt's native condition records whose rule changed in the window, in the shape the Submission's native condition read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+        "operationId": "listLiveAttemptNativeConditions",
+        "parameters": [
+          {
+            "description": "Keep records at or after this instant.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep records before this instant. With from, it must be later.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Largest number of records on this page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "as_of": "2026-12-14T11:05:00Z",
+                  "complete": true,
+                  "items": []
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/LiveNativeConditionListResponse"
+                }
+              }
+            },
+            "description": "One page.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List a running Attempt's native condition records",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow": {
       "parameters": [
         {
@@ -54207,7 +55547,7 @@
     },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips": {
       "get": {
-        "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never returned.",
+        "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to a caller who manages the Sitting, never to a reviewer.",
         "operationId": "listExamAttemptScreenClips",
         "parameters": [
           {
@@ -54222,10 +55562,46 @@
             "content": {
               "application/json": {
                 "example": {
-                  "items": []
+                  "items": [
+                    {
+                      "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                      "id": "twz47ydgjcx1ia56br8kpous3h",
+                      "range": {
+                        "end": "2026-08-01T09:42:00Z",
+                        "from_session_start": false,
+                        "start": "2026-08-01T09:40:00Z"
+                      },
+                      "reason": "Looked away from the screen for a long time.",
+                      "requested_at": "2026-08-01T09:42:05Z",
+                      "requested_by": {
+                        "display_name": "Priya Raman",
+                        "id": "nybc6xhg593upqice3sdeyro5k"
+                      },
+                      "revision": 4,
+                      "source": "manager",
+                      "state": "ready",
+                      "updated_at": "2026-08-01T09:43:10Z"
+                    },
+                    {
+                      "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                      "failure": "upload_deadline",
+                      "id": "8kpous3h9nfemqtwz47ydgjcx1",
+                      "integrity_flag_id": "ia56br8kpous3h9nfemqtwz47y",
+                      "range": {
+                        "end": "2026-08-01T09:22:00Z",
+                        "from_session_start": false,
+                        "start": "2026-08-01T09:20:00Z"
+                      },
+                      "requested_at": "2026-08-01T09:21:00Z",
+                      "revision": 3,
+                      "source": "incident",
+                      "state": "failed",
+                      "updated_at": "2026-08-01T09:31:00Z"
+                    }
+                  ]
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/ScreenClipListResponse"
+                  "$ref": "#/components/schemas/ManagedScreenClipListResponse"
                 }
               }
             },
@@ -54870,6 +56246,160 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/timeline": {
+      "get": {
+        "description": "Merges the Attempt's Flags (by when they opened), evidence (by when it was observed) and native condition records (by when their rule changed) in time order; each entry holds the record its kind names. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+        "operationId": "listLiveAttemptTimeline",
+        "parameters": [
+          {
+            "description": "Keep records at or after this instant.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep records before this instant. With from, it must be later.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Largest number of records on this page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same window.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "as_of": "2026-12-14T09:45:00Z",
+                  "complete": false,
+                  "items": [
+                    {
+                      "at": "2026-12-14T09:22:47Z",
+                      "flag": {
+                        "created_at": "2026-12-14T09:22:47Z",
+                        "evidence_count": 1,
+                        "evidence_overflow_count": 0,
+                        "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
+                        "generation": 2,
+                        "id": "xpq79ar61ncrjiouey6d9tgp91",
+                        "policy_kind": "focus_loss",
+                        "state": "open",
+                        "summary": "The exam window lost focus 1 time",
+                        "unresolved_missing_count": 0
+                      },
+                      "kind": "flag"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/LiveAttemptTimelineResponse"
+                }
+              }
+            },
+            "description": "One page.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List a running Attempt's Flags, evidence and native conditions in time order",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/cancel": {
       "parameters": [
         {
@@ -54979,11 +56509,60 @@
             }
           },
           {
-            "description": "Cursor from next_cursor of the previous page. Send it back unchanged.",
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same filters.",
             "in": "query",
             "name": "cursor",
             "required": false,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep candidates in any of these presence states. Repeat the parameter for more than one state; a state may appear once.",
+            "explode": true,
+            "in": "query",
+            "name": "presence_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SittingCandidatePresenceState"
+              },
+              "maxItems": 7,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "failing keeps candidates whose live participation fails an enforced native rule.",
+            "in": "query",
+            "name": "check",
+            "required": false,
+            "schema": {
+              "enum": [
+                "failing"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "true keeps candidates with unresolved integrity attention.",
+            "in": "query",
+            "name": "attention",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep candidates whose display name or username contains this text, ignoring case.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
               "type": "string"
             }
           }
@@ -56043,6 +57622,130 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        }
+      ],
+      "post": {
+        "description": "Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key releases nothing twice: an item this batch released reports released again. A replayed all_finalized batch looks the set up again.",
+        "operationId": "releaseExamSittingResults",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "submission_ids": [
+                  "39kqk53i4cswfzbi7hbai1r8qg",
+                  "6xoche483hwrx5rpu8jzjoe7qg"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseSittingResultsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "outcome": "released",
+                      "submission_id": "39kqk53i4cswfzbi7hbai1r8qg"
+                    },
+                    {
+                      "outcome": "not_finalized",
+                      "submission_id": "6xoche483hwrx5rpu8jzjoe7qg"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ResultReleaseBatchResponse"
+                }
+              }
+            },
+            "description": "Each Submission's outcome, in the order named.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Release many results of one Sitting",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/resume": {
       "parameters": [
         {
@@ -56134,6 +57837,211 @@
         ],
         "x-proctor-idempotency": "required"
       }
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/submissions": {
+      "get": {
+        "description": "Lists the Sitting's sealed Submissions, other than your own, with each candidate, the receipt code, the number of integrity Flags and the integrity standing. Needs submission.view on the Sitting. Each row's review appears only when you also hold submission.review there, and filtering by review_state or release_state without it is refused. The first page counts the whole Sitting, whatever the filters.",
+        "operationId": "listExamSittingSubmissions",
+        "parameters": [
+          {
+            "description": "Keep Submissions whose review is in any of these states. Repeat it for more than one.",
+            "explode": true,
+            "in": "query",
+            "name": "review_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "none",
+                  "draft",
+                  "finalized"
+                ],
+                "type": "string"
+              },
+              "maxItems": 3,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Keep Submissions whose result is withheld or released. A Submission with no review is withheld.",
+            "explode": true,
+            "in": "query",
+            "name": "release_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "withheld",
+                  "released"
+                ],
+                "type": "string"
+              },
+              "maxItems": 2,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "true keeps Submissions with at least one integrity Flag, false those with none.",
+            "in": "query",
+            "name": "has_flags",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "submitted lists the earliest Submission first; name lists by the candidate's display name.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "submitted",
+              "enum": [
+                "submitted",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "counts": {
+                    "flagged_submissions": 6,
+                    "flags": 9,
+                    "released": 0,
+                    "reviewed": 20,
+                    "total": 26
+                  },
+                  "items": [
+                    {
+                      "candidate": {
+                        "display_name": "Ada Student",
+                        "user_id": "nybc6xhg593upqice3sdeyro5k",
+                        "username": "student.ada"
+                      },
+                      "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
+                      "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                      "exam_sitting_id": "14j8umgczgrdp95w77zuxmxfu9",
+                      "flag_count": 2,
+                      "integrity_state": "settled",
+                      "receipt_code": "7QXR-4M2K-HV9D-3JNP",
+                      "review": {
+                        "finalized_at": "2026-12-15T09:12:00Z",
+                        "finalized_by": {
+                          "display_name": "Priya Raman",
+                          "id": "dfa1x1n7mkthyoziwxnupsmyia"
+                        },
+                        "finalized_by_user_id": "dfa1x1n7mkthyoziwxnupsmyia",
+                        "id": "ih1r84kij94nrwis97rft6rduh",
+                        "release_state": "withheld",
+                        "revision": 4,
+                        "state": "finalized"
+                      },
+                      "submission_id": "39kqk53i4cswfzbi7hbai1r8qg",
+                      "submitted_at": "2026-12-14T10:48:09Z",
+                      "unresolved_integrity_count": 0
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionListResponse"
+                }
+              }
+            },
+            "description": "One page of the Sitting's Submissions.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List a Sitting's Submissions with their flags and reviews",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        }
+      ]
     },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/exports": {
       "post": {
@@ -62632,6 +64540,191 @@
           "$ref": "#/components/parameters/StudentProgressionID"
         }
       ]
+    },
+    "/api/v1/submissions": {
+      "get": {
+        "description": "Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none\u0026review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts.",
+        "operationId": "listSubmissions",
+        "parameters": [
+          {
+            "description": "Keep Submissions whose review is in any of these states. Repeat it for more than one.",
+            "explode": true,
+            "in": "query",
+            "name": "review_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "none",
+                  "draft",
+                  "finalized"
+                ],
+                "type": "string"
+              },
+              "maxItems": 3,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Keep Submissions whose result is withheld or released. A Submission with no review is withheld.",
+            "explode": true,
+            "in": "query",
+            "name": "release_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "withheld",
+                  "released"
+                ],
+                "type": "string"
+              },
+              "maxItems": 2,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "true keeps Submissions with at least one integrity Flag, false those with none.",
+            "in": "query",
+            "name": "has_flags",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "submitted lists the earliest Submission first; name lists by the candidate's display name.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "submitted",
+              "enum": [
+                "submitted",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "candidate": {
+                        "display_name": "Ada Student",
+                        "user_id": "nybc6xhg593upqice3sdeyro5k",
+                        "username": "student.ada"
+                      },
+                      "exam": {
+                        "id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                        "title": "Algorithms final"
+                      },
+                      "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
+                      "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                      "exam_sitting_id": "14j8umgczgrdp95w77zuxmxfu9",
+                      "flag_count": 0,
+                      "integrity_state": "settled",
+                      "receipt_code": "7QXR-4M2K-HV9D-3JNP",
+                      "review": {
+                        "release_state": "withheld",
+                        "state": "none"
+                      },
+                      "submission_id": "39kqk53i4cswfzbi7hbai1r8qg",
+                      "submitted_at": "2026-12-14T10:48:09Z",
+                      "unresolved_integrity_count": 0
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionListResponse"
+                }
+              }
+            },
+            "description": "One page of Submissions.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Submissions across the Exams you can see",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
     },
     "/api/v1/submissions/{submission_id}/assistant-transcript": {
       "get": {

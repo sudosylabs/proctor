@@ -50,6 +50,8 @@ type attemptStoreFake struct {
 	candidateAccess                 store.CandidateAttemptAccess
 	authorizedSession               model.SessionID
 	managerOptions                  store.ExamAttemptManagerListOptions
+	candidateStatusOptions          []store.SittingCandidateStatusListOptions
+	attemptScreenClips              []store.ExamAttemptManagedScreenClip
 	managerRows                     []store.ExamAttemptManagerSnapshot
 	managerSuspension               *store.ExamAttemptSuspensionView
 	latestParticipation             *store.ExamAttemptParticipationView
@@ -238,8 +240,12 @@ func (f *attemptStoreFake) CompleteScreenClipUpload(_ context.Context, input *st
 	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
 }
 
-func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
-	return []store.ExamAttemptScreenClipView{}, nil
+func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptManagedScreenClip, error) {
+	return append([]store.ExamAttemptManagedScreenClip{}, f.attemptScreenClips...), nil
+}
+
+func (f *attemptStoreFake) ResolveAttemptSitting(_ context.Context, attemptID model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: f.f.sitting.ExamID, SittingID: f.f.sitting.ID}, nil
 }
 
 func (f *attemptStoreFake) GetAttemptScreenClip(
@@ -293,8 +299,18 @@ func (f *attemptStoreFake) ListCandidateActivity(context.Context, store.Candidat
 	return &store.CandidateExamActivityPage{ServerTime: model.NowUTC(), Items: []store.CandidateExamActivityItem{}}, nil
 }
 
-func (f *attemptStoreFake) ListSittingCandidateStatuses(context.Context, store.SittingCandidateStatusListOptions) (*store.SittingCandidateStatusPage, error) {
-	return &store.SittingCandidateStatusPage{Items: []store.SittingCandidateStatusItem{}}, nil
+func (f *attemptStoreFake) ListSittingCandidateStatuses(
+	_ context.Context,
+	options store.SittingCandidateStatusListOptions,
+) (*store.SittingCandidateStatusPage, error) {
+	f.f.order = append(f.f.order, "candidate_statuses.list")
+	f.candidateStatusOptions = append(f.candidateStatusOptions, options)
+	page := &store.SittingCandidateStatusPage{Items: []store.SittingCandidateStatusItem{}}
+	if options.IncludeCounts {
+		page.Counts = &store.SittingCandidateStatusCounts{Total: 3,
+			ByPresenceState: map[store.SittingCandidatePresenceState]int64{store.SittingCandidateConnected: 3}, WithAttention: 1}
+	}
+	return page, nil
 }
 
 func (f *attemptStoreFake) ListSittingCandidateDetails(_ context.Context, options store.SittingCandidateDetailOptions) ([]store.SittingCandidateDetail, error) {

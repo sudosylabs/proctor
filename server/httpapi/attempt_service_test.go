@@ -259,6 +259,8 @@ type attemptLedger struct {
 	clipCompletions  []*store.ExamAttemptScreenClipCompletion
 	clipReads        int
 	commands         []*store.CommandIdempotency
+	statusLists      []store.SittingCandidateStatusListOptions
+	clipReason       string
 }
 
 func newAttemptLedger(t *testing.T, f *attemptFixture) *attemptLedger {
@@ -342,8 +344,20 @@ func (s *attemptLedger) List(_ context.Context, options store.ExamAttemptManager
 	return rows[:min(len(rows), options.Limit)], nil
 }
 
-func (s *attemptLedger) ListSittingCandidateStatuses(context.Context, store.SittingCandidateStatusListOptions) (*store.SittingCandidateStatusPage, error) {
-	return &store.SittingCandidateStatusPage{}, nil
+func (s *attemptLedger) ListSittingCandidateStatuses(
+	_ context.Context,
+	options store.SittingCandidateStatusListOptions,
+) (*store.SittingCandidateStatusPage, error) {
+	s.statusLists = append(s.statusLists, options)
+	page := &store.SittingCandidateStatusPage{ServerTime: attemptFixtureTime, ExamID: s.f.examID, SittingID: s.f.sitting.ID,
+		SittingState: model.ExamSittingOpen, SittingRevision: 1, Items: []store.SittingCandidateStatusItem{}}
+	if options.IncludeCounts {
+		page.Counts = &store.SittingCandidateStatusCounts{Total: 4, WithFailedChecks: 1, WithAttention: 2,
+			ByPresenceState: map[store.SittingCandidatePresenceState]int64{
+				store.SittingCandidateConnected: 3, store.SittingCandidateSuspended: 1,
+			}}
+	}
+	return page, nil
 }
 
 func (s *attemptLedger) currentRevision() model.ExamRevisionID {
@@ -488,11 +502,15 @@ func (s *attemptLedger) CompleteScreenClipUpload(_ context.Context, input *store
 	return &value, nil
 }
 
-func (s *attemptLedger) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
+func (s *attemptLedger) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptManagedScreenClip, error) {
 	if s.clip == nil {
-		return []store.ExamAttemptScreenClipView{}, nil
+		return []store.ExamAttemptManagedScreenClip{}, nil
 	}
-	return []store.ExamAttemptScreenClipView{*s.clip}, nil
+	return []store.ExamAttemptManagedScreenClip{{ExamAttemptScreenClipView: *s.clip, PrivateReason: s.clipReason}}, nil
+}
+
+func (s *attemptLedger) ResolveAttemptSitting(_ context.Context, attemptID model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: s.f.examID, SittingID: s.f.sitting.ID}, nil
 }
 
 func (s *attemptLedger) GetAttemptScreenClip(_ context.Context, clips store.ExamAttemptClips, id model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {

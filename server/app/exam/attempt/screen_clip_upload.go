@@ -56,6 +56,7 @@ func (s *Service) BeginScreenClipUpload(
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, storeError(storeErrors, err)
 	}
+	s.publishCandidateScreenClipChanged(ctx, *clip)
 	return *clip, nil
 }
 
@@ -158,5 +159,6 @@ func (s *Service) CompleteScreenClipUpload(
 	if clip.State != model.ScreenClipReady {
 		return store.ExamAttemptScreenClipView{}, apperror.New("exam.attempt.unavailable")
 	}
+	s.publishCandidateScreenClipChanged(ctx, *clip)
 	return *clip, nil
 }

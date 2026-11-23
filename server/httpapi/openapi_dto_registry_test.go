@@ -153,6 +153,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ClassMemberResponse":                            reflect.TypeOf(classMemberResponse{}),
 	"ClassResponse":                                  reflect.TypeOf(classResponse{}),
 	"ClassListItemResponse":                          reflect.TypeOf(classListItemResponse{}),
+	"ClassDetailResponse":                            reflect.TypeOf(classDetailResponse{}),
 	"ClassListResponse":                              reflect.TypeOf(route.CountedList[classListItemResponse]{}),
 	"ProgrammeListResponse":                          reflect.TypeOf(route.CountedList[programmeResponse]{}),
 	"ProgrammeLevelListResponse":                     reflect.TypeOf(route.CountedList[programmeLevelResponse]{}),

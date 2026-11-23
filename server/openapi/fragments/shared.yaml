@@ -544,6 +544,20 @@ components:
           type: string
           format: date-time
           description: Time the account was disabled. Omitted while it is enabled.
+        disabled_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Who disabled the account, for the disable in force. Present only while the account is disabled, when the
+            disable named a person, and only for readers of the full profile: the User themselves or an
+            institution-wide user.view holder. `GET /users/{user_id}` answers only for an active account, so a
+            disabled account is read through the User directory.
+        disabled_reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: >-
+            The reason given when the account was disabled. Present with the same rule as `disabled_by`, and only
+            when a reason was given.
         profile_picture_url:
           type: string
           description: >-

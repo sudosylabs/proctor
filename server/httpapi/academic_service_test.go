@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/mailtest"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -117,6 +118,11 @@ func newAcademicFixture(t *testing.T, options academicOptions) *academicFixture 
 	require.NoError(t, err)
 	fixture.service = service
 	return fixture
+}
+
+// people names the fixture's users through its authorizer.
+func (f *academicFixture) people() *people.Resolver {
+	return testPeople(f.users, f.access.Authorizer)
 }
 
 // onlyAttempt is the one mutation attempt the auditor recorded.
@@ -640,6 +646,25 @@ func (s *academicUserRecords) add(users ...*model.User) {
 	}
 }
 
+// ListDisplayNames names every unarchived user the fake holds.
+func (s *academicUserRecords) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+	names := make([]store.UserDisplayName, 0, len(ids))
+	for _, id := range ids {
+		if user, ok := s.byID[id]; ok && !user.ArchivedAt.Valid {
+			names = append(names, store.UserDisplayName{UserID: id, DisplayName: user.DisplayName})
+		}
+	}
+	return names, nil
+}
+
+// ListVisibleDisplayNames sees only through institution-wide visibility.
+func (s *academicUserRecords) ListVisibleDisplayNames(ctx context.Context, ids []model.UserID, visibility store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	if !visibility.InstitutionWide {
+		return nil, nil
+	}
+	return s.ListDisplayNames(ctx, ids)
+}
+
 func (s *academicUserRecords) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
 	identities := make([]store.UserIdentity, 0, len(ids))
 	for _, id := range ids {
@@ -656,6 +681,13 @@ type academicBindingRecords struct {
 	store.RoleBindingStore
 	summaries []store.UserRoleBindingSummary
 	options   []store.RoleBindingSummaryOptions
+	teachers  []store.ClassTeachers
+	teacherOf []store.ClassTeacherOptions
+}
+
+func (s *academicBindingRecords) ListTeachersByClasses(_ context.Context, options store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	s.teacherOf = append(s.teacherOf, options)
+	return s.teachers, nil
 }
 
 func (s *academicBindingRecords) ListVisibleSummariesByUsers(_ context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {

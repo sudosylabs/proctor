@@ -163,6 +163,10 @@ type UserDisabledStateChange struct {
 	ID               model.UserID
 	ExpectedRevision int64
 	Disabled         bool
+	// DisabledBy and DisabledReason are recorded on a disable and cleared on
+	// an enable. Either may be empty: an actorless disable names nobody.
+	DisabledBy       model.UserID
+	DisabledReason   string
 	Capabilities     AccessDeploymentCapabilities
 	Occurrence       *model.MailOccurrence
 	Delivery         *model.MailDelivery

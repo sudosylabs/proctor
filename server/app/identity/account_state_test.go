@@ -234,7 +234,10 @@ func TestAccountDisableStartsAgainFromAFreshReadWhenTheUserChanged(t *testing.T)
 	}
 }
 
-func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T) {
+// TestAccountDisableRecordsTheTrimmedReasonAndItsActor pins that the
+// trimmed reason reaches the audit parameters and, with who disabled the
+// account, the User.
+func TestAccountDisableRecordsTheTrimmedReasonAndItsActor(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {
 		reason *string
@@ -265,6 +268,9 @@ func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T
 			}
 			require.Equal(t, true, value["disabled"])
 			require.Equal(t, user.ID.String(), value["user_id"])
+			want, _ := test.want.(string)
+			require.Equal(t, want, persistence.input.DisabledReason, "the User records the trimmed reason")
+			require.Equal(t, fixture.inv.Principal().UserID, persistence.input.DisabledBy, "the User records who disabled it")
 		})
 	}
 }

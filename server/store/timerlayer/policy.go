@@ -263,6 +263,7 @@ const (
 	methodListDirectorySummaries                    methodName = "list_directory_summaries"
 	methodListIdentities                            methodName = "list_identities"
 	methodListVisibleSummariesByUsers               methodName = "list_visible_summaries_by_users"
+	methodListTeachersByClasses                     methodName = "list_teachers_by_classes"
 	methodCountDeliveries                           methodName = "count_deliveries"
 	methodCountOpenOnboardingImports                methodName = "count_open_onboarding_imports"
 	methodListCandidateActivity                     methodName = "list_candidate_activity"

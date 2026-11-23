@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -36,6 +37,7 @@ type userFixture struct {
 	pictures *pictureContent
 	settings *settingsDocumentStore
 	service  *user.Service
+	access   *access.Authorizer
 }
 
 // newUserFixture builds the fixture with the caller's grants.
@@ -60,6 +62,7 @@ func newUserFixture(t *testing.T, grants ...accesstest.Grant) *userFixture {
 	})
 	require.NoError(t, err)
 	fixture.service = service
+	fixture.access = authorization.Authorizer
 	return fixture
 }
 

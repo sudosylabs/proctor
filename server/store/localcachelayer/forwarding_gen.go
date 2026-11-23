@@ -54,6 +54,8 @@ type localCacheStores struct {
 	examRecordsOnce                sync.Once
 	examExport                     store.ExamExportStore
 	examExportOnce                 sync.Once
+	auditExport                    store.AuditExportStore
+	auditExportOnce                sync.Once
 	examResource                   store.ExamResourceStore
 	examResourceOnce               sync.Once
 	examCorrection                 store.ExamCorrectionStore
@@ -232,6 +234,11 @@ type examRecordsStore struct {
 
 type examExportStore struct {
 	store.ExamExportStore
+	layer *Layer
+}
+
+type auditExportStore struct {
+	store.AuditExportStore
 	layer *Layer
 }
 
@@ -633,6 +640,16 @@ func (l *Layer) ExamExport() store.ExamExportStore {
 		}
 	})
 	return l.stores.examExport
+}
+
+func (l *Layer) AuditExport() store.AuditExportStore {
+	l.stores.auditExportOnce.Do(func() {
+		next := l.Store.AuditExport()
+		if next != nil {
+			l.stores.auditExport = &auditExportStore{AuditExportStore: next, layer: l}
+		}
+	})
+	return l.stores.auditExport
 }
 
 func (l *Layer) ExamResource() store.ExamResourceStore {
@@ -1076,6 +1093,7 @@ var (
 	_ store.ExamIntegrityReviewStore        = (*examIntegrityReviewStore)(nil)
 	_ store.ExamRecordsStore                = (*examRecordsStore)(nil)
 	_ store.ExamExportStore                 = (*examExportStore)(nil)
+	_ store.AuditExportStore                = (*auditExportStore)(nil)
 	_ store.ExamResourceStore               = (*examResourceStore)(nil)
 	_ store.ExamCorrectionStore             = (*examCorrectionStore)(nil)
 	_ store.ExamStarterWorkspaceStore       = (*examStarterWorkspaceStore)(nil)

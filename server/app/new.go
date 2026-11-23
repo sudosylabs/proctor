@@ -89,7 +89,7 @@ func New(deps Dependencies) (*App, error) {
 	}
 
 	acceptor.accept = onboardingPorts.AcceptExternalIdentity
-	runtime, err := newJobRuntime(deps, shared, authorizer, exams, users, defaultPictureJobs, onboardingPorts, wake)
+	runtime, err := newJobRuntime(deps, shared, authorizer, exams, administrations, users, defaultPictureJobs, onboardingPorts, wake)
 	if err != nil {
 		return nil, err
 	}
@@ -339,6 +339,7 @@ func newAdministration(
 		Sessions:                deps.Sessions,
 		Plugins:                 deps.Plugins,
 		AssistantProviders:      deps.AssistantProviders,
+		AuditExportContent:      deps.FileContent,
 		Now:                     time.Now,
 	})
 }

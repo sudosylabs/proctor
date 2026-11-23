@@ -82,83 +82,33 @@ type examExportCleanupHandler struct {
 	exports store.ExamExportStore
 	content ExamExportPurger
 }
-type examExportCleanupCommand struct {
-	BatchSize int `json:"batch_size"`
-}
 
 func (h examExportCleanupHandler) Run(ctx context.Context, e job.Execution) job.Outcome {
-	var command examExportCleanupCommand
-	if h.exports == nil ||
-		h.content == nil ||
-		model.DecodeStrictJobDocument(e.Job.Command, &command) != nil ||
-		command.BatchSize < 1 ||
-		command.BatchSize > 100 ||
-		e.Job.WorkReserved < 0 ||
-		e.Job.WorkReserved > 3 {
-		return job.PermanentFailure("job.command.invalid", errors.New("invalid Exam export cleanup command"))
+	return exportCleanupHandler[store.ExamExportArtifact]{sweep: h.sweep()}.Run(ctx, e)
+}
+
+// sweep is the exam export's cleanup on the shared export layer. A missing
+// collaborator leaves its steps nil, which the shared handler refuses.
+func (h examExportCleanupHandler) sweep() *exportSweep[store.ExamExportArtifact] {
+	sweep := &exportSweep[store.ExamExportArtifact]{
+		label: "Exam export",
+		code:  "exam.export.unavailable",
+		valid: func(a store.ExamExportArtifact) bool { return a.ExportID.IsValid() && a.AttemptID.IsValid() },
 	}
-
-	reserved, err := e.ReserveWork(ctx, 1, 3)
-	if err != nil {
-		return job.RetryableFailure("exam.export.unavailable", errors.New("Exam export cleanup reservation failed"))
+	if h.exports == nil || h.content == nil {
+		return sweep
 	}
-	if !reserved {
-		return job.PermanentFailure("exam.export.unavailable", errors.New("Exam export cleanup budget exhausted"))
+	sweep.reconcile = h.exports.Reconcile
+	sweep.begin = h.exports.BeginPurgeBatch
+	sweep.complete = h.exports.CompletePurge
+	sweep.purge = func(ctx context.Context, a store.ExamExportArtifact) error {
+		return h.content.PurgeExamExport(ctx, a.ExportID, a.AttemptID)
 	}
-
-	reconciled, err := h.exports.Reconcile(ctx, command.BatchSize)
-	if err != nil || reconciled < 0 || reconciled > command.BatchSize {
-		return job.RetryableFailure("exam.export.unavailable", errors.New("Exam export expiry reconciliation failed"))
-	}
-
-	artifacts, err := h.exports.BeginPurgeBatch(ctx, command.BatchSize)
-	if err != nil || len(artifacts) > command.BatchSize {
-		return job.RetryableFailure("exam.export.unavailable", errors.New("Exam export cleanup inventory failed"))
-	}
-
-	purged, failed := 0, false
-	for _, a := range artifacts {
-		if err = ctx.Err(); err != nil {
-			return job.RetryableFailure("exam.export.unavailable", errors.New("Exam export cleanup interrupted"))
-		}
-
-		if !a.ExportID.IsValid() || !a.AttemptID.IsValid() {
-			failed = true
-			continue
-		}
-
-		if err = h.content.PurgeExamExport(ctx, a.ExportID, a.AttemptID); err != nil {
-			failed = true
-			continue
-		}
-
-		if err = h.exports.CompletePurge(ctx, a); err != nil {
-			failed = true
-			continue
-		}
-
-		purged++
-	}
-
-	if failed {
-		return job.RetryableFailure("exam.export.unavailable", errors.New("Exam export cleanup remains incomplete"))
-	}
-
-	result, _ := json.Marshal(struct {
-		Reconciled     int `json:"reconciled"`
-		ObservedAbsent int `json:"observed_absent"`
-	}{reconciled, purged})
-	return job.Outcome{Kind: job.OutcomeSucceeded, Result: result}
+	return sweep
 }
 
 func examExportCleanupDescriptor(handler job.Handler) job.Descriptor {
-	descriptor := job.NewDescriptor(model.JobTypeExamExportCleanup, handler)
-	descriptor.PublicErrorCodes = []string{"job.command.invalid", "exam.export.unavailable"}
-	descriptor.BaseRetryDelay = time.Minute
-	descriptor.MaximumRetryDelay = 5 * time.Minute
-	descriptor.SuccessRetention = 7 * 24 * time.Hour
-	descriptor.FailureRetention = 7 * 24 * time.Hour
-	return descriptor
+	return exportCleanupDescriptor(model.JobTypeExamExportCleanup, "exam.export.unavailable", handler)
 }
 
 type examExportCleanupProposer struct {
@@ -167,24 +117,7 @@ type examExportCleanupProposer struct {
 }
 
 func (p examExportCleanupProposer) Propose(ctx context.Context, occurrence time.Time) error {
-	at := model.TimeUTC(p.now())
-	command, _ := json.Marshal(examExportCleanupCommand{BatchSize: 100})
-	job, err := model.NewJobWithDedupePolicy(
-		model.NewJobID(),
-		model.JobTypeExamExportCleanup,
-		command,
-		"exam-export-cleanup:"+model.TimeUTC(occurrence).Format("2006-01-02T15"),
-		model.JobDedupePermanent,
-		at,
-		at,
-		3,
-	)
-	if err != nil {
-		return err
-	}
-
-	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
-	return err
+	return exportCleanupProposer{jobs: p.jobs, now: p.now, jobType: model.JobTypeExamExportCleanup, dedupe: "exam-export-cleanup"}.Propose(ctx, occurrence)
 }
 
 // NewExamExportBuild registers the build of a requested exam export.

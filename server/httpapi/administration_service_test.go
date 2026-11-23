@@ -140,6 +140,7 @@ func (c administrationCatalog) Retention() store.RetentionStore                 
 func (c administrationCatalog) PluginSettings() store.PluginSettingsStore         { return nil }
 func (c administrationCatalog) Class() store.ClassStore                           { return nil }
 func (c administrationCatalog) EnvironmentProfile() store.EnvironmentProfileStore { return nil }
+func (c administrationCatalog) AuditExport() store.AuditExportStore               { return nil }
 
 // administrationRoleStore holds the Roles a test lists and records the
 // Roles the service created.

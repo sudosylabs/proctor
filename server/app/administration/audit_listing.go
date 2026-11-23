@@ -81,47 +81,21 @@ func (s *Service) ListAuditEvents(
 		return AuditEventPage{}, err
 	}
 
-	validAcademicVisibility := len(visibility.AllowedActions) > 0 &&
-		((visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) == 0) ||
-			(!visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) > 0))
-	if !visibility.InstitutionWide && !validAcademicVisibility {
+	if !validAuditVisibility(visibility) {
 		return AuditEventPage{}, access.DeniedError()
 	}
 	if query.Limit == 0 {
 		query.Limit = 50
 	}
-
-	if query.Limit < 1 ||
-		query.Limit > 200 ||
-		(query.ActorID != "" && !query.ActorID.IsValid()) ||
-		(query.SubjectUserID != "" && !query.SubjectUserID.IsValid()) ||
-		(query.BeforeID != "" && !query.BeforeID.IsValid()) ||
-		(query.Resource != nil && query.Resource.Validate() != nil) ||
-		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) ||
-		(query.Kind != "" && !query.Kind.IsValid()) ||
-		!validAuditListStatus(query.Status) {
+	if query.Limit < 1 || query.Limit > 200 || (query.BeforeID != "" && !query.BeforeID.IsValid()) {
 		return AuditEventPage{}, apperror.New("audit.query.invalid")
 	}
-	actions, err := auditListActions(query.Actions)
+	options, err := auditListFilters(query)
 	if err != nil {
 		return AuditEventPage{}, err
 	}
-
-	options := store.AuditListOptions{
-		ActorID:         model.UserID(strings.TrimSpace(query.ActorID.String())),
-		SubjectUserID:   query.SubjectUserID,
-		Actions:         actions,
-		Kind:            query.Kind,
-		Status:          query.Status,
-		Resource:        query.Resource,
-		Since:           query.Since,
-		Until:           query.Until,
-		Ascending:       query.Ascending,
-		BeforeCreatedAt: query.BeforeCreatedAt,
-		BeforeID:        query.BeforeID,
-		Limit:           query.Limit + 1,
-		Visibility:      visibility,
-	}
+	options.BeforeCreatedAt, options.BeforeID = query.BeforeCreatedAt, query.BeforeID
+	options.Limit, options.Visibility = query.Limit+1, visibility
 	events, err := s.audits.List(ctx, options)
 	if err != nil {
 		return AuditEventPage{}, auditListingError(err)
@@ -258,6 +232,38 @@ func (s *Service) auditNames(
 		return store.AuditNames{}, auditListingError(err)
 	}
 	return names, nil
+}
+
+// auditListFilters validates the listing's filters, the part of a query an
+// export freezes.
+func auditListFilters(query ListAuditEventsQuery) (store.AuditListOptions, error) {
+	if (query.ActorID != "" && !query.ActorID.IsValid()) ||
+		(query.SubjectUserID != "" && !query.SubjectUserID.IsValid()) ||
+		(query.Resource != nil && query.Resource.Validate() != nil) ||
+		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) ||
+		(query.Kind != "" && !query.Kind.IsValid()) ||
+		!validAuditListStatus(query.Status) {
+		return store.AuditListOptions{}, apperror.New("audit.query.invalid")
+	}
+	actions, err := auditListActions(query.Actions)
+	if err != nil {
+		return store.AuditListOptions{}, err
+	}
+	options := store.AuditListOptions{
+		ActorID:       query.ActorID,
+		SubjectUserID: query.SubjectUserID,
+		Actions:       actions,
+		Kind:          query.Kind,
+		Status:        query.Status,
+		Since:         query.Since,
+		Until:         query.Until,
+		Ascending:     query.Ascending,
+	}
+	if query.Resource != nil {
+		resource := *query.Resource
+		options.Resource = &resource
+	}
+	return options, nil
 }
 
 func validAuditListStatus(status model.AuditStatus) bool {

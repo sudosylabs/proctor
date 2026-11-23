@@ -40,6 +40,7 @@ type Catalog interface {
 	ExamIntegrityReview() ExamIntegrityReviewStore
 	ExamRecords() ExamRecordsStore
 	ExamExport() ExamExportStore
+	AuditExport() AuditExportStore
 	ExamResource() ExamResourceStore
 	ExamCorrection() ExamCorrectionStore
 	ExamStarterWorkspace() ExamStarterWorkspaceStore

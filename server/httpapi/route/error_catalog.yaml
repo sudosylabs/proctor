@@ -95,6 +95,18 @@ codes:
     description: "No assistant profile has that ID."
   - code: assistant_profile.unavailable
     description: "Environment profiles cannot be read or changed now; retry later."
+  - code: audit.export.expired
+    description: "The audit export's fixed expiry has passed, so it can't be downloaded."
+  - code: audit.export.limit
+    description: "The audit listing selects more events than one export can hold; narrow the filters."
+  - code: audit.export.not_found
+    description: "The audit export does not exist or is not the caller's."
+  - code: audit.export.not_ready
+    description: "The audit export is still being built."
+  - code: audit.export.policy_unconfigured
+    description: "The retention policy's export lifetime is 0, so exports can't be created."
+  - code: audit.export.unavailable
+    description: "The audit export failed or is temporarily unavailable; retry later."
   - code: audit.internal
     description: "The server produced an audit event it cannot record; the operation is refused."
   - code: audit.query.invalid

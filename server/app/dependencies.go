@@ -42,6 +42,7 @@ type FileContent interface {
 	jobs.RetentionContentPurger
 	exam.ExportContent
 	exam.CopyContent
+	administration.AuditExportContent
 	attempt.Content
 	resource.FileContent
 	correction.Content

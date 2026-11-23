@@ -52,6 +52,7 @@ func (c *catalogFake) RetentionPolicy() store.RetentionPolicyStore         { ret
 func (c *catalogFake) Retention() store.RetentionStore                     { return c.retention }
 func (c *catalogFake) PluginSettings() store.PluginSettingsStore           { return c.pluginSettings }
 func (c *catalogFake) EnvironmentProfile() store.EnvironmentProfileStore   { return nil }
+func (c *catalogFake) AuditExport() store.AuditExportStore                 { return nil }
 func (c *catalogFake) Class() store.ClassStore                             { return nil }
 func (c *catalogFake) AttemptEnvironment() store.AttemptEnvironmentStore   { return nil }
 func (c *catalogFake) AttemptRuntimeLease() store.AttemptRuntimeLeaseStore { return nil }

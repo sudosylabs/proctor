@@ -41,6 +41,7 @@ func newJobRuntime(
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
 	exams examServices,
+	administrations *administration.Service,
 	users *user.Service,
 	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
@@ -71,7 +72,7 @@ func newJobRuntime(
 	if err != nil {
 		return jobRuntime{}, err
 	}
-	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth, domainEvents)
+	definitions := buildApplicationJobDefinitions(deps, shared, exams, administrations, users, defaultPictureJobs, onboardingPorts, mailHealth, domainEvents)
 	engine, err := job.New(job.Dependencies{
 		Store:         deps.Store.Job(),
 		Descriptors:   definitions.descriptors,
@@ -187,6 +188,7 @@ func buildApplicationJobDefinitions(
 	deps Dependencies,
 	shared sharedMechanics,
 	exams examServices,
+	administrations *administration.Service,
 	users *user.Service,
 	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
@@ -209,6 +211,11 @@ func buildApplicationJobDefinitions(
 	}
 	retentionJobs := administration.NewRetentionJobs(shared.audit, deps.Store.Retention(), deps.Store.User(), shared.mail, time.Now)
 	jobStore, now := deps.Store.Job(), time.Now
+	// A nil service must reach the handler as a nil interface, which it refuses.
+	var auditExports jobs.AuditExportBuilder
+	if administrations != nil {
+		auditExports = administrations
+	}
 	// The one list of every enabled job.
 	registrations := []job.Registration{
 		jobs.NewDefaultProfilePicture(users),
@@ -238,6 +245,8 @@ func buildApplicationJobDefinitions(
 		jobs.NewExamSittingLifecycleRecovery(exams.sittings, jobStore, now),
 		jobs.NewExamExportBuild(exams.exports),
 		jobs.NewExamExportCleanup(deps.Store.ExamExport(), deps.FileContent, jobStore, now),
+		jobs.NewAuditExportBuild(auditExports),
+		jobs.NewAuditExportCleanup(deps.Store.AuditExport(), deps.FileContent, jobStore, now),
 		jobs.NewDomainEventDispatch(deps.Store.DomainEvent(), domainEvents),
 		jobs.NewRetentionExpiry(deps.Store.Retention(), retentionJobs.ExpiryAudit, jobStore, now),
 		jobs.NewRetentionReconcile(deps.Store.Retention(), retentionJobs.Audit, jobStore, now),

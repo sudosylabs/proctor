@@ -13,6 +13,7 @@ import (
 	"io"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/internal/exportfile"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -54,39 +55,28 @@ func (s *Exports) OpenExamExport(
 	q ExportQuery,
 ) (_ *ExportDownload, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	result, err := s.getExport(ctx, inv, q)
+	// The archive's lifetime runs on database time, never the node's clock.
+	export, body, err := exportfile.OpenStable(ctx,
+		func(ctx context.Context) (*model.ExamExport, store.ExamExportArtifact, error) {
+			result, err := s.getExport(ctx, inv, q)
+			if err == nil {
+				err = requireReadyExport(result)
+			}
+			if err != nil {
+				return nil, store.ExamExportArtifact{}, err
+			}
+			return result.Export, result.Artifact, nil
+		},
+		func(ctx context.Context, a store.ExamExportArtifact) (io.ReadCloser, error) {
+			return s.content.OpenExamExport(ctx, a.ExportID, a.AttemptID)
+		},
+		func(err error) error { return apperror.New("exam.export.unavailable").Wrap(err) },
+	)
 	if err != nil {
 		return nil, err
 	}
-	if err = requireReadyExport(result); err != nil {
-		return nil, err
-	}
 
-	body, err := s.content.OpenExamExport(ctx, result.Artifact.ExportID, result.Artifact.AttemptID)
-	if err != nil {
-		return nil, apperror.New("exam.export.unavailable").Wrap(err)
-	}
-	if body == nil {
-		return nil, apperror.New("exam.export.unavailable").Wrap(errors.New("missing export body"))
-	}
-
-	// Opening can block across expiry or an authority change, so re-read before
-	// exposing the body. The archive's lifetime runs on database time, never the
-	// node's clock.
-	current, err := s.getExport(ctx, inv, q)
-	if err == nil {
-		err = requireReadyExport(current)
-	}
-	if err == nil && current.Artifact != result.Artifact {
-		err = apperror.New("exam.export.unavailable").Wrap(errors.New("export artifact changed during open"))
-	}
-
-	if err != nil {
-		_ = body.Close()
-		return nil, err
-	}
-
-	return &ExportDownload{Export: current.Export, Body: body}, nil
+	return &ExportDownload{Export: export, Body: body}, nil
 }
 
 func (s *Exports) getExport(ctx context.Context, inv invocation.Invocation, q ExportQuery) (*store.ExamExportDownload, error) {

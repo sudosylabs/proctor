@@ -77,6 +77,9 @@ type RetentionRetirementID string
 // ExamExportID identifies one finite examination archive.
 type ExamExportID string
 
+// AuditExportID identifies one finite file of audit events.
+type AuditExportID string
+
 // AttemptParticipationID identifies one bounded continuity-credential lease.
 type AttemptParticipationID string
 

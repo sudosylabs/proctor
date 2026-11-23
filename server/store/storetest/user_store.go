@@ -1397,7 +1397,7 @@ func testUserStoreListDisplayNames(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	names, err := ss.User().ListDisplayNames(ctx, []model.UserID{named.ID, unnamed.ID, named.ID, model.NewUserID()})
 	require.NoError(t, err)
-	expected := []store.UserDisplayName{{UserID: named.ID, DisplayName: named.DisplayName}, {UserID: unnamed.ID, DisplayName: unnamed.Username}}
+	expected := []store.UserDisplayName{{UserID: named.ID, DisplayName: named.DisplayName}, {UserID: unnamed.ID, DisplayName: unnamed.Username, UsernameFallback: true}}
 	slices.SortFunc(expected, func(a, b store.UserDisplayName) int { return strings.Compare(a.UserID.String(), b.UserID.String()) })
 	// A missing user is absent, a repeated one is read once, and a user with no
 	// display name is presented by username.

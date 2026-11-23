@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"maps"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -405,9 +404,8 @@ func (h onboardingImportHandlers) report(request route.Request) (route.ProtocolR
 	return route.BinaryDownload(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).WithHeaders(headers), nil
 }
 
-// nameOnboardingImportPeople names the creators of views and the accounts
-// rows were matched to. An import holds up to 50,000 rows, so the people are
-// read store.MaximumUserDisplayNames at a time.
+// nameOnboardingImportPeople names creators and matched accounts using the
+// same directory visibility throughout the import.
 func nameOnboardingImportPeople(
 	request route.Request,
 	resolver *people.Resolver,
@@ -415,28 +413,13 @@ func nameOnboardingImportPeople(
 	rows []onboarding.OnboardingImportRowView,
 ) (people.Refs, error) {
 	ids := make([]model.UserID, 0, len(views)+len(rows))
-	seen := make(map[model.UserID]struct{}, cap(ids))
-	add := func(id model.UserID) {
-		if _, repeated := seen[id]; !id.IsZero() && !repeated {
-			seen[id] = struct{}{}
-			ids = append(ids, id)
-		}
-	}
 	for _, view := range views {
-		add(view.CreatedByUserID)
+		ids = append(ids, view.CreatedByUserID)
 	}
 	for _, row := range rows {
-		add(row.UserID)
+		ids = append(ids, row.UserID)
 	}
-	refs := people.Refs{}
-	for start := 0; start < len(ids); start += store.MaximumUserDisplayNames {
-		chunk, err := namePeople(request, resolver, ids[start:min(start+store.MaximumUserDisplayNames, len(ids))]...)
-		if err != nil {
-			return nil, err
-		}
-		maps.Copy(refs, chunk)
-	}
-	return refs, nil
+	return namePeople(request, resolver, ids...)
 }
 
 func nameOnboardingImport(

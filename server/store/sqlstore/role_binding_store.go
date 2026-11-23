@@ -656,7 +656,7 @@ func (s SQLRoleBindingStore) ListByScope(
 }
 
 // ListTeachersByClasses names, for each listed class with any, the first
-// Limit distinct current holders of a role bound at that class, and counts
+// Limit distinct current holders of a teaching role bound at that class, and counts
 // the rest, in one statement for the whole page.
 func (s SQLRoleBindingStore) ListTeachersByClasses(
 	ctx context.Context,
@@ -689,6 +689,7 @@ func (s SQLRoleBindingStore) ListTeachersByClasses(
 		JOIN roles ON roles.id = role_bindings.role_id AND roles.archived_at IS NULL
 		JOIN users ON users.id = role_bindings.user_id AND users.archived_at IS NULL
 		WHERE role_bindings.scope_type = 'class'
+			AND roles.permissions && ?::text[]
 			AND role_bindings.scope_id = ANY(?)
 			AND role_bindings.archived_at IS NULL
 			AND role_bindings.start_at <= ?
@@ -700,6 +701,12 @@ func (s SQLRoleBindingStore) ListTeachersByClasses(
 		FROM holders
 	)
 	SELECT class_id, user_id, total FROM ranked WHERE position <= ? ORDER BY class_id, position`,
+		pq.Array([]string{
+			string(model.ActionExamManage),
+			string(model.ActionExamManageOverride),
+			string(model.ActionSubmissionReview),
+			string(model.ActionSubmissionReviewOverride),
+		}),
 		pq.Array(idStrings(options.ClassIDs)), activeAt, activeAt, options.Limit); err != nil {
 		return nil, fmt.Errorf("list class teachers: %w", err)
 	}

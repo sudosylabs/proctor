@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -31,18 +32,14 @@ type classMemberResponse struct {
 // is, as a unit member listing names them, and the transfer its end is.
 type classMemberListItemResponse struct {
 	classMemberResponse
-	User     academicUnitMemberUserResponse `json:"user"`
-	Transfer *classMemberTransferResponse   `json:"transfer,omitempty"`
+	User     personRefResponse            `json:"user"`
+	Email    string                       `json:"email,omitempty"`
+	Transfer *classMemberTransferResponse `json:"transfer,omitempty"`
 }
 
 type classMemberTransferResponse struct {
-	ToClass classMemberTransferClassResponse `json:"to_class"`
-	At      string                           `json:"at"`
-}
-
-type classMemberTransferClassResponse struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ToClass classRefResponse `json:"to_class"`
+	At      string           `json:"at"`
 }
 
 type enrollClassMemberRequest struct {
@@ -57,11 +54,12 @@ type classEnrollmentResponse struct {
 }
 
 type classMemberHandlers struct {
-	app *academic.Service
+	app    *academic.Service
+	people *people.Resolver
 }
 
-func classMemberResource(app *academic.Service) route.Resource {
-	h := classMemberHandlers{app: app}
+func classMemberResource(app *academic.Service, resolver *people.Resolver) route.Resource {
+	h := classMemberHandlers{app: app, people: resolver}
 	return route.NewResource(
 		"class-members",
 		route.Endpoint{
@@ -118,6 +116,18 @@ func (h classMemberHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
+	ids := make([]model.UserID, 0, len(page.Members))
+	for _, member := range page.Members {
+		if !member.UserID.IsValid() {
+			return route.Result{}, route.ErrUnpresentable
+		}
+		ids = append(ids, member.UserID)
+	}
+	refs, err := namePeople(request, h.people, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	return membershipListResult(
 		scope,
 		page.ActiveAt,
@@ -130,13 +140,12 @@ func (h classMemberHandlers) list(request route.Request) (route.Result, error) {
 			identity := page.Users[member.UserID]
 			item := classMemberListItemResponse{
 				classMemberResponse: classMemberResponseFromModel(member),
-				User: academicUnitMemberUserResponse{
-					DisplayName: identity.DisplayName, Username: identity.Username, Email: identity.Email,
-				},
+				User:                *personRef(refs, member.UserID),
+				Email:               identity.Email,
 			}
 			if transfer, transferred := page.Transfers[member.ID]; transferred {
 				item.Transfer = &classMemberTransferResponse{
-					ToClass: classMemberTransferClassResponse{ID: transfer.ToClassID.String(), Name: transfer.ToClassName},
+					ToClass: classRefResponse{ID: transfer.ToClassID.String(), DisplayName: transfer.ToClassName},
 					At:      model.FormatRFC3339(transfer.At),
 				}
 			}

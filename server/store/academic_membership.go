@@ -269,7 +269,7 @@ type ClassMemberStore interface {
 	// membership of the same student in another class starting exactly at
 	// that end: the transfer that ends it. A membership without one has no
 	// entry. At most MaximumClassStudentCountClasses memberships are read.
-	ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID) ([]ClassMemberTransfer, error)
+	ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID, visibility ClassVisibilityScope) ([]ClassMemberTransfer, error)
 	ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.ClassMember, error)
 	// SeedEnroll and SeedEnd are unaudited fixture writes for conformance and
 	// integration tests; production code never calls a Seed operation.

@@ -24,7 +24,7 @@ type userMembershipResponse struct {
 	Kind           string                      `json:"kind"`
 	ID             string                      `json:"id"`
 	AcademicUnit   *userMembershipNameResponse `json:"academic_unit,omitempty"`
-	Class          *userMembershipNameResponse `json:"class,omitempty"`
+	Class          *classRefResponse           `json:"class,omitempty"`
 	ProgrammeLevel *userMembershipNameResponse `json:"programme_level,omitempty"`
 	Programme      *userMembershipNameResponse `json:"programme,omitempty"`
 	AcademicPeriod *userMembershipNameResponse `json:"academic_period,omitempty"`
@@ -33,8 +33,8 @@ type userMembershipResponse struct {
 }
 
 type userMembershipNameResponse struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
 }
 
 // userMembershipCursor is the last listed membership's kind, start and ID.
@@ -122,7 +122,7 @@ func (h userMembershipHandlers) list(request route.Request) (route.Result, error
 
 func userMembershipResponseFromStore(membership store.UserMembership) userMembershipResponse {
 	named := func(id, name string) *userMembershipNameResponse {
-		return &userMembershipNameResponse{ID: id, Name: name}
+		return &userMembershipNameResponse{ID: id, DisplayName: name}
 	}
 	response := userMembershipResponse{
 		Kind:    string(membership.Kind),
@@ -134,7 +134,7 @@ func userMembershipResponseFromStore(membership store.UserMembership) userMember
 		response.AcademicUnit = named(membership.AcademicUnitID.String(), membership.AcademicUnitName)
 		return response
 	}
-	response.Class = named(membership.ClassID.String(), membership.ClassName)
+	response.Class = &classRefResponse{ID: membership.ClassID.String(), DisplayName: membership.ClassName}
 	response.ProgrammeLevel = named(membership.ProgrammeLevelID.String(), membership.ProgrammeLevelName)
 	response.Programme = named(membership.ProgrammeID.String(), membership.ProgrammeName)
 	response.AcademicPeriod = named(membership.AcademicPeriodID.String(), membership.AcademicPeriodName)

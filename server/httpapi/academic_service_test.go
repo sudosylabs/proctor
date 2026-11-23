@@ -710,6 +710,6 @@ func (s *academicBindingRecords) ListVisibleSummariesByUsers(_ context.Context, 
 	return s.summaries, nil
 }
 
-func (s *academicClassMemberRecords) ListTransfers(context.Context, []model.ClassMemberID) ([]store.ClassMemberTransfer, error) {
+func (s *academicClassMemberRecords) ListTransfers(context.Context, []model.ClassMemberID, store.ClassVisibilityScope) ([]store.ClassMemberTransfer, error) {
 	return s.transfers, nil
 }

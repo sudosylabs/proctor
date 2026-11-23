@@ -14,6 +14,7 @@ package people
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -21,8 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Ref is one named person. A zero DisplayName means the account was removed:
-// the ID is kept so a client can still tell two former users apart.
+// Ref is one person referenced in a record. A display name can be absent
+// when an account was removed or a username is its only name and is hidden.
 type Ref struct {
 	ID          model.UserID
 	DisplayName string
@@ -32,8 +33,8 @@ type Ref struct {
 	Visible  bool
 }
 
-// Removed reports whether the account no longer exists to be named.
-func (r Ref) Removed() bool { return r.DisplayName == "" }
+// Named reports whether the caller has a name it may show for this person.
+func (r Ref) Named() bool { return r.DisplayName != "" }
 
 // Refs maps each requested ID to its Ref. A missing key is a zero ID.
 type Refs map[model.UserID]Ref
@@ -89,9 +90,8 @@ func New(catalog store.Catalog, authorizer *access.Authorizer) *Resolver {
 
 var errUnavailable = errors.New("people resolver is not configured")
 
-// Resolve names up to store.MaximumUserDisplayNames distinct users in at most
-// three bounded reads, whatever the page size. Call it only for a record the
-// principal is already authorized to read; it grants nothing itself.
+// Resolve names the people an authorized record refers to. Resolve visibility
+// once so even an import can name its people with bounded batches of reads.
 func (r *Resolver) Resolve(ctx context.Context, principal model.Principal, ids []model.UserID) (Refs, error) {
 	distinct := distinctUserIDs(ids)
 	refs := make(Refs, len(distinct))
@@ -101,36 +101,46 @@ func (r *Resolver) Resolve(ctx context.Context, principal model.Principal, ids [
 	if r == nil || r.users == nil || r.authorizer == nil {
 		return nil, r.fail(errUnavailable)
 	}
-	if len(distinct) > store.MaximumUserDisplayNames {
-		return nil, r.fail(errors.New("too many people to name in one read"))
-	}
-
-	names, err := r.users.ListDisplayNames(ctx, distinct)
-	if err != nil {
-		return nil, r.fail(err)
-	}
-	for _, name := range names {
-		refs[name.UserID] = Ref{ID: name.UserID, DisplayName: name.DisplayName}
-	}
 
 	visibility, err := r.authorizer.GrantedUserVisibility(ctx, principal)
 	if err != nil {
 		return nil, r.fail(err)
 	}
-	visible, err := r.users.ListVisibleDisplayNames(ctx, distinct, visibility)
+	for batch := range slices.Chunk(distinct, store.MaximumUserDisplayNames) {
+		if err := r.resolveBatch(ctx, refs, batch, visibility); err != nil {
+			return nil, r.fail(err)
+		}
+	}
+	return refs, nil
+}
+
+func (r *Resolver) resolveBatch(ctx context.Context, refs Refs, ids []model.UserID, visibility store.UserVisibilityScope) error {
+	names, err := r.users.ListDisplayNames(ctx, ids)
 	if err != nil {
-		return nil, r.fail(err)
+		return err
+	}
+	for _, name := range names {
+		ref := Ref{ID: name.UserID}
+		if !name.UsernameFallback {
+			ref.DisplayName = name.DisplayName
+		}
+		refs[name.UserID] = ref
+	}
+
+	visible, err := r.users.ListVisibleDisplayNames(ctx, ids, visibility)
+	if err != nil {
+		return err
 	}
 	visibleIDs := make([]model.UserID, 0, len(visible))
 	for _, name := range visible {
 		visibleIDs = append(visibleIDs, name.UserID)
 	}
 	if len(visibleIDs) == 0 {
-		return refs, nil
+		return nil
 	}
 	identities, err := r.users.ListIdentities(ctx, visibleIDs)
 	if err != nil {
-		return nil, r.fail(err)
+		return err
 	}
 	for _, identity := range identities {
 		ref, ok := refs[identity.ID]
@@ -138,10 +148,13 @@ func (r *Resolver) Resolve(ctx context.Context, principal model.Principal, ids [
 			continue
 		}
 		ref.Username = identity.Username
+		if ref.DisplayName == "" {
+			ref.DisplayName = identity.Username
+		}
 		ref.Visible = true
 		refs[identity.ID] = ref
 	}
-	return refs, nil
+	return nil
 }
 
 func distinctUserIDs(ids []model.UserID) []model.UserID {
@@ -168,9 +181,9 @@ type Records struct {
 	Classes       []model.ClassID
 }
 
-// RecordNames are the current names Records found. An archived or missing
-// record has no name. A role keeps its Name so the protected System
-// Administrator role can be shown localized.
+// RecordNames are the names Records found. Archived roles keep their names
+// on historical references. A role keeps its machine name so the protected
+// System Administrator role can be shown localized.
 type RecordNames struct {
 	Roles         map[model.RoleID]store.AuditRoleName
 	AcademicUnits map[model.AcademicUnitID]string
@@ -189,6 +202,7 @@ func (r *Resolver) NameRecords(ctx context.Context, records Records) (RecordName
 	}
 	names, err := r.audits.ListNames(ctx, store.AuditNameOptions{
 		RoleIDs:                     records.Roles,
+		IncludeArchivedRoles:        true,
 		AcademicUnitIDs:             records.AcademicUnits,
 		AcademicUnitInstitutionWide: true,
 		ClassIDs:                    records.Classes,

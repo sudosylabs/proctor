@@ -82,11 +82,15 @@ func testClassMemberTransfers(t *testing.T, ss store.Store) {
 	stay, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: from.ID, UserID: staying.ID, StartsAt: now.Add(-time.Hour)})
 	require.NoError(t, err)
 
-	transfers, err := ss.ClassMember().ListTransfers(ctx, []model.ClassMemberID{first.Membership.ID, ended.ID, stay.Membership.ID})
+	transfers, err := ss.ClassMember().ListTransfers(ctx, []model.ClassMemberID{first.Membership.ID, ended.ID, stay.Membership.ID}, store.ClassVisibilityScope{InstitutionWide: true})
 	require.NoError(t, err)
 	require.Len(t, transfers, 1, "an end that is no transfer, and no end, have no entry")
 	require.Equal(t, first.Membership.ID, transfers[0].ClassMemberID)
 	require.Equal(t, to.ID, transfers[0].ToClassID)
 	require.Equal(t, to.DisplayName, transfers[0].ToClassName)
 	require.True(t, at.Equal(transfers[0].At))
+
+	transfers, err = ss.ClassMember().ListTransfers(ctx, []model.ClassMemberID{first.Membership.ID}, store.ClassVisibilityScope{ClassIDs: []model.ClassID{from.ID}})
+	require.NoError(t, err)
+	require.Empty(t, transfers, "a transfer cannot reveal a class outside the viewer's scope")
 }

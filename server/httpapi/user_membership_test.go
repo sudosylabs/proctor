@@ -79,7 +79,7 @@ func TestUserMembershipsListOnlyWhatTheCallerMayViewMembersOf(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
 	require.JSONEq(t, `{"kind": "academic_unit", "id": "`+unitMembership.ID+`", "start_at": "2026-09-01T00:00:00Z",
-		"academic_unit": {"id": "`+world.unit.ID.String()+`", "name": "Computing"}}`, string(page.Items[0]))
+		"academic_unit": {"id": "`+world.unit.ID.String()+`", "display_name": "Computing"}}`, string(page.Items[0]))
 	require.NotEmpty(t, page.NextCursor)
 
 	response, records = serve(t, path+"?cursor="+page.NextCursor, grants...)
@@ -90,10 +90,10 @@ func TestUserMembershipsListOnlyWhatTheCallerMayViewMembersOf(t *testing.T) {
 	require.True(t, start.Equal(asked.AfterStartAt))
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.JSONEq(t, `{"kind": "class", "id": "`+enrolment.ID+`", "start_at": "2026-09-01T00:00:00Z", "end_at": "2027-06-28T00:00:00Z",
-		"class": {"id": "`+world.class.ID.String()+`", "name": "CS2 A"},
-		"programme_level": {"id": "`+world.level.ID.String()+`", "name": "Year 2"},
-		"programme": {"id": "`+world.programme.ID.String()+`", "name": "BSc Computing"},
-		"academic_period": {"id": "`+world.period.ID.String()+`", "name": "2026/27"}}`, string(page.Items[1]))
+		"class": {"id": "`+world.class.ID.String()+`", "display_name": "CS2 A"},
+		"programme_level": {"id": "`+world.level.ID.String()+`", "display_name": "Year 2"},
+		"programme": {"id": "`+world.programme.ID.String()+`", "display_name": "BSc Computing"},
+		"academic_period": {"id": "`+world.period.ID.String()+`", "display_name": "2026/27"}}`, string(page.Items[1]))
 
 	response, records = serve(t, path, inAcademicUnit("", world.unit.ID, model.ActionAcademicUnitMembersView))
 	assertHTTPProblem(t, response, http.StatusForbidden, "authorization.denied")

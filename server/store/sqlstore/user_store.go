@@ -1362,13 +1362,13 @@ func (s SQLUserStore) UpdateLastLogin(ctx context.Context, input *store.UserLast
 }
 
 // ListMFAStates reads the active two-step credentials of up to
-// MaximumUserDisplayNames users through the predicate the directory filters
+// 200 users through the predicate the directory filters
 // on.
 func (s SQLUserStore) ListMFAStates(ctx context.Context, userIDs []model.UserID) ([]store.UserMFAState, error) {
 	if len(userIDs) == 0 {
 		return []store.UserMFAState{}, nil
 	}
-	if len(userIDs) > store.MaximumUserDisplayNames || !validVisibilityIDs(userIDs) {
+	if len(userIDs) > 200 || !validVisibilityIDs(userIDs) {
 		return nil, store.NewErrInvalidInput("user", "mfa_states", nil)
 	}
 	rows := []struct {
@@ -1398,10 +1398,12 @@ func (s SQLUserStore) ListDisplayNames(ctx context.Context, userIDs []model.User
 		return result, nil
 	}
 	var rows []struct {
-		ID          string `db:"id"`
-		DisplayName string `db:"display_name"`
+		ID               string `db:"id"`
+		DisplayName      string `db:"display_name"`
+		UsernameFallback bool   `db:"username_fallback"`
 	}
-	if err = s.GetMaster().Select(ctx, &rows, `SELECT id, COALESCE(NULLIF(display_name, ''), username) AS display_name
+	if err = s.GetMaster().Select(ctx, &rows, `SELECT id, COALESCE(NULLIF(display_name, ''), username) AS display_name,
+			display_name = '' AS username_fallback
 		FROM users WHERE id = ANY(?) AND archived_at IS NULL ORDER BY id`, pq.Array(ids)); err != nil {
 		return nil, translateError("user", "display_names", err)
 	}
@@ -1410,7 +1412,7 @@ func (s SQLUserStore) ListDisplayNames(ctx context.Context, userIDs []model.User
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, store.UserDisplayName{UserID: id, DisplayName: row.DisplayName})
+		result = append(result, store.UserDisplayName{UserID: id, DisplayName: row.DisplayName, UsernameFallback: row.UsernameFallback})
 	}
 	return result, nil
 }

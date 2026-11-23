@@ -838,7 +838,7 @@ func (s *Service) ListClassMembersPage(
 	}
 
 	result.Total = total
-	if err := s.describeClassMembers(ctx, result, showEmail); err != nil {
+	if err := s.describeClassMembers(ctx, inv, result, showEmail); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -846,7 +846,7 @@ func (s *Service) ListClassMembersPage(
 
 // describeClassMembers names the members and their transfers in one read
 // each for the page.
-func (s *Service) describeClassMembers(ctx context.Context, page *ClassMemberPage, showEmail bool) error {
+func (s *Service) describeClassMembers(ctx context.Context, inv invocation.Invocation, page *ClassMemberPage, showEmail bool) error {
 	page.Users = map[model.UserID]store.UserIdentity{}
 	page.Transfers = map[model.ClassMemberID]store.ClassMemberTransfer{}
 	if len(page.Members) == 0 {
@@ -884,7 +884,18 @@ func (s *Service) describeClassMembers(ctx context.Context, page *ClassMemberPag
 	if len(ended) == 0 {
 		return nil
 	}
-	transfers, err := s.classMembers.ListTransfers(ctx, ended)
+	scope, err := s.authorizer.GrantedScopes(ctx, inv.Principal(), model.ActionClassView, model.ResourceClass)
+	if err != nil {
+		return err
+	}
+	if !scope.InstitutionWide && len(scope.AcademicUnitRootIDs) == 0 && len(scope.ClassIDs) == 0 {
+		return nil
+	}
+	transfers, err := s.classMembers.ListTransfers(ctx, ended, store.ClassVisibilityScope{
+		InstitutionWide:     scope.InstitutionWide,
+		AcademicUnitRootIDs: scope.AcademicUnitRootIDs,
+		ClassIDs:            scope.ClassIDs,
+	})
 	if err != nil {
 		return ClassMemberStoreErrors.Translate(err)
 	}

@@ -69,9 +69,8 @@ type ArchiveClassCommand struct {
 const ClassTeacherLimit = 3
 
 // ClassDetail is one class and, when the caller holds class.members.view on
-// it, its teachers. Teachers are the people holding a current Role Binding at
-// the class itself: membership is for students only, so a binding at the
-// class is the domain's only class-level relationship for staff.
+// it, its teachers. Teachers are the people currently bound to a role at the
+// class with exam management or submission review permission.
 type ClassDetail struct {
 	Class *model.Class
 	// Teachers is nil when the caller may not see the class's people, and

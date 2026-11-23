@@ -68,7 +68,7 @@ func (s SQLAuditStore) ListNames(ctx context.Context, options store.AuditNameOpt
 	if err := s.listAuditClassNames(ctx, classes, options.ClassVisibility, names.Classes); err != nil {
 		return store.AuditNames{}, err
 	}
-	if err := s.listAuditRoleNames(ctx, roles, names.Roles); err != nil {
+	if err := s.listAuditRoleNames(ctx, roles, options.IncludeArchivedRoles, names.Roles); err != nil {
 		return store.AuditNames{}, err
 	}
 	return names, nil
@@ -147,16 +147,17 @@ func (s SQLAuditStore) listAuditClassNames(
 	})
 }
 
-// listAuditRoleNames names the unarchived roles; the caller asks only for
-// roles the reader may see.
-func (s SQLAuditStore) listAuditRoleNames(ctx context.Context, ids []string, names map[model.RoleID]store.AuditRoleName) error {
+// listAuditRoleNames names the roles the caller has already scoped.
+func (s SQLAuditStore) listAuditRoleNames(ctx context.Context, ids []string, includeArchived bool, names map[model.RoleID]store.AuditRoleName) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	query := sq.Select("roles.id", "roles.name", "roles.display_name").
 		From("roles").
-		Where("roles.id = ANY(?)", pq.Array(ids)).
-		Where(sq.Eq{"roles.archived_at": nil})
+		Where("roles.id = ANY(?)", pq.Array(ids))
+	if !includeArchived {
+		query = query.Where(sq.Eq{"roles.archived_at": nil})
+	}
 	return s.selectAuditNames(ctx, query, "role", func(row auditNameRow) error {
 		id, err := parsePersistedID("role", "id", row.ID, model.ParseRoleID)
 		if err == nil {

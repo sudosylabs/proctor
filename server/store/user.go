@@ -323,10 +323,10 @@ type UserStore interface {
 	// ListDirectorySummaries omits a user with no current affiliation and no
 	// visible current academic unit.
 	ListDirectorySummaries(context.Context, UserDirectorySummaryOptions) ([]UserDirectorySummary, error)
-	// ListIdentities reads up to 200 users in no particular order; an unknown
+	// ListIdentities reads up to MaximumUserDisplayNames users in no particular order; an unknown
 	// ID has no entry.
 	ListIdentities(context.Context, []model.UserID) ([]UserIdentity, error)
-	// ListMFAStates reads up to MaximumUserDisplayNames users' active
+	// ListMFAStates reads up to 200 users' active
 	// two-step credentials in no particular order; a user without one has no
 	// entry. It never reads a pending setup or recovery codes.
 	ListMFAStates(context.Context, []model.UserID) ([]UserMFAState, error)
@@ -349,12 +349,15 @@ type UserStore interface {
 }
 
 // MaximumUserDisplayNames bounds one UserStore.ListDisplayNames read.
-const MaximumUserDisplayNames = 200
+const MaximumUserDisplayNames = 2_000
 
 // UserDisplayName is the display name, or the username when that is empty.
 type UserDisplayName struct {
 	UserID      model.UserID
 	DisplayName string
+	// UsernameFallback is true when DisplayName contains a username in
+	// place of an unset name. Only expose it through directory visibility.
+	UsernameFallback bool
 }
 
 type CurrentUserProductArea string

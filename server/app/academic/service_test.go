@@ -90,9 +90,9 @@ func academicUnitPublisherIn(events *[]string) *realtimetest.Publisher {
 }
 
 // academicUnitEventCall is the publication of one Academic Unit event: a
-// payload-free event for everyone who may view the unit.
+// refetch hint for everyone who may view the unit.
 func academicUnitEventCall(name string, unit *model.AcademicUnit) realtimetest.Call {
-	data := `{"academic_unit_id":"` + unit.ID.String() + `"`
+	data := `{"schema_version":1,"academic_unit_id":"` + unit.ID.String() + `"`
 	if !unit.ParentID.IsZero() {
 		data += `,"parent_academic_unit_id":"` + unit.ParentID.String() + `"`
 	}

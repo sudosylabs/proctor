@@ -133,10 +133,13 @@ type AuditNameOptions struct {
 	ClassIDs                    []model.ClassID
 	ClassVisibility             ClassVisibilityScope
 	RoleIDs                     []model.RoleID
+	// IncludeArchivedRoles names historical role references on a record the
+	// caller can already read.
+	IncludeArchivedRoles bool
 }
 
 // AuditNames are the names ListNames found; a record outside its visibility,
-// archived or missing is absent.
+// archived or missing is absent unless the caller explicitly requests historical roles.
 type AuditNames struct {
 	Users         map[model.UserID]string
 	AcademicUnits map[model.AcademicUnitID]string

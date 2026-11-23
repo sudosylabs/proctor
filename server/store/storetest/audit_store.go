@@ -653,6 +653,13 @@ func testAuditNames(t *testing.T, ctx context.Context, ss store.Store, instituti
 		Roles:         map[model.RoleID]store.AuditRoleName{role.ID: {Name: role.Name, DisplayName: "Audit Names Teacher"}},
 	}, names, "a zero visibility names no User, Academic Unit, or Class")
 
+	historicalRoles, err := ss.Audit().ListNames(ctx, store.AuditNameOptions{
+		RoleIDs:              []model.RoleID{archivedRole.ID},
+		IncludeArchivedRoles: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, store.AuditRoleName{Name: archivedRole.Name, DisplayName: "Gone"}, historicalRoles.Roles[archivedRole.ID])
+
 	wide := all
 	wide.UserVisibility = store.UserVisibilityScope{InstitutionWide: true}
 	wide.AcademicUnitInstitutionWide = true

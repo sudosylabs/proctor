@@ -26,6 +26,7 @@ import (
 )
 
 func TestRoleBindingStore(t *testing.T, ss store.Store) {
+	t.Run("ExpiryDeadlines", func(t *testing.T) { testRoleBindingExpiryDeadlines(t, ss) })
 	t.Run("ActiveIntervalPrecision", func(t *testing.T) { testRoleBindingActiveIntervalPrecision(t, ss) })
 	t.Run("VisibleSummariesByUsers", func(t *testing.T) { testRoleBindingVisibleSummariesByUsers(t, ss) })
 	t.Run("TeachersByClasses", func(t *testing.T) { testRoleBindingTeachersByClasses(t, ss) })
@@ -307,12 +308,15 @@ func testRoleBindingTeachersByClasses(t *testing.T, ss store.Store) {
 	class := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "teachers-class-"+token)
 	other := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "teachers-other-"+token)
 	empty := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "teachers-empty-"+token)
-	role := func(name string) *model.Role {
-		saved, err := SaveRole(ctx, ss, &model.Role{Name: "teachers-" + name + "-" + strings.ToLower(token), DisplayName: name, Permissions: []string{string(model.ActionClassView)}})
+	role := func(name string, permission model.Action) *model.Role {
+		saved, err := SaveRole(ctx, ss, &model.Role{Name: "teachers-" + name + "-" + strings.ToLower(token), DisplayName: name, Permissions: []string{string(permission)}})
 		require.NoError(t, err)
 		return saved
 	}
-	teaching, marking, retired := role("teaching"), role("marking"), role("retired")
+	teaching := role("teaching", model.ActionExamManage)
+	marking := role("marking", model.ActionSubmissionReview)
+	retired := role("retired", model.ActionExamManage)
+	observer := role("observer", model.ActionClassView)
 	named := func(name string) *model.User {
 		user := newUser()
 		user.DisplayName = name + " " + token
@@ -341,6 +345,7 @@ func testRoleBindingTeachersByClasses(t *testing.T, ss store.Store) {
 	_, err := EndRoleBinding(ctx, ss, ended.ID, start.Add(10*time.Millisecond))
 	require.NoError(t, err)
 	bind(eli, retired, model.RoleScopeClass, class.ID.String())
+	bind(eli, observer, model.RoleScopeClass, class.ID.String())
 	_, err = ArchiveRole(ctx, ss, retired.ID, model.NowUTC())
 	require.NoError(t, err)
 	bind(eli, teaching, model.RoleScopeAcademicUnit, unit.ID.String())
@@ -470,4 +475,46 @@ func testRoleBindingVisibleSummariesByUsers(t *testing.T, ss store.Store) {
 			require.ErrorAs(t, readErr, &invalid)
 		})
 	}
+}
+
+func testRoleBindingExpiryDeadlines(t *testing.T, ss store.Store) {
+	ctx := t.Context()
+	institution := saveInstitution(t, ctx, ss)
+	role, err := SaveRole(ctx, ss, &model.Role{
+		Name: "expiry-reader", DisplayName: "Expiry Reader", Permissions: []string{string(model.ActionClassView)},
+	})
+	require.NoError(t, err)
+	bindings := ss.RoleBinding()
+	page, err := bindings.ListExpiries(ctx, store.RoleBindingExpiryCursor{}, 1)
+	require.NoError(t, err)
+	// Use the same database clock as the scanner, with no timing wait.
+	deadline := page.CheckedAt.Add(-time.Second)
+	var expired []model.RoleBindingID
+	for _, end := range []time.Time{deadline, deadline, page.CheckedAt.Add(time.Hour)} {
+		user := saveUser(t, ctx, ss)
+		binding, err := SaveRoleBinding(ctx, ss, &model.RoleBinding{
+			UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
+			ScopeID: institution.ID.String(), StartsAt: deadline.Add(-time.Hour), EndsAt: model.OptionalTimeFrom(end),
+		})
+		require.NoError(t, err)
+		if end.Equal(deadline) {
+			expired = append(expired, binding.ID)
+		}
+	}
+
+	page, err = bindings.ListExpiries(ctx, store.RoleBindingExpiryCursor{At: deadline.Add(-time.Microsecond)}, 1)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	first := page.Items[0]
+	page, err = bindings.ListExpiries(ctx, first.Cursor, 1)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	second := page.Items[0]
+	require.ElementsMatch(t, expired, []model.RoleBindingID{first.Cursor.ID, second.Cursor.ID})
+	require.True(t, first.Cursor.At.Equal(second.Cursor.At))
+	require.NotEqual(t, first.UserID, second.UserID)
+
+	page, err = bindings.ListExpiries(ctx, store.RoleBindingExpiryCursor{At: deadline}, 5)
+	require.NoError(t, err)
+	require.Empty(t, page.Items, "scanned time and the future deadlines do not reappear")
 }

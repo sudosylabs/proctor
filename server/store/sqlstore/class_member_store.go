@@ -1399,18 +1399,18 @@ func filterClassMemberPage(query sq.SelectBuilder, options store.ClassMemberPage
 	}
 	if term := strings.TrimSpace(options.Query); term != "" {
 		pattern := directorySearchPattern(term)
-		email := ""
-		args := []any{pattern, pattern, pattern, pattern}
+		institutionFields := ""
+		args := []any{pattern}
 		if options.QueryMatchesEmail {
-			email = " OR search_users.email ILIKE ? ESCAPE '!'"
-			args = append(args, pattern)
+			institutionFields = " OR search_users.username ILIKE ? ESCAPE '!' OR search_users.email ILIKE ? ESCAPE '!'"
+			args = append(args, pattern, pattern)
 		}
 		query = query.Where(`EXISTS (
 			SELECT 1 FROM users search_users
 			WHERE search_users.id = class_members.user_id
+				AND search_users.archived_at IS NULL
 				AND (
-					search_users.username ILIKE ? ESCAPE '!' OR search_users.display_name ILIKE ? ESCAPE '!' OR
-					search_users.first_name ILIKE ? ESCAPE '!' OR search_users.last_name ILIKE ? ESCAPE '!'`+email+`
+					search_users.display_name ILIKE ? ESCAPE '!'`+institutionFields+`
 				)
 		)`, args...)
 	}
@@ -1418,8 +1418,9 @@ func filterClassMemberPage(query sq.SelectBuilder, options store.ClassMemberPage
 }
 
 // ListTransfers reads every listed membership in one statement.
-func (s SQLClassMemberStore) ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID) ([]store.ClassMemberTransfer, error) {
-	if len(memberIDs) > store.MaximumClassStudentCountClasses || !validVisibilityIDs(memberIDs) {
+func (s SQLClassMemberStore) ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID, visibility store.ClassVisibilityScope) ([]store.ClassMemberTransfer, error) {
+	if len(memberIDs) > store.MaximumClassStudentCountClasses || !validVisibilityIDs(memberIDs) ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
 		return nil, store.NewErrInvalidInput("class_member", "transfers", nil)
 	}
 	if len(memberIDs) == 0 {
@@ -1432,20 +1433,21 @@ func (s SQLClassMemberStore) ListTransfers(ctx context.Context, memberIDs []mode
 		ToClassName   string    `db:"to_class_name"`
 		At            time.Time `db:"transfer_at"`
 	}{}
-	if err := s.GetMaster().Select(ctx, &rows, `
-		SELECT DISTINCT ON (ended.id)
-			ended.id AS class_member_id, next.class_id AS to_class_id,
-			classes.display_name AS to_class_name, ended.end_at AS transfer_at
-		FROM class_members ended
-		JOIN class_members next ON next.user_id = ended.user_id
+	query := filterClassVisibility(sq.Select(
+		"DISTINCT ON (ended.id) ended.id AS class_member_id",
+		"next.class_id AS to_class_id",
+		"classes.display_name AS to_class_name",
+		"ended.end_at AS transfer_at",
+	).From("class_members ended").
+		Join(`class_members next ON next.user_id = ended.user_id
 			AND next.start_at = ended.end_at
 			AND next.class_id <> ended.class_id
-			AND next.archived_at IS NULL
-		JOIN classes ON classes.id = next.class_id
-		WHERE ended.id = ANY(?)
-			AND ended.archived_at IS NULL
-			AND ended.end_at IS NOT NULL
-		ORDER BY ended.id, next.id`, pq.Array(idStrings(memberIDs))); err != nil {
+			AND next.archived_at IS NULL`).
+		Join("classes ON classes.id = next.class_id").
+		Where("ended.id = ANY(?)", pq.Array(idStrings(memberIDs))).
+		Where("ended.archived_at IS NULL AND ended.end_at IS NOT NULL"), visibility).
+		OrderBy("ended.id", "next.id")
+	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list class member transfers: %w", err)
 	}
 

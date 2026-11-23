@@ -30,7 +30,7 @@ func personRef(refs people.Refs, id model.UserID) *personRefResponse {
 	}
 	response := &personRefResponse{ID: ref.ID.String()}
 	response.DisplayName = ref.DisplayName
-	if ref.Visible && !ref.Removed() {
+	if ref.Visible && ref.Named() {
 		response.Username = ref.Username
 		response.ProfilePictureURL = "/api/v1/users/" + ref.ID.String() + "/profile-picture"
 	}

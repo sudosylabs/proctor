@@ -266,8 +266,9 @@ func (s *Service) releaseBatchItem(
 // concealedDenial reports a refusal a single release would answer as not
 // found.
 func concealedDenial(err error) bool {
-	code := apperror.CodeOf(publicFailures.Conceal(err), "")
-	return code == "resource.not_found" || code == "exam.integrity_review.not_found" || code == "authorization.denied"
+	concealed := publicFailures.Conceal(err)
+	return apperror.Is(concealed, "resource.not_found") || apperror.Is(concealed, "exam.integrity_review.not_found") ||
+		apperror.Is(concealed, "authorization.denied")
 }
 
 func validReleaseBatchSelection(command ResultReleaseBatchCommand) bool {

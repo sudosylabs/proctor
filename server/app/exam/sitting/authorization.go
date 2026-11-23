@@ -343,7 +343,7 @@ func (s *Service) AuthorizeSittingSubmissions(
 	switch {
 	case err == nil:
 		authorization.ReviewVisible = true
-	case apperror.CodeOf(err, "") != "authorization.denied":
+	case !apperror.Is(err, "authorization.denied"):
 		return SittingSubmissionsAuthorization{}, err
 	}
 	return authorization, nil

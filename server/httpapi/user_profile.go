@@ -744,7 +744,7 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 	for _, entry := range page.Items {
 		disablers = append(disablers, entry.User.DisabledByUserID)
 	}
-	refs, err := namePeople(request, h.people, "administration.unavailable", disablers...)
+	refs, err := namePeople(request, h.people, disablers...)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -998,7 +998,7 @@ func (h userProfileHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	refs, err := namePeople(request, h.people, "administration.unavailable", account.DisabledByUserID)
+	refs, err := namePeople(request, h.people, account.DisabledByUserID)
 	if err != nil {
 		return route.Result{}, err
 	}

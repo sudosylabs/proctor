@@ -200,7 +200,7 @@ func (h classHandlers) classListResult(request route.Request, page academic.Clas
 	for _, teachers := range page.Teachers {
 		teacherIDs = append(teacherIDs, teachers.UserIDs...)
 	}
-	refs, err := namePeople(request, h.people, "administration.unavailable", teacherIDs...)
+	refs, err := namePeople(request, h.people, teacherIDs...)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -261,7 +261,7 @@ func (h classHandlers) get(request route.Request) (route.Result, error) {
 	if detail.Teachers != nil {
 		teacherIDs = detail.Teachers.UserIDs
 	}
-	refs, err := namePeople(request, h.people, "administration.unavailable", teacherIDs...)
+	refs, err := namePeople(request, h.people, teacherIDs...)
 	if err != nil {
 		return route.Result{}, err
 	}

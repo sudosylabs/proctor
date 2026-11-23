@@ -2036,6 +2036,12 @@ func (s *roleBindingStore) ListByScope(ctx context.Context, arg1 model.RoleScope
 	})
 }
 
+func (s *roleBindingStore) ListTeachersByClasses(ctx context.Context, arg1 store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ClassTeachers, error) {
+		return s.RoleBindingStore.ListTeachersByClasses(ctx, arg1)
+	})
+}
+
 func (s *roleBindingStore) ListCurrentByRoles(ctx context.Context, arg1 store.RoleBindingRoleListOptions) ([]*model.RoleBinding, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.RoleBinding, error) {
 		return s.RoleBindingStore.ListCurrentByRoles(ctx, arg1)

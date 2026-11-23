@@ -4513,6 +4513,36 @@
         },
         "description": "Class created"
       },
+      "ClassDetailOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "academic_period_id": "sjebyge5cpbop1xwo4eds74ejb",
+              "created_at": "2026-08-05T08:30:00Z",
+              "description": "First-year Class A.",
+              "display_name": "Computer Science Level 100 — B",
+              "id": "6xoche483hwrx5rpu8jzjoe7qg",
+              "name": "cs-level-100-a",
+              "programme_level_id": "iqcx3qc9sbbt6ocshszfqgq6ci",
+              "revision": 2,
+              "teachers": [
+                {
+                  "display_name": "Priya Raman",
+                  "id": "3n9ki8z1o5xkw7yq4m6rtbh5ce",
+                  "profile_picture_url": "/api/v1/users/3n9ki8z1o5xkw7yq4m6rtbh5ce/profile-picture",
+                  "username": "praman"
+                }
+              ],
+              "teachers_more": 0,
+              "updated_at": "2026-08-18T12:00:00Z"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ClassDetailResponse"
+            }
+          }
+        },
+        "description": "Class"
+      },
       "ClassListOK": {
         "content": {
           "application/json": {
@@ -17579,6 +17609,82 @@
         ],
         "type": "object"
       },
+      "ClassDetailResponse": {
+        "additionalProperties": false,
+        "description": "One Class. It includes the Class's teachers when the caller holds class.members.view on that Class.",
+        "properties": {
+          "academic_period_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Academic Period the Class runs in."
+          },
+          "archived_at": {
+            "description": "When the Class was archived. Omitted while it is active.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "When the Class was created.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "description": "Longer text shown to people, up to 1,024 characters. Empty when none was given.",
+            "type": "string"
+          },
+          "display_name": {
+            "description": "Name shown to people, up to 128 characters.",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Class identifier."
+          },
+          "name": {
+            "description": "Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among active Classes with the same Programme Level and Academic Period.",
+            "type": "string"
+          },
+          "programme_level_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Programme Level the Class belongs to."
+          },
+          "revision": {
+            "description": "Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the change fails if someone else changed the Class first.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "teachers": {
+            "description": "Up to three of the Class's teachers, by name: the people holding a current Role Binding at the Class itself. Present only when the caller holds class.members.view on this Class, as an empty list when the Class has none.",
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "teachers_more": {
+            "description": "How many more teachers the Class has beyond `teachers`. Present with `teachers`.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updated_at": {
+            "description": "When the Class last changed.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "id",
+          "created_at",
+          "updated_at",
+          "programme_level_id",
+          "academic_period_id",
+          "name",
+          "display_name",
+          "description"
+        ],
+        "type": "object"
+      },
       "ClassEnrollmentResponse": {
         "additionalProperties": false,
         "properties": {
@@ -17598,7 +17704,7 @@
       },
       "ClassListItemResponse": {
         "additionalProperties": false,
-        "description": "One Class in a Class listing. It includes the current student count when the caller holds class.members.view on that Class.",
+        "description": "One Class in a Class listing. It includes the current student count and the teachers when the caller holds class.members.view on that Class.",
         "properties": {
           "academic_period_id": {
             "$ref": "#/components/schemas/ID",
@@ -17649,6 +17755,19 @@
           "student_count_is_lower_bound": {
             "description": "True when `student_count` reached 10,000. Present with `student_count`.",
             "type": "boolean"
+          },
+          "teachers": {
+            "description": "Up to three of the Class's teachers, by name: the people holding a current Role Binding at the Class itself. Present only when the caller holds class.members.view on this Class, as an empty list when the Class has none.",
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "teachers_more": {
+            "description": "How many more teachers the Class has beyond `teachers`. Present with `teachers`.",
+            "minimum": 0,
+            "type": "integer"
           },
           "updated_at": {
             "description": "When the Class last changed.",
@@ -36359,6 +36478,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "disabled_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who disabled the account, for the disable in force. Present only while the account is disabled, when the disable named a person, and only for readers of the full profile: the User themselves or an institution-wide user.view holder. `GET /users/{user_id}` answers only for an active account, so a disabled account is read through the User directory."
+          },
+          "disabled_reason": {
+            "description": "The reason given when the account was disabled. Present with the same rule as `disabled_by`, and only when a reason was given.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
           "display_name": {
             "description": "Name shown to other people. It can be empty.",
             "type": "string"
@@ -36581,6 +36710,16 @@
           "disabled_at": {
             "description": "Time the account was disabled. Omitted while it is enabled.",
             "format": "date-time",
+            "type": "string"
+          },
+          "disabled_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who disabled the account, for the disable in force. Present only while the account is disabled, when the disable named a person, and only for readers of the full profile: the User themselves or an institution-wide user.view holder. `GET /users/{user_id}` answers only for an active account, so a disabled account is read through the User directory."
+          },
+          "disabled_reason": {
+            "description": "The reason given when the account was disabled. Present with the same rule as `disabled_by`, and only when a reason was given.",
+            "maxLength": 500,
+            "minLength": 1,
             "type": "string"
           },
           "display_name": {
@@ -42808,11 +42947,11 @@
         "x-proctor-idempotency": "none"
       },
       "get": {
-        "description": "Returns one active Class. Proctor checks the caller's permission on this Class itself. Being able to list Classes elsewhere is not enough. The response names its Programme Level and Academic Period and does not include its students.",
+        "description": "Returns one active Class. Proctor checks the caller's permission on this Class itself. Being able to list Classes elsewhere is not enough. The response names its Programme Level and Academic Period and does not include its students. A caller who holds class.members.view on the Class also gets its first three teachers.",
         "operationId": "getClass",
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ClassOK"
+            "$ref": "#/components/responses/ClassDetailOK"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"

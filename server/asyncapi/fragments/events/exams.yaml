@@ -11,8 +11,8 @@ components:
     exam_created:
       name: exam_created
       title: Exam created
-      summary: An Exam was created. The event has no data.
-      description: An Exam was created. The event has no data. Delivered to connections that subscribe to exam.view on the exam.
+      summary: An Exam was created. The event names it and its Academic Unit.
+      description: An Exam was created. The event names it and the Academic Unit that owns it. Delivered to connections that subscribe to exam.view on the exam.
       tags:
         - name: event
         - name: Exams
@@ -23,6 +23,7 @@ components:
             required:
               - event
               - action
+              - data
             properties:
               event:
                 type: string
@@ -30,9 +31,8 @@ components:
               action:
                 type: string
                 const: exam.view
-            not:
-              required:
-                - data
+              data:
+                $ref: '../../../schemas/realtime/exam_created.json'
       examples:
         - name: example
           payload:
@@ -43,6 +43,9 @@ components:
             resource:
               type: exam
               id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              academic_unit_id: jcx1ia56br8kpous3h9nfemqtw
     exam_draft_updated:
       name: exam_draft_updated
       title: Exam Draft updated

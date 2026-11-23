@@ -81,6 +81,7 @@ type ApplyWorkspaceBatchCommand struct {
 // cursors. Replayed is true when an exact retry returned the stored result.
 type WorkspaceBatchResult struct {
 	AttemptID       model.ExamAttemptID
+	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
 	CandidateUserID model.UserID
 	WorkspaceID     model.ExamAttemptWorkspaceID

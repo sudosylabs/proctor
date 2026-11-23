@@ -4,6 +4,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "exam_id",
+    "exam_sitting_id",
     "submission_id",
     "exam_attempt_id",
     "candidate_user_id",
@@ -14,6 +16,12 @@
     "changed_at"
   ],
   "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
     "submission_id": {
       "$ref": "id.json"
     },

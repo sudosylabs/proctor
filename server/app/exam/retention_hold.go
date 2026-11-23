@@ -128,6 +128,7 @@ func (r *Records) CreateRetentionHold(
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold creation result is incomplete"))
 	}
 
+	r.publishHoldChanged(ctx, result.Hold)
 	return result.Hold, nil
 }
 
@@ -189,5 +190,6 @@ func (r *Records) ReleaseRetentionHold(
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold release result is incomplete"))
 	}
 
+	r.publishHoldChanged(ctx, result.Hold)
 	return result.Hold, nil
 }

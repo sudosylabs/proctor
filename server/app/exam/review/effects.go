@@ -18,6 +18,8 @@ import (
 // never leave the review.
 func reviewEventFact(result Result) realtime.ExamIntegrityReviewEventFact {
 	return realtime.ExamIntegrityReviewEventFact{
+		ExamID:       result.Authorization.ExamID,
+		SittingID:    result.Authorization.SittingID,
 		SubmissionID: result.Authorization.SubmissionID,
 		AttemptID:    result.Authorization.AttemptID,
 		CandidateID:  result.Authorization.CandidateUserID,

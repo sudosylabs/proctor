@@ -155,12 +155,26 @@ func (s *Service) importAudience(ctx context.Context, scopeType model.RoleScopeT
 	return audience, nil
 }
 
+// publishAcceptedRelationships tells the accepting User's viewers that their
+// memberships changed and, when the package granted a Role, the binding's
+// scope that it was granted. Best effort.
+func (s *Service) publishAcceptedRelationships(ctx context.Context, userID model.UserID, binding *model.RoleBinding) {
+	err := realtime.PublishUsersChanged(ctx, s.publisher, userID)
+	if binding != nil {
+		err = errors.Join(err, realtime.PublishRoleBindingChanged(ctx, s.publisher, s.classes, binding))
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "invitation.accepted_relationships_changed", err)
+	}
+}
+
 // publishInvitationChanged notifies the inviter, best effort.
 func (s *Service) publishInvitationChanged(ctx context.Context, invitation *model.Invitation, operation string) {
 	if invitation == nil || invitation.InviterUserID.IsZero() {
 		return
 	}
-	event, err := realtime.NewInvitationChangedEvent(invitation.InviterUserID, invitation.ID, invitation.State)
+	event, err := realtime.NewInvitationChangedEvent(invitation.InviterUserID, invitation.ID, invitation.State,
+		invitation.ScopeType, invitation.ScopeID)
 	if err == nil {
 		err = s.publisher.Publish(ctx, event)
 	}

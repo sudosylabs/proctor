@@ -154,6 +154,27 @@ type RoleHolderCount struct {
 	Scopes   int
 }
 
+// MaximumClassTeacherClasses is the most classes one ListTeachersByClasses
+// call reads: one page of a class listing.
+const MaximumClassTeacherClasses = 200
+
+// ClassTeacherOptions selects, for a page of classes, up to Limit (1 to 10)
+// teachers each, as current at ActiveAt.
+type ClassTeacherOptions struct {
+	ClassIDs []model.ClassID
+	ActiveAt time.Time
+	Limit    int
+}
+
+// ClassTeachers is one class's teachers: the distinct people holding a
+// current Role Binding of an unarchived role at the class itself, by sort name
+// then ID. More counts the teachers past the limit.
+type ClassTeachers struct {
+	ClassID model.ClassID
+	UserIDs []model.UserID
+	More    int
+}
+
 // RoleBindingStore persists time-bounded role assignments. Scope references
 // are checked in the transaction because PostgreSQL cannot express a foreign
 // key whose target table depends on scope_type.
@@ -166,6 +187,8 @@ type RoleBindingStore interface {
 	// binding.
 	ListVisibleSummariesByUsers(context.Context, RoleBindingSummaryOptions) ([]UserRoleBindingSummary, error)
 	ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error)
+	// ListTeachersByClasses omits a class with no teacher.
+	ListTeachersByClasses(context.Context, ClassTeacherOptions) ([]ClassTeachers, error)
 	// CountCurrentByRoles counts what ListCurrentByRoles would return across
 	// every page, ignoring the keyset and limit, capped at maximum (see
 	// MaximumListCount).

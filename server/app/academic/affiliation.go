@@ -142,6 +142,7 @@ func (s *Service) CreateAffiliation(
 		if effectErr := s.publisher.InvalidateCurrentUserContext(ctx, result.UserID); effectErr != nil {
 			s.publisher.Report(ctx, "affiliation.changed", effectErr)
 		}
+		s.publishUserChanged(ctx, result.UserID)
 	}
 
 	return result, nil
@@ -234,6 +235,7 @@ func (s *Service) EndAffiliation(
 		if effectErr := s.publisher.InvalidateCurrentUserContext(ctx, result.UserID); effectErr != nil {
 			s.publisher.Report(ctx, "affiliation.changed", effectErr)
 		}
+		s.publishUserChanged(ctx, result.UserID)
 	}
 
 	return result, nil

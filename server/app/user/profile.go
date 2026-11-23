@@ -348,7 +348,9 @@ func (s *Service) listUsers(
 }
 
 // GetUserProfile gives a scoped grant the limited projection, without the
-// email address and account metadata.
+// email address and account metadata. Who disabled the account, and why, is
+// account metadata: it reaches only institution-wide readers, the same
+// readers who see the disable's reason in its audit.
 func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation, id model.UserID) (*model.User, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
@@ -468,6 +470,8 @@ func scopedUserProjection(user *model.User) *model.User {
 	projected.LastLoginAt = model.OptionalTime{}
 	projected.LastActivityAt = model.OptionalTime{}
 	projected.DisabledAt = model.OptionalTime{}
+	projected.DisabledByUserID = ""
+	projected.DisabledReason = ""
 	projected.DefaultProfilePictureSeed = ""
 	projected.DefaultProfilePictureFileID = model.FileEntryID("")
 	projected.CustomProfilePictureFileID = model.FileEntryID("")
@@ -518,7 +522,7 @@ func (s *Service) UpdateUserProfile(
 	}
 
 	resource := model.Resource{Type: model.ResourceUser, ID: id.String()}
-	return access.RunAudited(
+	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -541,4 +545,10 @@ func (s *Service) UpdateUserProfile(
 		},
 		StoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishUserChanged(ctx, id)
+	return updated, nil
 }

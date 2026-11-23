@@ -223,7 +223,7 @@ func TestScopedUserSearchReturnsOnlySafeDirectoryFields(t *testing.T) {
 		ID: model.NewUserID(), Username: "student", Email: "private@example.edu", EmailVerified: true,
 		DisplayName: "Student", FirstName: "Private", LastName: "Person", Locale: "fr", Timezone: "Europe/Paris",
 		LastLoginAt: model.OptionalTimeFromMillis(100), LastActivityAt: model.OptionalTimeFromMillis(200),
-		DisabledAt: model.OptionalTimeFromMillis(300),
+		DisabledAt: model.OptionalTimeFromMillis(300), DisabledByUserID: model.NewUserID(), DisabledReason: "Left the school",
 	}
 	persistence := &userStoreFake{events: &events, current: user, countTotal: 1}
 	caller, inv := newCaller()
@@ -242,6 +242,8 @@ func TestScopedUserSearchReturnsOnlySafeDirectoryFields(t *testing.T) {
 	require.False(t, projected.LastLoginAt.Valid)
 	require.False(t, projected.LastActivityAt.Valid)
 	require.False(t, projected.DisabledAt.Valid)
+	require.True(t, projected.DisabledByUserID.IsZero(), "who disabled the account is account metadata")
+	require.Empty(t, projected.DisabledReason, "why the account was disabled is account metadata")
 	require.Empty(t, projected.DefaultProfilePictureSeed)
 	require.True(t, projected.DefaultProfilePictureFileID.IsZero())
 	require.True(t, projected.CustomProfilePictureFileID.IsZero())

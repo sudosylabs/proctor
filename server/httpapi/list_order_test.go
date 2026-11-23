@@ -239,7 +239,7 @@ func TestClassListDirectionCountsAndStudentCounts(t *testing.T) {
 	unitPath := "/api/v1/academic-units/" + world.unit.ID.String() + "/classes"
 	levelPath := "/api/v1/programme-levels/" + world.level.ID.String() + "/classes"
 	serveAs := func(principal model.Principal, target string) *httptest.ResponseRecorder {
-		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classResource(fixture.service))
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classResource(fixture.service, fixture.people()))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()

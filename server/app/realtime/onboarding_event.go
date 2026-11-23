@@ -25,6 +25,8 @@ type invitationChangedData struct {
 	SchemaVersion int                   `json:"schema_version"`
 	InvitationID  string                `json:"invitation_id"`
 	State         model.InvitationState `json:"state"`
+	ScopeType     model.RoleScopeType   `json:"scope_type"`
+	ScopeID       string                `json:"scope_id"`
 }
 
 // NewOnboardingImportChangedEvent is published once for the import's scope
@@ -76,18 +78,23 @@ func NewCreatorOnboardingImportChangedEvent(
 	return Event{Name: creatorOnboardingImportChangedMessage.name, UserID: creatorID, Data: data}, nil
 }
 
-// NewInvitationChangedEvent goes to the inviter alone; the accepting user and
-// their account never travel.
+// NewInvitationChangedEvent goes to the inviter alone, naming the scope the
+// Invitation grants at; the accepting user and their account never travel.
 func NewInvitationChangedEvent(
 	inviterID model.UserID,
 	invitationID model.InvitationID,
 	state model.InvitationState,
+	scopeType model.RoleScopeType,
+	scopeID string,
 ) (Event, error) {
-	if !inviterID.IsValid() || !invitationID.IsValid() || !state.IsValid() {
-		return Event{}, errors.New("Invitation change event requires a valid inviter, Invitation and state")
+	if !inviterID.IsValid() || !invitationID.IsValid() || !state.IsValid() ||
+		!scopeType.IsValid() || !model.IsValidOpaqueID(scopeID) {
+		return Event{}, errors.New("Invitation change event requires a valid inviter, Invitation, state and scope")
 	}
 
-	data, err := json.Marshal(invitationChangedData{SchemaVersion: 1, InvitationID: invitationID.String(), State: state})
+	data, err := json.Marshal(invitationChangedData{
+		SchemaVersion: 1, InvitationID: invitationID.String(), State: state, ScopeType: scopeType, ScopeID: scopeID,
+	})
 	if err != nil {
 		return Event{}, fmt.Errorf("encode Invitation change event: %w", err)
 	}

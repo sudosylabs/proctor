@@ -72,7 +72,8 @@ func TestAcademicUnitMemberCreateUsesAuthorizationWithoutGrantingPermission(t *t
 	require.Equal(t, 1, clockCalls, "clock calls/creation/audit time")
 	require.True(t, model.TimeUTC(created.CreatedAt).Equal(persistence.createInput.AuditAt), "clock calls/creation/audit time")
 	// Contract: the new member's cached authorization is dropped, once.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)}}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)},
+		userChangedCall(t, model.UserID(userID))}, publisher.Calls())
 	require.Equal(t, model.UserID(userID), onlyAttempt(t, access).SubjectUserID, "the membership names the member as its subject")
 	require.NotNil(t, persistence.createInput.Notice, "creation mail = %#v", persistence.createInput)
 	require.Equal(t, int64(1), persistence.createInput.Recipient.Revision, "creation mail = %#v", persistence.createInput)
@@ -102,7 +103,8 @@ func TestAcademicUnitMemberEndCarriesRevision(t *testing.T) {
 	require.Equal(t, current.Revision, persistence.endInput.ExpectedRevision, "end input/result = %#v / %#v", persistence.endInput, ended)
 	require.Equal(t, current.Revision+1, ended.Revision, "end input/result = %#v / %#v", persistence.endInput, ended)
 	// Contract: the former member's cached authorization is dropped, once.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: current.UserID}}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: current.UserID},
+		userChangedCall(t, current.UserID)}, publisher.Calls())
 	require.NotNil(t, persistence.endInput.Notice, "end mail = %#v", persistence.endInput)
 	require.Equal(t, int64(1), persistence.endInput.Recipient.Revision, "end mail = %#v", persistence.endInput)
 	require.Equal(t, 1, rendered.Count(), "end mail = %#v", persistence.endInput)

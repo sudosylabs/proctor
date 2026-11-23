@@ -17,6 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -97,12 +99,17 @@ func TestAcademicPeriodUpdatePreservesInstitutionOwnership(t *testing.T) {
 	}
 	persistence := &academicPeriodStoreFake{events: &events, current: period}
 	access := academicPeriodAccess(t, &events, persistence, nil, institutionGrant(principal.UserID, model.ActionAcademicPeriodManage))
-	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+	publisher := &realtimetest.Publisher{}
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Publisher: publisher, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	name := "2026-revised"
 	updated, err := service.UpdateAcademicPeriod(context.Background(), caller, UpdateAcademicPeriodCommand{ID: period.ID, Name: &name})
 	require.NoError(t, err)
 	require.Equal(t, period.Owner, updated.Owner)
 	require.Equal(t, period.Owner, persistence.updateInput.Period.Owner)
+	changed, err := realtime.NewAcademicPeriodChangedEvent(period.ID, period.Owner)
+	require.NoError(t, err)
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: changed}}, publisher.Calls(),
+		"the period's viewers are told to refetch it after commit")
 }
 
 func TestAcademicPeriodCreateAuthorizationDenialStopsBeforeAuditAndStore(t *testing.T) {

@@ -84,6 +84,66 @@ func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t 
 	gate.requireOnlyDecision(t, model.ActionExamSittingViewOverride, model.ResourceExamSitting, gate.sitting.ID.String(), model.AuditStatusFail)
 }
 
+// subscriptionUsers holds one active User, related to one unit.
+type subscriptionUsers struct {
+	store.UserStore
+	user   *model.User
+	unitID model.AcademicUnitID
+}
+
+func (s subscriptionUsers) Get(_ context.Context, id model.UserID) (*model.User, error) {
+	if id != s.user.ID {
+		return nil, store.NewErrNotFound("user", id.String())
+	}
+	copied := *s.user
+	return &copied, nil
+}
+
+func (s subscriptionUsers) MatchVisibility(_ context.Context, id model.UserID, visibility store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
+	for _, root := range visibility.AcademicUnitRootIDs {
+		if id == s.user.ID && root == s.unitID {
+			return store.UserVisibilityMatch{ScopeType: model.RoleScopeAcademicUnit, ScopeID: root.String()}, nil
+		}
+	}
+	return store.UserVisibilityMatch{}, nil
+}
+
+// TestAuthorizeWebSocketUserSubscriptionFollowsUserVisibility pins that a
+// user.changed subscription is admitted through the caller's user
+// visibility: a unit-scoped viewer may follow a User related to their unit,
+// and no other.
+func TestAuthorizeWebSocketUserSubscriptionFollowsUserVisibility(t *testing.T) {
+	t.Parallel()
+	related, unrelated := model.NewAcademicUnitID(), model.NewAcademicUnitID()
+	subject := &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu", Revision: 1}
+	resource := model.Resource{Type: model.ResourceUser, ID: subject.ID.String()}
+	for name, test := range map[string]struct {
+		unitID  model.AcademicUnitID
+		allowed bool
+	}{
+		"related unit":   {unitID: related, allowed: true},
+		"unrelated unit": {unitID: unrelated},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			caller := testExamPrincipal(model.NewUserID())
+			fixture := accesstest.New(t, accesstest.Options{
+				Grants: []accesstest.Grant{{UserID: caller.UserID, Actions: []model.Action{model.ActionUserView},
+					ScopeType: model.RoleScopeAcademicUnit, ScopeID: test.unitID.String()}},
+				Users: subscriptionUsers{user: subject, unitID: related},
+			})
+			admission := NewRealtimeAdmission(RealtimeAdmissionDependencies{Authorizer: fixture.Authorizer})
+			err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(caller, model.RequestMetadata{}),
+				model.ActionUserView, resource)
+			if test.allowed {
+				require.NoError(t, err)
+				return
+			}
+			require.True(t, apperror.Is(err, "authorization.denied"), "unrelated viewer error = %v", err)
+		})
+	}
+}
+
 // A subscription may name an owning scope its action accepts, but no other
 // Resource type; the shape is refused before any authorization decision.
 func TestAuthorizeWebSocketSubscriptionRefusesAResourceTheActionDoesNotAccept(t *testing.T) {

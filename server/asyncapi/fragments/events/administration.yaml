@@ -1,0 +1,304 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Refetch hints for the administration boards: people, structure, roles,
+# retention and mail.
+components:
+  messages:
+    user.changed:
+      name: user.changed
+      title: User changed
+      summary: Refetch the User; their profile, account state, affiliations, two-step state or memberships changed.
+      description: >-
+        Refetch the User: their profile, account state, Affiliations, two-step state or memberships changed. The
+        event names the User only. Delivered to connections that subscribe to user.view on the user; a subscription
+        is admitted for a User the caller can see in the directory.
+      tags:
+        - name: event
+        - name: Users
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: user.changed
+              action:
+                type: string
+                const: user.view
+              data:
+                $ref: '../../../schemas/realtime/user_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: user.changed
+            sequence: 60
+            action: user.view
+            resource:
+              type: user
+              id: qtwz47ydgjcx1ia56br8kpous3
+            data:
+              schema_version: 1
+              user_id: qtwz47ydgjcx1ia56br8kpous3
+    class.changed:
+      name: class.changed
+      title: Class changed
+      summary: Refetch the Class; it, its members or its teachers changed.
+      description: >-
+        Refetch the Class: the Class itself, its members or its teachers changed. A membership change also sends
+        user.changed for the member. Delivered to connections that subscribe to class.view on the class.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: class.changed
+              action:
+                type: string
+                const: class.view
+              data:
+                $ref: '../../../schemas/realtime/class_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: class.changed
+            sequence: 61
+            action: class.view
+            resource:
+              type: class
+              id: z47ydgjcx1ia56br8kpous3h9n
+            data:
+              schema_version: 1
+              class_id: z47ydgjcx1ia56br8kpous3h9n
+              academic_unit_id: jcx1ia56br8kpous3h9nfemqtw
+    academic_period.changed:
+      name: academic_period.changed
+      title: Academic Period changed
+      summary: Refetch the Academic Period; it was created, changed or archived.
+      description: >-
+        Refetch the Academic Period: it was created, changed or archived. Delivered to connections that subscribe to
+        academic_period.view on the academic period, which its owner's viewers may do.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: academic_period.changed
+              action:
+                type: string
+                const: academic_period.view
+              data:
+                $ref: '../../../schemas/realtime/academic_period_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: academic_period.changed
+            sequence: 62
+            action: academic_period.view
+            resource:
+              type: academic_period
+              id: 8kpous3h9nfemqtwz47ydgjcx5
+            data:
+              schema_version: 1
+              academic_period_id: 8kpous3h9nfemqtwz47ydgjcx5
+              academic_unit_id: jcx1ia56br8kpous3h9nfemqtw
+    role.changed:
+      name: role.changed
+      title: Role changed
+      summary: Refetch the Role; it or its permissions changed.
+      description: >-
+        Refetch the Role: it was created, changed or archived. Delivered to connections that subscribe to role.view
+        on the institution.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: role.changed
+              action:
+                type: string
+                const: role.view
+              data:
+                $ref: '../../../schemas/realtime/role_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: role.changed
+            sequence: 63
+            action: role.view
+            resource:
+              type: institution
+              id: ous3h9nfemqtwz47ydgjcx1ia5
+            data:
+              schema_version: 1
+              role_id: ia56br8kpous3h9nfemqtwz47y
+    role_binding.changed:
+      name: role_binding.changed
+      title: Role Binding changed
+      summary: Refetch the Role Binding; it was granted or ended.
+      description: >-
+        Refetch the Role Binding: it was granted or ended. Delivered to connections that subscribe to
+        role_binding.view on the binding's own scope: the institution, an academic unit or a class. A binding at a
+        Class also sends class.changed, since it changes the Class's teachers. The holder hears of it through
+        current_user.context.changed.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: role_binding.changed
+              action:
+                type: string
+                const: role_binding.view
+              data:
+                $ref: '../../../schemas/realtime/role_binding_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: role_binding.changed
+            sequence: 64
+            action: role_binding.view
+            resource:
+              type: academic_unit
+              id: jcx1ia56br8kpous3h9nfemqtw
+            data:
+              schema_version: 1
+              role_binding_id: mqtwz47ydgjcx1ia56br8kpous
+              user_id: qtwz47ydgjcx1ia56br8kpous3
+              role_id: ia56br8kpous3h9nfemqtwz47y
+              scope_type: academic_unit
+              scope_id: jcx1ia56br8kpous3h9nfemqtw
+    retention.changed:
+      name: retention.changed
+      title: Retention changed
+      summary: Refetch retention; the policy, a hold or an Exam's records due changed.
+      description: >-
+        Refetch retention: the policy was replaced, a hold was placed or released, or an Exam's records due for
+        removal changed when a Sitting's records were completed. kind says which. Delivered to connections that
+        subscribe to retention_policy.view on the institution.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: retention.changed
+              action:
+                type: string
+                const: retention_policy.view
+              data:
+                $ref: '../../../schemas/realtime/retention_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: retention.changed
+            sequence: 65
+            action: retention_policy.view
+            resource:
+              type: institution
+              id: ous3h9nfemqtwz47ydgjcx1ia5
+            data:
+              schema_version: 1
+              kind: hold
+              retention_hold_id: 5br8kpous3h9nfemqtwz47ydgj
+              exam_id: 6br8h9nfemqtwz47ydgjcx1ia5
+    mail_delivery.changed:
+      name: mail_delivery.changed
+      title: Mail delivery changed
+      summary: Refetch the mail delivery; its state changed.
+      description: >-
+        Refetch the mail delivery: it started sending, was accepted, queued for a retry, failed, expired or was
+        suppressed. The recipient and the message are never included. Delivered to connections that subscribe to
+        mail.view on the institution.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: mail_delivery.changed
+              action:
+                type: string
+                const: mail.view
+              data:
+                $ref: '../../../schemas/realtime/mail_delivery_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: mail_delivery.changed
+            sequence: 66
+            action: mail.view
+            resource:
+              type: institution
+              id: ous3h9nfemqtwz47ydgjcx1ia5
+            data:
+              schema_version: 1
+              mail_delivery_id: x1ia56br8kpous3h9nfemqtwz4

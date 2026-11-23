@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -28,24 +29,29 @@ import (
 )
 
 type userProfileResponse struct {
-	ID                      string  `json:"id"`
-	CreatedAt               string  `json:"created_at"`
-	UpdatedAt               string  `json:"updated_at"`
-	ArchivedAt              string  `json:"archived_at,omitempty"`
-	Username                string  `json:"username"`
-	Email                   *string `json:"email,omitempty"`
-	EmailVerified           *bool   `json:"email_verified,omitempty"`
-	DisplayName             string  `json:"display_name"`
-	FirstName               string  `json:"first_name"`
-	LastName                string  `json:"last_name"`
-	Locale                  *string `json:"locale,omitempty"`
-	Timezone                *string `json:"timezone,omitempty"`
-	LastLoginAt             string  `json:"last_login_at,omitempty"`
-	LastActivityAt          string  `json:"last_activity_at,omitempty"`
-	DisabledAt              string  `json:"disabled_at,omitempty"`
-	ProfilePictureURL       string  `json:"profile_picture_url"`
-	ProfilePictureChangedAt string  `json:"profile_picture_changed_at,omitempty"`
-	ProfilePictureKind      string  `json:"profile_picture_kind"`
+	ID             string  `json:"id"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+	ArchivedAt     string  `json:"archived_at,omitempty"`
+	Username       string  `json:"username"`
+	Email          *string `json:"email,omitempty"`
+	EmailVerified  *bool   `json:"email_verified,omitempty"`
+	DisplayName    string  `json:"display_name"`
+	FirstName      string  `json:"first_name"`
+	LastName       string  `json:"last_name"`
+	Locale         *string `json:"locale,omitempty"`
+	Timezone       *string `json:"timezone,omitempty"`
+	LastLoginAt    string  `json:"last_login_at,omitempty"`
+	LastActivityAt string  `json:"last_activity_at,omitempty"`
+	DisabledAt     string  `json:"disabled_at,omitempty"`
+	// DisabledBy and DisabledReason describe the disable in force. Only a
+	// profile read and the directory present them, and only to readers of
+	// the full profile.
+	DisabledBy              *personRefResponse `json:"disabled_by,omitempty"`
+	DisabledReason          string             `json:"disabled_reason,omitempty"`
+	ProfilePictureURL       string             `json:"profile_picture_url"`
+	ProfilePictureChangedAt string             `json:"profile_picture_changed_at,omitempty"`
+	ProfilePictureKind      string             `json:"profile_picture_kind"`
 }
 
 // userDirectoryEntryResponse is one user directory item: the profile the
@@ -198,10 +204,11 @@ type userProfileHandlers struct {
 	users    *user.Service
 	attempts *attempt.Service
 	emails   *identity.Service
+	people   *people.Resolver
 }
 
-func userProfileResource(users *user.Service, attempts *attempt.Service, emails *identity.Service) route.Resource {
-	h := userProfileHandlers{users: users, attempts: attempts, emails: emails}
+func userProfileResource(users *user.Service, attempts *attempt.Service, emails *identity.Service, resolver *people.Resolver) route.Resource {
+	h := userProfileHandlers{users: users, attempts: attempts, emails: emails, people: resolver}
 	userPath := "/users/{user_id}"
 	picture := "/users/{user_id}/profile-picture"
 	email := "/users/{user_id}/email"
@@ -731,10 +738,26 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
+	// A scoped page carries no disable record, so only an institution-wide
+	// reader's disabled rows are named, in one read for the page.
+	disablers := make([]model.UserID, 0, len(page.Items))
+	for _, entry := range page.Items {
+		disablers = append(disablers, entry.User.DisabledByUserID)
+	}
+	refs, err := namePeople(request, h.people, "administration.unavailable", disablers...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	envelope, err := route.NewList(
 		page.Items,
 		page.HasMore,
-		userDirectoryEntryResponseFromApplication,
+		func(entry user.UserDirectoryEntry) userDirectoryEntryResponse {
+			response := userDirectoryEntryResponseFromApplication(entry)
+			response.DisabledBy = personRef(refs, entry.User.DisabledByUserID)
+			response.DisabledReason = entry.User.DisabledReason
+			return response
+		},
 		func(last user.UserDirectoryEntry) (string, error) {
 			return route.EncodeCursor(newUserDirectoryCursor(order, last.User), userDirectoryCursorSpec())
 		},
@@ -975,7 +998,14 @@ func (h userProfileHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, userProfileResponseFromModel(account)), nil
+	refs, err := namePeople(request, h.people, "administration.unavailable", account.DisabledByUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := userProfileResponseFromModel(account)
+	response.DisabledBy = personRef(refs, account.DisabledByUserID)
+	response.DisabledReason = account.DisabledReason
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func (h userProfileHandlers) update(request route.Request) (route.Result, error) {

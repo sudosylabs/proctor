@@ -3986,6 +3986,12 @@ func (s *timedRoleBindingStore) ListByScope(arg0 context.Context, arg1 model.Rol
 	})
 }
 
+func (s *timedRoleBindingStore) ListTeachersByClasses(arg0 context.Context, arg1 store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListTeachersByClasses), func(callCtx context.Context) ([]store.ClassTeachers, error) {
+		return s.next.ListTeachersByClasses(callCtx, arg1)
+	})
+}
+
 func (s *timedRoleBindingStore) ListCurrentByRoles(arg0 context.Context, arg1 store.RoleBindingRoleListOptions) ([]*model.RoleBinding, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListCurrentByRoles), func(callCtx context.Context) ([]*model.RoleBinding, error) {
 		return s.next.ListCurrentByRoles(callCtx, arg1)

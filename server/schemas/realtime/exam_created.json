@@ -1,0 +1,18 @@
+{
+  "title": "Exam created",
+  "description": "Names the new Exam and the Academic Unit that owns it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "academic_unit_id"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "academic_unit_id": {
+      "$ref": "id.json"
+    }
+  }
+}

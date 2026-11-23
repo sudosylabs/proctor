@@ -25,7 +25,8 @@ import (
 )
 
 // SetUserEnabledCommand enables or disables a user. Reason is accepted only
-// when disabling and is stored only in the audit event.
+// when disabling; it is stored on the User with who disabled it, and in the
+// audit event.
 type SetUserEnabledCommand struct {
 	ID             model.UserID
 	Enabled        bool
@@ -36,7 +37,7 @@ type SetUserEnabledCommand struct {
 }
 
 // MaximumAccountDisableReasonRunes is the longest disable reason, in runes.
-const MaximumAccountDisableReasonRunes = 500
+const MaximumAccountDisableReasonRunes = model.UserDisableReasonMaxRunes
 
 func accountDisableReason(command SetUserEnabledCommand) (string, error) {
 	if command.Reason == nil {
@@ -175,6 +176,8 @@ func (s *Service) setUserEnabledFromCurrent(
 				ID:               userID,
 				ExpectedRevision: current.Revision,
 				Disabled:         disabled,
+				DisabledBy:       inv.Principal().UserID,
+				DisabledReason:   reason,
 				Capabilities:     AccessDeploymentCapabilities(s.capabilities.Snapshot()),
 				Occurrence:       prepared.Occurrence,
 				Delivery:         prepared.Delivery,
@@ -202,6 +205,7 @@ func (s *Service) setUserEnabledFromCurrent(
 	if disabled && result != nil && len(result.RevokedSessions) > 0 {
 		s.publisher.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 	}
+	s.publishUserChanged(ctx, userID)
 
 	return result.User, false, nil
 }

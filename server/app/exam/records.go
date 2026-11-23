@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -29,6 +30,9 @@ type Records struct {
 	recentTTL  time.Duration
 	now        func() time.Time
 	newHoldID  func() model.RetentionHoldID
+	// publisher tells retention viewers that holds or records due changed;
+	// nil publishes nothing.
+	publisher realtime.Publisher
 }
 
 // RecordsDependencies are the collaborators of NewRecords.
@@ -41,6 +45,8 @@ type RecordsDependencies struct {
 	RecentTTL   time.Duration
 	Now         func() time.Time
 	NewHoldID   func() model.RetentionHoldID
+	// Publisher is optional; without it nothing is announced.
+	Publisher realtime.Publisher
 }
 
 // NewRecords returns a Records service, or an error when a required
@@ -66,5 +72,6 @@ func NewRecords(deps RecordsDependencies) (*Records, error) {
 		recentTTL:           deps.RecentTTL,
 		now:                 deps.Now,
 		newHoldID:           deps.NewHoldID,
+		publisher:           deps.Publisher,
 	}, nil
 }

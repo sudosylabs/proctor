@@ -15,6 +15,7 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -63,7 +64,10 @@ func planUserDisabledStateChange(input *store.UserDisabledStateChange) (userDisa
 		input.ChangedAt.IsZero() ||
 		!input.AuditEventID.IsValid() ||
 		input.AuditAt.IsZero() ||
-		!validAccessDeploymentCapabilities(input.Capabilities) {
+		!validAccessDeploymentCapabilities(input.Capabilities) ||
+		(!input.DisabledBy.IsZero() && !input.DisabledBy.IsValid()) ||
+		!model.ValidUserDisableReason(input.DisabledReason) ||
+		(!input.Disabled && (!input.DisabledBy.IsZero() || input.DisabledReason != "")) {
 		return userDisabledStatePlan{}, store.NewErrInvalidInput("user", "disabled_state_change", nil)
 	}
 
@@ -293,7 +297,7 @@ func persistUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *sto
 		tx,
 		input.ID.String(),
 		input.ExpectedRevision,
-		disabledAt,
+		userDisabledRecord{at: disabledAt, by: input.DisabledBy, reason: input.DisabledReason},
 		input.ChangedAt,
 		mailEligibilityRevision,
 	)
@@ -381,15 +385,24 @@ func decodeUserDisabledMutationOutcome(data []byte) (*userDisabledMutationResult
 	return &userDisabledMutationResult{Value: &store.UserDisabledStateResult{User: &model.User{ID: id}}, NoOp: outcome.NoOp}, nil
 }
 
+// userDisabledRecord is the disable a write records; a zero at enables the
+// account and clears who and why.
+type userDisabledRecord struct {
+	at     time.Time
+	by     model.UserID
+	reason string
+}
+
 func setUserDisabled(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	id string,
 	expectedRevision int64,
-	disabledAt time.Time,
+	record userDisabledRecord,
 	updateAt time.Time,
 	mailEligibilityRevision int64,
 ) (*userRow, error) {
+	disabledAt := record.at
 	if expectedRevision <= 0 ||
 		updateAt.IsZero() ||
 		(!disabledAt.IsZero() && !disabledAt.Equal(updateAt)) ||
@@ -406,12 +419,15 @@ func setUserDisabled(
 		UPDATE users
 		   SET updated_at = GREATEST(updated_at, ?),
 		       disabled_at = CASE WHEN ? THEN GREATEST(created_at, ?) END,
+		       disabled_by_user_id = ?, disabled_reason = ?,
 		       mail_eligibility_revision = ?, revision = revision + 1
 		 WHERE id = ? AND archived_at IS NULL AND revision = ?
 		   AND ((? AND disabled_at IS NULL) OR (NOT ? AND disabled_at IS NOT NULL))`,
 		updateTime,
 		!disabledAt.IsZero(),
 		updateTime,
+		nullableID(record.by.String()),
+		sql.NullString{String: record.reason, Valid: record.reason != ""},
 		mailEligibilityRevision,
 		id,
 		expectedRevision,

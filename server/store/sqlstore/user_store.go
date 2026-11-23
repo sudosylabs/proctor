@@ -52,6 +52,8 @@ type userRow struct {
 	LastLoginAt                 sql.NullTime   `db:"last_login_at"`
 	LastActivityAt              sql.NullTime   `db:"last_activity_at"`
 	DisabledAt                  sql.NullTime   `db:"disabled_at"`
+	DisabledByUserID            sql.NullString `db:"disabled_by_user_id"`
+	DisabledReason              sql.NullString `db:"disabled_reason"`
 	DefaultProfilePictureSeed   string         `db:"default_profile_picture_seed"`
 	DefaultProfilePictureFileID sql.NullString `db:"default_profile_picture_file_id"`
 	CustomProfilePictureFileID  sql.NullString `db:"custom_profile_picture_file_id"`
@@ -77,6 +79,8 @@ func userSliceColumns() []string {
 		"users.last_login_at",
 		"users.last_activity_at",
 		"users.disabled_at",
+		"users.disabled_by_user_id",
+		"users.disabled_reason",
 		"users.default_profile_picture_seed",
 		"users.default_profile_picture_file_id",
 		"users.custom_profile_picture_file_id",
@@ -304,14 +308,14 @@ func insertUser(ctx context.Context, executor sqlxExecutor, user *model.User) er
 		INSERT INTO users (
 			id, created_at, updated_at, archived_at, revision, username, email,
 			email_verified, display_name, first_name, last_name, locale,
-			timezone, last_login_at, last_activity_at, disabled_at,
+			timezone, last_login_at, last_activity_at, disabled_at, disabled_by_user_id, disabled_reason,
 			default_profile_picture_seed, default_profile_picture_file_id,
 			custom_profile_picture_file_id, profile_picture_changed_at
 		)
 		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :revision, :username, :email,
 			:email_verified, :display_name, :first_name, :last_name, :locale,
-			:timezone, :last_login_at, :last_activity_at, :disabled_at,
+			:timezone, :last_login_at, :last_activity_at, :disabled_at, :disabled_by_user_id, :disabled_reason,
 			:default_profile_picture_seed, :default_profile_picture_file_id,
 			:custom_profile_picture_file_id, :profile_picture_changed_at
 		)`, &row); err != nil {
@@ -1245,7 +1249,7 @@ func getUserByIDForUpdate(ctx context.Context, executor sqlxExecutor, id string)
 	if err := executor.Get(ctx, &row, `
 		SELECT id, created_at, updated_at, archived_at, revision, username, email,
 		       email_verified, display_name, first_name, last_name, locale,
-		       timezone, last_login_at, last_activity_at, disabled_at,
+		       timezone, last_login_at, last_activity_at, disabled_at, disabled_by_user_id, disabled_reason,
 		       default_profile_picture_seed, default_profile_picture_file_id,
 		       custom_profile_picture_file_id, profile_picture_changed_at
 		  FROM users
@@ -1261,7 +1265,7 @@ func getUserByID(ctx context.Context, executor sqlxExecutor, id string) (*model.
 	if err := executor.Get(ctx, &row, `
 		SELECT id, created_at, updated_at, archived_at, revision, username, email,
 		       email_verified, display_name, first_name, last_name, locale,
-		       timezone, last_login_at, last_activity_at, disabled_at
+		       timezone, last_login_at, last_activity_at, disabled_at, disabled_by_user_id, disabled_reason
 		       , default_profile_picture_seed, default_profile_picture_file_id,
 		       custom_profile_picture_file_id, profile_picture_changed_at
 		  FROM users
@@ -1442,6 +1446,8 @@ func newUserRow(user *model.User) userRow {
 		LastLoginAt:                 NullTimeFromOptional(user.LastLoginAt),
 		LastActivityAt:              NullTimeFromOptional(user.LastActivityAt),
 		DisabledAt:                  NullTimeFromOptional(user.DisabledAt),
+		DisabledByUserID:            nullableID(user.DisabledByUserID.String()),
+		DisabledReason:              sql.NullString{String: user.DisabledReason, Valid: user.DisabledReason != ""},
 		DefaultProfilePictureSeed:   user.DefaultProfilePictureSeed,
 		DefaultProfilePictureFileID: nullableID(user.DefaultProfilePictureFileID.String()),
 		CustomProfilePictureFileID:  nullableID(user.CustomProfilePictureFileID.String()),
@@ -1475,6 +1481,11 @@ func (row userRow) model() (*model.User, error) {
 		return nil, err
 	}
 
+	disabledByID, err := parseNullablePersistedID("user", "disabled_by_user_id", row.DisabledByUserID, model.ParseUserID)
+	if err != nil {
+		return nil, err
+	}
+
 	value := &model.User{
 		ID:                          id,
 		CreatedAt:                   row.CreatedAt.UTC(),
@@ -1492,6 +1503,8 @@ func (row userRow) model() (*model.User, error) {
 		LastLoginAt:                 OptionalTimeFromNullTime(row.LastLoginAt),
 		LastActivityAt:              OptionalTimeFromNullTime(row.LastActivityAt),
 		DisabledAt:                  OptionalTimeFromNullTime(row.DisabledAt),
+		DisabledByUserID:            disabledByID,
+		DisabledReason:              row.DisabledReason.String,
 		DefaultProfilePictureSeed:   row.DefaultProfilePictureSeed,
 		DefaultProfilePictureFileID: defaultPictureID,
 		CustomProfilePictureFileID:  customPictureID,

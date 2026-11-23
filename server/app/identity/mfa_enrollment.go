@@ -345,6 +345,7 @@ func (s *Service) ActivateMFA(
 		[]model.SessionID{principal.SessionID},
 		activated.AccessTokenHashes,
 	)
+	s.publishUserChanged(ctx, principal.UserID)
 	return &MFAActivation{RecoveryCodes: rawCodes}, nil
 }
 
@@ -410,6 +411,7 @@ func (s *Service) DisableMFA(
 	s.publisher.SessionsRevoked(
 		ctx, principal.UserID, nil, result.AccessTokenHashes,
 	)
+	s.publishUserChanged(ctx, principal.UserID)
 	return nil
 }
 

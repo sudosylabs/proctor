@@ -90,7 +90,7 @@ components:
       name: invitation.changed
       title: Invitation changed
       summary: Refetch an Invitation you issued; it reached a new state.
-      description: Refetch an Invitation you issued; it reached a new state, today when it is accepted. Delivered to the connections of the User who issued it.
+      description: Refetch an Invitation you issued; it reached a new state, today when it is accepted. The event names the scope the Invitation grants at. Delivered to the connections of the User who issued it.
       tags:
         - name: event
         - name: Onboarding
@@ -125,3 +125,5 @@ components:
               schema_version: 1
               invitation_id: '6br8kpous3h9nfemqtwz47ydgj'
               state: accepted
+              scope_type: class
+              scope_id: z47ydgjcx1ia56br8kpous3h9n

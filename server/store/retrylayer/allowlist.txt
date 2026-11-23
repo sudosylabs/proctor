@@ -191,6 +191,7 @@ RoleBindingStore.ListByUser                                always
 RoleBindingStore.ListVisibleByUser                         always
 RoleBindingStore.ListVisibleSummariesByUsers               always
 RoleBindingStore.ListByScope                               always
+RoleBindingStore.ListTeachersByClasses                     always
 RoleBindingStore.ListCurrentByRoles                        always
 RoleBindingStore.CountCurrentByRoles                       always
 RoleBindingStore.CountHoldersByRoles                       always

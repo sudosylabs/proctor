@@ -549,8 +549,11 @@ func (r *SubmissionReview) Reopen(expectedRevision int64, at time.Time) error {
 // StudentResult is everything the candidate sees on release. It leaves out
 // evidence, decisions, private rationale, manager notes and sealed content.
 type StudentResult struct {
-	ReviewID               SubmissionReviewID
-	SubmissionID           SubmissionID
+	ReviewID     SubmissionReviewID
+	SubmissionID SubmissionID
+	// ReceiptCode is the Submission's receipt, so the candidate can quote it
+	// long after submitting. A Review alone does not know it.
+	ReceiptCode            SubmissionReceiptCode
 	AttemptID              ExamAttemptID
 	CandidateUserID        UserID
 	StudentRemarksMarkdown string

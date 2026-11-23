@@ -1077,8 +1077,13 @@ const (
 type CandidateExamAccessState string
 
 const (
-	CandidateExamAccessNotOpen               CandidateExamAccessState = "not_open"
-	CandidateExamAccessJoinable              CandidateExamAccessState = "joinable"
+	CandidateExamAccessNotOpen    CandidateExamAccessState = "not_open"
+	CandidateExamAccessJoinable   CandidateExamAccessState = "joinable"
+	CandidateExamAccessJoinClosed CandidateExamAccessState = "join_closed"
+	// CandidateExamAccessWaiting is the early-join phase: the candidate may
+	// run the readiness checks and read the instructions, and the Attempt
+	// starts when the sitting opens at its scheduled start.
+	CandidateExamAccessWaiting               CandidateExamAccessState = "waiting"
 	CandidateExamAccessResumable             CandidateExamAccessState = "resumable"
 	CandidateExamAccessSittingPaused         CandidateExamAccessState = "sitting_paused"
 	CandidateExamAccessAwaitReallow          CandidateExamAccessState = "await_reallow"
@@ -1107,14 +1112,22 @@ type CandidateExamActivityListOptions struct {
 	Limit                 int
 }
 
+// CandidateExamActivityAttempt is the candidate's own view of their Attempt.
+// SuspendedAt is when the current or latest suspension began and ReallowedAt
+// when the latest one was lifted; who acted and why stay with managers.
+// LastSavedAt is when the workspace last acknowledged a change.
 type CandidateExamActivityAttempt struct {
 	ID                   model.ExamAttemptID
 	State                model.ExamAttemptState
 	SuspensionReasonCode model.AttemptSuspensionCandidateReason
+	SuspendedAt          model.OptionalTime
+	ReallowedAt          model.OptionalTime
+	LastSavedAt          model.OptionalTime
 }
 
 type CandidateExamActivitySubmission struct {
 	ID          model.SubmissionID
+	ReceiptCode model.SubmissionReceiptCode
 	SubmittedAt time.Time
 	Provenance  model.ExamSubmissionProvenance
 }
@@ -1131,6 +1144,7 @@ type CandidateExamActivityItem struct {
 	ClassDisplayName        string
 	ScheduledStartAt        time.Time
 	ScheduledEndAt          time.Time
+	JoinWindow              model.ExamSittingJoinWindow
 	SittingState            model.ExamSittingState
 	SittingReasonCode       string
 	ActivityState           CandidateExamActivityState

@@ -57,7 +57,7 @@ type sittingFixture struct {
 func (f sittingFixture) sitting(t *testing.T) *model.ExamSitting {
 	t.Helper()
 	sitting, err := model.NewExamSitting(f.sittingID, f.examID, f.revisionID, f.classID,
-		testNow.Add(time.Hour), testNow.Add(3*time.Hour), testNow)
+		testNow.Add(time.Hour), testNow.Add(3*time.Hour), model.ExamSittingJoinWindow{}, testNow)
 	require.NoError(t, err)
 	return sitting
 }

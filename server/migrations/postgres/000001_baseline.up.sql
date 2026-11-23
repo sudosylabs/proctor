@@ -1443,6 +1443,11 @@ CREATE TABLE exam_sittings (
     class_id varchar(26) NOT NULL REFERENCES classes(id),
     scheduled_start_at timestamptz NOT NULL,
     scheduled_end_at timestamptz NOT NULL,
+    -- The optional join window: when candidates may join early to prepare,
+    -- and when first entry closes. The sitting still opens at its scheduled
+    -- start. Both freeze when the sitting opens.
+    join_opens_at timestamptz,
+    join_closes_at timestamptz,
     state varchar(16) NOT NULL CHECK (state IN ('scheduled', 'open', 'paused', 'closing', 'closed', 'canceled')),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
@@ -1462,6 +1467,10 @@ CREATE TABLE exam_sittings (
         FOREIGN KEY (exam_id, exam_revision_id, exam_revision_sealed)
         REFERENCES exam_revisions(exam_id, id, sealed),
     CONSTRAINT exam_sittings_schedule_check CHECK (scheduled_start_at < scheduled_end_at),
+    CONSTRAINT exam_sittings_join_window_check CHECK (
+        (join_opens_at IS NULL OR join_opens_at <= scheduled_start_at) AND
+        (join_closes_at IS NULL OR (join_closes_at > scheduled_start_at AND join_closes_at <= scheduled_end_at))
+    ),
     CONSTRAINT exam_sittings_mail_disabled_suppressed_revision_check CHECK (
         (mail_disabled_suppressed_revision IS NULL AND mail_disabled_suppressed_audience_revision IS NULL AND
             mail_disabled_suppressed_eligibility_revision IS NULL) OR

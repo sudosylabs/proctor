@@ -7824,6 +7824,7 @@
         "exam.attempt.already_connected",
         "exam.attempt.unavailable",
         "exam.attempt.sitting_not_open",
+        "exam.attempt.join_closed",
         "exam.attempt.state_conflict",
         "exam.delivery.metadata_capacity",
         "exam.security.attempt_not_ready",

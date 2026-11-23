@@ -166,6 +166,17 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	require.Equal(t, connected.Participation.Generation, sealed.Generation)
 	require.Equal(t, connected.Connection.ID, sealed.ConnectionID)
 	requireSuccessfulAudit(t, ctx, ss, input.AuditEventID)
+	activity, err := ss.ExamAttempt().ListCandidateActivity(ctx, store.CandidateExamActivityListOptions{
+		CandidateUserID: fixture.candidate.ID, Limit: 50,
+	})
+	require.NoError(t, err)
+	require.Len(t, activity.Items, 1)
+	require.NotNil(t, activity.Items[0].Submission)
+	require.Equal(t, input.ReceiptCode, activity.Items[0].Submission.ReceiptCode, "the candidate can read the receipt code after submitting")
+	require.NotNil(t, activity.Items[0].Attempt)
+	require.Equal(t, model.OptionalTimeFrom(written.Changes[0].ChangedAt), activity.Items[0].Attempt.LastSavedAt,
+		"the workspace's latest acknowledged change is when the work was last saved")
+	require.False(t, activity.Items[0].Attempt.SuspendedAt.Valid, "an Attempt never suspended has no suspension time")
 	requireExamAttemptSubmittedEvent(t, ctx, ss, input.DomainEventID, input.DomainEventJobID, examAttemptSubmittedFact{
 		SubmissionID: sealed.Receipt.SubmissionID, AttemptID: connected.Attempt.ID, SittingID: fixture.sitting.ID,
 		ExamID: fixture.examID, SubmittedAt: sealed.Receipt.SubmittedAt,

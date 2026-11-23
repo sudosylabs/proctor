@@ -318,6 +318,7 @@ components:
               start_rule_id: reference
               rules:
                 - rule_id: reference
+                  label: Algorithms reference
                   origin: https://reference.example.edu
                   path_prefix: /algorithms
                   host_match: exact
@@ -325,6 +326,7 @@ components:
                   blocked_navigation_outcome: record
                   institution_http_exception: false
                 - rule_id: library
+                  label: Course library
                   origin: https://library.example.edu
                   path_prefix: /
                   host_match: exact_and_subdomains

@@ -195,6 +195,58 @@ func TestBrowserPolicyRequiresExplicitExceptionField(t *testing.T) {
 	}
 }
 
+func TestBrowserPolicyRuleLabel(t *testing.T) {
+	rule := func(label string) []BrowserPolicyRule {
+		return []BrowserPolicyRule{{
+			RuleID: "start", Label: label, Origin: "https://docs.example", PathPrefix: "/",
+			HostMatch: BrowserPolicyHostExact, BlockedNavigationOutcome: BrowserPolicyBlockedNavigationRecord,
+		}}
+	}
+
+	policy, err := NewBrowserPolicy(true, "start", rule("  PostgreSQL docu\u202ementation\u2066 "))
+	require.NoError(t, err)
+	assert.Equal(t, "PostgreSQL documentation", policy.Rules[0].Label)
+
+	encoded, err := EncodeBrowserPolicy(policy)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"label":"PostgreSQL documentation"`)
+	decoded, err := DecodeBrowserPolicy(encoded)
+	require.NoError(t, err)
+	assert.Equal(t, policy, decoded, "the label survives the canonical round trip")
+
+	blank, err := NewBrowserPolicy(true, "start", rule(" \u202a "))
+	require.NoError(t, err)
+	assert.Empty(t, blank.Rules[0].Label, "a blank label is absent")
+	encoded, err = EncodeBrowserPolicy(blank)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "label", "an absent label is not encoded")
+
+	labeled, err := NewBrowserPolicy(true, "start", rule("Docs"))
+	require.NoError(t, err)
+	before, err := BrowserPolicyDigest(blank)
+	require.NoError(t, err)
+	after, err := BrowserPolicyDigest(labeled)
+	require.NoError(t, err)
+	assert.NotEqual(t, before, after, "the label is part of the frozen policy")
+
+	for name, label := range map[string]string{
+		"too long": strings.Repeat("x", BrowserPolicyRuleLabelMaxRunes+1),
+		"control":  "Docs\nnotes",
+		"invalid":  "\xff",
+	} {
+		_, err = NewBrowserPolicy(true, "start", rule(label))
+		assert.Error(t, err, name)
+	}
+	_, err = NewBrowserPolicy(true, "start", rule(strings.Repeat("é", BrowserPolicyRuleLabelMaxRunes)))
+	assert.NoError(t, err, "the bound counts characters, not bytes")
+
+	untrimmed := labeled.Clone()
+	untrimmed.Rules[0].Label = " Docs"
+	assert.Error(t, untrimmed.Validate(), "a stored label must already be normalized")
+	_, err = DecodeBrowserPolicy([]byte(`{"enabled":true,"rules":[{"allow_redirects":false,"blocked_navigation_outcome":"record","host_match":"exact","institution_http_exception":false,"label":"","origin":"https://docs.example","path_prefix":"/","rule_id":"start"}],"start_rule_id":"start"}`))
+	assert.Error(t, err, "an empty label is not canonical")
+}
+
 func TestBrowserPolicyCanonicalAgreementFixtures(t *testing.T) {
 	raw, err := os.ReadFile("testdata/browser_policies.json")
 	require.NoError(t, err)

@@ -157,6 +157,7 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"exam.attempt.environment_unavailable":                        {status: http.StatusServiceUnavailable},
 	"exam.attempt.focus_loss_conflict":                            {status: http.StatusConflict},
 	"exam.attempt.invalid":                                        {status: http.StatusBadRequest},
+	"exam.attempt.join_closed":                                    {status: http.StatusConflict},
 	"exam.attempt.management_authority_conflict":                  {status: http.StatusConflict},
 	"exam.attempt.not_found":                                      {status: http.StatusNotFound},
 	"exam.attempt.preview_connection_ended":                       {status: http.StatusConflict},

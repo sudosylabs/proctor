@@ -88,6 +88,8 @@ components:
                   display_name: CS201 Group A
                 scheduled_start_at: '2026-09-14T09:00:00Z'
                 scheduled_end_at: '2026-09-14T11:00:00Z'
+                join_opens_at: '2026-09-14T08:50:00Z'
+                join_closes_at: '2026-09-14T09:30:00Z'
                 sitting_state: open
                 sitting_reason_code: null
                 activity_state: in_progress
@@ -98,6 +100,9 @@ components:
                   id: o87yi4tenx8kodmcuup1hmtsbo
                   state: active
                   suspension_reason_code: null
+                  suspended_at: '2026-09-14T09:27:04Z'
+                  reallowed_at: '2026-09-14T09:38:15Z'
+                  last_saved_at: '2026-09-14T09:52:40Z'
                 submission: null
                 result: null
               - exam_id: nybc6xhg593upqice3sdeyro5k
@@ -123,6 +128,7 @@ components:
                   suspension_reason_code: null
                 submission:
                   id: xpq79ar61ncrjiouey6d9tgp91
+                  receipt_code: 7QXR-4M2K-HV9D-3JNP
                   submitted_at: '2026-09-07T13:48:10Z'
                   provenance: candidate_submitted
                 result:
@@ -157,11 +163,15 @@ components:
         continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is
         suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another
         unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example
-        because they left the Class or manage the Exam. `not_open`, `submitted`, `result_available` and `ended`
-        follow the Sitting and Submission.
+        because they left the Class or manage the Exam. `waiting` means the Sitting's join window is open but the
+        Sitting has not started: the candidate can run the readiness checks and read the instructions, and the
+        Attempt starts at the scheduled start. `join_closed` means the join window has closed before they started.
+        `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.
       enum:
         - not_open
+        - waiting
         - joinable
+        - join_closed
         - resumable
         - sitting_paused
         - await_reallow
@@ -214,14 +224,36 @@ components:
             - native_policy_review_required
             - manager_suspended
             - null
+        suspended_at:
+          type: string
+          format: date-time
+          description: >-
+            When the current suspension began, or the latest one if the candidate was let back in. Absent when the
+            Attempt was never suspended.
+        reallowed_at:
+          type: string
+          format: date-time
+          description: When an invigilator last let the candidate back in. Absent until that happens.
+        last_saved_at:
+          type: string
+          format: date-time
+          description: >-
+            When the workspace last acknowledged a change, from any Proctor Desktop the candidate used. Absent until
+            the first change.
     CandidateExamActivitySubmissionResponse:
       type: object
       additionalProperties: false
       description: The candidate's Submission for this Sitting.
-      required: [id, submitted_at, provenance]
+      required: [id, receipt_code, submitted_at, provenance]
       properties:
         id:
           $ref: '#/components/schemas/ID'
+        receipt_code:
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$
+          description: >-
+            The Submission's receipt code, the same value returned when it was submitted, in groups of four separated
+            by hyphens.
         submitted_at:
           type: string
           format: date-time
@@ -284,6 +316,18 @@ components:
           type: string
           format: date-time
           description: Scheduled end of the Sitting.
+        join_opens_at:
+          type: string
+          format: date-time
+          description: >-
+            When the candidate can join to prepare: run the readiness checks and read the instructions. The Attempt
+            still starts at scheduled_start_at. Absent when there is no early join.
+        join_closes_at:
+          type: string
+          format: date-time
+          description: >-
+            When the Sitting stops admitting candidates who have not started. Absent when they can start until the
+            end. A candidate who has started can carry on until the end.
         sitting_state:
           $ref: '#/components/schemas/ExamSittingState'
         sitting_reason_code:

@@ -175,7 +175,9 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 
 // securityPolicyOverviewResponse is the policy the readiness overview checks
 // the machine against. readiness_digest is compared with the one the
-// preflight prepared at Start returns.
+// preflight prepared at Start returns. focus_loss and browser_sites tell the
+// candidate the rules they are held to, without rule IDs, review outcomes or
+// thresholds beyond these.
 type securityPolicyOverviewResponse struct {
 	ServerTime                time.Time                         `json:"server_time"`
 	Policy                    model.EffectiveExamSecurityPolicy `json:"policy"`
@@ -184,6 +186,38 @@ type securityPolicyOverviewResponse struct {
 	CatalogBindings           []model.SecurityCatalogBinding    `json:"catalog_bindings"`
 	BrowserActivityDisclosure model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
 	ScreenRecordingDisclosure *model.ScreenRecordingDisclosure  `json:"screen_recording_disclosure"`
+	FocusLoss                 candidateFocusLossRuleResponse    `json:"focus_loss"`
+	BrowserSites              []candidateBrowserSiteResponse    `json:"browser_sites"`
+	InstructionsMarkdown      string                            `json:"instructions_markdown"`
+}
+
+type candidateFocusLossRuleResponse struct {
+	Mode          model.NativeMode                `json:"mode"`
+	Count         int                             `json:"count,omitempty"`
+	WindowSeconds int64                           `json:"window_seconds,omitempty"`
+	Outcome       model.CandidateFocusLossOutcome `json:"outcome"`
+}
+
+type candidateBrowserSiteResponse struct {
+	Label      string `json:"label,omitempty"`
+	Origin     string `json:"origin"`
+	PathPrefix string `json:"path_prefix"`
+	Start      bool   `json:"start"`
+}
+
+// candidateFocusLossRuleFrom rounds a window with a fraction of a second up,
+// so the candidate is never told a shorter window than the one that counts.
+func candidateFocusLossRuleFrom(rule model.CandidateFocusLossRule) candidateFocusLossRuleResponse {
+	seconds := int64((rule.Window + time.Second - 1) / time.Second)
+	return candidateFocusLossRuleResponse{Mode: rule.Mode, Count: rule.IncidentCount, WindowSeconds: seconds, Outcome: rule.Outcome}
+}
+
+func candidateBrowserSitesFrom(sites []model.CandidateBrowserSite) []candidateBrowserSiteResponse {
+	response := make([]candidateBrowserSiteResponse, len(sites))
+	for index, site := range sites {
+		response[index] = candidateBrowserSiteResponse{Label: site.Label, Origin: site.Origin, PathPrefix: site.PathPrefix, Start: site.Start}
+	}
+	return response
 }
 
 func (h examAttemptHandlers) securityPolicyOverview(request route.Request) (route.Result, error) {
@@ -207,9 +241,13 @@ func (h examAttemptHandlers) securityPolicyOverview(request route.Request) (rout
 		CapabilityMatrixDigest: overview.Resolved.CapabilityMatrixDigest, CatalogBindings: overview.Resolved.CatalogBindings,
 		BrowserActivityDisclosure: overview.BrowserActivityDisclosure,
 		ScreenRecordingDisclosure: overview.ScreenRecordingDisclosure,
+		FocusLoss:                 candidateFocusLossRuleFrom(overview.FocusLoss.CandidateRule(overview.Resolved.Policy.FocusLossMode)),
+		BrowserSites:              candidateBrowserSitesFrom(overview.BrowserPolicy.CandidateSites()),
+		InstructionsMarkdown:      overview.InstructionsMarkdown,
 	}
 	encoded, err := json.Marshal(result)
-	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
+	// The instructions have their own bound, on top of the policy's.
+	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes+2*model.ExamInstructionsMarkdownMaxBytes {
 		return route.Result{}, route.ErrUnpresentable
 	}
 	return route.JSON(http.StatusOK, result).WithHeaders(privateNoStoreHeaders()), nil

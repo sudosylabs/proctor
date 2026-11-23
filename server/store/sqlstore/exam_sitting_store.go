@@ -37,6 +37,8 @@ type examSittingRow struct {
 	ClassID          string         `db:"class_id"`
 	ScheduledStartAt time.Time      `db:"scheduled_start_at"`
 	ScheduledEndAt   time.Time      `db:"scheduled_end_at"`
+	JoinOpensAt      sql.NullTime   `db:"join_opens_at"`
+	JoinClosesAt     sql.NullTime   `db:"join_closes_at"`
 	State            string         `db:"state"`
 	CreatedAt        time.Time      `db:"created_at"`
 	UpdatedAt        time.Time      `db:"updated_at"`
@@ -51,7 +53,7 @@ type examSittingRow struct {
 }
 
 const examSittingColumns = `id, exam_id, exam_revision_id, class_id, scheduled_start_at,
-	scheduled_end_at, state, created_at, updated_at, opened_at, paused_at, closing_at, closed_at,
+	scheduled_end_at, join_opens_at, join_closes_at, state, created_at, updated_at, opened_at, paused_at, closing_at, closed_at,
 	canceled_at, reason_code, revision,
 	(SELECT academic_unit_id FROM exams WHERE exams.id = exam_sittings.exam_id) AS academic_unit_id`
 const examSittingSelect = `SELECT ` + examSittingColumns + ` FROM exam_sittings`
@@ -77,6 +79,10 @@ func (row examSittingRow) model() (*model.ExamSitting, error) {
 		return nil, invalidPersistedState("exam_sitting", "class_id", err)
 	}
 
+	joinWindow := model.ExamSittingJoinWindow{
+		OpensAt:  OptionalTimeFromNullTime(row.JoinOpensAt),
+		ClosesAt: OptionalTimeFromNullTime(row.JoinClosesAt),
+	}
 	sitting := &model.ExamSitting{
 		ID:               id,
 		ExamID:           examID,
@@ -84,6 +90,7 @@ func (row examSittingRow) model() (*model.ExamSitting, error) {
 		ClassID:          classID,
 		ScheduledStartAt: model.TimeUTC(row.ScheduledStartAt),
 		ScheduledEndAt:   model.TimeUTC(row.ScheduledEndAt),
+		JoinWindow:       joinWindow,
 		State:            model.ExamSittingState(row.State),
 		CreatedAt:        model.TimeUTC(row.CreatedAt),
 		UpdatedAt:        model.TimeUTC(row.UpdatedAt),
@@ -551,6 +558,7 @@ func prepareExamSittingUpdate(input *store.ExamSittingScheduleUpdate) error {
 		input.ScheduledStartAt.IsZero() ||
 		input.ScheduledEndAt.IsZero() ||
 		!input.ScheduledStartAt.Before(input.ScheduledEndAt) ||
+		input.JoinWindow.ValidateFor(input.ScheduledStartAt, input.ScheduledEndAt) != nil ||
 		!input.AuditEventID.IsValid() ||
 		input.AuditAt.IsZero() {
 		return store.NewErrInvalidInput("exam_sitting", "schedule_update", nil)
@@ -688,16 +696,18 @@ func scheduleExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	_, err = tx.Exec(
 		ctx,
 		`INSERT INTO exam_sittings (
-			id, exam_id, exam_revision_id, class_id, scheduled_start_at, scheduled_end_at, state,
-			created_at, updated_at, revision
+			id, exam_id, exam_revision_id, class_id, scheduled_start_at, scheduled_end_at,
+			join_opens_at, join_closes_at, state, created_at, updated_at, revision
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		candidate.ID.String(),
 		candidate.ExamID.String(),
 		candidate.ExamRevisionID.String(),
 		candidate.ClassID.String(),
 		candidate.ScheduledStartAt,
 		candidate.ScheduledEndAt,
+		NullTimeFromOptional(candidate.JoinWindow.OpensAt),
+		NullTimeFromOptional(candidate.JoinWindow.ClosesAt),
 		candidate.State,
 		candidate.CreatedAt,
 		candidate.UpdatedAt,
@@ -763,7 +773,7 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 		return nil, err
 	}
 
-	changed, err := current.ApplySchedule(input.ExamRevisionID, input.ClassID, input.ScheduledStartAt, input.ScheduledEndAt, changedAt)
+	changed, err := current.ApplySchedule(input.ExamRevisionID, input.ClassID, input.ScheduledStartAt, input.ScheduledEndAt, input.JoinWindow, changedAt)
 	if err != nil {
 		return nil, store.NewErrInvalidInput("exam_sitting", "schedule", nil).Wrap(err)
 	}
@@ -775,7 +785,7 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 		ctx,
 		`UPDATE exam_sittings
 		SET exam_revision_id = ?, class_id = ?, scheduled_start_at = ?, scheduled_end_at = ?,
-			updated_at = ?, revision = ?
+			join_opens_at = ?, join_closes_at = ?, updated_at = ?, revision = ?
 		WHERE exam_id = ?
 			AND id = ?
 			AND state = 'scheduled'
@@ -784,6 +794,8 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 		current.ClassID.String(),
 		current.ScheduledStartAt,
 		current.ScheduledEndAt,
+		NullTimeFromOptional(current.JoinWindow.OpensAt),
+		NullTimeFromOptional(current.JoinWindow.ClosesAt),
 		current.UpdatedAt,
 		current.Revision,
 		current.ExamID.String(),
@@ -917,6 +929,8 @@ type examSittingDocument struct {
 	ClassID          model.ClassID               `json:"class_id"`
 	ScheduledStartAt time.Time                   `json:"scheduled_start_at"`
 	ScheduledEndAt   time.Time                   `json:"scheduled_end_at"`
+	JoinOpensAt      model.OptionalTime          `json:"join_opens_at"`
+	JoinClosesAt     model.OptionalTime          `json:"join_closes_at"`
 	State            model.ExamSittingState      `json:"state"`
 	CreatedAt        time.Time                   `json:"created_at"`
 	UpdatedAt        time.Time                   `json:"updated_at"`
@@ -937,6 +951,8 @@ func newExamSittingDocument(sitting *model.ExamSitting) examSittingDocument {
 		ClassID:          sitting.ClassID,
 		ScheduledStartAt: sitting.ScheduledStartAt,
 		ScheduledEndAt:   sitting.ScheduledEndAt,
+		JoinOpensAt:      sitting.JoinWindow.OpensAt,
+		JoinClosesAt:     sitting.JoinWindow.ClosesAt,
 		State:            sitting.State,
 		CreatedAt:        sitting.CreatedAt,
 		UpdatedAt:        sitting.UpdatedAt,
@@ -959,6 +975,7 @@ func (d examSittingDocument) model() (*model.ExamSitting, error) {
 		ClassID:          d.ClassID,
 		ScheduledStartAt: d.ScheduledStartAt,
 		ScheduledEndAt:   d.ScheduledEndAt,
+		JoinWindow:       model.ExamSittingJoinWindow{OpensAt: d.JoinOpensAt, ClosesAt: d.JoinClosesAt},
 		State:            d.State,
 		CreatedAt:        d.CreatedAt,
 		UpdatedAt:        d.UpdatedAt,
@@ -1357,6 +1374,12 @@ func encodeExamSittingAudit(sitting *model.ExamSitting, replayed bool, originalA
 		"state":              sitting.State,
 		"reason_code":        sitting.ReasonCode,
 		"revision":           sitting.Revision,
+	}
+	if sitting.JoinWindow.OpensAt.Valid {
+		data["join_opens_at"] = sitting.JoinWindow.OpensAt.Time
+	}
+	if sitting.JoinWindow.ClosesAt.Valid {
+		data["join_closes_at"] = sitting.JoinWindow.ClosesAt.Time
 	}
 	if replayed {
 		data["idempotency_replayed"] = true

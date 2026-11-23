@@ -97,9 +97,9 @@ type ExamSittingSchedule struct {
 	Mail            *ExamSittingMailFanout
 }
 
-// ExamSittingScheduleUpdate replaces a scheduled sitting's revision, class
-// and times, fenced by ExpectedRevision. PostgreSQL's statement time stamps
-// the change.
+// ExamSittingScheduleUpdate replaces a scheduled sitting's revision, class,
+// times and join window, fenced by ExpectedRevision. PostgreSQL's statement
+// time stamps the change. OpenJob is due at the sitting's new OpensAt.
 type ExamSittingScheduleUpdate struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -110,6 +110,7 @@ type ExamSittingScheduleUpdate struct {
 	ClassID          model.ClassID
 	ScheduledStartAt time.Time
 	ScheduledEndAt   time.Time
+	JoinWindow       model.ExamSittingJoinWindow
 	OpenJob          *model.Job
 	DeadlineJob      *model.Job
 	AuditEventID     model.AuditEventID

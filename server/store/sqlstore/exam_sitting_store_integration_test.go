@@ -27,6 +27,14 @@ func TestExamSittingStoreAdapter(t *testing.T) {
 	StoreTest(t, storetest.TestExamSittingStore)
 }
 
+func TestExamSittingJoinWindow(t *testing.T) {
+	StoreTest(t, storetest.TestExamSittingJoinWindow)
+}
+
+func TestExamSittingJoinWindowUpdate(t *testing.T) {
+	StoreTest(t, storetest.TestExamSittingJoinWindowUpdate)
+}
+
 func TestExamSittingMailReconciliationAfterObsoleteSuppression(t *testing.T) {
 	StoreTest(t, storetest.TestExamSittingMailReconciliationAfterObsoleteSuppression)
 }

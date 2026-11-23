@@ -26,7 +26,22 @@ var (
 	// ErrAttemptAdmissionDeadlineReached means the sitting's scheduled end has
 	// passed.
 	ErrAttemptAdmissionDeadlineReached = errors.New("sitting has reached its scheduled end")
+	// ErrAttemptAdmissionJoinClosed means the sitting's join window has
+	// closed, so no new Attempt may start.
+	ErrAttemptAdmissionJoinClosed = errors.New("sitting's join window has closed")
 )
+
+// CheckAttemptFirstEntry decides the end of the join window, which binds only
+// the first entry that creates an Attempt: a candidate who already started
+// reconnects and resumes until the scheduled end. Its start needs no check
+// here, because an Attempt is only created once the sitting opens at the
+// scheduled start. An empty window admits as before.
+func CheckAttemptFirstEntry(window ExamSittingJoinWindow, decisionTime time.Time) error {
+	if window.ClosesAt.Valid && !decisionTime.Before(window.ClosesAt.Time) {
+		return ErrAttemptAdmissionJoinClosed
+	}
+	return nil
+}
 
 // AttemptAdmissionSitting is what admission knows once the sitting and its
 // class are locked.
@@ -38,6 +53,13 @@ type AttemptAdmissionSitting struct {
 	// AllowPaused admits a paused sitting. Only the exact replay of an earlier
 	// admission sets it; a new connection always needs an open sitting.
 	AllowPaused bool
+	// AllowWaiting admits a scheduled sitting in its early-join phase.
+	// Only preparation sets it: the readiness overview and the preflight,
+	// which create no Attempt.
+	AllowWaiting bool
+	// Waiting reports that the database decided the sitting is in its
+	// early-join phase.
+	Waiting bool
 }
 
 // CheckAttemptAdmissionSitting decides the rules that need only the sitting.
@@ -51,6 +73,9 @@ func CheckAttemptAdmissionSitting(facts AttemptAdmissionSitting) error {
 		return nil
 	}
 	if facts.AllowPaused && facts.State == ExamSittingPaused {
+		return nil
+	}
+	if facts.AllowWaiting && facts.Waiting && facts.State == ExamSittingScheduled {
 		return nil
 	}
 	return ErrAttemptAdmissionSittingState

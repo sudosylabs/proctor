@@ -520,7 +520,7 @@ func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 		}
 
 		access.SittingID = sittingID
-		guard, err := lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), true)
+		guard, err := lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), admitReplay)
 		if err != nil {
 			return nil, err
 		}

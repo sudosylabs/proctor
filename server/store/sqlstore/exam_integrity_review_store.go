@@ -1797,12 +1797,13 @@ func (s *SQLExamIntegrityReviewStore) GetReleasedStudentResult(
 	var row struct {
 		ReviewID        string    `db:"review_id"`
 		SubmissionID    string    `db:"submission_id"`
+		ReceiptCode     string    `db:"receipt_code"`
 		AttemptID       string    `db:"attempt_id"`
 		CandidateUserID string    `db:"candidate_user_id"`
 		StudentRemarks  string    `db:"student_remarks"`
 		ReleasedAt      time.Time `db:"released_at"`
 	}
-	if err := s.GetMaster().Get(ctx, &row, `SELECT r.id AS review_id, r.submission_id,
+	if err := s.GetMaster().Get(ctx, &row, `SELECT r.id AS review_id, r.submission_id, sub.receipt_code,
 			a.id AS attempt_id, a.candidate_user_id, r.student_remarks_markdown AS student_remarks,
 			r.released_at
 		FROM submission_reviews r
@@ -1826,9 +1827,15 @@ func (s *SQLExamIntegrityReviewStore) GetReleasedStudentResult(
 		return nil, err
 	}
 
+	receiptCode := model.SubmissionReceiptCode(row.ReceiptCode)
+	if !receiptCode.IsValid() {
+		return nil, invalidPersistedState("student_result", "receipt_code", nil)
+	}
+
 	return &model.StudentResult{
 		ReviewID:               reviewID,
 		SubmissionID:           submissionID,
+		ReceiptCode:            receiptCode,
 		AttemptID:              attemptID,
 		CandidateUserID:        candidateID,
 		StudentRemarksMarkdown: row.StudentRemarks,

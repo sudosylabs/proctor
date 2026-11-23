@@ -51,12 +51,25 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	assertPreparedIdempotency(t, scheduled, userID, idempotencyOperationSchedule, "schedule-key",
 		fmt.Sprintf(`{"exam_id":%q,"exam_revision_id":%q,"class_id":%q,"scheduled_start_at":"2026-08-24T10:00:00Z","scheduled_end_at":"2026-08-24T12:00:00Z"}`, examID, revisionID, classID))
 
+	joined, err := prepareScheduleIdempotency(inv, ScheduleCommand{ExamID: examID, ExamRevisionID: revisionID,
+		ClassID: classID, ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "schedule-key",
+		JoinWindow: model.ExamSittingJoinWindow{OpensAt: model.OptionalTimeFrom(start.Add(-10 * time.Minute))}})
+	require.NoError(t, err)
+	assertPreparedIdempotency(t, joined, userID, idempotencyOperationSchedule, "schedule-key",
+		fmt.Sprintf(`{"exam_id":%q,"exam_revision_id":%q,"class_id":%q,"scheduled_start_at":"2026-08-24T10:00:00Z","scheduled_end_at":"2026-08-24T12:00:00Z","join_opens_at":"2026-08-24T09:50:00Z"}`, examID, revisionID, classID))
+
 	changedEnd := end.Add(time.Hour)
 	updated, err := prepareScheduleUpdateIdempotency(inv, UpdateScheduleCommand{ExamID: examID, SittingID: sittingID,
 		ExpectedRevision: 2, ScheduledEndAt: &changedEnd, IdempotencyKey: "update-key"})
 	require.NoError(t, err)
 	assertPreparedIdempotency(t, updated, userID, idempotencyOperationUpdateSchedule, "update-key",
 		fmt.Sprintf(`{"exam_id":%q,"exam_sitting_id":%q,"expected_revision":2,"scheduled_end_at":"2026-08-24T13:00:00Z"}`, examID, sittingID))
+
+	clearing, err := prepareScheduleUpdateIdempotency(inv, UpdateScheduleCommand{ExamID: examID, SittingID: sittingID,
+		ExpectedRevision: 2, JoinWindow: &model.ExamSittingJoinWindow{}, IdempotencyKey: "update-key"})
+	require.NoError(t, err)
+	assertPreparedIdempotency(t, clearing, userID, idempotencyOperationUpdateSchedule, "update-key",
+		fmt.Sprintf(`{"exam_id":%q,"exam_sitting_id":%q,"expected_revision":2,"join_window":{}}`, examID, sittingID))
 
 	transition := ManagerTransitionCommand{ExamID: examID, SittingID: sittingID, ExpectedRevision: 3, PrivateReason: "room unavailable", IdempotencyKey: "transition-key"}
 	for _, operation := range []string{idempotencyOperationCancel, idempotencyOperationPause, idempotencyOperationResume, idempotencyOperationClose} {

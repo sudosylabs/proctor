@@ -297,6 +297,9 @@ components:
             class_id: ybndrfg8ejkmcpqxot1uwisza4
             scheduled_start_at: "2026-12-14T09:00:00Z"
             scheduled_end_at: "2026-12-14T11:00:00Z"
+            join_window:
+              opens_at: "2026-12-14T08:50:00Z"
+              closes_at: "2026-12-14T09:30:00Z"
     UpdateExamSittingSchedule:
       description: The Sitting's current revision and at least one value to change.
       required: true
@@ -308,6 +311,8 @@ components:
             expected_revision: 3
             scheduled_start_at: "2026-12-14T09:30:00Z"
             scheduled_end_at: "2026-12-14T11:30:00Z"
+            join_window:
+              opens_at: "2026-12-14T09:20:00Z"
   responses:
     ExamSittingCreated:
       description: The Sitting was scheduled.
@@ -325,6 +330,8 @@ components:
             class_id: 1asb7sk89dp1ex339fkh3te5t4
             scheduled_start_at: '2026-12-14T09:00:00Z'
             scheduled_end_at: '2026-12-14T11:00:00Z'
+            join_opens_at: '2026-12-14T08:50:00Z'
+            join_closes_at: '2026-12-14T09:30:00Z'
             state: scheduled
             created_at: '2026-11-20T14:12:05Z'
             updated_at: '2026-11-20T14:12:05Z'
@@ -390,6 +397,26 @@ components:
           type: string
           format: date-time
           description: The Sitting's deadline. It must be after the start and inside the Class's Academic Period.
+        join_window:
+          $ref: '#/components/schemas/ExamSittingJoinWindow'
+    ExamSittingJoinWindow:
+      description: >-
+        When candidates may join. Leave a bound out for none. From opens_at, at or before the start, candidates can
+        run the readiness checks and read the instructions; Attempts still start when the Sitting opens at the
+        scheduled start. closes_at, after the start and at or before the deadline, refuses first entry from then on
+        with exam.attempt.join_closed, while candidates who already started carry on. The window is frozen once the
+        Sitting opens.
+      type: object
+      additionalProperties: false
+      properties:
+        opens_at:
+          type: string
+          format: date-time
+          description: When candidates can join early to prepare.
+        closes_at:
+          type: string
+          format: date-time
+          description: When candidates who have not started can no longer join.
     UpdateExamSittingScheduleRequest:
       description: >-
         Changes to a Sitting that has not opened yet. Send the current revision and at least one value to
@@ -407,6 +434,8 @@ components:
             - scheduled_start_at
         - required:
             - scheduled_end_at
+        - required:
+            - join_window
       properties:
         expected_revision:
           type: integer
@@ -429,6 +458,11 @@ components:
           type: string
           format: date-time
           description: A new deadline. It must be after the start and inside the Class's Academic Period.
+        join_window:
+          $ref: '#/components/schemas/ExamSittingJoinWindow'
+          description: >-
+            A new join window, replacing the whole current one; {} removes it. Left out, the current window is kept
+            and checked against the new times.
     ExamSittingListResponse:
       description: One page of Sittings, latest scheduled start first.
       type: object

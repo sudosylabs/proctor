@@ -20,43 +20,27 @@ func validExamExportBuild(input *store.ExamExportBuild) bool {
 	return input != nil && input.ExportID.IsValid() && input.AttemptID.IsValid() && input.JobID.IsValid() && input.ClaimToken.IsValid()
 }
 
+// examExportKind is the exam export's place in the shared export layer.
+var examExportKind = exportArtifactKind{
+	entity:         "exam_export",
+	exportsTable:   "exam_exports",
+	artifactsTable: "exam_export_artifacts",
+	buildJobType:   model.JobTypeExamExportBuild,
+	purgePredicate: examExportPurgePredicate,
+}
+
 func lockExamExportBuild(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamExportBuild) (examExportRow, time.Time, error) {
-	var at time.Time
-	if err := tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
-		return examExportRow{}, at, err
-	}
+	var row examExportRow
+	at, err := lockExportBuild(ctx, tx, examExportKind, input.JobID, input.AttemptID, input.ClaimToken, func() (exportBuildRow, error) {
+		var lockErr error
+		row, lockErr = getExamExport(ctx, tx, input.ExportID, true)
+		return exportBuildRow{JobID: row.JobID, ExpiresAt: row.ExpiresAt, SourceExpiresAt: row.SourceExpiresAt}, lockErr
+	})
+	return row, at, err
+}
 
-	attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, at)
-	if err != nil {
-		return examExportRow{}, at, err
-	}
-
-	job, err := getJob(ctx, tx, input.JobID, true)
-	if err != nil {
-		return examExportRow{}, at, err
-	}
-
-	row, err := getExamExport(ctx, tx, input.ExportID, true)
-	if err != nil {
-		return row, at, err
-	}
-	if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
-		return row, at, err
-	}
-
-	if attempt.JobID != input.JobID ||
-		job.Type != model.JobTypeExamExportBuild ||
-		job.Status != model.JobStatusRunning ||
-		row.JobID != input.JobID.String() ||
-		!at.Before(attempt.LeaseExpiresAt) {
-		return row, at, store.NewErrConflict("exam_export", "claim_lost", nil)
-	}
-
-	if !at.Before(row.ExpiresAt) || !at.Before(row.SourceExpiresAt) {
-		return row, at, store.NewErrConflict("exam_export", "expired", nil)
-	}
-
-	return row, model.TimeUTC(at), nil
+func examExportArtifactRef(a store.ExamExportArtifact) exportArtifactRef {
+	return exportArtifactRef{ExportID: a.ExportID.String(), AttemptID: a.AttemptID.String()}
 }
 
 func (s *SQLExamExportStore) BeginBuild(ctx context.Context, input *store.ExamExportBuild) (*store.ExamExportSnapshot, error) {
@@ -171,21 +155,8 @@ func (s *SQLExamExportStore) BeginBuild(ctx context.Context, input *store.ExamEx
 			return nil, store.NewErrConflict("exam_export", "source_changed", nil)
 		}
 
-		inserted, err := tx.Exec(ctx, `INSERT INTO exam_export_artifacts(
-				export_id, attempt_id, created_at, reconcile_after
-			)
-			VALUES (?, ?, ?, ?)
-			ON CONFLICT DO NOTHING`, e.ID.String(), input.AttemptID.String(), at, at)
-		if err != nil {
+		if err = registerExportArtifact(ctx, tx, examExportKind, examExportArtifactRef(input.ExamExportArtifact), at); err != nil {
 			return nil, err
-		}
-
-		affected, err := inserted.RowsAffected()
-		if err != nil {
-			return nil, err
-		}
-		if affected != 1 {
-			return nil, store.NewErrConflict("exam_export", "build_already_started", nil)
 		}
 
 		return result, nil
@@ -217,18 +188,9 @@ func (s *SQLExamExportStore) Publish(ctx context.Context, input *store.ExamExpor
 			return false, store.NewErrConflict("exam_export", "unavailable", nil)
 		}
 
-		var registered bool
-		if err = tx.Get(ctx, &registered, `SELECT EXISTS(
-				SELECT 1
-				FROM exam_export_artifacts
-				WHERE export_id = ?
-					AND attempt_id = ?
-			)`, input.ExportID.String(), input.AttemptID.String()); err != nil {
+		ref := examExportArtifactRef(input.ExamExportArtifact)
+		if err = publishExportArtifact(ctx, tx, examExportKind, ref); err != nil {
 			return false, err
-		}
-
-		if !registered {
-			return false, store.NewErrConflict("exam_export", "artifact_missing", nil)
 		}
 
 		if _, err = tx.Exec(ctx, `UPDATE exam_exports
@@ -238,10 +200,7 @@ func (s *SQLExamExportStore) Publish(ctx context.Context, input *store.ExamExpor
 			return false, err
 		}
 
-		if _, err = tx.Exec(ctx, `UPDATE exam_export_artifacts
-			SET writer_finished = true
-			WHERE export_id = ?
-				AND attempt_id = ?`, input.ExportID.String(), input.AttemptID.String()); err != nil {
+		if err = markExportWriterPublished(ctx, tx, examExportKind, ref); err != nil {
 			return false, err
 		}
 
@@ -262,12 +221,7 @@ func (s *SQLExamExportStore) FinishWriter(ctx context.Context, a store.ExamExpor
 	if !a.ExportID.IsValid() || !a.AttemptID.IsValid() {
 		return store.NewErrInvalidInput("exam_export", "artifact", nil)
 	}
-
-	_, err := s.GetMaster().Exec(ctx, `UPDATE exam_export_artifacts
-		SET writer_finished = true, reconcile_after = LEAST(reconcile_after, clock_timestamp())
-		WHERE export_id = ?
-			AND attempt_id = ?`, a.ExportID.String(), a.AttemptID.String())
-	return err
+	return finishExportWriter(ctx, s.SQLStore, examExportKind, examExportArtifactRef(a))
 }
 
 func (s *SQLExamExportStore) Reconcile(ctx context.Context, limit int) (int, error) {
@@ -339,82 +293,24 @@ func (s *SQLExamExportStore) BeginPurgeBatch(ctx context.Context, limit int) ([]
 	if limit < 1 || limit > 100 {
 		return nil, store.NewErrInvalidInput("exam_export", "limit", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "begin Exam export purge batch", func(
-		ctx context.Context,
-		tx *sqlxTxWrapper,
-	) ([]store.ExamExportArtifact, error) {
-		var rows []struct {
-			ExportID  string `db:"export_id"`
-			AttemptID string `db:"attempt_id"`
-		}
-		if err := tx.Select(ctx, &rows, `WITH candidates AS MATERIALIZED (
-				SELECT a.export_id, a.attempt_id, a.reconcile_after
-				FROM exam_export_artifacts a
-				JOIN exam_exports e ON e.id = a.export_id
-				WHERE a.reconcile_after <= clock_timestamp()
-					AND `+examExportPurgePredicate+`
-			ORDER BY a.reconcile_after, a.export_id, a.attempt_id
-			LIMIT ?
-			FOR UPDATE OF a SKIP LOCKED),
-				deferred AS (
-					UPDATE exam_export_artifacts a
-					SET reconcile_after = clock_timestamp()+interval '1 hour'
-					FROM candidates c
-					WHERE a.export_id = c.export_id
-						AND a.attempt_id = c.attempt_id
-					RETURNING a.export_id, a.attempt_id
-				)
-			SELECT d.export_id, d.attempt_id
-			FROM deferred d
-			JOIN candidates c USING(export_id, attempt_id)
-			ORDER BY c.reconcile_after, d.export_id, d.attempt_id`, limit); err != nil {
-			return nil, err
-		}
-
-		result := make([]store.ExamExportArtifact, 0, len(rows))
-		for _, r := range rows {
-			a := store.ExamExportArtifact{ExportID: model.ExamExportID(r.ExportID), AttemptID: model.JobAttemptID(r.AttemptID)}
-			if !a.ExportID.IsValid() || !a.AttemptID.IsValid() {
-				return nil, store.NewErrConflict("exam_export", "artifact", nil)
-			}
-
-			result = append(result, a)
-		}
-
-		return result, nil
+	rows, err := beginExportPurgeBatch(ctx, s.SQLStore, examExportKind, limit, func(r exportArtifactRef) bool {
+		return model.ExamExportID(r.ExportID).IsValid() && model.JobAttemptID(r.AttemptID).IsValid()
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]store.ExamExportArtifact, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, store.ExamExportArtifact{ExportID: model.ExamExportID(r.ExportID), AttemptID: model.JobAttemptID(r.AttemptID)})
+	}
+
+	return result, nil
 }
 
 func (s *SQLExamExportStore) CompletePurge(ctx context.Context, a store.ExamExportArtifact) error {
 	if !a.ExportID.IsValid() || !a.AttemptID.IsValid() {
 		return store.NewErrInvalidInput("exam_export", "artifact", nil)
 	}
-
-	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "record Exam export absence", func(
-		ctx context.Context,
-		tx *sqlxTxWrapper,
-	) (bool, error) {
-		if _, err := tx.Exec(ctx, `DELETE FROM exam_export_artifacts a USING exam_exports e
-			WHERE e.id = a.export_id
-				AND a.export_id = ?
-				AND a.attempt_id = ?
-				AND a.writer_finished
-				AND `+examExportPurgePredicate, a.ExportID.String(), a.AttemptID.String()); err != nil {
-			return false, err
-		}
-
-		// Keep an uncertain writer's exact key, even after absence. A remote
-		// write may still complete late; this receipt schedules another check.
-		_, err := tx.Exec(ctx, `UPDATE exam_export_artifacts a
-			SET observed_absent_at = clock_timestamp(),
-				reconcile_after = clock_timestamp()+interval '1 hour'
-			FROM exam_exports e
-			WHERE e.id = a.export_id
-				AND a.export_id = ?
-				AND a.attempt_id = ?
-				AND NOT a.writer_finished
-				AND `+examExportPurgePredicate, a.ExportID.String(), a.AttemptID.String())
-		return true, err
-	})
-	return err
+	return completeExportPurge(ctx, s.SQLStore, examExportKind, examExportArtifactRef(a))
 }

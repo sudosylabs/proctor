@@ -9,25 +9,18 @@ package filecontent
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
-	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-type uncertainExamExportWrite struct{ cause error }
-
-func (e *uncertainExamExportWrite) Error() string           { return "Exam export write outcome is uncertain" }
-func (e *uncertainExamExportWrite) Unwrap() error           { return e.cause }
-func (*uncertainExamExportWrite) ExamExportWriteUncertain() {}
+// examExportLabel names the exam export in errors.
+const examExportLabel = "Exam export"
 
 // BuildExamExport writes only to the export identity registered in input. It
 // verifies each source file as the format reads it, and re-reads the stored
@@ -70,22 +63,20 @@ func (c *Content) buildExamExport(ctx context.Context, input exam.ExportArchiveI
 	if err = c.writeExamExport(ctx, input, format, bounded); err != nil {
 		return nil, err
 	}
-	if _, err = spool.Seek(0, io.SeekStart); err != nil {
-		return nil, sanitize("rewind Exam export spool", err)
-	}
-
-	hash := sha256.New()
-	size, err := io.CopyBuffer(hash, workReader{ctx: ctx, reader: spool}, make([]byte, 32<<10))
+	size, digest, err := hashSpool(ctx, examExportLabel, spool)
 	if err != nil {
-		return nil, sanitize("hash Exam export archive", err)
+		return nil, err
 	}
 
-	result := &exam.ExportArchiveContent{SizeBytes: size, SHA256: hex.EncodeToString(hash.Sum(nil))}
+	result := &exam.ExportArchiveContent{SizeBytes: size, SHA256: digest}
 	if !model.ValidExamExportContent(result.SizeBytes, result.SHA256) {
 		return nil, errors.New("invalid Exam export archive size")
 	}
 
-	return c.storeExamExport(ctx, examExportKey(input.ExportID, input.AttemptID), spool, result)
+	if err = c.storeVerifiedExport(ctx, examExportLabel, examExportKey(input.ExportID, input.AttemptID), spool, size, digest); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (c *Content) validateExamExportInput(input exam.ExportArchiveInput) error {
@@ -129,50 +120,6 @@ func (c *Content) validateExamExportInput(input exam.ExportArchiveInput) error {
 	return nil
 }
 
-func (c *Content) storeExamExport(
-	ctx context.Context,
-	key string,
-	spool *os.File,
-	result *exam.ExportArchiveContent,
-) (*exam.ExportArchiveContent, error) {
-	conditional := c.filesystem.Capabilities().ConditionalWrite
-	if !conditional {
-		matching, verifyErr := c.verifyExamExport(ctx, key, result)
-		if verifyErr == nil {
-			if matching {
-				return result, nil
-			}
-			return nil, errors.New("Exam export object conflict")
-		}
-
-		if !errors.Is(verifyErr, vfs.ErrNotFound) {
-			return nil, sanitize("inspect Exam export object", verifyErr)
-		}
-	}
-
-	if _, err := spool.Seek(0, io.SeekStart); err != nil {
-		return nil, sanitize("rewind Exam export spool", err)
-	}
-
-	size := result.SizeBytes
-	_, writeErr := c.filesystem.Write(ctx, key, workReader{ctx: ctx, reader: spool}, vfs.WriteOptions{Size: &size, NoOverwrite: conditional})
-	// A write error can still mean the write committed, and a success is not
-	// proof; only the re-read decides.
-	matching, verifyErr := c.verifyExamExport(ctx, key, result)
-	if verifyErr != nil || !matching {
-		if writeErr != nil {
-			return nil, &uncertainExamExportWrite{cause: sanitize("store Exam export archive", writeErr)}
-		}
-		if verifyErr != nil {
-			return nil, sanitize("verify Exam export archive", verifyErr)
-		}
-
-		return nil, errors.New("Exam export archive verification failed")
-	}
-
-	return result, nil
-}
-
 func examExportFileMember(f exam.ExportArchiveFile) string {
 	return "files/" + f.SubmissionID.String() + "/" + f.Entry.EntryID.String()
 }
@@ -191,47 +138,18 @@ func (w *examExportBoundedWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (c *Content) verifyExamExport(ctx context.Context, key string, expected *exam.ExportArchiveContent) (bool, error) {
-	file, err := c.filesystem.Open(ctx, key, vfs.OpenOptions{})
-	if err != nil {
-		return false, err
-	}
-	defer file.Body.Close()
-	if file.Info.Size != expected.SizeBytes {
-		return false, nil
-	}
-	hash := sha256.New()
-	size, err := io.CopyBuffer(hash, io.LimitReader(workReader{ctx: ctx, reader: file.Body}, expected.SizeBytes+1), make([]byte, 32<<10))
-	return err == nil && size == expected.SizeBytes && hex.EncodeToString(hash.Sum(nil)) == expected.SHA256, err
-}
-
 func (c *Content) OpenExamExport(ctx context.Context, id model.ExamExportID, attempt model.JobAttemptID) (io.ReadCloser, error) {
 	if c == nil || c.filesystem == nil || !id.IsValid() || !attempt.IsValid() {
 		return nil, errors.New("invalid Exam export identity")
 	}
-	file, err := c.filesystem.Open(ctx, examExportKey(id, attempt), vfs.OpenOptions{})
-	if err != nil {
-		return nil, sanitize("open Exam export archive", err)
-	}
-	return file.Body, nil
+	return c.openExport(ctx, examExportLabel, examExportKey(id, attempt))
 }
 
 func (c *Content) PurgeExamExport(ctx context.Context, id model.ExamExportID, attempt model.JobAttemptID) error {
 	if c == nil || c.filesystem == nil || !id.IsValid() || !attempt.IsValid() {
 		return errors.New("invalid Exam export identity")
 	}
-	key := examExportKey(id, attempt)
-	if err := c.filesystem.Remove(ctx, key, vfs.RemoveOptions{}); err != nil && !errors.Is(err, vfs.ErrNotFound) {
-		return sanitize("remove Exam export archive", err)
-	}
-	_, err := c.filesystem.Stat(ctx, key)
-	if errors.Is(err, vfs.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return sanitize("observe Exam export absence", err)
-	}
-	return errors.New("Exam export archive remains present")
+	return c.purgeExport(ctx, examExportLabel, examExportKey(id, attempt))
 }
 
 func examExportKey(id model.ExamExportID, attempt model.JobAttemptID) string {

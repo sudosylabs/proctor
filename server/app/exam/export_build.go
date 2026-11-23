@@ -10,9 +10,9 @@ package exam
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/internal/exportfile"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -40,14 +40,10 @@ func (s *Exports) BuildFromJob(ctx context.Context, system invocation.System, in
 	// Publication may have an unknown outcome, so cleanup trusts only the stored
 	// ready state and never guesses whether deleting bytes is safe.
 	defer func() {
-		var uncertain interface{ ExamExportWriteUncertain() }
-		if errors.As(err, &uncertain) {
-			return
-		}
-
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if finishErr := s.exports.FinishWriter(cleanup, input.ExamExportArtifact); finishErr != nil && err == nil {
+		finishErr := exportfile.FinishWriter(ctx, err, examExportWriteUncertain, func(cleanup context.Context) error {
+			return s.exports.FinishWriter(cleanup, input.ExamExportArtifact)
+		})
+		if finishErr != nil && err == nil {
 			err = apperror.New("exam.export.unavailable").Wrap(finishErr)
 		}
 	}()
@@ -79,4 +75,9 @@ func (s *Exports) BuildFromJob(ctx context.Context, system invocation.System, in
 	}
 
 	return nil
+}
+
+func examExportWriteUncertain(err error) bool {
+	var uncertain interface{ ExamExportWriteUncertain() }
+	return errors.As(err, &uncertain)
 }

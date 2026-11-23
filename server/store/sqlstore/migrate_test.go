@@ -21,6 +21,7 @@ import (
 
 var baselineTables = []string{
 	"academic_periods",
+	"academic_topology_revision",
 	"academic_unit_members",
 	"academic_units",
 	"access_policies",
@@ -30,6 +31,8 @@ var baselineTables = []string{
 	"assistant_profiles",
 	"attempt_runtime_leases",
 	"audit_events",
+	"audit_export_artifacts",
+	"audit_exports",
 	"browser_activity_events",
 	"browser_activity_sources",
 	"browser_authentication_transactions",
@@ -154,6 +157,7 @@ var baselineTables = []string{
 	"submission_review_inventory_evidence",
 	"submission_review_inventory_flags",
 	"submission_review_release_preparations",
+	"submission_review_reopenings",
 	"submission_review_waivers",
 	"submission_reviews",
 	"upload_leases",

@@ -345,6 +345,8 @@ func TestAccountEnablePublishesNoRevocation(t *testing.T) {
 	require.NotEmpty(t, user.DisabledByUserID, "preparing the notice does not mutate the stored snapshot")
 	require.Equal(t, "Leave of absence", user.DisabledReason)
 	require.False(t, persistence.input.Disabled, "result/input = %#v / %#v", result, persistence.input)
+	require.Empty(t, persistence.input.DisabledBy, "an enable does not set disable provenance")
+	require.Empty(t, persistence.input.DisabledReason)
 	require.Equal(t, 1, fixture.renders.Count())
 	require.Equal(t, model.MailTemplateIdentityAccountEnabled, persistence.input.Delivery.TemplateKey)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit

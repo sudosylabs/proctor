@@ -161,8 +161,10 @@ func (s *Service) setUserEnabledFromCurrent(
 	}
 
 	operation := model.AuditOperationEnableAccount
+	var disabledBy model.UserID
 	if disabled {
 		operation = model.AuditOperationDisableAccount
+		disabledBy = inv.Principal().UserID
 	}
 
 	parameters := map[string]any{"user_id": userID, "disabled": disabled}
@@ -188,7 +190,7 @@ func (s *Service) setUserEnabledFromCurrent(
 				ID:               userID,
 				ExpectedRevision: current.Revision,
 				Disabled:         disabled,
-				DisabledBy:       inv.Principal().UserID,
+				DisabledBy:       disabledBy,
 				DisabledReason:   reason,
 				Capabilities:     AccessDeploymentCapabilities(s.capabilities.Snapshot()),
 				Occurrence:       prepared.Occurrence,

@@ -134,7 +134,7 @@ func runLayerConformance(
 			storetest.TestRetentionStore(t, decorated, retentionSQLProbe(sqlStore))
 		}},
 		{"ExamRecords", func(t *testing.T, decorated store.Store) {
-			storetest.TestExamRecordsStore(t, decorated, storetest.ExamRecordsSQLProbe{ConcurrentPeer: newSQLExamRecordsStore(sqlStore)})
+			storetest.TestExamRecordsStore(t, decorated, examRecordsSQLProbe(sqlStore, sqlStore))
 		}},
 		{"ExamResource", storetest.TestExamResourceStore},
 		{"ExamCorrection", func(t *testing.T, decorated store.Store) {
@@ -418,11 +418,26 @@ func TestExamIntegrityReviewReopen(t *testing.T) {
 	storetest.TestExamIntegrityReviewReopen(t, persistence)
 }
 
+func examRecordsSQLProbe(persistence, peer *SQLStore) storetest.ExamRecordsSQLProbe {
+	return storetest.ExamRecordsSQLProbe{
+		ConcurrentPeer: newSQLExamRecordsStore(peer),
+		AgeHoldReview: func(t testing.TB, ctx context.Context, id model.RetentionHoldID) {
+			t.Helper()
+			_, err := persistence.GetMaster().Exec(ctx, `
+				UPDATE retention_holds
+				SET created_at = statement_timestamp() - interval '1 hour',
+					until = statement_timestamp() - interval '1 minute'
+				WHERE id = ?`, id)
+			require.NoError(t, err)
+		},
+	}
+}
+
 func TestExamRecordsStore(t *testing.T) {
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	storetest.TestExamRecordsStore(t, persistence, storetest.ExamRecordsSQLProbe{ConcurrentPeer: newSQLExamRecordsStore(peerPersistence)})
+	storetest.TestExamRecordsStore(t, persistence, examRecordsSQLProbe(persistence, peerPersistence))
 }
 
 func examSubmissionSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamSubmissionSQLProbe {

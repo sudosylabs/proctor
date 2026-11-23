@@ -114,6 +114,12 @@ type RetentionHoldPage struct {
 	HasMore    bool
 }
 
+// RetentionHoldDue identifies a hold and its containing exam for notification.
+type RetentionHoldDue struct {
+	ID     model.RetentionHoldID
+	ExamID model.ExamID
+}
+
 // RetentionReconciliation is one idempotent unit of approved retention work.
 // The store decides eligibility from its own clock and state; neither the
 // worker nor a preview asserts it.
@@ -185,6 +191,9 @@ type RetentionStore interface {
 	SummarizeRecordsByExam(context.Context, RetentionExamSummaryOptions) (*RetentionExamSummaryPage, error)
 	// ListHolds pages every hold of the Institution.
 	ListHolds(context.Context, RetentionHoldListOptions) (*RetentionHoldPage, error)
+	// ClaimDueHoldNotifications marks a bounded batch due for review. The
+	// claim coordinates nodes and does not change the hold's lifecycle.
+	ClaimDueHoldNotifications(context.Context) ([]RetentionHoldDue, error)
 	ReconcileSubmission(context.Context, *RetentionReconciliation) (*RetentionReconciliationResult, error)
 	// BeginPurgeBatch selects up to limit due keys, oldest first, and defers
 	// each for one hour before any I/O, so concurrent callers skip them. A lost

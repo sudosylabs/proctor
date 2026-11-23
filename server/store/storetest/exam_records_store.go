@@ -18,7 +18,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type ExamRecordsSQLProbe struct{ ConcurrentPeer store.ExamRecordsStore }
+type ExamRecordsSQLProbe struct {
+	ConcurrentPeer store.ExamRecordsStore
+	AgeHoldReview  func(testing.TB, context.Context, model.RetentionHoldID)
+}
 
 // TestExamRecordsStore uses the real delivery and review aggregates to verify
 // post-closure completion, private waivers, late-data staleness and manual holds.
@@ -326,6 +329,23 @@ func testRecordsHolds(t *testing.T, ctx context.Context, ss store.Store, f examA
 	unreleased, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, Limit: 200})
 	require.NoError(t, err)
 	require.Len(t, unreleased.Holds, 3)
+
+	if len(probes) > 0 && probes[0].AgeHoldReview != nil {
+		due, err := ss.Retention().ClaimDueHoldNotifications(ctx)
+		require.NoError(t, err)
+		require.Empty(t, due, "a future review is not due")
+		probes[0].AgeHoldReview(t, ctx, datedResult.Hold.ID)
+		due, err = ss.Retention().ClaimDueHoldNotifications(ctx)
+		require.NoError(t, err)
+		require.Equal(t, []store.RetentionHoldDue{{ID: datedResult.Hold.ID, ExamID: examScope.ExamID}}, due)
+		due, err = ss.Retention().ClaimDueHoldNotifications(ctx)
+		require.NoError(t, err)
+		require.Empty(t, due, "a second pass cannot claim the same review")
+		page, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, ReasonCode: "records_review", Limit: 200})
+		require.NoError(t, err)
+		require.Len(t, page.Holds, 1)
+		require.True(t, page.Holds[0].DueForReview(model.NowUTC()), "notifying does not release a hold")
+	}
 	withReleased, err := ss.Retention().ListHolds(ctx, store.RetentionHoldListOptions{ExamID: examScope.ExamID, IncludeReleased: true, Limit: 200})
 	require.NoError(t, err)
 	require.Len(t, withReleased.Holds, 4, "released holds appear only when asked for")

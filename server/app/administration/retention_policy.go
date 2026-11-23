@@ -143,12 +143,14 @@ func (s *Service) ReplaceRetentionPolicy(
 		return nil, apperror.New("retention_policy.unavailable")
 	}
 
-	event, err := realtime.NewRetentionPolicyChangedEvent(institution.ID)
-	if err == nil {
-		err = s.publisher.Publish(ctx, event)
-	}
-	if err != nil {
-		s.publisher.Report(ctx, "retention.changed", err)
+	if stored.Changed && !stored.Replayed {
+		event, err := realtime.NewRetentionPolicyChangedEvent(institution.ID)
+		if err == nil {
+			err = s.publisher.Publish(ctx, event)
+		}
+		if err != nil {
+			s.publisher.Report(ctx, "retention.changed", err)
+		}
 	}
 	return stored.Policy.Clone(), nil
 }

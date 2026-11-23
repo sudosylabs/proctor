@@ -1133,6 +1133,35 @@ func countRetentionBlocker(counter *model.RetentionPreviewCounts, blocker model.
 	return nil
 }
 
+func (s *SQLRetentionStore) ClaimDueHoldNotifications(ctx context.Context) ([]store.RetentionHoldDue, error) {
+	var rows []struct {
+		ID     model.RetentionHoldID `db:"id"`
+		ExamID model.ExamID          `db:"exam_id"`
+	}
+	if err := s.GetMaster().Select(ctx, &rows, `
+		WITH due AS (
+			SELECT id
+			FROM retention_holds
+			WHERE until <= statement_timestamp()
+				AND released_at IS NULL AND due_notified_at IS NULL
+			ORDER BY until, id
+			LIMIT 100
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE retention_holds h
+		SET due_notified_at = statement_timestamp()
+		FROM due
+		WHERE h.id = due.id
+		RETURNING h.id, h.exam_id`); err != nil {
+		return nil, fmt.Errorf("claim due retention hold notifications: %w", err)
+	}
+	holds := make([]store.RetentionHoldDue, len(rows))
+	for i, row := range rows {
+		holds[i] = store.RetentionHoldDue{ID: row.ID, ExamID: row.ExamID}
+	}
+	return holds, nil
+}
+
 // ListHolds pages the Institution's holds by ID, naming each Exam in the same
 // read.
 func (s *SQLRetentionStore) ListHolds(ctx context.Context, options store.RetentionHoldListOptions) (*store.RetentionHoldPage, error) {

@@ -252,7 +252,7 @@ paths:
         the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no
         content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is
         refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a
-        formula start with an apostrophe.
+        formula start with an apostrophe. Each export is audited.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -289,66 +289,6 @@ paths:
               example: |
                 exam_id,exam_title,exam_sitting_id,submission_id,category,blocker,eligible_at,held,completion_current,retired_at,policy_revision,as_of
                 xpq79ar61ncrjiouey6d9tgp91,Algorithms final,17778cuf6b17rhtapprfjozet8,zq993bky9h3uj4saw8iywi38cy,work,retention_period,2027-06-01T12:00:00Z,false,true,,3,2026-09-01T12:00:00Z
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-  /api/v1/retention/exam-summaries:
-    get:
-      operationId: listRetentionExamSummaries
-      summary: Count retention records by Exam
-      tags:
-        - Data retention
-      description: >-
-        Lists the Exams that have retention records, by Exam ID, each with its title and its records counted by
-        category and status the way a Retention Preview counts the Institution. The caller needs
-        `retention_policy.view`. `limit` counts Exams.
-      x-proctor-auth: session_required
-      x-proctor-idempotency: none
-      x-proctor-error-codes:
-        - authorization.denied
-        - authorization.request.invalid
-        - authorization.unavailable
-        - request.invalid
-        - retention.invalid
-        - retention.unavailable
-        - retention_policy.unavailable
-        - resource.not_found
-        - retention_policy.revision_conflict
-        - authentication.required
-        - authentication.token_invalid
-        - authentication.credential_ambiguous
-        - authentication.dpop.invalid
-        - authentication.dpop.replayed
-        - authentication.dpop.use_nonce
-        - authentication.dpop.unavailable
-      security:
-        - bearerAuth: []
-        - dpopAuth: []
-        - sessionCookie: []
-      parameters:
-        - $ref: '#/components/parameters/PageLimit'
-        - $ref: '#/components/parameters/PageCursor'
-      responses:
-        '200':
-          description: One page of Exam summaries
-          headers:
-            Cache-Control:
-              $ref: '#/components/headers/PrivateNoStore'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RetentionExamSummariesResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -410,9 +350,11 @@ paths:
           schema:
             type: boolean
             default: false
+          description: Include released holds as well as holds that still protect records.
         - name: reason_code
           in: query
           required: false
+          description: Keep only holds placed for this reason.
           schema:
             type: string
             enum:
@@ -440,7 +382,7 @@ paths:
                   - id: yftfs48pasu5fd6czhcwz6b4x3
                     exam:
                       id: xpq79ar61ncrjiouey6d9tgp91
-                      title: Algorithms final
+                      display_name: Algorithms final
                     exam_sitting_id: 4z3cy1rp9cucq7qo1g9mq94dj3
                     revision: 1
                     created_at: '2026-09-01T10:00:00Z'
@@ -472,9 +414,10 @@ paths:
         - Data retention
       description: >-
         Lists the retention status of each Submission's records. The caller needs `retention_policy.view`.
-        File names, answers, evidence and remarks are never included. `limit` counts Submissions, and each
-        Submission adds four items: work, integrity, Browser Activity and security operational. The cursor
-        only works with this listing. A retired category stays retired even after its detailed receipt
+        File names, answers, evidence and remarks are never included. By default, `limit` counts Submissions,
+        and each Submission adds four items covering work, integrity, Browser Activity and security operational
+        records. Set `group_by=exam` to count records by category for each Exam. In that mode, `limit` counts
+        Exams and the response orders them by Exam ID. A cursor continues only the grouping that issued it. A retired category stays retired even after its detailed receipt
         expires. `purge_verified` counts come from a separate check that the stored objects are gone from
         current storage. They don't certify secure erasure of the storage media, or removal from backups,
         earlier object versions or downloads already in progress.
@@ -502,16 +445,13 @@ paths:
         - dpopAuth: []
         - sessionCookie: []
       parameters:
-        - name: limit
+        - name: group_by
           in: query
-          description: >-
-            Maximum number of Submissions to include. Each one adds a work, an integrity, a Browser Activity and a
-            security operational item.
+          description: Set to `exam` for per-Exam summaries. Omit it to list records by Submission.
           schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 100
+            type: string
+            enum: [exam]
+        - $ref: '#/components/parameters/PageLimit'
         - name: cursor
           in: query
           description: The `next_cursor` value from the previous page. Treat it as an unreadable token and pass it unchanged.
@@ -654,88 +594,106 @@ components:
               retired: 0
               eligible_exams: 0
     RetentionRecordsOK:
-      description: One page of retention records. Each Submission adds four items, one per category.
+      description: One page of retention records by Submission, or one page of Exam summaries with `group_by=exam`.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/RetentionRecordsResponse'
-          example:
-            policy_revision: 3
-            as_of: '2026-09-01T12:00:00Z'
-            items:
-              - exam_id: xpq79ar61ncrjiouey6d9tgp91
-                exam:
-                  id: xpq79ar61ncrjiouey6d9tgp91
-                  title: Algorithms final
-                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
-                submission_id: zq993bky9h3uj4saw8iywi38cy
-                category: work
-                completion_revision: 2
-                completed_at: '2026-06-01T12:00:00Z'
-                completion_current: true
-                has_integrity: true
-                held: false
-                shared_published_objects: 1
-                blocker: retention_period
-                eligible_at: '2027-06-01T12:00:00Z'
-              - exam_id: xpq79ar61ncrjiouey6d9tgp91
-                exam:
-                  id: xpq79ar61ncrjiouey6d9tgp91
-                  title: Algorithms final
-                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
-                submission_id: zq993bky9h3uj4saw8iywi38cy
-                category: integrity
-                completion_revision: 2
-                completed_at: '2026-06-01T12:00:00Z'
-                completion_current: true
-                has_integrity: true
-                held: false
-                shared_published_objects: 0
-                blocker: retention_period
-                eligible_at: '2027-06-01T12:00:00Z'
-              - exam_id: xpq79ar61ncrjiouey6d9tgp91
-                exam:
-                  id: xpq79ar61ncrjiouey6d9tgp91
-                  title: Algorithms final
-                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
-                submission_id: zq993bky9h3uj4saw8iywi38cy
-                category: browser_activity
-                completion_revision: 2
-                completed_at: '2026-06-01T12:00:00Z'
-                completion_current: true
-                has_integrity: true
-                held: false
-                shared_published_objects: 0
-                blocker: ''
-                eligible_at: '2026-08-30T12:00:00Z'
-                retirement:
-                  id: 5ebqfbnezgahdbx9oy7rfr6oro
-                  state: grace
-                  policy_revision: 3
-                  control_revision: 2
-                  completion_revision: 2
-                  scheduled_at: '2026-08-31T02:00:00Z'
-                  retire_after: '2026-09-07T02:00:00Z'
-                  purge_pending: 0
-                  purge_verified: 0
-              - exam_id: xpq79ar61ncrjiouey6d9tgp91
-                exam:
-                  id: xpq79ar61ncrjiouey6d9tgp91
-                  title: Algorithms final
-                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
-                submission_id: zq993bky9h3uj4saw8iywi38cy
-                category: security_operational
-                completion_revision: 2
-                completed_at: '2026-06-01T12:00:00Z'
-                completion_current: true
-                has_integrity: true
-                held: false
-                shared_published_objects: 0
-                blocker: retention_unconfigured
-            next_cursor: eyJhZnRlcl9zdWJtaXNzaW9uX2lkIjoienE5OTMifQ
+            anyOf:
+              - $ref: '#/components/schemas/RetentionRecordsResponse'
+              - $ref: '#/components/schemas/RetentionExamSummariesResponse'
+          examples:
+            by_submission:
+              summary: Records by Submission
+              value:
+                policy_revision: 3
+                as_of: '2026-09-01T12:00:00Z'
+                items:
+                  - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                    exam:
+                      id: xpq79ar61ncrjiouey6d9tgp91
+                      display_name: Algorithms final
+                    exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                    submission_id: zq993bky9h3uj4saw8iywi38cy
+                    category: work
+                    completion_revision: 2
+                    completed_at: '2026-06-01T12:00:00Z'
+                    completion_current: true
+                    has_integrity: true
+                    held: false
+                    shared_published_objects: 1
+                    blocker: retention_period
+                    eligible_at: '2027-06-01T12:00:00Z'
+                  - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                    exam:
+                      id: xpq79ar61ncrjiouey6d9tgp91
+                      display_name: Algorithms final
+                    exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                    submission_id: zq993bky9h3uj4saw8iywi38cy
+                    category: integrity
+                    completion_revision: 2
+                    completed_at: '2026-06-01T12:00:00Z'
+                    completion_current: true
+                    has_integrity: true
+                    held: false
+                    shared_published_objects: 0
+                    blocker: retention_period
+                    eligible_at: '2027-06-01T12:00:00Z'
+                  - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                    exam:
+                      id: xpq79ar61ncrjiouey6d9tgp91
+                      display_name: Algorithms final
+                    exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                    submission_id: zq993bky9h3uj4saw8iywi38cy
+                    category: browser_activity
+                    completion_revision: 2
+                    completed_at: '2026-06-01T12:00:00Z'
+                    completion_current: true
+                    has_integrity: true
+                    held: false
+                    shared_published_objects: 0
+                    blocker: ''
+                    eligible_at: '2026-08-30T12:00:00Z'
+                    retirement:
+                      id: 5ebqfbnezgahdbx9oy7rfr6oro
+                      state: grace
+                      policy_revision: 3
+                      control_revision: 2
+                      completion_revision: 2
+                      scheduled_at: '2026-08-31T02:00:00Z'
+                      retire_after: '2026-09-07T02:00:00Z'
+                      purge_pending: 0
+                      purge_verified: 0
+                  - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                    exam:
+                      id: xpq79ar61ncrjiouey6d9tgp91
+                      display_name: Algorithms final
+                    exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                    submission_id: zq993bky9h3uj4saw8iywi38cy
+                    category: security_operational
+                    completion_revision: 2
+                    completed_at: '2026-06-01T12:00:00Z'
+                    completion_current: true
+                    has_integrity: true
+                    held: false
+                    shared_published_objects: 0
+                    blocker: retention_unconfigured
+                next_cursor: eyJhZnRlcl9zdWJtaXNzaW9uX2lkIjoienE5OTMifQ
+            by_exam:
+              summary: Records grouped by Exam
+              value:
+                policy_revision: 3
+                as_of: '2026-09-01T12:00:00Z'
+                items:
+                  - exam:
+                      id: xpq79ar61ncrjiouey6d9tgp91
+                      display_name: Algorithms final
+                    work: {total: 1, eligible: 0, awaiting_deadline: 0, incomplete: 0, held: 1, unconfigured: 0, supporting_work: 0, export_protected: 0, retired: 0, eligible_exams: 0}
+                    integrity: {total: 1, eligible: 0, awaiting_deadline: 0, incomplete: 0, held: 1, unconfigured: 0, supporting_work: 0, export_protected: 0, retired: 0, eligible_exams: 0}
+                    browser_activity: {total: 1, eligible: 0, awaiting_deadline: 0, incomplete: 0, held: 1, unconfigured: 0, supporting_work: 0, export_protected: 0, retired: 0, eligible_exams: 0}
+                    security_operational: {total: 1, eligible: 0, awaiting_deadline: 0, incomplete: 0, held: 1, unconfigured: 0, supporting_work: 0, export_protected: 0, retired: 0, eligible_exams: 0}
   schemas:
     RetentionControlRequest:
       description: A change to the cleanup control.
@@ -788,46 +746,39 @@ components:
         settings and is marked `proposed`.
       type: object
       additionalProperties: false
+      required:
+        - submission_retention_days
+        - integrity_retention_days
+        - browser_activity_retention_days
+        - security_operational_retention_days
+        - audit_retention_days
+        - export_retention_days
+        - deletion_grace_days
+        - candidate_notices
       properties:
         submission_retention_days:
-          type:
-            - integer
-            - "null"
+          type: integer
           minimum: 0
         integrity_retention_days:
-          type:
-            - integer
-            - "null"
+          type: integer
           minimum: 0
         browser_activity_retention_days:
-          type:
-            - integer
-            - "null"
+          type: integer
           minimum: 0
         security_operational_retention_days:
-          type:
-            - integer
-            - "null"
+          type: integer
           minimum: 0
         audit_retention_days:
-          type:
-            - integer
-            - "null"
+          type: integer
           minimum: 0
         export_retention_days:
-          type:
-            - integer
-            - "null"
+          type: integer
           minimum: 0
         deletion_grace_days:
-          type:
-            - integer
-            - "null"
+          type: integer
           minimum: 0
         candidate_notices:
-          type:
-            - boolean
-            - "null"
+          type: boolean
     RetentionControlResponse:
       description: Whether recurring cleanup is approved, and for which policy revision.
       type: object
@@ -1118,19 +1069,6 @@ components:
           description: >-
             Number of stored objects confirmed gone from current storage. This doesn't cover backups or
             earlier object versions.
-    RetentionExam:
-      description: An Exam named by its draft title.
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - title
-      properties:
-        id:
-          $ref: '#/components/schemas/ID'
-        title:
-          type: string
-          description: The Exam's draft title. Empty if the Exam has no draft.
     RetentionExamSummary:
       description: One Exam's retention records, counted by category as a preview counts them.
       type: object
@@ -1143,7 +1081,7 @@ components:
         - security_operational
       properties:
         exam:
-          $ref: '#/components/schemas/RetentionExam'
+          $ref: '#/components/schemas/ExamRef'
         work:
           $ref: '#/components/schemas/RetentionPreviewCounts'
         integrity:
@@ -1187,14 +1125,13 @@ components:
         - exam
         - revision
         - created_at
-        - created_by
         - reason_code
         - due_for_review
       properties:
         id:
           $ref: '#/components/schemas/ID'
         exam:
-          $ref: '#/components/schemas/RetentionExam'
+          $ref: '#/components/schemas/ExamRef'
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
           description: Held Sitting, or the Sitting of the held Submission. Omitted for an Exam hold.
@@ -1272,7 +1209,7 @@ components:
         - blocker
       properties:
         exam:
-          $ref: '#/components/schemas/RetentionExam'
+          $ref: '#/components/schemas/ExamRef'
         exam_id:
           $ref: '#/components/schemas/ID'
           description: Exam the records belong to.

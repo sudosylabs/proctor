@@ -9,17 +9,17 @@ package httpapi
 
 import (
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"slices"
 	"time"
 
-	"bytes"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
-	"io"
-	"slices"
 )
 
 type retentionHandlers struct {
@@ -134,13 +134,6 @@ func retentionResource(app *administration.Service, resolver *people.Resolver) r
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
-			Path:   "/retention/exam-summaries",
-			Auth:   route.AuthSessionRequired,
-			Errors: readErrors,
-			Handle: h.examSummaries,
-		},
-		route.Endpoint{
-			Method: http.MethodGet,
 			Path:   "/retention/holds",
 			Auth:   route.AuthSessionRequired,
 			Errors: readErrors,
@@ -243,32 +236,26 @@ type retirementResponse struct {
 	PurgeVerified      int64   `json:"purge_verified"`
 }
 type retentionRecordResponse struct {
-	ExamID                 string                `json:"exam_id"`
-	Exam                   retentionExamResponse `json:"exam"`
-	SittingID              string                `json:"exam_sitting_id"`
-	SubmissionID           string                `json:"submission_id"`
-	Category               string                `json:"category"`
-	CompletionRevision     int64                 `json:"completion_revision"`
-	CompletedAt            *string               `json:"completed_at,omitempty"`
-	CompletionCurrent      bool                  `json:"completion_current"`
-	HasIntegrity           bool                  `json:"has_integrity"`
-	Held                   bool                  `json:"held"`
-	ExportProtectedUntil   *string               `json:"export_protected_until,omitempty"`
-	RetiredAt              *string               `json:"retired_at,omitempty"`
-	SharedPublishedObjects int64                 `json:"shared_published_objects"`
-	Blocker                string                `json:"blocker"`
-	EligibleAt             *string               `json:"eligible_at,omitempty"`
-	Retirement             *retirementResponse   `json:"retirement,omitempty"`
-}
-
-// retentionExamResponse names an Exam by its draft title.
-type retentionExamResponse struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+	ExamID                 string              `json:"exam_id"`
+	Exam                   examRefResponse     `json:"exam"`
+	SittingID              string              `json:"exam_sitting_id"`
+	SubmissionID           string              `json:"submission_id"`
+	Category               string              `json:"category"`
+	CompletionRevision     int64               `json:"completion_revision"`
+	CompletedAt            *string             `json:"completed_at,omitempty"`
+	CompletionCurrent      bool                `json:"completion_current"`
+	HasIntegrity           bool                `json:"has_integrity"`
+	Held                   bool                `json:"held"`
+	ExportProtectedUntil   *string             `json:"export_protected_until,omitempty"`
+	RetiredAt              *string             `json:"retired_at,omitempty"`
+	SharedPublishedObjects int64               `json:"shared_published_objects"`
+	Blocker                string              `json:"blocker"`
+	EligibleAt             *string             `json:"eligible_at,omitempty"`
+	Retirement             *retirementResponse `json:"retirement,omitempty"`
 }
 
 type retentionExamSummaryResponse struct {
-	Exam                retentionExamResponse          `json:"exam"`
+	Exam                examRefResponse                `json:"exam"`
 	Work                retentionPreviewCountsResponse `json:"work"`
 	Integrity           retentionPreviewCountsResponse `json:"integrity"`
 	BrowserActivity     retentionPreviewCountsResponse `json:"browser_activity"`
@@ -286,19 +273,19 @@ type retentionExamSummariesResponse struct {
 // carries reason codes but never the private reasons, which stay on the
 // Exam's own records.
 type retentionHoldListItemResponse struct {
-	ID                string                `json:"id"`
-	Exam              retentionExamResponse `json:"exam"`
-	SittingID         string                `json:"exam_sitting_id,omitempty"`
-	SubmissionID      string                `json:"submission_id,omitempty"`
-	Revision          int64                 `json:"revision"`
-	CreatedAt         string                `json:"created_at"`
-	CreatedBy         personRefResponse     `json:"created_by"`
-	ReasonCode        string                `json:"reason_code"`
-	Until             string                `json:"until,omitempty"`
-	DueForReview      bool                  `json:"due_for_review"`
-	ReleasedAt        string                `json:"released_at,omitempty"`
-	ReleasedBy        *personRefResponse    `json:"released_by,omitempty"`
-	ReleaseReasonCode string                `json:"release_reason_code,omitempty"`
+	ID                string             `json:"id"`
+	Exam              examRefResponse    `json:"exam"`
+	SittingID         string             `json:"exam_sitting_id,omitempty"`
+	SubmissionID      string             `json:"submission_id,omitempty"`
+	Revision          int64              `json:"revision"`
+	CreatedAt         string             `json:"created_at"`
+	CreatedBy         *personRefResponse `json:"created_by,omitempty"`
+	ReasonCode        string             `json:"reason_code"`
+	Until             string             `json:"until,omitempty"`
+	DueForReview      bool               `json:"due_for_review"`
+	ReleasedAt        string             `json:"released_at,omitempty"`
+	ReleasedBy        *personRefResponse `json:"released_by,omitempty"`
+	ReleaseReasonCode string             `json:"release_reason_code,omitempty"`
 }
 
 type retentionHoldCursor struct {
@@ -417,18 +404,25 @@ func (h retentionHandlers) getPreview(request route.Request) (route.Result, erro
 func (h retentionHandlers) records(request route.Request) (route.Result, error) {
 	values := request.HTTP.URL.Query()
 	for key, items := range values {
-		if len(items) != 1 || (key != "limit" && key != "cursor") {
+		if len(items) != 1 || (key != "limit" && key != "cursor" && key != "group_by") {
 			return route.Result{}, route.InvalidRequest(nil)
 		}
 	}
 
-	limit, err := request.QueryLimit()
+	pageRequest, err := request.Page()
 	if err != nil {
 		return route.Result{}, err
 	}
+	if values.Has("group_by") {
+		if values.Get("group_by") != "exam" {
+			return route.Result{}, route.InvalidRequest(nil)
+		}
+		return h.examSummaries(request, pageRequest)
+	}
+	limit := pageRequest.Limit
 
 	var after model.SubmissionID
-	if raw := values.Get("cursor"); raw != "" {
+	if raw := pageRequest.Cursor; raw != "" {
 		cursor, cursorErr := route.DecodeCursor(raw, retentionCursorSpec())
 		if cursorErr != nil {
 			return route.Result{}, route.InvalidRequest(cursorErr)
@@ -457,7 +451,7 @@ func (h retentionHandlers) records(request route.Request) (route.Result, error) 
 		r := item.Record
 		value := retentionRecordResponse{
 			ExamID:                 r.Scope.ExamID.String(),
-			Exam:                   retentionExamResponse{ID: r.Scope.ExamID.String(), Title: page.ExamTitles[r.Scope.ExamID]},
+			Exam:                   examRefResponse{ID: r.Scope.ExamID.String(), DisplayName: page.ExamTitles[r.Scope.ExamID]},
 			SittingID:              r.Scope.SittingID.String(),
 			SubmissionID:           r.Scope.SubmissionID.String(),
 			Category:               string(r.Category),
@@ -587,26 +581,16 @@ func retentionExpiryCountsDTO(c model.RetentionExpiryCounts) retentionExpiryCoun
 }
 
 // examSummaries pages the Exams that have records, each with its counts.
-func (h retentionHandlers) examSummaries(request route.Request) (route.Result, error) {
-	values := request.HTTP.URL.Query()
-	for key, items := range values {
-		if len(items) != 1 || (key != "limit" && key != "cursor") {
-			return route.Result{}, route.InvalidRequest(nil)
-		}
-	}
-	limit, err := request.QueryLimit()
-	if err != nil {
-		return route.Result{}, err
-	}
+func (h retentionHandlers) examSummaries(request route.Request, pageRequest route.PageRequest) (route.Result, error) {
 	var after model.ExamID
-	if raw := request.HTTP.URL.Query().Get("cursor"); raw != "" {
+	if raw := pageRequest.Cursor; raw != "" {
 		cursor, err := route.DecodeCursor(raw, retentionExamCursorSpec())
 		if err != nil {
 			return route.Result{}, route.InvalidRequest(err)
 		}
 		after = model.ExamID(cursor.AfterExamID)
 	}
-	page, err := h.app.SummarizeRetentionRecordsByExam(request.Context, request.Invocation(), after, limit)
+	page, err := h.app.SummarizeRetentionRecordsByExam(request.Context, request.Invocation(), after, pageRequest.Limit)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -617,7 +601,7 @@ func (h retentionHandlers) examSummaries(request route.Request) (route.Result, e
 	}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, retentionExamSummaryResponse{
-			Exam:                retentionExamResponse{ID: item.ExamID.String(), Title: item.Title},
+			Exam:                examRefResponse{ID: item.ExamID.String(), DisplayName: item.Title},
 			Work:                retentionPreviewCountsDTO(item.Work),
 			Integrity:           retentionPreviewCountsDTO(item.Integrity),
 			BrowserActivity:     retentionPreviewCountsDTO(item.BrowserActivity),
@@ -637,15 +621,46 @@ func (h retentionHandlers) exportRecords(request route.Request) (route.ProtocolR
 	if len(request.HTTP.URL.Query()) > 0 {
 		return route.ProtocolResult{}, route.InvalidRequest(nil)
 	}
-	var body bytes.Buffer
-	if err := h.app.ExportRetentionRecords(request.Context, request.Invocation(), &body); err != nil {
+	// A spool keeps the export bounded in memory and lets us report a cap
+	// or audit failure before the download starts.
+	file, err := os.CreateTemp("", "proctor-retention-records-*")
+	if err != nil {
+		return route.ProtocolResult{}, route.Unpresentable(err)
+	}
+	body := &retentionRecordsFile{File: file, path: file.Name()}
+	if os.Remove(body.path) == nil {
+		body.path = ""
+	}
+	if err := h.app.ExportRetentionRecords(request.Context, request.Invocation(), body); err != nil {
+		_ = body.Close()
 		return route.ProtocolResult{}, err
+	}
+	length, err := body.Seek(0, io.SeekCurrent)
+	if err == nil {
+		_, err = body.Seek(0, io.SeekStart)
+	}
+	if err != nil {
+		_ = body.Close()
+		return route.ProtocolResult{}, route.Unpresentable(err)
 	}
 	headers := privateNoStoreHeaders()
 	headers.Set("Content-Type", "text/csv; charset=utf-8")
 	headers.Set("Content-Disposition", `attachment; filename="retention-records.csv"`)
 	headers.Set("X-Content-Type-Options", "nosniff")
-	return route.BinaryDownload(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).WithHeaders(headers), nil
+	return route.BinaryDownload(body, length).WithHeaders(headers), nil
+}
+
+type retentionRecordsFile struct {
+	*os.File
+	path string
+}
+
+func (f *retentionRecordsFile) Close() error {
+	err := f.File.Close()
+	if f.path != "" {
+		err = errors.Join(err, os.Remove(f.path))
+	}
+	return err
 }
 
 func (h retentionHandlers) holds(request route.Request) (route.Result, error) {
@@ -696,12 +711,12 @@ func (h retentionHandlers) holds(request route.Request) (route.Result, error) {
 	response, err := route.NewList(page.Holds, page.HasMore, func(hold model.RetentionHold) retentionHoldListItemResponse {
 		item := retentionHoldListItemResponse{
 			ID:                hold.ID.String(),
-			Exam:              retentionExamResponse{ID: hold.Scope.ExamID.String(), Title: page.ExamTitles[hold.Scope.ExamID]},
+			Exam:              examRefResponse{ID: hold.Scope.ExamID.String(), DisplayName: page.ExamTitles[hold.Scope.ExamID]},
 			SittingID:         hold.Scope.SittingID.String(),
 			SubmissionID:      hold.Scope.SubmissionID.String(),
 			Revision:          hold.Revision,
 			CreatedAt:         model.FormatRFC3339(hold.CreatedAt),
-			CreatedBy:         *personRef(refs, hold.CreatedByUserID),
+			CreatedBy:         personRef(refs, hold.CreatedByUserID),
 			ReasonCode:        hold.ReasonCode,
 			Until:             hold.Until.FormatRFC3339(),
 			DueForReview:      hold.DueForReview(now),

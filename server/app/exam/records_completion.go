@@ -111,6 +111,8 @@ func (r *Records) CompleteExamSittingRecords(
 	}
 
 	// Completing a Sitting's records starts its retention clock.
-	r.publishRecordsChanged(ctx, command.Scope.ExamID)
+	if !result.Replayed && result.Completion.Revision > command.ExpectedRevision {
+		r.publishRecordsChanged(ctx, command.Scope.ExamID)
+	}
 	return result.Completion, nil
 }

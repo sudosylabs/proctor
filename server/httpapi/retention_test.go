@@ -177,6 +177,37 @@ func TestRetentionHTTPRecordsPresentsFullPageOfSubmissions(t *testing.T) {
 	require.NotEmpty(t, response.NextCursor)
 }
 
+func TestRetentionHTTPRecordsGroupsAndPagesByExam(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := retentionHTTPPrincipal()
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRetentionPolicyView))
+	exam := model.NewExamID()
+	fixture.retention.examSummaries = &store.RetentionExamSummaryPage{
+		PolicyRevision: 3, AsOf: model.NowUTC(), HasMore: true,
+		Items: []store.RetentionExamSummary{{ExamID: exam, Title: "Algorithms final"}},
+	}
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, nil))
+	const path = "/api/v1/retention/records"
+	r := serveRetentionHTTP(t, api, "GET", path+"?group_by=exam&limit=2", "", "")
+	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+	var response retentionExamSummariesResponse
+	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &response))
+	require.Equal(t, int64(3), response.PolicyRevision)
+	require.Len(t, response.Items, 1)
+	require.Equal(t, examRefResponse{ID: exam.String(), DisplayName: "Algorithms final"}, response.Items[0].Exam)
+	require.NotEmpty(t, response.NextCursor)
+	require.Equal(t, store.RetentionExamSummaryOptions{Limit: 2}, fixture.retention.examOptions)
+
+	r = serveRetentionHTTP(t, api, "GET", path+"?group_by=exam&cursor="+response.NextCursor, "", "")
+	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+	require.Equal(t, store.RetentionExamSummaryOptions{AfterExamID: exam, Limit: 50}, fixture.retention.examOptions)
+	for _, query := range []string{"?group_by=", "?group_by=unit", "?group_by=exam&group_by=exam", "?cursor=" + response.NextCursor} {
+		r = serveRetentionHTTP(t, api, "GET", path+query, "", "")
+		assertHTTPProblem(t, r, http.StatusBadRequest, "request.invalid")
+	}
+}
+
 func TestRetentionHTTPHoldsNameTheExamAndKeepPrivateReasons(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
@@ -198,7 +229,7 @@ func TestRetentionHTTPHoldsNameTheExamAndKeepPrivateReasons(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
-	require.Equal(t, map[string]any{"id": examID.String(), "title": "Algorithms final"}, page.Items[0]["exam"])
+	require.Equal(t, map[string]any{"id": examID.String(), "display_name": "Algorithms final"}, page.Items[0]["exam"])
 	require.Equal(t, true, page.Items[0]["due_for_review"], "a passed review date shows the hold is due")
 	require.Equal(t, map[string]any{"id": creator.String()}, page.Items[0]["created_by"])
 
@@ -212,7 +243,7 @@ func TestRetentionHTTPHoldsNeedInstitutionWideRetentionView(t *testing.T) {
 	principal := retentionHTTPPrincipal()
 	fixture := newAdministrationFixture(t, inAcademicUnit(principal.UserID, model.NewAcademicUnitID(), model.ActionRetentionPolicyView))
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionResource(fixture.service, nil))
-	for _, path := range []string{"/api/v1/retention/holds", "/api/v1/retention/records/export", "/api/v1/retention/exam-summaries"} {
+	for _, path := range []string{"/api/v1/retention/holds", "/api/v1/retention/records/export", "/api/v1/retention/records?group_by=exam"} {
 		r := serveRetentionHTTP(t, api, "GET", path, "", "")
 		assertHTTPProblem(t, r, http.StatusForbidden, "authorization.denied")
 	}

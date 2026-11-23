@@ -10,9 +10,11 @@ package administration
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"io"
 	"strconv"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -88,35 +90,65 @@ func (s *Service) SummarizeRetentionRecordsByExam(
 // MaximumRetentionExportSubmissions submissions. Records hold no student
 // content, so the export carries none either.
 func (s *Service) ExportRetentionRecords(ctx context.Context, inv invocation.Invocation, w io.Writer) error {
-	if _, _, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView); err != nil {
+	institution, resource, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView)
+	if err != nil {
 		return err
 	}
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     model.ActionRetentionPolicyView,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeInstitution,
+		ScopeID:    institution.ID.String(),
+		Operation:  "export_records",
+	})
+	if err != nil {
+		return apperror.New("retention.unavailable").Wrap(err)
+	}
+	submissions, err := s.writeRetentionRecords(ctx, w)
+	if err != nil {
+		auditErr := s.auditor.Fail(ctx, auditID, apperror.CodeOf(err, "retention.unavailable"))
+		return errors.Join(err, auditErr)
+	}
+	if err := s.auditor.Complete(ctx, auditID, map[string]any{"submission_count": submissions}); err != nil {
+		return apperror.New("retention.unavailable").Wrap(err)
+	}
+	return nil
+}
+
+func (s *Service) writeRetentionRecords(ctx context.Context, w io.Writer) (int, error) {
 	out := csv.NewWriter(w)
 	if err := out.Write([]string{
 		"exam_id", "exam_title", "exam_sitting_id", "submission_id", "category", "blocker", "eligible_at",
 		"held", "completion_current", "retired_at", "policy_revision", "as_of",
 	}); err != nil {
-		return apperror.New("retention.unavailable").Wrap(err)
+		return 0, apperror.New("retention.unavailable").Wrap(err)
 	}
 
 	var after model.SubmissionID
 	submissions := 0
 	for {
+		previous := after
 		page, err := s.retention.ListRecords(ctx, store.RetentionRecordListOptions{AfterSubmissionID: after, Limit: model.RetentionMaximumPageSize})
 		if err != nil {
-			return retentionError(err)
+			return 0, retentionError(err)
 		}
-		if page == nil || page.PolicyRevision < 1 || page.HasMore && len(page.Items) == 0 {
-			return apperror.New("retention.unavailable")
+		if page == nil || page.PolicyRevision < 1 || page.AsOf.IsZero() ||
+			len(page.Items) > model.RetentionRecordsPerSubmission*model.RetentionMaximumPageSize ||
+			page.HasMore && len(page.Items) == 0 {
+			return 0, apperror.New("retention.unavailable")
 		}
 		for _, item := range page.Items {
 			record := item.Record
+			if record.Scope.SubmissionID < after || !record.Scope.SubmissionID.IsValid() {
+				return 0, apperror.New("retention.unavailable")
+			}
 			if record.Scope.SubmissionID != after {
 				after = record.Scope.SubmissionID
 				submissions++
 			}
 			if submissions > MaximumRetentionExportSubmissions {
-				return apperror.New("retention.invalid").WithField("field", "records")
+				return 0, apperror.New("retention.invalid").WithField("field", "records")
 			}
 			if err := out.Write([]string{
 				record.Scope.ExamID.String(),
@@ -132,18 +164,21 @@ func (s *Service) ExportRetentionRecords(ctx context.Context, inv invocation.Inv
 				strconv.FormatInt(page.PolicyRevision, 10),
 				model.FormatRFC3339(page.AsOf),
 			}); err != nil {
-				return apperror.New("retention.unavailable").Wrap(err)
+				return 0, apperror.New("retention.unavailable").Wrap(err)
 			}
 		}
 		if !page.HasMore {
 			break
 		}
+		if after <= previous {
+			return 0, apperror.New("retention.unavailable")
+		}
 	}
 	out.Flush()
 	if err := out.Error(); err != nil {
-		return apperror.New("retention.unavailable").Wrap(err)
+		return 0, apperror.New("retention.unavailable").Wrap(err)
 	}
-	return nil
+	return submissions, nil
 }
 
 // csvSafe keeps a title a spreadsheet would read as a formula from running

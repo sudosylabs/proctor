@@ -88,9 +88,6 @@ func (r *Records) CreateRetentionHold(
 	if model.ValidateRecordsReason(command.ReasonCode, command.PrivateReason) != nil {
 		return nil, apperror.Invalid("exam.invalid", "retention_hold")
 	}
-	if command.Until.Valid && !command.Until.Time.After(r.now()) {
-		return nil, apperror.Invalid("exam.invalid", "until")
-	}
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
@@ -135,7 +132,9 @@ func (r *Records) CreateRetentionHold(
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold creation result is incomplete"))
 	}
 
-	r.publishHoldChanged(ctx, result.Hold)
+	if !result.Replayed {
+		r.publishHoldChanged(ctx, result.Hold)
+	}
 	return result.Hold, nil
 }
 
@@ -193,10 +192,12 @@ func (r *Records) ReleaseRetentionHold(
 		return nil, r.failMutation(ctx, mutation, err)
 	}
 
-	if !result.Released() {
+	if !result.ConsistentWithRelease(command.HoldID, command.Scope) {
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold release result is incomplete"))
 	}
 
-	r.publishHoldChanged(ctx, result.Hold)
+	if !result.Replayed {
+		r.publishHoldChanged(ctx, result.Hold)
+	}
 	return result.Hold, nil
 }

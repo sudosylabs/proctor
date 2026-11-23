@@ -515,6 +515,8 @@ type administrationRetentionStore struct {
 	institutionID model.InstitutionID
 	notices       []model.RetentionNotice
 	records       *store.RetentionRecordPage
+	examSummaries *store.RetentionExamSummaryPage
+	examOptions   store.RetentionExamSummaryOptions
 	calls         int
 
 	change        *store.RetentionControlChange
@@ -763,6 +765,14 @@ func (s *administrationAuditStore) CountRepeats(_ context.Context, options store
 		}
 	}
 	return repeats, nil
+}
+
+func (s *administrationRetentionStore) SummarizeRecordsByExam(_ context.Context, options store.RetentionExamSummaryOptions) (*store.RetentionExamSummaryPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	s.examOptions = options
+	return s.examSummaries, nil
 }
 
 func (s *administrationRetentionStore) ListHolds(_ context.Context, options store.RetentionHoldListOptions) (*store.RetentionHoldPage, error) {

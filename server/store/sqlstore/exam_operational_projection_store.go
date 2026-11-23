@@ -113,7 +113,11 @@ type candidateExamActivityRow struct {
 	AttemptID               sql.NullString `db:"attempt_id"`
 	AttemptState            sql.NullString `db:"attempt_state"`
 	SuspensionReason        sql.NullString `db:"suspension_reason"`
+	SuspendedAt             sql.NullTime   `db:"suspended_at"`
+	ReallowedAt             sql.NullTime   `db:"reallowed_at"`
+	LastSavedAt             sql.NullTime   `db:"last_saved_at"`
 	SubmissionID            sql.NullString `db:"submission_id"`
+	SubmissionReceiptCode   sql.NullString `db:"submission_receipt_code"`
 	SubmittedAt             sql.NullTime   `db:"submitted_at"`
 	SubmissionProvenance    sql.NullString `db:"submission_provenance"`
 	ReleasedAt              sql.NullTime   `db:"released_at"`
@@ -232,9 +236,10 @@ func candidateActivityQuery(options store.CandidateExamActivityListOptions, serv
 					)
 			) AS established_access,
 			a.id AS attempt_id, a.state AS attempt_state,
-			suspension.candidate_reason AS suspension_reason, submission.id AS submission_id,
-			submission.submitted_at, submission.provenance AS submission_provenance,
-			review.released_at
+			suspension.candidate_reason AS suspension_reason, suspension_times.suspended_at,
+			suspension_times.reallowed_at, saved.changed_at AS last_saved_at, submission.id AS submission_id,
+			submission.receipt_code AS submission_receipt_code, submission.submitted_at,
+			submission.provenance AS submission_provenance, review.released_at
 		FROM exam_sittings s
 		JOIN exams e ON e.id = s.exam_id
 		JOIN exam_revisions r ON r.id = s.exam_revision_id
@@ -249,6 +254,19 @@ func candidateActivityQuery(options store.CandidateExamActivityListOptions, serv
 			AND review.release_state = 'released'
 		LEFT JOIN exam_attempt_suspensions suspension ON suspension.exam_attempt_id = a.id
 			AND suspension.state = 'active'
+		-- Only a manager's reallow closes a suspension, so the latest closed
+		-- one ended when the candidate was let back in.
+		LEFT JOIN LATERAL (
+			SELECT MAX(history.started_at) AS suspended_at,
+				MAX(history.ended_at) FILTER (WHERE history.state = 'closed') AS reallowed_at
+			FROM exam_attempt_suspensions history
+			WHERE history.exam_attempt_id = a.id
+		) suspension_times ON true
+		-- The journal always keeps the entry at the workspace cursor, the
+		-- latest change the workspace acknowledged.
+		LEFT JOIN exam_attempt_workspaces workspace ON workspace.exam_attempt_id = a.id
+		LEFT JOIN exam_attempt_workspace_journal saved ON saved.workspace_id = workspace.id
+			AND saved.cursor = workspace.cursor
 		WHERE (`
 	args := []any{
 		serverTime,
@@ -424,6 +442,16 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 			ID:                   attemptID,
 			State:                attemptState,
 			SuspensionReasonCode: model.AttemptSuspensionCandidateReason(row.SuspensionReason.String),
+			SuspendedAt:          OptionalTimeFromNullTime(row.SuspendedAt),
+			ReallowedAt:          OptionalTimeFromNullTime(row.ReallowedAt),
+			LastSavedAt:          OptionalTimeFromNullTime(row.LastSavedAt),
+		}
+		if (attemptState == model.ExamAttemptSuspended || row.ReallowedAt.Valid) && !row.SuspendedAt.Valid {
+			return store.CandidateExamActivityItem{}, invalidPersistedState(
+				"candidate_exam_activity",
+				"suspension",
+				errors.New("inconsistent suspension times"),
+			)
 		}
 		if (attemptState == model.ExamAttemptSuspended) != row.SuspensionReason.Valid {
 			return store.CandidateExamActivityItem{}, invalidPersistedState(
@@ -432,7 +460,7 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 				errors.New("inconsistent Suspension projection"),
 			)
 		}
-	} else if row.AttemptState.Valid || row.SuspensionReason.Valid {
+	} else if row.AttemptState.Valid || row.SuspensionReason.Valid || row.SuspendedAt.Valid || row.ReallowedAt.Valid || row.LastSavedAt.Valid {
 		return store.CandidateExamActivityItem{}, invalidPersistedState(
 			"candidate_exam_activity",
 			"attempt",
@@ -443,7 +471,9 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 	if row.SubmissionID.Valid {
 		submissionID, parseErr := model.ParseSubmissionID(row.SubmissionID.String)
 		provenance := model.ExamSubmissionProvenance(row.SubmissionProvenance.String)
+		receiptCode := model.SubmissionReceiptCode(row.SubmissionReceiptCode.String)
 		if parseErr != nil ||
+			!receiptCode.IsValid() ||
 			!row.SubmittedAt.Valid ||
 			!provenance.IsValid() ||
 			item.Attempt == nil ||
@@ -457,10 +487,12 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 
 		item.Submission = &store.CandidateExamActivitySubmission{
 			ID:          submissionID,
+			ReceiptCode: receiptCode,
 			SubmittedAt: model.TimeUTC(row.SubmittedAt.Time),
 			Provenance:  provenance,
 		}
 	} else if row.SubmittedAt.Valid ||
+		row.SubmissionReceiptCode.Valid ||
 		row.SubmissionProvenance.Valid ||
 		item.Attempt != nil && item.Attempt.State == model.ExamAttemptSubmitted {
 		return store.CandidateExamActivityItem{}, invalidPersistedState(

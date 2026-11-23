@@ -4082,7 +4082,10 @@
                   ],
                   "attempt": {
                     "id": "o87yi4tenx8kodmcuup1hmtsbo",
+                    "last_saved_at": "2026-09-14T09:52:40Z",
+                    "reallowed_at": "2026-09-14T09:38:15Z",
                     "state": "active",
+                    "suspended_at": "2026-09-14T09:27:04Z",
                     "suspension_reason_code": null
                   },
                   "class": {
@@ -4132,6 +4135,7 @@
                   "submission": {
                     "id": "xpq79ar61ncrjiouey6d9tgp91",
                     "provenance": "candidate_submitted",
+                    "receipt_code": "7QXR-4M2K-HV9D-3JNP",
                     "submitted_at": "2026-09-07T13:48:10Z"
                   },
                   "title": "Linear Algebra Quiz 2"
@@ -10505,6 +10509,7 @@
           "application/json": {
             "example": {
               "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
+              "receipt_code": "7QXR-4M2K-HV9D-3JNP",
               "released_at": "2026-12-18T15:20:00Z",
               "student_remarks_markdown": "Your submission was reviewed and no further action is needed.",
               "submission_id": "39kqk53i4cswfzbi7hbai1r8qg",
@@ -16551,6 +16556,16 @@
           "id": {
             "$ref": "#/components/schemas/ID"
           },
+          "last_saved_at": {
+            "description": "When the workspace last acknowledged a change, from any Proctor Desktop the candidate used. Absent until the first change.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "reallowed_at": {
+            "description": "When an invigilator last let the candidate back in. Absent until that happens.",
+            "format": "date-time",
+            "type": "string"
+          },
           "state": {
             "description": "Current state of the Attempt.",
             "enum": [
@@ -16559,6 +16574,11 @@
               "suspended",
               "submitted"
             ],
+            "type": "string"
+          },
+          "suspended_at": {
+            "description": "When the current suspension began, or the latest one if the candidate was let back in. Absent when the Attempt was never suspended.",
+            "format": "date-time",
             "type": "string"
           },
           "suspension_reason_code": {
@@ -16791,6 +16811,11 @@
           "provenance": {
             "$ref": "#/components/schemas/ExamSubmissionProvenance"
           },
+          "receipt_code": {
+            "description": "The Submission's receipt code, the same value returned when it was submitted, in groups of four separated by hyphens.",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$",
+            "type": "string"
+          },
           "submitted_at": {
             "description": "Time the Submission was made.",
             "format": "date-time",
@@ -16799,6 +16824,7 @@
         },
         "required": [
           "id",
+          "receipt_code",
           "submitted_at",
           "provenance"
         ],
@@ -35494,6 +35520,11 @@
             "$ref": "#/components/schemas/ID",
             "description": "The candidate's Attempt."
           },
+          "receipt_code": {
+            "description": "The Submission's receipt code, the same value the candidate got when they submitted, in groups of four separated by hyphens.",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$",
+            "type": "string"
+          },
           "released_at": {
             "description": "When the result was released.",
             "format": "date-time",
@@ -35516,6 +35547,7 @@
         "required": [
           "submission_review_id",
           "submission_id",
+          "receipt_code",
           "exam_attempt_id",
           "student_remarks_markdown",
           "released_at"

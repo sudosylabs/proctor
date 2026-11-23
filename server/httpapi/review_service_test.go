@@ -230,7 +230,7 @@ func (s *reviewLedger) GetReleasedStudentResult(_ context.Context, attemptID mod
 	if attemptID != s.f.attemptID || userID != s.f.candidate.UserID {
 		return nil, store.NewErrNotFound("student_result", attemptID.String())
 	}
-	return &model.StudentResult{ReviewID: s.f.review.ID, SubmissionID: s.f.submission.ID, AttemptID: s.f.attemptID,
+	return &model.StudentResult{ReviewID: s.f.review.ID, SubmissionID: s.f.submission.ID, ReceiptCode: s.f.submission.ReceiptCode, AttemptID: s.f.attemptID,
 		CandidateUserID: s.f.candidate.UserID, StudentRemarksMarkdown: "Approved **remarks**", ReleasedAt: s.f.review.UpdatedAt}, nil
 }
 

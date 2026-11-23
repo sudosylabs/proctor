@@ -1108,14 +1108,22 @@ type CandidateExamActivityListOptions struct {
 	Limit                 int
 }
 
+// CandidateExamActivityAttempt is the candidate's own view of their Attempt.
+// SuspendedAt is when the current or latest suspension began and ReallowedAt
+// when the latest one was lifted; who acted and why stay with managers.
+// LastSavedAt is when the workspace last acknowledged a change.
 type CandidateExamActivityAttempt struct {
 	ID                   model.ExamAttemptID
 	State                model.ExamAttemptState
 	SuspensionReasonCode model.AttemptSuspensionCandidateReason
+	SuspendedAt          model.OptionalTime
+	ReallowedAt          model.OptionalTime
+	LastSavedAt          model.OptionalTime
 }
 
 type CandidateExamActivitySubmission struct {
 	ID          model.SubmissionID
+	ReceiptCode model.SubmissionReceiptCode
 	SubmittedAt time.Time
 	Provenance  model.ExamSubmissionProvenance
 }

@@ -331,6 +331,7 @@ type examIntegrityDiscrepancyListResponse struct {
 type studentExamResultResponse struct {
 	SubmissionReviewID     string `json:"submission_review_id"`
 	SubmissionID           string `json:"submission_id"`
+	ReceiptCode            string `json:"receipt_code"`
 	ExamAttemptID          string `json:"exam_attempt_id"`
 	StudentRemarksMarkdown string `json:"student_remarks_markdown"`
 	ReleasedAt             string `json:"released_at"`
@@ -961,6 +962,7 @@ func (h examIntegrityReviewHandlers) studentResult(request route.Request) (route
 	response := studentExamResultResponse{
 		SubmissionReviewID:     result.ReviewID.String(),
 		SubmissionID:           result.SubmissionID.String(),
+		ReceiptCode:            result.ReceiptCode.Display(),
 		ExamAttemptID:          result.AttemptID.String(),
 		StudentRemarksMarkdown: result.StudentRemarksMarkdown,
 		ReleasedAt:             model.FormatRFC3339(result.ReleasedAt),

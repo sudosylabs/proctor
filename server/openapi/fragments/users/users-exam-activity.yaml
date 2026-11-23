@@ -100,6 +100,9 @@ components:
                   id: o87yi4tenx8kodmcuup1hmtsbo
                   state: active
                   suspension_reason_code: null
+                  suspended_at: '2026-09-14T09:27:04Z'
+                  reallowed_at: '2026-09-14T09:38:15Z'
+                  last_saved_at: '2026-09-14T09:52:40Z'
                 submission: null
                 result: null
               - exam_id: nybc6xhg593upqice3sdeyro5k
@@ -125,6 +128,7 @@ components:
                   suspension_reason_code: null
                 submission:
                   id: xpq79ar61ncrjiouey6d9tgp91
+                  receipt_code: 7QXR-4M2K-HV9D-3JNP
                   submitted_at: '2026-09-07T13:48:10Z'
                   provenance: candidate_submitted
                 result:
@@ -218,14 +222,36 @@ components:
             - native_policy_review_required
             - manager_suspended
             - null
+        suspended_at:
+          type: string
+          format: date-time
+          description: >-
+            When the current suspension began, or the latest one if the candidate was let back in. Absent when the
+            Attempt was never suspended.
+        reallowed_at:
+          type: string
+          format: date-time
+          description: When an invigilator last let the candidate back in. Absent until that happens.
+        last_saved_at:
+          type: string
+          format: date-time
+          description: >-
+            When the workspace last acknowledged a change, from any Proctor Desktop the candidate used. Absent until
+            the first change.
     CandidateExamActivitySubmissionResponse:
       type: object
       additionalProperties: false
       description: The candidate's Submission for this Sitting.
-      required: [id, submitted_at, provenance]
+      required: [id, receipt_code, submitted_at, provenance]
       properties:
         id:
           $ref: '#/components/schemas/ID'
+        receipt_code:
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$
+          description: >-
+            The Submission's receipt code, the same value returned when it was submitted, in groups of four separated
+            by hyphens.
         submitted_at:
           type: string
           format: date-time

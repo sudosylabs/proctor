@@ -180,14 +180,20 @@ type candidateExamActivityRelationResponse struct {
 	DisplayName string `json:"display_name"`
 }
 
+// candidateExamActivityAttemptResponse is the candidate's own Attempt. The
+// suspension times carry no manager name or reason text.
 type candidateExamActivityAttemptResponse struct {
 	ID                   string                 `json:"id"`
 	State                model.ExamAttemptState `json:"state"`
 	SuspensionReasonCode *string                `json:"suspension_reason_code"`
+	SuspendedAt          string                 `json:"suspended_at,omitempty"`
+	ReallowedAt          string                 `json:"reallowed_at,omitempty"`
+	LastSavedAt          string                 `json:"last_saved_at,omitempty"`
 }
 
 type candidateExamActivitySubmissionResponse struct {
 	ID          string                         `json:"id"`
+	ReceiptCode string                         `json:"receipt_code"`
 	SubmittedAt string                         `json:"submitted_at"`
 	Provenance  model.ExamSubmissionProvenance `json:"provenance"`
 }
@@ -398,7 +404,9 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 		}
 
 		if item.Attempt != nil {
-			mapped.Attempt = &candidateExamActivityAttemptResponse{ID: item.Attempt.ID.String(), State: item.Attempt.State}
+			mapped.Attempt = &candidateExamActivityAttemptResponse{ID: item.Attempt.ID.String(), State: item.Attempt.State,
+				SuspendedAt: item.Attempt.SuspendedAt.FormatRFC3339(), ReallowedAt: item.Attempt.ReallowedAt.FormatRFC3339(),
+				LastSavedAt: item.Attempt.LastSavedAt.FormatRFC3339()}
 			if item.Attempt.SuspensionReasonCode != "" {
 				value := string(item.Attempt.SuspensionReasonCode)
 				mapped.Attempt.SuspensionReasonCode = &value
@@ -408,6 +416,7 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 		if item.Submission != nil {
 			mapped.Submission = &candidateExamActivitySubmissionResponse{
 				ID:          item.Submission.ID.String(),
+				ReceiptCode: item.Submission.ReceiptCode.Display(),
 				SubmittedAt: model.FormatRFC3339(item.Submission.SubmittedAt),
 				Provenance:  item.Submission.Provenance,
 			}

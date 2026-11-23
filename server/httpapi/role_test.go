@@ -74,7 +74,7 @@ func TestRoleResponsePreservesExistingWireShape(t *testing.T) {
 		Permissions: []string{string(model.ActionClassView)}, BuiltIn: false,
 	})
 	require.NoError(t, err)
-	got, err := json.Marshal(roleResponseFromModel(nil, role))
+	got, err := json.Marshal(roleResponseFromModel(nil, role, nil))
 	require.NoError(t, err)
 	require.Equal(t, string(want), string(got), "response")
 }

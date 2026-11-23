@@ -77,3 +77,13 @@ func (s *Service) NameRoleBindings(
 	}
 	return result, nil
 }
+
+// NamePeople names the people records the caller was already authorized to
+// read refer to, such as who last changed a Role. It grants nothing.
+func (s *Service) NamePeople(ctx context.Context, inv invocation.Invocation, ids []model.UserID) (people.Refs, error) {
+	refs, err := s.people.Resolve(ctx, inv.Principal(), ids)
+	if err != nil {
+		return nil, apperror.New("administration.unavailable").Wrap(err)
+	}
+	return refs, nil
+}

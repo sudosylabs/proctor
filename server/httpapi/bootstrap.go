@@ -107,7 +107,7 @@ func installationBootstrapResponseFromModel(
 
 	var role *roleResponse
 	if result.Role != nil {
-		mapped := roleResponseFromModel(request, result.Role)
+		mapped := roleResponseFromModel(request, result.Role, nil)
 		role = &mapped
 	}
 

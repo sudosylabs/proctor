@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -50,6 +51,8 @@ type roleResponse struct {
 	Description string   `json:"description"`
 	Permissions []string `json:"permissions"`
 	BuiltIn     bool     `json:"built_in"`
+	// UpdatedBy is who last created or changed a custom role.
+	UpdatedBy *personRefResponse `json:"updated_by,omitempty"`
 	// Holders is present only on reads, and only for a caller holding
 	// role_binding.view somewhere.
 	Holders *roleHoldersResponse `json:"holders,omitempty"`
@@ -68,8 +71,8 @@ type roleHoldersResponse struct {
 
 // roleResponseFromResult presents a read role with its holders, when the
 // application counted them.
-func roleResponseFromResult(request *http.Request, result administration.RoleResult) roleResponse {
-	response := roleResponseFromModel(request, result.Role)
+func roleResponseFromResult(request *http.Request, result administration.RoleResult, refs people.Refs) roleResponse {
+	response := roleResponseFromModel(request, result.Role, refs)
 	if holders := result.Holders; holders != nil {
 		response.Holders = &roleHoldersResponse{
 			Bindings:             holders.Bindings,
@@ -83,7 +86,7 @@ func roleResponseFromResult(request *http.Request, result administration.RoleRes
 	return response
 }
 
-func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse {
+func roleResponseFromModel(request *http.Request, role *model.Role, refs people.Refs) roleResponse {
 	permissions := role.Permissions
 	if permissions == nil {
 		permissions = []string{}
@@ -100,6 +103,7 @@ func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse
 		CreatedAt:   model.FormatRFC3339(role.CreatedAt),
 		UpdatedAt:   model.FormatRFC3339(role.UpdatedAt),
 		ArchivedAt:  role.ArchivedAt.FormatRFC3339(),
+		UpdatedBy:   personRef(refs, role.UpdatedByUserID),
 		Name:        role.Name,
 		DisplayName: displayName,
 		Description: description,
@@ -232,11 +236,19 @@ func (h roleHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
+	updaters := make([]model.UserID, 0, len(roles.Items))
+	for _, result := range roles.Items {
+		updaters = append(updaters, result.Role.UpdatedByUserID)
+	}
+	refs, err := h.app.NamePeople(request.Context, request.Invocation(), updaters)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response, err := route.NewList(
 		roles.Items,
 		roles.HasMore,
 		func(result administration.RoleResult) roleResponse {
-			return roleResponseFromResult(request.HTTP, result)
+			return roleResponseFromResult(request.HTTP, result, refs)
 		},
 		func(last administration.RoleResult) (string, error) {
 			return route.EncodeCursor(roleCursor{Name: last.Role.Name, ID: last.Role.ID.String()}, roleCursorSpec())
@@ -282,7 +294,11 @@ func (h roleHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, roleResponseFromResult(request.HTTP, role)), nil
+	refs, err := h.app.NamePeople(request.Context, request.Invocation(), []model.UserID{role.Role.UpdatedByUserID})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, roleResponseFromResult(request.HTTP, role, refs)), nil
 }
 
 func (h roleHandlers) create(request route.Request) (route.Result, error) {
@@ -305,7 +321,11 @@ func (h roleHandlers) create(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusCreated, roleResponseFromModel(request.HTTP, saved)), nil
+	refs, err := h.app.NamePeople(request.Context, request.Invocation(), []model.UserID{saved.UpdatedByUserID})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusCreated, roleResponseFromModel(request.HTTP, saved, refs)), nil
 }
 
 func (h roleHandlers) patch(request route.Request) (route.Result, error) {
@@ -333,7 +353,11 @@ func (h roleHandlers) patch(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, roleResponseFromModel(request.HTTP, updated)), nil
+	refs, err := h.app.NamePeople(request.Context, request.Invocation(), []model.UserID{updated.UpdatedByUserID})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, roleResponseFromModel(request.HTTP, updated, refs)), nil
 }
 
 func (h roleHandlers) archive(request route.Request) (route.Result, error) {

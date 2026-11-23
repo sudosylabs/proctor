@@ -33338,6 +33338,10 @@
             "description": "Time of the latest change to the Role.",
             "format": "date-time",
             "type": "string"
+          },
+          "updated_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who last created, changed or archived this custom Role. Omitted for a built-in Role."
           }
         },
         "required": [

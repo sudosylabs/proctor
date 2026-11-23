@@ -192,11 +192,12 @@ func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, com
 	}
 
 	candidate := &model.Role{
-		Name:        command.Name,
-		DisplayName: command.DisplayName,
-		Description: command.Description,
-		Permissions: append([]string(nil), command.Permissions...),
-		BuiltIn:     false,
+		Name:            command.Name,
+		DisplayName:     command.DisplayName,
+		Description:     command.Description,
+		Permissions:     append([]string(nil), command.Permissions...),
+		BuiltIn:         false,
+		UpdatedByUserID: inv.Principal().UserID,
 	}
 	if err := validateKnownPermissions(candidate.Permissions); err != nil {
 		return nil, err
@@ -266,6 +267,7 @@ func (s *Service) UpdateRole(ctx context.Context, inv invocation.Invocation, com
 
 	candidate := current.Clone()
 	candidate.Patch(patch)
+	candidate.UpdatedByUserID = inv.Principal().UserID
 	if err = validatePatchedPermissions(current.Permissions, command.Permissions); err != nil {
 		return nil, err
 	}
@@ -361,6 +363,7 @@ func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, id
 			return s.roles.Archive(ctx, &store.RoleArchive{
 				ID:           id,
 				ArchiveAt:    reference.MutationAt,
+				ArchivedBy:   inv.Principal().UserID,
 				AuditEventID: reference.ID,
 				AuditAt:      reference.MutationAt,
 			})

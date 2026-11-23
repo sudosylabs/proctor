@@ -1650,6 +1650,9 @@ CREATE TABLE roles (
     description varchar(4096) NOT NULL DEFAULT '',
     permissions text[] NOT NULL DEFAULT '{}',
     built_in boolean NOT NULL DEFAULT false,
+    -- The person who last created, changed or archived the Role. Built-in
+    -- roles change only with the server, so theirs stays empty.
+    updated_by_user_id varchar(26) REFERENCES users(id),
     CONSTRAINT roles_lifecycle_check CHECK (updated_at >= created_at)
 );
 
@@ -4929,7 +4932,9 @@ ALTER TABLE class_members
 
 ALTER TABLE roles
     ADD CONSTRAINT roles_id_canonical_check
-    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT roles_updated_by_user_id_canonical_check
+    CHECK (updated_by_user_id IS NULL OR updated_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE role_bindings
     ADD CONSTRAINT role_bindings_id_canonical_check

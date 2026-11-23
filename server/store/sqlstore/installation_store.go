@@ -186,7 +186,7 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		var row roleRow
 		if getErr := tx.Get(ctx, &row, `
 			SELECT id, created_at, updated_at, archived_at, name, display_name, description,
-				permissions, built_in
+				permissions, built_in, updated_by_user_id
 			FROM roles
 			WHERE name = ?
 			FOR UPDATE`, model.SystemAdministratorRoleName); getErr != nil {

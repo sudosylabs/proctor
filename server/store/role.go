@@ -32,6 +32,7 @@ type RoleUpdate struct {
 type RoleArchive struct {
 	ID           model.RoleID
 	ArchiveAt    time.Time
+	ArchivedBy   model.UserID
 	AuditEventID model.AuditEventID
 	AuditAt      time.Time
 }

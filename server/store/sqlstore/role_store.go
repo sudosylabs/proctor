@@ -45,6 +45,7 @@ type roleRow struct {
 	Description string         `db:"description"`
 	Permissions pq.StringArray `db:"permissions"`
 	BuiltIn     bool           `db:"built_in"`
+	UpdatedBy   sql.NullString `db:"updated_by_user_id"`
 }
 
 func roleSliceColumns() []string {
@@ -58,6 +59,7 @@ func roleSliceColumns() []string {
 		"roles.description",
 		"roles.permissions",
 		"roles.built_in",
+		"roles.updated_by_user_id",
 	}
 }
 
@@ -118,11 +120,11 @@ func insertRole(ctx context.Context, executor sqlxExecutor, role *model.Role) (r
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO roles (
 			id, created_at, updated_at, archived_at, name, display_name,
-			description, permissions, built_in
+			description, permissions, built_in, updated_by_user_id
 		)
 		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :name, :display_name,
-			:description, :permissions, :built_in
+			:description, :permissions, :built_in, :updated_by_user_id
 		)`, &row); err != nil {
 		return roleRow{}, fmt.Errorf("save role: %w", translateError("role", role.ID.String(), err))
 	}
@@ -236,7 +238,7 @@ func (s SQLRoleStore) Update(ctx context.Context, input *store.RoleUpdate) (*mod
 			ctx,
 			&locked,
 			`SELECT id, created_at, updated_at, archived_at, name, display_name, description, permissions,
-				built_in
+				built_in, updated_by_user_id
 			FROM roles
 			WHERE id = ?
 				AND archived_at IS NULL
@@ -294,13 +296,14 @@ func updateRole(ctx context.Context, executor sqlxExecutor, role *model.Role, ex
 		`
 		UPDATE roles
 		   SET updated_at = ?, name = ?, display_name = ?,
-		       description = ?, permissions = ?
+		       description = ?, permissions = ?, updated_by_user_id = ?
 		 WHERE id = ? AND archived_at IS NULL AND built_in = ? AND updated_at = ?`,
 		row.UpdatedAt,
 		row.Name,
 		row.DisplayName,
 		row.Description,
 		row.Permissions,
+		row.UpdatedBy,
 		row.ID,
 		row.BuiltIn,
 		expectedUpdatedAt,
@@ -329,7 +332,7 @@ func (s SQLRoleStore) Archive(ctx context.Context, input *store.RoleArchive) (*m
 		var row roleRow
 		if err := tx.Get(ctx, &row, `
 		SELECT id, created_at, updated_at, archived_at, name, display_name,
-		       description, permissions, built_in
+		       description, permissions, built_in, updated_by_user_id
 		  FROM roles
 		 WHERE id = ? AND archived_at IS NULL
 		 FOR UPDATE`, input.ID); err != nil {
@@ -343,13 +346,14 @@ func (s SQLRoleStore) Archive(ctx context.Context, input *store.RoleArchive) (*m
 		if role.BuiltIn {
 			return nil, store.NewErrConflict("role", "roles_built_in_protected", nil)
 		}
-		if err := archiveRole(ctx, tx, input.ID.String(), input.ArchiveAt); err != nil {
+		if err := archiveRole(ctx, tx, input.ID.String(), input.ArchiveAt, input.ArchivedBy); err != nil {
 			return nil, err
 		}
 
 		at := model.TimeUTC(input.ArchiveAt)
 		role.UpdatedAt = at
 		role.ArchivedAt = model.OptionalTimeFrom(at)
+		role.UpdatedByUserID = input.ArchivedBy
 		encoded, appErr := model.EncodeAuditData(role.Auditable())
 		if appErr != nil {
 			return nil, appErr
@@ -365,10 +369,10 @@ func (s SQLRoleStore) Archive(ctx context.Context, input *store.RoleArchive) (*m
 	})
 }
 
-func archiveRole(ctx context.Context, executor sqlxExecutor, id string, archiveAt time.Time) error {
+func archiveRole(ctx context.Context, executor sqlxExecutor, id string, archiveAt time.Time, archivedBy model.UserID) error {
 	result, err := executor.Exec(ctx, `
-		UPDATE roles SET updated_at = ?, archived_at = ?
-		 WHERE id = ? AND archived_at IS NULL AND built_in = false`, model.TimeUTC(archiveAt), model.TimeUTC(archiveAt), id)
+		UPDATE roles SET updated_at = ?, archived_at = ?, updated_by_user_id = ?
+		 WHERE id = ? AND archived_at IS NULL AND built_in = false`, model.TimeUTC(archiveAt), model.TimeUTC(archiveAt), nullableID(archivedBy.String()), id)
 	if err != nil {
 		return fmt.Errorf("archive role: %w", err)
 	}
@@ -390,6 +394,7 @@ func newRoleRow(role *model.Role) roleRow {
 		Description: role.Description,
 		Permissions: permissions,
 		BuiltIn:     role.BuiltIn,
+		UpdatedBy:   nullableID(role.UpdatedByUserID.String()),
 	}
 }
 
@@ -399,15 +404,16 @@ func (row roleRow) model() (*model.Role, error) {
 		return nil, err
 	}
 	value := &model.Role{
-		ID:          id,
-		CreatedAt:   row.CreatedAt.UTC(),
-		UpdatedAt:   row.UpdatedAt.UTC(),
-		ArchivedAt:  OptionalTimeFromNullTime(row.ArchivedAt),
-		Name:        row.Name,
-		DisplayName: row.DisplayName,
-		Description: row.Description,
-		Permissions: append([]string(nil), row.Permissions...),
-		BuiltIn:     row.BuiltIn,
+		ID:              id,
+		CreatedAt:       row.CreatedAt.UTC(),
+		UpdatedAt:       row.UpdatedAt.UTC(),
+		ArchivedAt:      OptionalTimeFromNullTime(row.ArchivedAt),
+		Name:            row.Name,
+		DisplayName:     row.DisplayName,
+		Description:     row.Description,
+		Permissions:     append([]string(nil), row.Permissions...),
+		BuiltIn:         row.BuiltIn,
+		UpdatedByUserID: model.UserID(row.UpdatedBy.String),
 	}
 	if err := validatePersistedModel("role", value); err != nil {
 		return nil, err

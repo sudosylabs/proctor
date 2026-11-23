@@ -612,6 +612,9 @@ components:
         built_in:
           type: boolean
           description: True for a Role that ships with Proctor. Built-in Roles can't be edited or deleted.
+        updated_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who last created, changed or archived this custom Role. Omitted for a built-in Role.
         holders:
           $ref: '#/components/schemas/RoleHolders'
           description: Who holds the Role now. Present only if you hold role_binding.view somewhere.

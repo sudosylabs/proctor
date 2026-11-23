@@ -125,6 +125,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"CancelExamSittingRequest":                       reflect.TypeOf(cancelExamSittingRequest{}),
 	"CandidateAttemptConfiguration":                  reflect.TypeOf(candidateAttemptConfigurationResponse{}),
 	"CandidateBrowserPolicy":                         reflect.TypeOf(candidateBrowserPolicyResponse{}),
+	"CandidateBrowserSite":                           reflect.TypeOf(candidateBrowserSiteResponse{}),
+	"CandidateFocusLossRule":                         reflect.TypeOf(candidateFocusLossRuleResponse{}),
 	"CandidateExamActivityAttemptResponse":           reflect.TypeOf(candidateExamActivityAttemptResponse{}),
 	"CandidateExamActivityItemResponse":              reflect.TypeOf(candidateExamActivityItemResponse{}),
 	"CandidateExamActivityRelationResponse":          reflect.TypeOf(candidateExamActivityRelationResponse{}),

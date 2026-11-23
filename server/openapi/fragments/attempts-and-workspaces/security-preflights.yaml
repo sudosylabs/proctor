@@ -1285,12 +1285,24 @@ components:
         - catalog_bindings
         - browser_activity_disclosure
         - screen_recording_disclosure
+        - focus_loss
+        - browser_sites
       properties:
         server_time:
           type: string
           format: date-time
         policy:
           $ref: '#/components/schemas/EffectiveExamSecurityPolicy'
+        focus_loss:
+          $ref: '#/components/schemas/CandidateFocusLossRule'
+        browser_sites:
+          type: array
+          maxItems: 128
+          description: >-
+            The sites the Exam browser opens, from the Exam Revision the Sitting delivers. Empty when the Exam browser
+            is off. Exactly one is the start page when it is on.
+          items:
+            $ref: '#/components/schemas/CandidateBrowserSite'
         readiness_digest:
           $ref: '#/components/schemas/ReadinessDigest'
         capability_matrix_digest:
@@ -1309,6 +1321,72 @@ components:
           oneOf:
             - $ref: '#/components/schemas/ScreenRecordingDisclosure'
             - type: 'null'
+    CandidateFocusLossRule:
+      type: object
+      additionalProperties: false
+      description: >-
+        The Exam's focus-loss rule as the candidate is told it before starting, from the Exam Revision the Sitting
+        delivers. count and window_seconds are present only when the rule is on.
+      required:
+        - mode
+        - outcome
+      properties:
+        mode:
+          type: string
+          enum:
+            - disabled
+            - observe
+            - enforce
+          description: The same value as the policy's focus_loss_mode.
+        count:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: How many times leaving the exam window within window_seconds leads to the outcome.
+        window_seconds:
+          type: integer
+          format: int64
+          minimum: 10
+          maximum: 14400
+          description: >-
+            The length of the rolling window, in whole seconds. A window with a fraction of a second is rounded up,
+            so it is never shorter than the one that counts.
+        outcome:
+          type: string
+          enum:
+            - none
+            - warning
+            - suspension
+          description: >-
+            What the candidate experiences when the rule trips: nothing visible, a warning, or the Attempt is stopped
+            until a manager lets them back in.
+    CandidateBrowserSite:
+      type: object
+      additionalProperties: false
+      description: One site the Exam browser opens, as the candidate is told it.
+      required:
+        - origin
+        - path_prefix
+        - start
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 400
+          description: The rule's label, when the Exam gives one.
+        origin:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: The scheme, host and optional port of the site.
+        path_prefix:
+          type: string
+          pattern: ^/
+          maxLength: 2048
+          description: The path the site covers, and everything below it.
+        start:
+          type: boolean
+          description: True for the page the Exam browser opens first.
     ReadinessDigest:
       type: string
       pattern: ^sha256:[0-9a-f]{64}$

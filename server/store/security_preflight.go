@@ -110,10 +110,13 @@ type SecurityPreflightStore interface {
 }
 
 // SecurityPolicyOverview is the policy the readiness check compares the
-// candidate's machine with before start.
+// candidate's machine with before start, and the rules the candidate is held
+// to: FocusLoss and BrowserPolicy as frozen in the Sitting's revision.
 type SecurityPolicyOverview struct {
 	ServerTime                time.Time
 	Resolved                  model.ResolvedNativePolicy
 	BrowserActivityDisclosure model.BrowserActivityDisclosure
 	ScreenRecordingDisclosure *model.ScreenRecordingDisclosure
+	FocusLoss                 model.FocusLossPolicy
+	BrowserPolicy             model.BrowserPolicy
 }

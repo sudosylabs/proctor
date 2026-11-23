@@ -16379,6 +16379,40 @@
         ],
         "type": "object"
       },
+      "CandidateBrowserSite": {
+        "additionalProperties": false,
+        "description": "One site the Exam browser opens, as the candidate is told it.",
+        "properties": {
+          "label": {
+            "description": "The rule's label, when the Exam gives one.",
+            "maxLength": 400,
+            "minLength": 1,
+            "type": "string"
+          },
+          "origin": {
+            "description": "The scheme, host and optional port of the site.",
+            "format": "uri",
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "path_prefix": {
+            "description": "The path the site covers, and everything below it.",
+            "maxLength": 2048,
+            "pattern": "^/",
+            "type": "string"
+          },
+          "start": {
+            "description": "True for the page the Exam browser opens first.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "origin",
+          "path_prefix",
+          "start"
+        ],
+        "type": "object"
+      },
       "CandidateCapability": {
         "description": "A group of candidate operations that a live correction can hold back until it is acknowledged. `browser` covers the exam browser, `submission` covers submitting the Attempt, and `workspace` covers changing the Workspace.",
         "enum": [
@@ -17057,6 +17091,48 @@
           "workspace_cursor",
           "items",
           "refresh_required"
+        ],
+        "type": "object"
+      },
+      "CandidateFocusLossRule": {
+        "additionalProperties": false,
+        "description": "The Exam's focus-loss rule as the candidate is told it before starting, from the Exam Revision the Sitting delivers. count and window_seconds are present only when the rule is on.",
+        "properties": {
+          "count": {
+            "description": "How many times leaving the exam window within window_seconds leads to the outcome.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mode": {
+            "description": "The same value as the policy's focus_loss_mode.",
+            "enum": [
+              "disabled",
+              "observe",
+              "enforce"
+            ],
+            "type": "string"
+          },
+          "outcome": {
+            "description": "What the candidate experiences when the rule trips: nothing visible, a warning, or the Attempt is stopped until a manager lets them back in.",
+            "enum": [
+              "none",
+              "warning",
+              "suspension"
+            ],
+            "type": "string"
+          },
+          "window_seconds": {
+            "description": "The length of the rolling window, in whole seconds. A window with a fraction of a second is rounded up, so it is never shorter than the one that counts.",
+            "format": "int64",
+            "maximum": 14400,
+            "minimum": 10,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "outcome"
         ],
         "type": "object"
       },
@@ -34098,6 +34174,14 @@
           "browser_activity_disclosure": {
             "$ref": "#/components/schemas/BrowserActivityDisclosure"
           },
+          "browser_sites": {
+            "description": "The sites the Exam browser opens, from the Exam Revision the Sitting delivers. Empty when the Exam browser is off. Exactly one is the start page when it is on.",
+            "items": {
+              "$ref": "#/components/schemas/CandidateBrowserSite"
+            },
+            "maxItems": 128,
+            "type": "array"
+          },
           "capability_matrix_digest": {
             "description": "SHA-256 of the exact signed bytes of the release's certification document.",
             "pattern": "^sha256:[0-9a-f]{64}$",
@@ -34109,6 +34193,9 @@
             },
             "maxItems": 32,
             "type": "array"
+          },
+          "focus_loss": {
+            "$ref": "#/components/schemas/CandidateFocusLossRule"
           },
           "policy": {
             "$ref": "#/components/schemas/EffectiveExamSecurityPolicy"
@@ -34139,7 +34226,9 @@
           "capability_matrix_digest",
           "catalog_bindings",
           "browser_activity_disclosure",
-          "screen_recording_disclosure"
+          "screen_recording_disclosure",
+          "focus_loss",
+          "browser_sites"
         ],
         "type": "object"
       },

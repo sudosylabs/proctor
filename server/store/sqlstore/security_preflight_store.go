@@ -780,9 +780,14 @@ func (s *SQLSecurityPreflightStore) ReadSecurityPolicyOverview(
 		if err != nil {
 			return nil, err
 		}
+		selections, err := model.DecodeExamPolicySet(revision.Policy.Bytes)
+		if err != nil {
+			return nil, err
+		}
 		return &store.SecurityPolicyOverview{
 			ServerTime: now, Resolved: resolved,
 			BrowserActivityDisclosure: disclosure, ScreenRecordingDisclosure: recording,
+			FocusLoss: selections.FocusLoss, BrowserPolicy: revision.BrowserPolicy.Clone(),
 		}, nil
 	})
 }

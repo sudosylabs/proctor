@@ -79,7 +79,8 @@ func TestExamSittingJoinWindow(t *testing.T) {
 	require.False(t, window.Waiting(ExamSittingScheduled, startAt, startAt.Add(-11*time.Minute)), "before the window nobody waits")
 	require.True(t, window.Waiting(ExamSittingScheduled, startAt, startAt.Add(-10*time.Minute)), "the early-join phase opens inclusively")
 	require.True(t, window.Waiting(ExamSittingScheduled, startAt, startAt.Add(-time.Microsecond)))
-	require.False(t, window.Waiting(ExamSittingScheduled, startAt, startAt), "waiting ends at the scheduled start")
+	require.True(t, window.Waiting(ExamSittingScheduled, startAt, startAt), "a delayed opening job must not block preparation")
+	require.True(t, ExamSittingJoinWindow{}.Waiting(ExamSittingScheduled, startAt, startAt.Add(time.Second)), "a sitting without early join allows preparation at the start")
 	require.False(t, window.Waiting(ExamSittingOpen, startAt, startAt.Add(-time.Minute)), "an open sitting has no waiting phase")
 	require.False(t, ExamSittingJoinWindow{}.Waiting(ExamSittingScheduled, startAt, startAt.Add(-time.Minute)), "without an opening nobody waits")
 

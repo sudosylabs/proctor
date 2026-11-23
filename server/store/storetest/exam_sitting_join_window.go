@@ -170,10 +170,24 @@ func TestExamSittingJoinWindowUpdate(t *testing.T, ss store.Store) {
 	end := start.Add(2 * time.Hour)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, start, end, model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
+	candidateInput := newUser()
+	candidateInput.EmailVerified = true
+	candidate, err := createUser(t, ctx, ss, candidateInput)
+	require.NoError(t, err)
+	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: fixture.period.StartsAt})
+	require.NoError(t, err)
+	member := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID, AcademicPeriodID: fixture.period.ID, StartsAt: fixture.period.StartsAt}
+	member.PrepareCreate(model.NewClassMemberID(), model.NowUTC())
+	_, err = ss.ClassMember().Enroll(ctx, &store.ClassMemberEnrollment{Member: member, Recipient: candidate,
+		Notice:       classMemberPreparedMail(t, member, model.MailTemplateAcademicClassEnrolled, member.CreatedAt),
+		AuditEventID: saveClassMemberAuditAttempt(t, ctx, ss, fixture.class.ID.String()).ID, AuditAt: model.NowUTC()})
+	require.NoError(t, err)
+	scheduleMail := newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled, model.MailTemplateExamSittingScheduled)
+
 	openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 	_, err = ss.ExamSitting().Schedule(ctx, &store.ExamSittingSchedule{Sitting: sitting, OpenJob: openJob, DeadlineJob: deadlineJob, ActorUserID: fixture.actor.ID,
 		AuditEventID: saveExamSittingAudit(t, ctx, ss, fixture.actor.ID, fixture.examID, fixture.unitID).ID, AuditAt: model.NowUTC(),
-		Mail: newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailScheduled, model.MailTemplateExamSittingScheduled)},
+		Mail: scheduleMail},
 		examCommand(fixture.actor.ID, "exam.sitting.schedule", "join-update-schedule", "join-update-schedule"))
 	require.NoError(t, err)
 
@@ -184,7 +198,6 @@ func TestExamSittingJoinWindowUpdate(t *testing.T, ss store.Store) {
 			ExamRevisionID: fixture.revisionID, ClassID: fixture.class.ID, ScheduledStartAt: start, ScheduledEndAt: end,
 			JoinWindow: window, OpenJob: openJob, DeadlineJob: deadlineJob,
 			AuditEventID: saveExamSittingAudit(t, ctx, ss, fixture.actor.ID, fixture.examID, fixture.unitID).ID, AuditAt: model.NowUTC(),
-			Mail: newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailRescheduled, model.MailTemplateExamSittingRescheduled),
 		}, examCommand(fixture.actor.ID, "exam.sitting.schedule.update", key, key))
 	}
 
@@ -193,6 +206,14 @@ func TestExamSittingJoinWindowUpdate(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.True(t, set.Value.Sitting.JoinWindow.Equal(window))
 	require.Equal(t, int64(2), set.Value.Sitting.Revision)
+	mail, err := ss.ExamSitting().ListMailRecipients(ctx, store.ExamSittingMailRecipientPageRequest{
+		OccurrenceID: scheduleMail.Occurrence.ID, Limit: model.SittingMailExpansionPageSize,
+	})
+	require.NoError(t, err)
+	require.Len(t, mail.Recipients, 1)
+	require.Equal(t, candidate.ID, mail.Recipients[0].User.ID)
+	require.Equal(t, model.MailTemplateExamSittingScheduled, mail.Recipients[0].TemplateKey,
+		"a join-window edit preserves mail for the schedule still in force")
 
 	_, err = update(2, model.ExamSittingJoinWindow{ClosesAt: model.OptionalTimeFrom(end.Add(time.Minute))}, "join-update-invalid")
 	var invalid *store.ErrInvalidInput

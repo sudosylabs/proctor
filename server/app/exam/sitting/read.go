@@ -58,7 +58,7 @@ func (s *Service) ReadExamSitting(
 	}
 
 	read := Read{ExamSittingSnapshot: snapshot}
-	counts, err := s.candidateCounts(ctx, []model.ExamSittingID{sittingID})
+	counts, err := s.candidateCounts(ctx, []model.ExamSittingID{sittingID}, inv.Principal().UserID)
 	if err != nil {
 		return Read{}, err
 	}
@@ -102,7 +102,7 @@ func (s *Service) ListExamSittingsWithCounts(
 	for _, item := range page.Items {
 		ids = append(ids, item.Sitting.ID)
 	}
-	counts, err := s.candidateCounts(ctx, ids)
+	counts, err := s.candidateCounts(ctx, ids, inv.Principal().UserID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -114,8 +114,8 @@ func (s *Service) ListExamSittingsWithCounts(
 	return items, page.HasMore, nil
 }
 
-func (s *Service) candidateCounts(ctx context.Context, ids []model.ExamSittingID) (map[model.ExamSittingID]CandidateCount, error) {
-	stored, err := s.sittings.CountCandidates(ctx, ids)
+func (s *Service) candidateCounts(ctx context.Context, ids []model.ExamSittingID, viewer model.UserID) (map[model.ExamSittingID]CandidateCount, error) {
+	stored, err := s.sittings.CountCandidates(ctx, ids, viewer)
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}

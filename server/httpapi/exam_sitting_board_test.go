@@ -17,7 +17,7 @@ import (
 // The board reads below report nothing beyond the sitting itself: no
 // candidates, history or corrections.
 
-func (s *sittingLedger) CountCandidates(_ context.Context, ids []model.ExamSittingID) (map[model.ExamSittingID]int, error) {
+func (s *sittingLedger) CountCandidates(_ context.Context, ids []model.ExamSittingID, _ model.UserID) (map[model.ExamSittingID]int, error) {
 	counts := make(map[model.ExamSittingID]int, len(ids))
 	for _, id := range ids {
 		counts[id] = 0

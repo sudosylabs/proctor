@@ -51,7 +51,7 @@ func TestReadHidesHistoryFromAViewerWhoCannotManage(t *testing.T) {
 	require.False(t, viewer.persistence.historyRead, "the history is not even read")
 }
 
-func (f *sittingStoreFake) CountCandidates(_ context.Context, ids []model.ExamSittingID) (map[model.ExamSittingID]int, error) {
+func (f *sittingStoreFake) CountCandidates(_ context.Context, ids []model.ExamSittingID, _ model.UserID) (map[model.ExamSittingID]int, error) {
 	counts := map[model.ExamSittingID]int{}
 	for _, id := range ids {
 		counts[id] = f.candidateCount

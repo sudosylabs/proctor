@@ -735,7 +735,8 @@ const managedExamsCTE = `managed_exams AS (
 			AND manager.user_id = ?
 		JOIN academic_unit_members member ON member.academic_unit_id = exam.academic_unit_id
 			AND member.user_id = ?
-		WHERE member.archived_at IS NULL
+		WHERE exam.copying_until IS NULL
+			AND member.archived_at IS NULL
 			AND member.start_at <= statement_timestamp()
 			AND (member.end_at IS NULL OR member.end_at > statement_timestamp())
 	)`

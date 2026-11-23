@@ -45,10 +45,14 @@ func TestListCatalogUsesAuthorizedPersistenceVisibilityAndBoundedSummary(t *test
 	}, fixture.decisions(), "the collection decision is recorded at the Institution")
 	// Contract: list visibility is authorized before the Store lists Exams.
 	// The ordinary and override grants are both read.
-	// The page's action counts then read the sitting-view and review scopes,
-	// ordinary and override each, recording no decision.
+	// Action counts then read ordinary and override scopes for sitting view,
+	// submission review and submission view without recording a decision.
 	require.Equal(t, []string{"grants", "grants", "decision:exam.view:success", "store.list",
-		"grants", "grants", "grants", "grants"}, *fixture.order)
+		"grants", "grants", "grants", "grants", "grants", "grants"}, *fixture.order)
+	require.NotNil(t, fixture.persistence.actionOptions)
+	require.Equal(t, fixture.userID, fixture.persistence.actionOptions.SubmissionVisibility.ActorUserID)
+	require.Empty(t, fixture.persistence.actionOptions.SubmissionVisibility.OrdinaryAcademicUnitRootIDs)
+	require.False(t, fixture.persistence.actionOptions.SubmissionVisibility.OrdinaryInstitutionWide)
 }
 
 func TestArchiveOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.T) {

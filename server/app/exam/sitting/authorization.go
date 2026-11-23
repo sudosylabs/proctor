@@ -216,37 +216,47 @@ func (s *Service) authorizeSittingManage(
 	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (bool, error) {
+	decision, err := s.authorizeSittingAction(ctx, inv, sittingID, model.ActionExamSittingManage, model.ActionExamSittingManageOverride)
+	return decision.override, err
+}
+
+// AuthorizeSittingSubmissionView requires the same manager access
+// to submissions as the sitting's submission list.
+func (s *Service) AuthorizeSittingSubmissionView(ctx context.Context, inv invocation.Invocation, sittingID model.ExamSittingID) error {
+	_, err := s.authorizeSittingAction(ctx, inv, sittingID, model.ActionSubmissionView, model.ActionSubmissionViewOverride)
+	return err
+}
+
+func (s *Service) authorizeSittingAction(
+	ctx context.Context,
+	inv invocation.Invocation,
+	sittingID model.ExamSittingID,
+	action, override model.Action,
+) (authorizationDecision, error) {
 	if !sittingID.IsValid() {
-		return false, apperror.Invalid("exam.sitting.invalid", "exam_sitting_id")
+		return authorizationDecision{}, apperror.Invalid("exam.sitting.invalid", "exam_sitting_id")
 	}
 	if inv.Principal().Validate() != nil {
-		return false, apperror.Invalid("exam.sitting.invalid", "principal")
+		return authorizationDecision{}, apperror.Invalid("exam.sitting.invalid", "principal")
 	}
 
 	snapshot, err := s.sittings.Resolve(ctx, sittingID)
 	if err != nil {
-		return false, storeErrors.Translate(err)
+		return authorizationDecision{}, storeErrors.Translate(err)
+	}
+	if snapshot.Sitting.ID != sittingID {
+		return authorizationDecision{}, apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned a mismatched snapshot"))
 	}
 
-	value := *snapshot
-	if value.Sitting.ID != sittingID {
-		return false, apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned a mismatched snapshot"))
-	}
-
-	decision, err := s.authorizeManagerAction(
+	return s.authorizeManagerAction(
 		ctx,
 		inv,
-		value.Sitting.ExamID,
+		snapshot.Sitting.ExamID,
 		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		model.TimeUTC(s.now()),
-		model.ActionExamSittingManage,
-		model.ActionExamSittingManageOverride,
+		action,
+		override,
 	)
-	if err != nil {
-		return false, err
-	}
-
-	return decision.override, nil
 }
 
 type authorizationDecision struct {

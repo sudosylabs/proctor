@@ -112,4 +112,24 @@ func (s *Service) publishLifecycle(ctx context.Context, result *store.ExamSittin
 	if err := s.publishLifecycleChanged(ctx, result.Value.Sitting, result.Transition); err != nil {
 		s.publisher.Report(ctx, "exam_sitting_"+operation, err)
 	}
+	// The administration count includes open, paused and closing sittings.
+	// Only entering or leaving that set changes what policy managers read.
+	switch result.Transition {
+	case store.ExamSittingTransitionOpened, store.ExamSittingTransitionClosedNoAttempts, store.ExamSittingTransitionSealingCompleted:
+		if err := s.publishOpenSittingsChanged(ctx); err != nil {
+			s.publisher.Report(ctx, "desktop_compatibility_policy.changed", err)
+		}
+	}
+}
+
+func (s *Service) publishOpenSittingsChanged(ctx context.Context) error {
+	institution, err := s.authorizer.Institution(ctx)
+	if err != nil {
+		return err
+	}
+	event, err := realtime.NewDesktopCompatibilityPolicyChangedEvent(institution.ID)
+	if err != nil {
+		return err
+	}
+	return s.publisher.Publish(ctx, event)
 }

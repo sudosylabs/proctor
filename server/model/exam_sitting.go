@@ -126,12 +126,15 @@ func (w ExamSittingJoinWindow) Canonical() ExamSittingJoinWindow {
 	return w
 }
 
-// Waiting reports whether at is in the early-join phase of a sitting still
-// in state and due to start at scheduledStartAt: from OpensAt until the
-// start. A waiting candidate may prepare (the readiness overview and
-// preflight) but holds no Attempt, so nobody gains working time.
+// Waiting permits preparation from the join opening until the sitting state
+// changes. With no early opening, preparation begins at the scheduled start.
+// An opening job that runs late must not block preparation in the meantime.
 func (w ExamSittingJoinWindow) Waiting(state ExamSittingState, scheduledStartAt, at time.Time) bool {
-	return state == ExamSittingScheduled && w.OpensAt.Valid && !at.Before(w.OpensAt.Time) && at.Before(scheduledStartAt)
+	opensAt := scheduledStartAt
+	if w.OpensAt.Valid {
+		opensAt = w.OpensAt.Time
+	}
+	return state == ExamSittingScheduled && !at.Before(opensAt)
 }
 
 // ExamSittingReasonCode is a bounded, candidate-safe lifecycle reason. A
@@ -201,6 +204,13 @@ func NewExamSitting(
 	return sitting, nil
 }
 
+// ScheduleDiffers reports a change to the schedule announced in mail.
+// The join window affects admission and does not replace the announcement.
+func (s *ExamSitting) ScheduleDiffers(revisionID ExamRevisionID, classID ClassID, startAt, endAt time.Time) bool {
+	return s.ExamRevisionID != revisionID || s.ClassID != classID ||
+		!s.ScheduledStartAt.Equal(startAt) || !s.ScheduledEndAt.Equal(endAt)
+}
+
 // ApplySchedule replaces the whole pre-open schedule at once. Once lifecycle
 // processing has begun it fails without mutation; extending the end is
 // ExtendEnd's job.
@@ -220,11 +230,7 @@ func (s *ExamSitting) ApplySchedule(
 
 	scheduledStartAt, scheduledEndAt = TimeUTC(scheduledStartAt), TimeUTC(scheduledEndAt)
 	joinWindow = joinWindow.Canonical()
-	if s.ExamRevisionID == examRevisionID &&
-		s.ClassID == classID &&
-		s.ScheduledStartAt == scheduledStartAt &&
-		s.ScheduledEndAt == scheduledEndAt &&
-		s.JoinWindow.Equal(joinWindow) {
+	if !s.ScheduleDiffers(examRevisionID, classID, scheduledStartAt, scheduledEndAt) && s.JoinWindow.Equal(joinWindow) {
 		return false, nil
 	}
 

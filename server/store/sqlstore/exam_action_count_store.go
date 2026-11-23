@@ -30,6 +30,7 @@ func (s SQLExamAuthoringStore) CountExamActions(
 		!options.ViewerUserID.IsValid() ||
 		!validExamManagerVisibility(options.SittingVisibility) ||
 		!validExamManagerVisibility(options.ReviewVisibility) ||
+		!validExamManagerVisibility(options.SubmissionVisibility) ||
 		!store.ValidCountMaximum(options.Maximum) {
 		return nil, store.NewErrInvalidInput("exam", "action_counts", nil)
 	}
@@ -51,6 +52,8 @@ func (s SQLExamAuthoringStore) CountExamActions(
 
 	sittings := newExamManagerVisibility("sitting_view", options.SittingVisibility, "e")
 	reviews := newExamManagerVisibility("review", options.ReviewVisibility, "e")
+	submissions := newExamManagerVisibility("submission_view", options.SubmissionVisibility, "e")
+	canReview := `(` + reviews.predicate + ` AND ` + submissions.predicate + `)`
 	var rows []struct {
 		ExamID         string        `db:"id"`
 		SittingVisible bool          `db:"sitting_visible"`
@@ -58,19 +61,23 @@ func (s SQLExamAuthoringStore) CountExamActions(
 		PendingReview  sql.NullInt64 `db:"pending_review_count"`
 	}
 	args := append(append([]any{}, sittings.cteArgs...), reviews.cteArgs...)
+	args = append(args, submissions.cteArgs...)
 	args = append(args, sittings.predicateArgs...)
-	args = append(args, reviews.predicateArgs...)
-	args = append(args, reviews.predicateArgs...)
-	args = append(args, options.Maximum, pq.Array(ids))
-	if err := reader.Select(ctx, &rows, `WITH RECURSIVE `+sittings.ctes+`, `+reviews.ctes+`
-		SELECT e.id, `+sittings.predicate+` AS sitting_visible, `+reviews.predicate+` AS review_visible,
-			CASE WHEN `+reviews.predicate+` THEN (
+	for range 2 {
+		args = append(args, reviews.predicateArgs...)
+		args = append(args, submissions.predicateArgs...)
+	}
+	args = append(args, options.ViewerUserID.String(), options.Maximum, pq.Array(ids))
+	if err := reader.Select(ctx, &rows, `WITH RECURSIVE `+sittings.ctes+`, `+reviews.ctes+`, `+submissions.ctes+`
+		SELECT e.id, `+sittings.predicate+` AS sitting_visible, `+canReview+` AS review_visible,
+			CASE WHEN `+canReview+` THEN (
 				SELECT COUNT(*)
 				FROM (
 					SELECT 1
 					FROM exam_submissions submission
 					JOIN exam_attempts a ON a.id = submission.exam_attempt_id
 					WHERE a.exam_id = e.id
+						AND a.candidate_user_id <> ?
 						AND submission.sealed = true
 						AND submission.integrity_retired_at IS NULL
 						AND NOT EXISTS (

@@ -61,25 +61,9 @@ func candidateStatusCTE(
 ) (string, []any) {
 	query := `WITH status_sittings AS (` + statusSittings + `),
 		population AS (
-			SELECT s.id AS exam_sitting_id, a.candidate_user_id
+			SELECT s.id AS exam_sitting_id, members.user_id AS candidate_user_id
 			FROM status_sittings s
-			JOIN exam_attempts a ON a.exam_sitting_id = s.id
-			UNION
-			SELECT s.id, member.user_id
-			FROM status_sittings s
-			-- A scheduled sitting's candidates are the class at its start. An
-			-- opened sitting's are the class when it opened and, while it is
-			-- open or paused, the class now as well.
-			JOIN LATERAL (
-				VALUES
-					(CASE WHEN s.state IN ('scheduled', 'canceled') THEN s.scheduled_start_at END),
-					(CASE WHEN s.state NOT IN ('scheduled', 'canceled') THEN s.opened_at END),
-					(CASE WHEN s.state IN ('open', 'paused') THEN ?::timestamptz END)
-			) instant(at) ON instant.at IS NOT NULL
-			JOIN class_members member ON member.class_id = s.class_id
-				AND member.start_at <= instant.at
-				AND (member.end_at IS NULL OR member.end_at > instant.at)
-				AND (member.archived_at IS NULL OR member.archived_at > instant.at)
+			CROSS JOIN LATERAL (` + sittingCandidatePopulationSQL("?::timestamptz") + `) members
 		),
 		finalized_review AS (
 			SELECT review.id, review.exam_attempt_id
@@ -237,7 +221,6 @@ func candidateStatusCTE(
 		LEFT JOIN exam_attempt_suspensions suspension ON suspension.exam_attempt_id = a.id
 			AND suspension.state = 'active'
 		LEFT JOIN exam_attempt_environments environment ON environment.exam_attempt_id = a.id
-		WHERE candidate.id <> ?
 		),
 		candidate_status_presence AS (
 			SELECT status.*, ` + candidateStatusPresenceSQL + ` AS presence_state
@@ -248,7 +231,7 @@ func candidateStatusCTE(
 			FROM candidate_status_presence status
 		)`
 	args := append([]any{}, statusSittingArgs...)
-	args = append(args, serverTime, serverTime, serverTime, serverTime, serverTime, excludeUserID.String())
+	args = append(args, serverTime, excludeUserID.String(), serverTime, serverTime, serverTime, serverTime)
 	return query, args
 }
 
@@ -273,8 +256,8 @@ func candidateStatusFilterSQL(filter store.SittingCandidateStatusFilter) (string
 	}
 	if term := strings.TrimSpace(filter.Query); term != "" {
 		pattern := directorySearchPattern(term)
-		clauses = append(clauses, `(status.display_name ILIKE ? ESCAPE '!' OR status.username ILIKE ? ESCAPE '!')`)
-		args = append(args, pattern, pattern)
+		clauses = append(clauses, `status.display_name ILIKE ? ESCAPE '!'`)
+		args = append(args, pattern)
 	}
 	if len(clauses) == 0 {
 		return "TRUE", nil

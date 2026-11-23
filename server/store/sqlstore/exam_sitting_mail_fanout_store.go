@@ -31,6 +31,11 @@ func insertExamSittingMailFanout(
 		return err
 	}
 
+	scheduleRevision, err := readSittingMailScheduleRevision(ctx, tx, sitting.ID)
+	if err != nil {
+		return err
+	}
+
 	databaseNow, err := jobDatabaseNow(ctx, tx)
 	if err != nil {
 		return err
@@ -94,7 +99,7 @@ func insertExamSittingMailFanout(
 		occurrence.ID.String(),
 		bundleID,
 		sitting.ID.String(),
-		sitting.Revision,
+		scheduleRevision,
 		nullableID(priorClassID.String()),
 		input.ChangeKind,
 		databaseNow,
@@ -106,7 +111,7 @@ func insertExamSittingMailFanout(
 	}
 
 	if terminalReason == "suppressed_disabled" {
-		return recordDisabledExamSittingMailConvergence(ctx, tx, sitting, actorID, disabledEligibilityRevision)
+		return recordDisabledExamSittingMailConvergence(ctx, tx, sitting, actorID, scheduleRevision, disabledEligibilityRevision)
 	}
 
 	result, updateErr := tx.Exec(
@@ -241,6 +246,7 @@ func recordDisabledExamSittingMailConvergence(
 	tx *sqlxTxWrapper,
 	sitting *model.ExamSitting,
 	actorID model.UserID,
+	scheduleRevision int64,
 	disabledEligibilityRevision int64,
 ) error {
 	var audienceRevision int64
@@ -262,7 +268,7 @@ func recordDisabledExamSittingMailConvergence(
 		WHERE id = ?
 			AND revision = ?`,
 		actorID.String(),
-		sitting.Revision,
+		scheduleRevision,
 		audienceRevision,
 		disabledEligibilityRevision,
 		sitting.ID.String(),

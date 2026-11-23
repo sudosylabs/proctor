@@ -66,18 +66,19 @@ func testExamCatalogListAndArchive(t *testing.T, ss store.Store) {
 	require.Zero(t, strangerTotal, "a viewer who manages no exam counts none")
 	actions, err := ss.ExamAuthoring().CountExamActions(ctx, store.ExamActionCountOptions{
 		ExamIDs: []model.ExamID{first.Value.Exam.ID}, ViewerUserID: creator.ID,
-		SittingVisibility: visibility, ReviewVisibility: store.ExamListVisibility{ActorUserID: creator.ID},
+		SittingVisibility: visibility, ReviewVisibility: visibility, SubmissionVisibility: store.ExamListVisibility{ActorUserID: creator.ID},
 		Maximum: store.MaximumListCount,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, actions[first.Value.Exam.ID].NeedsAttention, "a manager with sitting view gets the attention count")
 	require.Zero(t, *actions[first.Value.Exam.ID].NeedsAttention, "an exam with no open sitting needs no one")
-	require.Nil(t, actions[first.Value.Exam.ID].PendingReview, "no review scope, no review count")
+	require.Nil(t, actions[first.Value.Exam.ID].PendingReview, "no submission view scope, no review count")
 	strangerActions, err := ss.ExamAuthoring().CountExamActions(ctx, store.ExamActionCountOptions{
 		ExamIDs: []model.ExamID{first.Value.Exam.ID}, ViewerUserID: stranger.ID,
-		SittingVisibility: store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
-		ReviewVisibility:  store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
-		Maximum:           store.MaximumListCount,
+		SittingVisibility:    store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
+		ReviewVisibility:     store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
+		SubmissionVisibility: store.ExamListVisibility{ActorUserID: stranger.ID, OrdinaryMembershipAt: membershipBase, OrdinaryInstitutionWide: true},
+		Maximum:              store.MaximumListCount,
 	})
 	require.NoError(t, err)
 	require.Nil(t, strangerActions[first.Value.Exam.ID].NeedsAttention, "a scope can't widen to an exam the viewer doesn't manage")

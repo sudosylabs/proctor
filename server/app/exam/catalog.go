@@ -159,13 +159,18 @@ func (a *Authoring) examActionCounts(
 		return nil, err
 	}
 
+	submissions, err := a.authorizer.ExamManagerScopes(ctx, principal, model.ActionSubmissionView, model.ActionSubmissionViewOverride)
+	if err != nil {
+		return nil, err
+	}
+
 	ids := make([]model.ExamID, 0, len(items))
 	for _, item := range items {
 		ids = append(ids, item.ID)
 	}
 	counts, err := a.exams.CountExamActions(ctx, store.ExamActionCountOptions{
 		ExamIDs: ids, ViewerUserID: principal.UserID,
-		SittingVisibility: sittings, ReviewVisibility: reviews, Maximum: store.MaximumListCount,
+		SittingVisibility: sittings, ReviewVisibility: reviews, SubmissionVisibility: submissions, Maximum: store.MaximumListCount,
 	})
 	if err != nil {
 		return nil, examStoreErrors.Translate(err)

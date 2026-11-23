@@ -137,6 +137,7 @@ func TestUpdateScheduleKeepsChecksAndClearsTheJoinWindow(t *testing.T) {
 	require.True(t, fixture.persistence.update.JoinWindow.Equal(model.ExamSittingJoinWindow{ClosesAt: closesAt}),
 		"the new window replaces the old one, dropping its opening")
 	require.True(t, fixture.jobs.boundaryStart.Equal(start), "the sitting opens at the start")
+	require.Nil(t, fixture.persistence.update.Mail, "a join-window change does not reschedule the sitting")
 }
 
 func TestScheduleUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testing.T) {

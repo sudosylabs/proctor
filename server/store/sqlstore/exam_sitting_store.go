@@ -551,7 +551,6 @@ func prepareExamSittingUpdate(input *store.ExamSittingScheduleUpdate) error {
 		!input.ActorUserID.IsValid() ||
 		input.OpenJob == nil ||
 		input.DeadlineJob == nil ||
-		input.Mail == nil ||
 		!input.ExamRevisionID.IsValid() ||
 		!input.ClassID.IsValid() ||
 		input.ExpectedRevision < 1 ||
@@ -756,6 +755,10 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 	}
 
 	priorClassID := current.ClassID
+	mailNeeded := current.ScheduleDiffers(input.ExamRevisionID, input.ClassID, input.ScheduledStartAt, input.ScheduledEndAt)
+	if mailNeeded && input.Mail == nil {
+		return nil, store.NewErrInvalidInput("exam_sitting", "mail_fanout", nil)
+	}
 	if lineageErr := guardExamSittingLineage(
 		ctx,
 		tx,
@@ -785,7 +788,8 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 		ctx,
 		`UPDATE exam_sittings
 		SET exam_revision_id = ?, class_id = ?, scheduled_start_at = ?, scheduled_end_at = ?,
-			join_opens_at = ?, join_closes_at = ?, updated_at = ?, revision = ?
+			join_opens_at = ?, join_closes_at = ?, updated_at = ?, revision = ?,
+			mail_schedule_revision = CASE WHEN ? THEN ? ELSE mail_schedule_revision END
 		WHERE exam_id = ?
 			AND id = ?
 			AND state = 'scheduled'
@@ -797,6 +801,8 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 		NullTimeFromOptional(current.JoinWindow.OpensAt),
 		NullTimeFromOptional(current.JoinWindow.ClosesAt),
 		current.UpdatedAt,
+		current.Revision,
+		mailNeeded,
 		current.Revision,
 		current.ExamID.String(),
 		current.ID.String(),
@@ -815,16 +821,18 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 		return nil, err
 	}
 
-	if err := insertExamSittingMailFanout(
-		ctx,
-		tx,
-		input.Mail,
-		current,
-		priorClassID,
-		input.ActorUserID,
-		disabledEligibilityRevision,
-	); err != nil {
-		return nil, err
+	if mailNeeded {
+		if err := insertExamSittingMailFanout(
+			ctx,
+			tx,
+			input.Mail,
+			current,
+			priorClassID,
+			input.ActorUserID,
+			disabledEligibilityRevision,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := completeExamSittingAudit(ctx, tx, current, input.AuditEventID, input.AuditAt); err != nil {
@@ -868,7 +876,7 @@ func cancelExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Exam
 	result, err := tx.Exec(
 		ctx,
 		`UPDATE exam_sittings
-		SET state = ?, updated_at = ?, canceled_at = ?, reason_code = ?, revision = ?
+		SET state = ?, updated_at = ?, canceled_at = ?, reason_code = ?, revision = ?, mail_schedule_revision = ?
 		WHERE exam_id = ?
 			AND id = ?
 			AND state = 'scheduled'
@@ -877,6 +885,7 @@ func cancelExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Exam
 		current.UpdatedAt,
 		current.CanceledAt.Time,
 		current.ReasonCode,
+		current.Revision,
 		current.Revision,
 		current.ExamID.String(),
 		current.ID.String(),

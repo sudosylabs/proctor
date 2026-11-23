@@ -20,45 +20,35 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// sittingCandidatePopulationSQL is the board's candidate set of the sitting
-// aliased s: every candidate with an Attempt, and the class members the
-// sitting admits. Before it opens they are the members at the scheduled start;
-// once it opened, the members at OpenedAt; while it runs, also the members
-// now. It must match the population ListSittingCandidateStatuses lists.
-const sittingCandidatePopulationSQL = `SELECT a.candidate_user_id AS user_id
+// sittingCandidatePopulationSQL is used beneath a sitting aliased s. The
+// caller supplies the SQL expression for its read time and the excluded user.
+func sittingCandidatePopulationSQL(at string) string {
+	return `SELECT members.user_id
+	FROM (
+		SELECT a.candidate_user_id AS user_id
 		FROM exam_attempts a
 		WHERE a.exam_sitting_id = s.id
 		UNION
 		SELECT member.user_id
-		FROM class_members member
-		WHERE member.class_id = s.class_id
-			AND (
-				(
-					s.state IN ('scheduled', 'canceled')
-					AND member.start_at <= s.scheduled_start_at
-					AND (member.end_at IS NULL OR member.end_at > s.scheduled_start_at)
-					AND (member.archived_at IS NULL OR member.archived_at > s.scheduled_start_at)
-				)
-				OR (
-					s.state NOT IN ('scheduled', 'canceled')
-					AND s.opened_at IS NOT NULL
-					AND member.start_at <= s.opened_at
-					AND (member.end_at IS NULL OR member.end_at > s.opened_at)
-					AND (member.archived_at IS NULL OR member.archived_at > s.opened_at)
-				)
-				OR (
-					s.state IN ('open', 'paused')
-					AND member.start_at <= statement_timestamp()
-					AND (member.end_at IS NULL OR member.end_at > statement_timestamp())
-					AND (member.archived_at IS NULL OR member.archived_at > statement_timestamp())
-				)
-			)`
+		FROM (VALUES
+			(CASE WHEN s.state IN ('scheduled', 'canceled') THEN s.scheduled_start_at END),
+			(CASE WHEN s.state NOT IN ('scheduled', 'canceled') THEN s.opened_at END),
+			(CASE WHEN s.state IN ('open', 'paused') THEN ` + at + ` END)
+		) instant(at)
+		JOIN class_members member ON member.class_id = s.class_id
+			AND member.start_at <= instant.at
+			AND (member.end_at IS NULL OR member.end_at > instant.at)
+			AND (member.archived_at IS NULL OR member.archived_at > instant.at)
+	) members
+	WHERE members.user_id <> ?`
+}
 
 func (s SQLExamSittingStore) CountCandidates(
 	ctx context.Context,
 	sittingIDs []model.ExamSittingID,
+	viewerUserID model.UserID,
 ) (map[model.ExamSittingID]int, error) {
-	if len(sittingIDs) > 200 {
+	if len(sittingIDs) > 200 || !viewerUserID.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_sitting", "candidate_count", nil)
 	}
 	counts := make(map[model.ExamSittingID]int, len(sittingIDs))
@@ -79,10 +69,10 @@ func (s SQLExamSittingStore) CountCandidates(
 	}
 	if err := s.GetMaster().Select(ctx, &rows, `SELECT s.id AS exam_sitting_id, (
 			SELECT COUNT(*)
-			FROM (`+sittingCandidatePopulationSQL+` LIMIT ?) population
+			FROM (`+sittingCandidatePopulationSQL("statement_timestamp()")+` LIMIT ?) population
 		) AS candidate_count
 		FROM exam_sittings s
-		WHERE s.id = ANY(?)`, store.MaximumListCount, pq.Array(ids)); err != nil {
+		WHERE s.id = ANY(?)`, viewerUserID.String(), store.MaximumListCount, pq.Array(ids)); err != nil {
 		return nil, fmt.Errorf("count Exam Sitting candidates: %w", err)
 	}
 

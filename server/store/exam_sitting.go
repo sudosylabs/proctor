@@ -373,7 +373,7 @@ type ExamSittingStore interface {
 	// CountCandidates counts each sitting's candidates, the set its board
 	// lists, in one query, stopping at MaximumListCount. A sitting it cannot
 	// see is absent from the result.
-	CountCandidates(context.Context, []model.ExamSittingID) (map[model.ExamSittingID]int, error)
+	CountCandidates(context.Context, []model.ExamSittingID, model.UserID) (map[model.ExamSittingID]int, error)
 	// ListHistory returns up to limit (at most ExamSittingHistoryMaximum)
 	// manager actions with their private reasons, newest first.
 	ListHistory(context.Context, model.ExamSittingID, int) ([]ExamSittingHistoryEntry, error)

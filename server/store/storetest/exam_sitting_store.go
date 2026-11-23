@@ -247,7 +247,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 	require.Equal(t, store.ExamSittingHistoryCanceled, history[0].Kind)
 	require.Equal(t, fixture.actor.ID, history[0].ActorUserID)
 	require.Equal(t, "Room unavailable", history[0].Reason)
-	counts, err := ss.ExamSitting().CountCandidates(ctx, []model.ExamSittingID{sitting.ID})
+	counts, err := ss.ExamSitting().CountCandidates(ctx, []model.ExamSittingID{sitting.ID}, fixture.actor.ID)
 	require.NoError(t, err)
 	require.Contains(t, counts, sitting.ID, "every asked sitting is counted")
 	require.GreaterOrEqual(t, counts[sitting.ID], 0)

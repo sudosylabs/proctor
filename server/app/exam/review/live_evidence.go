@@ -225,12 +225,12 @@ func (s *Service) authorizeLiveEvidence(
 	if scope.AttemptID != query.AttemptID || scope.ExamID != query.ExamID || scope.SittingID != query.SittingID {
 		return LiveEvidenceRead{}, apperror.New("exam.integrity_review.not_found")
 	}
-	if scope.CandidateUserID == inv.Principal().UserID {
-		if err = s.authorizer.Audit.RecordAuthorizationDecision(ctx, inv.Principal(), model.ActionSubmissionView,
-			model.Resource{Type: model.ResourceExamSitting, ID: query.SittingID.String()}, model.RoleScopeAcademicUnit,
-			unitID.String(), inv.RequestMetadata(), false); err != nil {
-			return LiveEvidenceRead{}, err
-		}
+	allowed := scope.CandidateUserID != inv.Principal().UserID
+	if err = s.authorizer.Audit.RecordAttemptEvidenceDecision(ctx, inv, scope.AttemptID,
+		scope.CandidateUserID, unitID, query.FlagID, allowed); err != nil {
+		return LiveEvidenceRead{}, err
+	}
+	if !allowed {
 		return LiveEvidenceRead{}, apperror.New("exam.integrity_review.not_found")
 	}
 	return LiveEvidenceRead{Complete: scope.Submitted || scope.Retired, AsOf: scope.AsOf}, nil

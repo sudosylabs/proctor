@@ -43,14 +43,14 @@ func integrityFlagSummaryLocalizationDefinitions() []localization.Definition {
 
 // integrityFlagSummary is one localized sentence about a flag: what its
 // policy saw and how often, counting evidence beyond what was retained. It
-// names a browser rule or a desktop rule (its capability when the flag names
-// no rule) by its identifier, never an
-// application: Desktop names catalogue applications from its own registry.
+// uses the Browser Rule's frozen label if present and otherwise its ID.
+// Desktop names applications from its own registry.
 func integrityFlagSummary(
 	request *http.Request,
 	kind model.IntegrityPolicyKind,
 	nativeRule string,
 	browser *model.BrowserIntegrityGroup,
+	browserRuleLabel string,
 	evidence int,
 	overflow int64,
 ) string {
@@ -63,7 +63,10 @@ func integrityFlagSummary(
 	case kind == model.IntegrityPolicyFocusLoss:
 		id = integrityFlagSummaryFocusLoss
 	case kind == model.IntegrityPolicyBrowserNavigation && browser != nil && browser.RuleID != "":
-		id, data["Rule"] = integrityFlagSummaryBrowserRule, browser.RuleID
+		if browserRuleLabel == "" {
+			browserRuleLabel = browser.RuleID
+		}
+		id, data["Rule"] = integrityFlagSummaryBrowserRule, browserRuleLabel
 	case kind == model.IntegrityPolicyBrowserNavigation:
 		id = integrityFlagSummaryBrowser
 	default:

@@ -8,8 +8,11 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -25,6 +28,10 @@ import (
 // action's message alone. Self history never names the actor, and names the
 // user the caller acted on only while the caller can see them.
 const (
+	auditRoleCreated        = "audit.role.created"
+	auditRolePatched        = "audit.role.patched"
+	auditRolePatchFields    = "audit.role.patch_fields"
+	auditRoleArchived       = "audit.role.archived"
 	auditSummaryActorHidden = "audit.actor.hidden"
 	auditSummaryActorSystem = "audit.actor.system"
 	auditSummarySubject     = "audit.subject.hidden"
@@ -77,6 +84,15 @@ func auditSummaryLocalizationDefinitions() []localization.Definition {
 		definitions = append(definitions, localization.Definition{ID: id, Origin: localizationOrigin})
 	}
 	definitions = append(definitions, localization.Definition{ID: auditSummaryRoleNamed, Origin: localizationOrigin, Variables: []string{"Name"}})
+	for _, id := range []string{auditRoleCreated, auditRolePatched, auditRoleArchived} {
+		definitions = append(definitions, localization.Definition{ID: id, Origin: localizationOrigin, Variables: []string{"Actor", "Role"}})
+	}
+	definitions = append(definitions, localization.Definition{
+		ID: auditRolePatchFields, Origin: localizationOrigin, Variables: []string{"Actor", "Role", "Fields"},
+	})
+	for _, field := range auditRoleFields {
+		definitions = append(definitions, localization.Definition{ID: "audit.role.field." + field, Origin: localizationOrigin})
+	}
 	for _, status := range auditSummaryStatuses {
 		definitions = append(definitions, localization.Definition{
 			ID: auditStatusSummaryID(status), Origin: localizationOrigin, Variables: []string{"Summary"},
@@ -157,12 +173,67 @@ func auditSummary(request *http.Request, event *model.AuditEvent, names store.Au
 		subject = route.Translate(request, auditSummarySubject, "")
 	}
 
+	if event.Action == string(model.ActionRoleManage) && event.Status == model.AuditStatusSuccess {
+		if summary := auditRoleSummary(request, event, actor); summary != "" {
+			return summary
+		}
+	}
+
 	summary := route.TranslateRequest(request, localization.Request{ID: id, TemplateData: map[string]string{
 		"Actor":    actor,
 		"Subject":  subject,
 		"Resource": auditResourceName(request, event.Resource, names),
 	}}, event.Action)
 	return auditStatusSummary(request, event.Status, summary)
+}
+
+var auditRoleFields = []string{"display_name", "description", "permissions"}
+
+func auditRoleSummary(request *http.Request, event *model.AuditEvent, actor string) string {
+	var role struct {
+		DisplayName   string   `json:"display_name"`
+		Permissions   []string `json:"permissions"`
+		ChangedFields []string `json:"changed_fields"`
+	}
+	if json.Unmarshal(event.Result, &role) != nil || role.DisplayName == "" {
+		return ""
+	}
+	var id string
+	args := map[string]string{"Actor": actor, "Role": role.DisplayName}
+	switch event.Operation() {
+	case "create":
+		id = auditRoleCreated
+	case "archive":
+		id = auditRoleArchived
+	case "patch":
+		id = auditRolePatched
+		if role.ChangedFields == nil {
+			var prior struct {
+				DisplayName string   `json:"display_name"`
+				Permissions []string `json:"permissions"`
+			}
+			if json.Unmarshal(event.PriorState, &prior) == nil {
+				if prior.DisplayName != role.DisplayName {
+					role.ChangedFields = append(role.ChangedFields, "display_name")
+				}
+				if !slices.Equal(prior.Permissions, role.Permissions) {
+					role.ChangedFields = append(role.ChangedFields, "permissions")
+				}
+			}
+		}
+		var labels []string
+		for _, field := range auditRoleFields {
+			if slices.Contains(role.ChangedFields, field) {
+				labels = append(labels, route.Translate(request, "audit.role.field."+field, field))
+			}
+		}
+		if len(labels) > 0 {
+			id, args["Fields"] = auditRolePatchFields, strings.Join(labels, ", ")
+		}
+	default:
+		return ""
+	}
+	return route.TranslateRequest(request, localization.Request{ID: id, TemplateData: args}, "")
 }
 
 // auditResourceName is the current name of a user, academic unit, or class

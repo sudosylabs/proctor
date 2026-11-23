@@ -29,7 +29,12 @@ func TestLiveEvidenceNeedsSittingManagementAndSubmissionView(t *testing.T) {
 	require.False(t, page.Complete, "an unsealed attempt is not complete")
 	require.Equal(t, manager.at, page.AsOf)
 	require.Equal(t, []string{"success"}, manager.decisions(model.ActionExamSittingManage))
-	require.Equal(t, []string{"success"}, manager.decisions(model.ActionSubmissionView), "the read is recorded as an evidence read is")
+	require.Equal(t, []string{"success", "success"}, manager.decisions(model.ActionSubmissionView),
+		"the sitting permission and the attempt read are independently recorded")
+	decisions := manager.control.Audits.Decisions()
+	attempt := decisions[len(decisions)-1]
+	require.Equal(t, model.Resource{Type: model.ResourceExamAttempt, ID: manager.attemptID.String()}, attempt.Resource)
+	require.False(t, attempt.SubjectUserID.IsZero(), "the candidate is the subject of the evidence read")
 
 	for name, actions := range map[string][]model.Action{
 		"view only":   {model.ActionSubmissionView, model.ActionSubmissionReview},
@@ -55,7 +60,7 @@ func TestLiveEvidenceRefusesAnotherSittingsAttempt(t *testing.T) {
 	require.Zero(t, f.persistence.liveReads)
 
 	query = liveQuery(f)
-	query.Limit = 101
+	query.Limit = 201
 	_, err = f.service.ListLiveEvidence(context.Background(), f.inv, query)
 	require.True(t, apperror.Is(err, "exam.integrity_review.invalid"), "error = %v", err)
 }

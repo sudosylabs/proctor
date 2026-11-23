@@ -10,7 +10,6 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/review"
@@ -120,7 +119,11 @@ func liveEvidenceQuery(request route.Request, kind string) (review.LiveEvidenceQ
 	if err != nil {
 		return review.LiveEvidenceQuery{}, err
 	}
-	query := review.LiveEvidenceQuery{ExamID: examID, SittingID: sittingID, AttemptID: attemptID, Limit: 50}
+	page, err := request.Page()
+	if err != nil {
+		return review.LiveEvidenceQuery{}, err
+	}
+	query := review.LiveEvidenceQuery{ExamID: examID, SittingID: sittingID, AttemptID: attemptID, Limit: page.Limit}
 	values := request.HTTP.URL.Query()
 	for name, bound := range map[string]*time.Time{"from": &query.Window.From, "to": &query.Window.To} {
 		if raw := values.Get(name); raw != "" {
@@ -131,17 +134,7 @@ func liveEvidenceQuery(request route.Request, kind string) (review.LiveEvidenceQ
 			*bound = at
 		}
 	}
-	if !query.Window.From.IsZero() && !query.Window.To.IsZero() && !query.Window.From.Before(query.Window.To) {
-		return query, route.InvalidRequest(errors.New("from must be before to"))
-	}
-	if raw := values.Get("limit"); raw != "" {
-		limit, parseErr := strconv.Atoi(raw)
-		if parseErr != nil || limit < 1 || limit > store.LiveEvidenceReadMaximum {
-			return query, route.InvalidRequest(errors.New("limit must be between 1 and 100"))
-		}
-		query.Limit = limit
-	}
-	if raw := values.Get("cursor"); raw != "" {
+	if raw := page.Cursor; raw != "" {
 		if kind == "timeline" {
 			cursor, decodeErr := route.DecodeCursor(raw, liveTimelineCursorSpec())
 			if decodeErr != nil {

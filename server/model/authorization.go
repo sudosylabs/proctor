@@ -123,6 +123,7 @@ const (
 	ResourceClass          ResourceType = "class"
 	ResourceUser           ResourceType = "user"
 	ResourceExam           ResourceType = "exam"
+	ResourceExamAttempt    ResourceType = "exam_attempt"
 	ResourceExamSitting    ResourceType = "exam_sitting"
 	ResourceSubmission     ResourceType = "submission"
 	ResourceMailDelivery   ResourceType = "mail_delivery"
@@ -139,6 +140,7 @@ var resourceTypes = []ResourceType{
 	ResourceAcademicUnit,
 	ResourceClass,
 	ResourceExam,
+	ResourceExamAttempt,
 	ResourceExamSitting,
 	ResourceInstitution,
 	ResourceMailDelivery,

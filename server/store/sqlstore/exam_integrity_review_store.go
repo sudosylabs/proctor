@@ -300,6 +300,13 @@ func (s *SQLExamIntegrityReviewStore) Get(
 			return nil, err
 		}
 
+		if err = tx.Get(ctx, &snapshot.LatestReopeningReason, `SELECT reason
+			FROM submission_review_reopenings
+			WHERE submission_review_id = ? AND review_revision <= ?
+			ORDER BY review_revision DESC LIMIT 1`, reviewRow.ID, snapshot.Review.Revision); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("read latest Integrity Review reopening: %w", err)
+		}
+
 		var rows []examIntegrityReviewDecisionRow
 		if err = tx.Select(ctx, &rows, examIntegrityReviewDecisionSelect+` WHERE submission_review_id = ?
 			ORDER BY integrity_flag_id`, reviewRow.ID); err != nil {
@@ -382,6 +389,11 @@ const (
 			COALESCE(bg.overflow_count, eval.overflow_count, 0) AS overflow_count,
 			bg.participation_id AS browser_participation_id,
 			bg.policy_revision_id AS browser_policy_revision_id, bg.rule_id AS browser_rule_id,
+			(SELECT rule->>'label'
+			 FROM exam_revisions revision,
+			      jsonb_array_elements(revision.browser_policy_document->'rules') rule
+			 WHERE revision.id = bg.policy_revision_id AND rule->>'rule_id' = bg.rule_id
+			 LIMIT 1) AS browser_rule_label,
 			bg.overflow_first_received_at, bg.overflow_last_received_at,
 			COALESCE(eval.unresolved_missing_count, 0) AS unresolved_missing_count`
 	integrityFlagSummaryJoins = `LEFT JOIN integrity_evidence ev ON ev.integrity_flag_id = f.id
@@ -398,6 +410,7 @@ type integrityFlagSummaryRow struct {
 	BrowserPart            sql.NullString `db:"browser_participation_id"`
 	BrowserPolicy          sql.NullString `db:"browser_policy_revision_id"`
 	BrowserRule            sql.NullString `db:"browser_rule_id"`
+	BrowserRuleLabel       sql.NullString `db:"browser_rule_label"`
 	OverflowFirst          sql.NullTime   `db:"overflow_first_received_at"`
 	OverflowLast           sql.NullTime   `db:"overflow_last_received_at"`
 	AttemptID              string         `db:"attempt_id"`
@@ -455,6 +468,7 @@ func (row integrityFlagSummaryRow) summary() (store.ExamIntegrityFlagSummary, er
 
 	return store.ExamIntegrityFlagSummary{
 		Browser:                browser,
+		BrowserRuleLabel:       row.BrowserRuleLabel.String,
 		Flag:                   flag,
 		EvidenceCount:          row.EvidenceCount,
 		OverflowCount:          row.OverflowCount,

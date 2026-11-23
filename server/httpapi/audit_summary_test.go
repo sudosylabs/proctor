@@ -366,3 +366,19 @@ func TestAuditResourceShowsRepeatsCountedInTheCallersVisibility(t *testing.T) {
 	require.Len(t, fixture.audits.repeatReads, 1, "one read for the page")
 	require.True(t, fixture.audits.repeatReads[0].Visibility.InstitutionWide, "the repeat read uses the listing's visibility")
 }
+
+func TestRoleAuditSummaryNamesOnlyKnownChangedFields(t *testing.T) {
+	t.Parallel()
+	request := auditSummaryRequest(t, "en")
+	actor := model.NewUserID()
+	event := &model.AuditEvent{
+		ActorID: actor, Action: string(model.ActionRoleManage), Status: model.AuditStatusSuccess,
+		Resource:   model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
+		Parameters: []byte(`{"operation":"patch"}`),
+		Result:     []byte(`{"display_name":"Teacher","changed_fields":["description","unexpected","permissions"]}`),
+	}
+	names := store.AuditNames{Users: map[model.UserID]string{actor: "Ada Admin"}}
+	require.Equal(t, "Ada Admin changed the role “Teacher” (description, permissions)", auditSummary(request, event, names))
+	event.Parameters, event.Result = nil, nil
+	require.Equal(t, "Ada Admin managed roles", auditSummary(request, event, names))
+}

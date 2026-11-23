@@ -14,7 +14,7 @@ import (
 )
 
 // LiveEvidenceReadMaximum bounds one page of a live evidence read.
-const LiveEvidenceReadMaximum = 100
+const LiveEvidenceReadMaximum = 200
 
 // LiveEvidenceScope names an attempt for the live evidence reads, read at
 // AsOf. Submitted reports a sealed Submission, after which the attempt adds

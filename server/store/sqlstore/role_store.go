@@ -274,7 +274,19 @@ func (s SQLRoleStore) Update(ctx context.Context, input *store.RoleUpdate) (*mod
 			return nil, err
 		}
 
-		encoded, appErr := model.EncodeAuditData(candidate.Auditable())
+		fields := make([]string, 0, 3)
+		if locked.DisplayName != candidate.DisplayName {
+			fields = append(fields, "display_name")
+		}
+		if locked.Description != candidate.Description {
+			fields = append(fields, "description")
+		}
+		if !slices.Equal([]string(locked.Permissions), candidate.Permissions) {
+			fields = append(fields, "permissions")
+		}
+		result := candidate.Auditable()
+		result["changed_fields"] = fields
+		encoded, appErr := model.EncodeAuditData(result)
 		if appErr != nil {
 			return nil, appErr
 		}

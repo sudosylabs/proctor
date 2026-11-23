@@ -131,6 +131,42 @@ type reviewStoreFake struct {
 	draft       *store.ExamIntegrityReviewDraftMutation
 	idempotency *store.CommandIdempotency
 	prepareErr  error
+	batches     map[[32]byte]reviewBatchFake
+}
+
+type reviewBatchFake struct {
+	fingerprint [32]byte
+	items       []store.ExamResultReleaseBatchItem
+}
+
+func (f *reviewStoreFake) ClaimResultReleaseBatch(ctx context.Context, start *store.ExamResultReleaseBatchStart, command *store.CommandIdempotency) (*store.ExamResultReleaseBatchClaim, error) {
+	if saved, ok := f.batches[command.KeyDigest]; ok {
+		if saved.fingerprint != command.Fingerprint {
+			return nil, &store.ErrIdempotencyConflict{}
+		}
+		return &store.ExamResultReleaseBatchClaim{Items: saved.items}, nil
+	}
+	if _, err := f.f.control.Audits.Save(ctx, start.Audit); err != nil {
+		return nil, err
+	}
+	ids := start.SubmissionIDs
+	if start.AllFinalized {
+		for _, row := range f.listed {
+			if row.Review != nil && row.Review.State == model.SubmissionReviewFinalized &&
+				row.Review.ReleaseState == model.SubmissionReviewWithheld {
+				ids = append(ids, row.SubmissionID)
+			}
+		}
+	}
+	return &store.ExamResultReleaseBatchClaim{Token: model.NewID(), SubmissionIDs: ids}, nil
+}
+
+func (f *reviewStoreFake) CompleteResultReleaseBatch(_ context.Context, completion *store.ExamResultReleaseBatchCompletion, command *store.CommandIdempotency) error {
+	if f.batches == nil {
+		f.batches = make(map[[32]byte]reviewBatchFake)
+	}
+	f.batches[command.KeyDigest] = reviewBatchFake{fingerprint: command.Fingerprint, items: slices.Clone(completion.Items)}
+	return nil
 }
 
 func (f *reviewStoreFake) PrepareRelease(ctx context.Context, input *store.ExamIntegrityReviewReleasePrepare) (*store.ExamIntegrityReviewReleasePreparation, error) {

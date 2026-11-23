@@ -18,6 +18,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+var submissionListStoreErrors = storeErrors.With(apperror.StoreRule{
+	Kind: apperror.StoreInvalidInput, Entity: "submission", Constraint: "cursor", Code: "request.invalid",
+})
+
 // SubmissionListQuery selects one page of submissions. ExamID and SittingID
 // name a sitting; both zero list every exam the caller may see.
 type SubmissionListQuery struct {
@@ -68,7 +72,7 @@ func (s *Service) ListSittingSubmissions(
 		Sort: query.Sort, After: query.After, IncludeCounts: query.After == nil, Limit: query.Limit + 1,
 	})
 	if err != nil {
-		return SubmissionListPage{}, storeErrors.Translate(err)
+		return SubmissionListPage{}, submissionListStoreErrors.Translate(err)
 	}
 	page, err := submissionListPage(stored, query, query.After == nil)
 	if err != nil {
@@ -108,7 +112,7 @@ func (s *Service) ListSubmissions(
 		Filter: cloneSubmissionListFilter(query.Filter), Sort: query.Sort, After: query.After, Limit: query.Limit + 1,
 	})
 	if err != nil {
-		return SubmissionListPage{}, storeErrors.Translate(err)
+		return SubmissionListPage{}, submissionListStoreErrors.Translate(err)
 	}
 	return submissionListPage(stored, query, false)
 }
@@ -133,7 +137,7 @@ func validSubmissionListQuery(query SubmissionListQuery) bool {
 	if after := query.After; after != nil &&
 		(!after.SubmissionID.IsValid() ||
 			query.Sort == store.SubmissionListBySubmitted && after.SubmittedAt.IsZero() ||
-			query.Sort == store.SubmissionListByName && after.Name == "") {
+			query.Sort == store.SubmissionListByName && !after.SubmittedAt.IsZero()) {
 		return false
 	}
 	return true

@@ -57,9 +57,12 @@ var reviewActions = append(slices.Clone(sittingActions),
 // reviewFixtureTime is when the seeded Submission was submitted.
 var reviewFixtureTime = time.Date(2026, 8, 15, 18, 0, 0, 0, time.UTC)
 
-func newReviewFixture(t *testing.T) *reviewFixture {
+func newReviewFixture(t *testing.T, actions ...model.Action) *reviewFixture {
 	t.Helper()
-	f := &reviewFixture{sittingFixture: newSittingFixtureWith(t, testExamHTTPPrincipal(), reviewActions...)}
+	if len(actions) == 0 {
+		actions = reviewActions
+	}
+	f := &reviewFixture{sittingFixture: newSittingFixtureWith(t, testExamHTTPPrincipal(), actions...)}
 	at := reviewFixtureTime
 	f.candidate = testExamHTTPPrincipal()
 	f.candidate.UserID = f.submissions.candidateID
@@ -157,6 +160,7 @@ type reviewLedger struct {
 	flagSummaries   []store.ExamIntegrityFlagSummary
 	submissionLists []store.SubmissionListOptions
 	liveTimelines   []store.LiveTimelineListOptions
+	reopeningReason string
 
 	flagLists        []store.ExamIntegrityFlagListOptions
 	evidenceLists    []store.ExamIntegrityEvidenceListOptions
@@ -164,6 +168,8 @@ type reviewLedger struct {
 	attemptLists     []store.AttemptEvidenceListOptions
 	decisions        []*store.ExamIntegrityReviewDecisionMutation
 	reopens          []*store.ExamIntegrityReviewReopen
+	batchStarts      []*store.ExamResultReleaseBatchStart
+	batchCompletions []*store.ExamResultReleaseBatchCompletion
 	commands         []*store.CommandIdempotency
 	resultReads      []model.ExamAttemptID
 	previewReads     []model.SubmissionID
@@ -183,6 +189,17 @@ func (s *reviewLedger) ListLiveTimeline(_ context.Context, options store.LiveTim
 	s.liveTimelines = append(s.liveTimelines, options)
 	return &store.LiveTimelinePage{Items: []store.LiveTimelineItem{{Kind: store.LiveTimelineFlag, At: s.f.flag.CreatedAt,
 		Flag: &store.ExamIntegrityFlagSummary{Flag: *s.f.flag, EvidenceCount: 1}}}}, nil
+}
+
+func (s *reviewLedger) ClaimResultReleaseBatch(_ context.Context, start *store.ExamResultReleaseBatchStart, command *store.CommandIdempotency) (*store.ExamResultReleaseBatchClaim, error) {
+	s.batchStarts = append(s.batchStarts, start)
+	s.commands = append(s.commands, command)
+	return &store.ExamResultReleaseBatchClaim{Token: model.NewID(), SubmissionIDs: slices.Clone(start.SubmissionIDs)}, nil
+}
+
+func (s *reviewLedger) CompleteResultReleaseBatch(_ context.Context, completion *store.ExamResultReleaseBatchCompletion, _ *store.CommandIdempotency) error {
+	s.batchCompletions = append(s.batchCompletions, completion)
+	return nil
 }
 
 // ListSubmissions lists the seeded Submission with its draft review.
@@ -220,7 +237,7 @@ func (s *reviewLedger) Get(_ context.Context, id model.SubmissionID) (*store.Exa
 	}
 	return &store.ExamSubmissionReviewSnapshot{NativeConditions: model.NewNativeConditionInventory(),
 		AttemptEvidence: model.NewAttemptEvidenceInventory(), Authorization: s.f.authorization(), Submission: s.f.submission,
-		Review: s.f.review, Decisions: []model.IntegrityReviewDecision{*s.f.decision}}, nil
+		Review: s.f.review, LatestReopeningReason: s.reopeningReason, Decisions: []model.IntegrityReviewDecision{*s.f.decision}}, nil
 }
 
 func (s *reviewLedger) ListFlags(_ context.Context, options store.ExamIntegrityFlagListOptions) (*store.ExamIntegrityFlagPage, error) {

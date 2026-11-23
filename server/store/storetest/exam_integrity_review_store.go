@@ -215,6 +215,21 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, draftInput.StudentRemarksMarkdown, drafted.Review.StudentRemarksMarkdown)
 	assertReviewAuditPrivate(t, ctx, ss, draftInput.AuditEventID, draftInput.ManagerNotes, draftInput.StudentRemarksMarkdown)
 
+	reviewScope := store.ExamListVisibility{ActorUserID: fixture.manager.ID, OverrideInstitutionWide: true}
+	countOptions := store.ExamActionCountOptions{
+		ExamIDs: []model.ExamID{fixture.examID}, ViewerUserID: fixture.manager.ID, Maximum: store.MaximumListCount,
+		SittingVisibility: reviewScope, ReviewVisibility: reviewScope, SubmissionVisibility: reviewScope,
+	}
+	pending, err := ss.ExamAuthoring().CountExamActions(ctx, countOptions)
+	require.NoError(t, err)
+	require.Equal(t, new(1), pending[fixture.examID].PendingReview)
+	ownScope := store.ExamListVisibility{ActorUserID: fixture.candidate.ID, OverrideInstitutionWide: true}
+	countOptions.ViewerUserID = fixture.candidate.ID
+	countOptions.SittingVisibility, countOptions.ReviewVisibility, countOptions.SubmissionVisibility = ownScope, ownScope, ownScope
+	ownPending, err := ss.ExamAuthoring().CountExamActions(ctx, countOptions)
+	require.NoError(t, err)
+	require.Equal(t, new(0), ownPending[fixture.examID].PendingReview, "a viewer's own Submission is excluded")
+
 	finalizeInput := &store.ExamIntegrityReviewFinalize{
 		SubmissionID: sealed.Receipt.SubmissionID, ReviewID: reviewID, ActorUserID: fixture.manager.ID,
 		ExpectedRevision: drafted.Review.Revision, ChangedAt: model.NowUTC().Add(2 * time.Millisecond),
@@ -236,6 +251,24 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, 1, finalized.Review.EvidenceCount)
 	require.Equal(t, 1, finalized.Review.DiscrepancyCount)
 	require.True(t, validStoretestDigest(finalized.Review.EvidenceInventoryDigest))
+
+	batchStart := &store.ExamResultReleaseBatchStart{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, AllFinalized: true,
+		Audit: &model.AuditEvent{ActorID: fixture.manager.ID, Action: string(model.ActionSubmissionRelease),
+			Resource:  model.Resource{Type: model.ResourceExamSitting, ID: fixture.sitting.ID.String()},
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: fixture.unitID.String(),
+			Status: model.AuditStatusAttempt, NodeID: "test-node"},
+	}
+	batchKey := examCommand(fixture.manager.ID, store.ExamResultReleaseBatchOperation, "review-bulk-release", "all-finalized")
+	batch, err := reviews.ClaimResultReleaseBatch(ctx, batchStart, batchKey)
+	require.NoError(t, err)
+	require.NotEmpty(t, batch.Token)
+	require.Equal(t, []model.SubmissionID{sealed.Receipt.SubmissionID}, batch.SubmissionIDs)
+	_, err = reviews.ClaimResultReleaseBatch(ctx, batchStart, batchKey)
+	require.ErrorAs(t, err, new(*store.ErrIdempotencyInProgress))
+	conflictingBatchKey := examCommand(fixture.manager.ID, store.ExamResultReleaseBatchOperation, "review-bulk-release", "explicit-submissions")
+	_, err = reviews.ClaimResultReleaseBatch(ctx, batchStart, conflictingBatchKey)
+	require.ErrorAs(t, err, new(*store.ErrIdempotencyConflict))
 
 	lateDecision := *decisionInput
 	lateDecision.ExpectedReviewRevision = finalized.Review.Revision
@@ -317,6 +350,15 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.Equal(t, releaseInput.ReviewID, released.Review.ID)
 	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState)
 	require.Equal(t, int64(4), released.Review.Revision)
+	batchItems := []store.ExamResultReleaseBatchItem{{SubmissionID: sealed.Receipt.SubmissionID, Outcome: store.ExamResultReleased}}
+	require.NoError(t, reviews.CompleteResultReleaseBatch(ctx, &store.ExamResultReleaseBatchCompletion{
+		Token: batch.Token, Items: batchItems,
+	}, batchKey))
+	replayedBatch, err := reviews.ClaimResultReleaseBatch(ctx, batchStart, batchKey)
+	require.NoError(t, err)
+	require.Empty(t, replayedBatch.Token)
+	require.Equal(t, batchItems, replayedBatch.Items, "completed all_finalized replays the now released Submission")
+
 	testSubmissionList(t, ctx, reviews, fixture, sealed.Receipt.SubmissionID, released.Review)
 	require.True(t, released.Review.ReleasedAt.Valid)
 	require.True(t, released.Review.ReleasedAt.Time.Equal(releaseInput.Notice.Occurrence.CreatedAt))
@@ -765,6 +807,26 @@ func testSubmissionList(
 	require.Nil(t, hidden.Counts.Reviewed)
 	require.Empty(t, sitting(false, store.SubmissionListFilter{ReviewStates: []store.SubmissionListReviewState{state}}).Items,
 		"a review filter never matches a review the reader may not see")
+
+	namePage, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
+		Sort: store.SubmissionListByName, Limit: 1,
+	})
+	require.NoError(t, err)
+	require.Len(t, namePage.Items, 1)
+	nextNamePage, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
+		Sort: store.SubmissionListByName, Limit: 1, After: &store.SubmissionListCursor{SubmissionID: namePage.Items[0].SubmissionID},
+	})
+	require.NoError(t, err)
+	require.Empty(t, nextNamePage.Items, "the name cursor seeks by the referenced Submission")
+	_, err = reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
+		Sort: store.SubmissionListByName, Limit: 1, After: &store.SubmissionListCursor{SubmissionID: model.NewSubmissionID()},
+	})
+	var staleCursor *store.ErrInvalidInput
+	require.ErrorAs(t, err, &staleCursor, "a stale anchor must not silently end the list")
+	require.Equal(t, "cursor", staleCursor.Field)
 
 	own, err := reviews.ListSubmissions(ctx, store.SubmissionListOptions{
 		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.candidate.ID,

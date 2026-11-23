@@ -100,14 +100,54 @@ func TestBulkReleaseGivesEachSubmissionItsOutcome(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{ResultReleaseBatchOperation, store.ExamIntegrityReviewReleaseOperation}, operations,
 		"one audit for the batch and one for the released Submission")
-
-	submissions := 0
+	submissions, board := 0, 0
 	for _, call := range f.publisher.Calls() {
-		if call.Event.Name == "exam_sitting.submissions.changed" {
+		switch call.Event.Name {
+		case "exam_sitting.submissions.changed":
 			submissions++
+		case "manager.sitting_board.changed":
+			board++
 		}
 	}
 	require.Equal(t, 1, submissions, "the batch refreshes the submission list once")
+	require.Equal(t, 1, board, "the batch refreshes the sitting board once")
+}
+
+func TestBulkReleaseReplayKeepsTheOriginalFinalizedSelection(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	finalized := &store.SubmissionListReview{ID: f.reviewID, State: model.SubmissionReviewFinalized,
+		ReleaseState: model.SubmissionReviewWithheld, Revision: 2, FinalizedByUserID: f.userID}
+	original := store.SubmissionListItem{
+		SubmissionID: f.submissionID, ExamID: f.examID, SittingID: f.sittingID, AttemptID: f.attemptID,
+		ReviewVisible: true, Review: finalized,
+	}
+	f.persistence.listed = []store.SubmissionListItem{original}
+	command := ResultReleaseBatchCommand{
+		ExamID: f.examID, SittingID: f.sittingID, AllFinalized: true, IdempotencyKey: "original-selection",
+	}
+	first, err := f.service.ReleaseSittingResults(t.Context(), f.inv, command)
+	require.NoError(t, err)
+	require.Len(t, first.Items, 1)
+	require.Equal(t, ResultReleaseReleased, first.Items[0].Outcome)
+	require.Len(t, f.persistence.releases, 1)
+
+	changed := original
+	changed.SubmissionID = model.NewSubmissionID()
+	f.persistence.listed = []store.SubmissionListItem{changed}
+	published := f.publisher.Calls()
+	replayed, err := f.service.ReleaseSittingResults(t.Context(), f.inv, command)
+	require.NoError(t, err)
+	require.Equal(t, first, replayed)
+	require.Len(t, f.persistence.releases, 1, "replay skips item mutations")
+	require.Len(t, f.persistence.lists, 1, "replay skips reading current submission rows")
+	require.Len(t, f.control.Audits.Attempts(), 2, "replay writes no additional mutation audit")
+	require.Equal(t, published, f.publisher.Calls(), "replay publishes no events")
+
+	command.AllFinalized, command.SubmissionIDs = false, []model.SubmissionID{changed.SubmissionID}
+	_, err = f.service.ReleaseSittingResults(t.Context(), f.inv, command)
+	require.True(t, apperror.Is(err, "idempotency.conflict"), "error = %v", err)
+	require.Len(t, f.control.Audits.Attempts(), 2)
 }
 
 func TestBulkReleaseReportsDraftsAndEarlierReleases(t *testing.T) {

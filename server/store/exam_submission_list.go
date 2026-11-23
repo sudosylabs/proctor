@@ -51,10 +51,10 @@ type SubmissionListFilter struct {
 }
 
 // SubmissionListCursor is the keyset of the last row seen, in the list's
-// sort: SubmittedAt for the submitted sort, Name for the name sort.
+// sort. The name sort reads the key from the scoped Submission so no
+// candidate identity is carried in the cursor.
 type SubmissionListCursor struct {
 	SubmittedAt  time.Time
-	Name         string
 	SubmissionID model.SubmissionID
 }
 

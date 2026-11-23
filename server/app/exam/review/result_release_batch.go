@@ -13,33 +13,34 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 // ResultReleaseBatchOperation names a bulk result release in the audit log.
-const ResultReleaseBatchOperation = "exam.integrity_review.release_batch"
+const ResultReleaseBatchOperation = store.ExamResultReleaseBatchOperation
 
 // ResultReleaseOutcome is what a bulk release did with one Submission.
-type ResultReleaseOutcome string
+type ResultReleaseOutcome = store.ExamResultReleaseOutcome
 
 const (
 	// ResultReleaseReleased: this batch released the result, now or when it
 	// first ran under the same key.
-	ResultReleaseReleased ResultReleaseOutcome = "released"
+	ResultReleaseReleased = store.ExamResultReleased
 	// ResultReleaseAlready: someone had released it before.
-	ResultReleaseAlready ResultReleaseOutcome = "already_released"
+	ResultReleaseAlready = store.ExamResultAlreadyReleased
 	// ResultReleaseNotFinalized: its review is missing or still a draft.
-	ResultReleaseNotFinalized ResultReleaseOutcome = "not_finalized"
+	ResultReleaseNotFinalized = store.ExamResultNotFinalized
 	// ResultReleaseDenied: the caller may not release it, or it is not a
 	// Submission of the sitting.
-	ResultReleaseDenied ResultReleaseOutcome = "denied"
+	ResultReleaseDenied = store.ExamResultReleaseDenied
 	// ResultReleaseFailed: the release could not be done now; ErrorCode says
 	// why, and the item may be retried.
-	ResultReleaseFailed ResultReleaseOutcome = "failed"
+	ResultReleaseFailed = store.ExamResultReleaseFailed
 )
 
 // ResultReleaseBatchCommand releases the results of SubmissionIDs, or of
@@ -53,11 +54,7 @@ type ResultReleaseBatchCommand struct {
 }
 
 // ResultReleaseBatchItem is one Submission's outcome.
-type ResultReleaseBatchItem struct {
-	SubmissionID model.SubmissionID
-	Outcome      ResultReleaseOutcome
-	ErrorCode    string
-}
+type ResultReleaseBatchItem = store.ExamResultReleaseBatchItem
 
 // ResultReleaseBatchResult lists the outcomes in the order the Submissions
 // were named, or by submission time for AllFinalized.
@@ -68,10 +65,9 @@ type ResultReleaseBatchResult struct {
 // ReleaseSittingResults releases many results of one sitting. The sitting is
 // authorized once for release; then each Submission goes through the same
 // checks, audit, mail and events as a single release, and commits on its own.
-// One audit entry records the batch. Each item's idempotency key derives from
-// the batch key, so a replay releases nothing twice: an item this batch
-// released replays as released, and one released by someone else is already
-// released.
+// The batch's command key freezes the selection and the completed outcomes.
+// An expired execution claim keeps its selection; per-item keys let a new
+// claimant recover already executed releases.
 func (s *Service) ReleaseSittingResults(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -81,8 +77,14 @@ func (s *Service) ReleaseSittingResults(
 	if !command.ExamID.IsValid() || !command.SittingID.IsValid() || !validReleaseBatchSelection(command) {
 		return ResultReleaseBatchResult{}, apperror.Invalid("exam.integrity_review.invalid", "result_release_batch")
 	}
-	if command.IdempotencyKey == "" {
-		return ResultReleaseBatchResult{}, apperror.New("idempotency.key_required")
+	prepared, err := idempotency.Require(inv, ResultReleaseBatchOperation, command.IdempotencyKey, struct {
+		ExamID        model.ExamID         `json:"exam_id"`
+		SittingID     model.ExamSittingID  `json:"exam_sitting_id"`
+		SubmissionIDs []model.SubmissionID `json:"submission_ids,omitempty"`
+		AllFinalized  bool                 `json:"all_finalized"`
+	}{command.ExamID, command.SittingID, command.SubmissionIDs, command.AllFinalized})
+	if err != nil {
+		return ResultReleaseBatchResult{}, err
 	}
 	if s.authorizer.Sittings == nil {
 		return ResultReleaseBatchResult{}, apperror.New("exam.integrity_review.unavailable")
@@ -96,59 +98,62 @@ func (s *Service) ReleaseSittingResults(
 		action = model.ActionSubmissionReleaseOverride
 	}
 
-	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: inv,
-		Action:     action,
-		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
-		ScopeType:  model.RoleScopeAcademicUnit,
-		ScopeID:    unitID.String(),
-		Operation:  ResultReleaseBatchOperation,
-		Value: map[string]any{
+	audit, err := s.auditor.PrepareAtScope(ctx, inv, action,
+		model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
+		model.RoleScopeAcademicUnit, unitID.String(), ResultReleaseBatchOperation, map[string]any{
 			"exam_id":         command.ExamID.String(),
 			"exam_sitting_id": command.SittingID.String(),
 			"all_finalized":   command.AllFinalized,
 			"submission_ids":  submissionIDStrings(command.SubmissionIDs),
-		},
-	})
+		})
 	if err != nil {
 		return ResultReleaseBatchResult{}, err
 	}
 
-	rows, err := s.releaseBatchRows(ctx, inv, command)
+	// Give the database lease a margin over any one handler's work.
+	workCtx, cancel := context.WithTimeout(ctx, store.ExamResultReleaseBatchWorkTime)
+	defer cancel()
+	claim, err := s.reviews.ClaimResultReleaseBatch(workCtx, &store.ExamResultReleaseBatchStart{
+		ExamID: command.ExamID, SittingID: command.SittingID, SubmissionIDs: command.SubmissionIDs,
+		AllFinalized: command.AllFinalized, Audit: audit,
+	}, prepared)
 	if err != nil {
-		return ResultReleaseBatchResult{}, s.failAudit(ctx, auditID, err)
+		return ResultReleaseBatchResult{}, storeErrors.Translate(err)
 	}
-	ids := command.SubmissionIDs
-	if command.AllFinalized {
-		ids = make([]model.SubmissionID, 0, len(rows))
-		for _, row := range rows {
-			ids = append(ids, row.SubmissionID)
-		}
+	if claim == nil {
+		return ResultReleaseBatchResult{}, storeErrors.Translate(nil)
+	}
+	if claim.Token == "" {
+		return ResultReleaseBatchResult{Items: claim.Items}, nil
 	}
 
-	result := ResultReleaseBatchResult{Items: make([]ResultReleaseBatchItem, 0, len(ids))}
-	counts := map[ResultReleaseOutcome]int{}
+	rows, err := s.releaseBatchRows(workCtx, inv, command, claim.SubmissionIDs)
+	if err != nil {
+		return ResultReleaseBatchResult{}, err
+	}
+	result := ResultReleaseBatchResult{Items: make([]ResultReleaseBatchItem, 0, len(claim.SubmissionIDs))}
 	released := false
-	for _, id := range ids {
+	for _, id := range claim.SubmissionIDs {
+		if err = workCtx.Err(); err != nil {
+			return ResultReleaseBatchResult{}, storeErrors.Translate(err)
+		}
 		row, found := rows[id]
-		item := s.releaseBatchItem(ctx, inv, command.IdempotencyKey, id, row, found)
-		counts[item.Outcome]++
+		item := s.releaseBatchItem(workCtx, inv, command.IdempotencyKey, id, row, found)
 		released = released || item.Outcome == ResultReleaseReleased
 		result.Items = append(result.Items, item)
 	}
 
-	if err = s.auditor.Complete(ctx, auditID, map[string]any{
-		"released":         counts[ResultReleaseReleased],
-		"already_released": counts[ResultReleaseAlready],
-		"not_finalized":    counts[ResultReleaseNotFinalized],
-		"denied":           counts[ResultReleaseDenied],
-		"failed":           counts[ResultReleaseFailed],
-	}); err != nil {
-		return ResultReleaseBatchResult{}, err
+	if err = s.reviews.CompleteResultReleaseBatch(workCtx, &store.ExamResultReleaseBatchCompletion{
+		Token: claim.Token, Items: result.Items,
+	}, prepared); err != nil {
+		return ResultReleaseBatchResult{}, storeErrors.Translate(err)
 	}
 	if released {
-		if err = s.publishSittingSubmissionsChanged(ctx, command.ExamID, command.SittingID); err != nil {
-			s.publisher.Report(ctx, "exam_sitting.submissions.changed", err)
+		if err = errors.Join(
+			realtime.PublishSittingBoardChanged(ctx, s.publisher, command.ExamID, command.SittingID),
+			s.publishSittingSubmissionsChanged(ctx, command.ExamID, command.SittingID),
+		); err != nil {
+			s.publisher.Report(ctx, "submission.result_release_batch", err)
 		}
 	}
 	return result, nil
@@ -162,30 +167,21 @@ func (s *Service) releaseBatchRows(
 	ctx context.Context,
 	inv invocation.Invocation,
 	command ResultReleaseBatchCommand,
+	ids []model.SubmissionID,
 ) (map[model.SubmissionID]store.SubmissionListItem, error) {
-	options := store.SubmissionListOptions{
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	page, err := s.reviews.ListSubmissions(ctx, store.SubmissionListOptions{
 		ExamID: command.ExamID, SittingID: command.SittingID, ReviewVisible: true,
-		ExcludeCandidateUserID: inv.Principal().UserID, SubmissionIDs: command.SubmissionIDs,
-		Sort: store.SubmissionListBySubmitted, Limit: store.SubmissionListMaximum + 1,
-	}
-	if command.AllFinalized {
-		options.Filter = store.SubmissionListFilter{
-			ReviewStates:  []store.SubmissionListReviewState{store.SubmissionListReviewFinalized},
-			ReleaseStates: []model.SubmissionReviewReleaseState{model.SubmissionReviewWithheld},
-		}
-	}
-	page, err := s.reviews.ListSubmissions(ctx, options)
+		ExcludeCandidateUserID: inv.Principal().UserID, SubmissionIDs: ids,
+		Sort: store.SubmissionListBySubmitted, Limit: store.SubmissionListMaximum,
+	})
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
-	if page == nil || len(page.Items) > store.SubmissionListMaximum {
-		// AllFinalized releases at most one page; the caller sends the rest
-		// again once these are out of the finalized, withheld set.
-		if page != nil && command.AllFinalized {
-			page.Items = page.Items[:store.SubmissionListMaximum]
-		} else {
-			return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid bulk release rows"))
-		}
+	if page == nil || len(page.Items) > len(ids) {
+		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid bulk release rows"))
 	}
 	rows := make(map[model.SubmissionID]store.SubmissionListItem, len(page.Items))
 	for _, item := range page.Items {
@@ -208,10 +204,14 @@ func (s *Service) releaseBatchItem(
 	found bool,
 ) ResultReleaseBatchItem {
 	item := ResultReleaseBatchItem{SubmissionID: submissionID}
-	override, authorization, err := s.authorizeReleaseMutation(ctx, inv, submissionID)
-	if err != nil || !found {
+	if !found {
 		item.Outcome = ResultReleaseDenied
-		if err != nil && !concealedDenial(err) {
+		return item
+	}
+	override, authorization, err := s.authorizeReleaseMutation(ctx, inv, submissionID)
+	if err != nil {
+		item.Outcome = ResultReleaseDenied
+		if !concealedDenial(err) {
 			item.Outcome, item.ErrorCode = ResultReleaseFailed, apperror.CodeOf(publicFailures.Conceal(err), "exam.integrity_review.unavailable")
 		}
 		return item
@@ -256,7 +256,7 @@ func (s *Service) releaseBatchItem(
 	if now, readErr := s.reviews.ListSubmissions(ctx, store.SubmissionListOptions{
 		ExamID: row.ExamID, SittingID: row.SittingID, ReviewVisible: true, ExcludeCandidateUserID: inv.Principal().UserID,
 		SubmissionIDs: []model.SubmissionID{submissionID}, Sort: store.SubmissionListBySubmitted, Limit: 1,
-	}); readErr == nil && len(now.Items) == 1 && now.Items[0].Review != nil &&
+	}); readErr == nil && now != nil && len(now.Items) == 1 && now.Items[0].Review != nil &&
 		now.Items[0].Review.ReleaseState == model.SubmissionReviewReleased {
 		item.Outcome = ResultReleaseAlready
 	}

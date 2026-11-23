@@ -36,15 +36,15 @@ func reviewEventFact(result Result) realtime.ExamIntegrityReviewEventFact {
 // which shows each review's state; a bulk release publishes that once for its
 // batch instead.
 func (s *Service) publishSittingBoardChanged(ctx context.Context, result Result) error {
+	if result.inBatch {
+		return nil
+	}
 	board := realtime.PublishSittingBoardChanged(
 		ctx,
 		s.publisher,
 		result.Authorization.ExamID,
 		result.Authorization.SittingID,
 	)
-	if result.inBatch {
-		return board
-	}
 	return errors.Join(board, s.publishSittingSubmissionsChanged(ctx, result.Authorization.ExamID, result.Authorization.SittingID))
 }
 
@@ -53,7 +53,7 @@ func (s *Service) publishSittingSubmissionsChanged(ctx context.Context, examID m
 	if err != nil {
 		return err
 	}
-	return s.publisher.Publish(ctx, event)
+	return s.publisher.PublishExamChange(ctx, event, examID)
 }
 
 func (s *Service) publishReviewChanged(ctx context.Context, result Result) error {

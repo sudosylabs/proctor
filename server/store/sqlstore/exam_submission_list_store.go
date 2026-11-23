@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/lib/pq"
 	"github.com/sudosylabs/proctor/server/model"
@@ -53,16 +52,20 @@ type submissionListCountRow struct {
 	Flags              int64 `db:"flags"`
 }
 
-// submissionListNameMaximumBytes bounds a name keyset, which is a display
-// name the store itself returned.
-const submissionListNameMaximumBytes = 1024
-
 // ListSubmissions returns one page of sealed submissions of one sitting, or
 // of every exam the visibility reaches, with each candidate, flag count and
 // review, ordered by the sort and then by submission ID. Counts read the same
 // rows without the filter, in one more grouped query.
 func (s *SQLExamIntegrityReviewStore) ListSubmissions(
 	ctx context.Context,
+	options store.SubmissionListOptions,
+) (*store.SubmissionListPage, error) {
+	return listSubmissions(ctx, s.GetMaster(), options)
+}
+
+func listSubmissions(
+	ctx context.Context,
+	reader sqlxExecutor,
 	options store.SubmissionListOptions,
 ) (*store.SubmissionListPage, error) {
 	if err := validateSubmissionListOptions(options); err != nil {
@@ -98,14 +101,19 @@ func (s *SQLExamIntegrityReviewStore) ListSubmissions(
 		args = append(args, *filter.HasFlags)
 	}
 
+	nameOrder := `LOWER(CASE WHEN listed.display_name <> '' THEN listed.display_name ELSE listed.username END)`
 	order := ` ORDER BY listed.submitted_at, listed.submission_id`
 	if options.Sort == store.SubmissionListByName {
-		order = ` ORDER BY lower(listed.display_name), listed.submission_id`
+		order = ` ORDER BY ` + nameOrder + `, listed.submission_id`
 	}
 	if after := options.After; after != nil {
 		if options.Sort == store.SubmissionListByName {
-			query += ` AND (lower(listed.display_name), listed.submission_id) > (lower(?), ?)`
-			args = append(args, after.Name, after.SubmissionID.String())
+			query += ` AND (` + nameOrder + `, listed.submission_id) > (
+				SELECT ` + nameOrder + `, listed.submission_id
+				FROM submission_list listed
+				WHERE listed.submission_id = ?
+			)`
+			args = append(args, after.SubmissionID.String())
 		} else {
 			query += ` AND (listed.submitted_at, listed.submission_id) > (?, ?)`
 			args = append(args, model.TimeUTC(after.SubmittedAt), after.SubmissionID.String())
@@ -115,8 +123,20 @@ func (s *SQLExamIntegrityReviewStore) ListSubmissions(
 	args = append(args, options.Limit)
 
 	var rows []submissionListRow
-	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
+	if err := reader.Select(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("list Submissions: %w", err)
+	}
+	// An absent or newly hidden anchor is not the end of the list.
+	if len(rows) == 0 && options.Sort == store.SubmissionListByName && options.After != nil {
+		var anchorVisible bool
+		if err := reader.Get(ctx, &anchorVisible, cte+`
+			SELECT EXISTS (SELECT 1 FROM submission_list WHERE submission_id = ?)`,
+			append(cteArgs, options.After.SubmissionID.String())...); err != nil {
+			return nil, fmt.Errorf("check Submission list cursor: %w", err)
+		}
+		if !anchorVisible {
+			return nil, store.NewErrInvalidInput("submission", "cursor", nil)
+		}
 	}
 	page := &store.SubmissionListPage{Items: make([]store.SubmissionListItem, 0, len(rows))}
 	for _, row := range rows {
@@ -129,7 +149,7 @@ func (s *SQLExamIntegrityReviewStore) ListSubmissions(
 
 	if options.IncludeCounts {
 		var counts submissionListCountRow
-		if err := s.GetMaster().Get(ctx, &counts, cte+`
+		if err := reader.Get(ctx, &counts, cte+`
 			SELECT COUNT(*) AS total,
 				COUNT(*) FILTER (WHERE listed.review_state = 'finalized') AS reviewed,
 				COUNT(*) FILTER (WHERE listed.release_state = 'released') AS released,
@@ -182,7 +202,10 @@ func submissionListScope(options store.SubmissionListOptions) (string, []any) {
 	if len(ctes) > 0 {
 		prefix = `WITH RECURSIVE ` + strings.Join(ctes, `, `) + `, `
 	}
-	cte := prefix + `submission_list AS (
+	// A name keyset references this CTE twice. Allow PostgreSQL to push the
+	// anchor lookup by ID into its own plan and avoid evaluating the flag
+	// count for every row before applying the limit.
+	cte := prefix + `submission_list AS NOT MATERIALIZED (
 			SELECT submission.id AS submission_id, e.id AS exam_id, d.title AS exam_title,
 				s.exam_sitting_id, s.id AS exam_attempt_id, candidate.id AS candidate_user_id,
 				candidate.username, candidate.display_name, submission.submitted_at, submission.receipt_code,
@@ -241,9 +264,7 @@ func validateSubmissionListOptions(options store.SubmissionListOptions) error {
 	}
 	if after := options.After; after != nil {
 		if !after.SubmissionID.IsValid() ||
-			options.Sort == store.SubmissionListBySubmitted && after.SubmittedAt.IsZero() ||
-			options.Sort == store.SubmissionListByName &&
-				(after.Name == "" || len(after.Name) > submissionListNameMaximumBytes || !utf8.ValidString(after.Name)) {
+			options.Sort == store.SubmissionListBySubmitted && after.SubmittedAt.IsZero() {
 			return store.NewErrInvalidInput("submission", "cursor", nil)
 		}
 	}
@@ -271,7 +292,7 @@ func (row submissionListRow) item() (store.SubmissionListItem, error) {
 		return invalid("exam_attempt_id", err)
 	}
 	candidateID, err := model.ParseUserID(row.CandidateUserID)
-	if err != nil || row.Username == "" || row.DisplayName == "" {
+	if err != nil || row.Username == "" {
 		return invalid("candidate", err)
 	}
 	receipt, err := model.ParseSubmissionReceiptCode(row.ReceiptCode)

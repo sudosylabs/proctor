@@ -52,6 +52,7 @@ func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.Sub
 // evidence detail or private candidate-authored material.
 type ExamIntegrityFlagSummary struct {
 	Browser                *model.BrowserIntegrityGroup
+	BrowserRuleLabel       string
 	Flag                   model.IntegrityFlag
 	EvidenceCount          int
 	OverflowCount          int64
@@ -104,7 +105,9 @@ type ExamSubmissionReviewSnapshot struct {
 	Authorization             ExamIntegrityReviewAuthorization
 	Submission                *model.ExamSubmission
 	Review                    *model.SubmissionReview
-	Decisions                 []model.IntegrityReviewDecision
+	// LatestReopeningReason is private to managers of the sitting.
+	LatestReopeningReason string
+	Decisions             []model.IntegrityReviewDecision
 }
 
 type ExamIntegrityReviewDecisionMutation struct {
@@ -241,6 +244,11 @@ type ExamIntegrityReviewStore interface {
 	Finalize(context.Context, *ExamIntegrityReviewFinalize, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
 	PrepareRelease(context.Context, *ExamIntegrityReviewReleasePrepare) (*ExamIntegrityReviewReleasePreparation, error)
 	Release(context.Context, *ExamIntegrityReviewRelease, *CommandIdempotency) (*ExamIntegrityReviewMutationResult, error)
+	// ClaimResultReleaseBatch replays the retained outcome or reserves the
+	// original selection; CompleteResultReleaseBatch keeps the item outcomes
+	// and completes the batch's audit together.
+	ClaimResultReleaseBatch(context.Context, *ExamResultReleaseBatchStart, *CommandIdempotency) (*ExamResultReleaseBatchClaim, error)
+	CompleteResultReleaseBatch(context.Context, *ExamResultReleaseBatchCompletion, *CommandIdempotency) error
 	// Reopen returns a finalized review to draft, keeping its decisions, and
 	// refuses one whose result is released (integrity_review_released). It
 	// reopens the sitting's records completion like late evidence does.

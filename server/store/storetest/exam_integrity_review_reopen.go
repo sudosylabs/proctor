@@ -47,40 +47,51 @@ func TestExamIntegrityReviewReopen(t *testing.T, ss store.Store) {
 		return finalized
 	}
 	var lastReopenAudit model.AuditEventID
-	reopen := func(revision int64, key string) (*store.ExamIntegrityReviewMutationResult, error) {
+	reopen := func(revision int64, key, reason string) (*store.ExamIntegrityReviewMutationResult, error) {
 		lastReopenAudit = audit(model.ActionSubmissionReview)
 		return reviews.Reopen(ctx, &store.ExamIntegrityReviewReopen{
 			SubmissionID: submissionID, ReviewID: reviewID, ActorUserID: fixture.manager.ID, ExpectedRevision: revision,
-			Reason: "the clip needs another look", ChangedAt: model.NowUTC(),
+			Reason: reason, ChangedAt: model.NowUTC(),
 			AuditEventID: lastReopenAudit, AuditAt: model.NowUTC(),
 		}, examCommand(fixture.manager.ID, store.ExamIntegrityReviewReopenOperation, key, key))
 	}
 
-	_, err = reopen(decided.Review.Revision, "reopen-draft")
+	const firstReason = "the clip needs another look"
+	_, err = reopen(decided.Review.Revision, "reopen-draft", firstReason)
 	var conflict *store.ErrConflict
 	require.ErrorAs(t, err, &conflict, "a draft review can't be reopened")
 
 	finalized := finalize(decided.Review.Revision, "reopen-finalize")
-	_, err = reopen(finalized.Review.Revision-1, "reopen-stale")
+	_, err = reopen(finalized.Review.Revision-1, "reopen-stale", firstReason)
 	require.ErrorAs(t, err, &conflict)
 	require.Equal(t, "integrity_review_revision", conflict.Constraint, "a stale reopen is fenced")
 
-	reopened, err := reopen(finalized.Review.Revision, "reopen")
+	reopened, err := reopen(finalized.Review.Revision, "reopen", firstReason)
 	require.NoError(t, err)
 	require.Equal(t, model.SubmissionReviewDraft, reopened.Review.State)
 	require.Equal(t, model.SubmissionReviewWithheld, reopened.Review.ReleaseState)
 	require.Equal(t, finalized.Review.Revision+1, reopened.Review.Revision)
 	require.False(t, reopened.Review.FinalizedAt.Valid)
 	requireSuccessfulAudit(t, ctx, ss, lastReopenAudit)
-	assertReviewAuditPrivate(t, ctx, ss, lastReopenAudit, "the clip needs another look")
+	assertReviewAuditPrivate(t, ctx, ss, lastReopenAudit, firstReason)
 	snapshot, err := reviews.Get(ctx, submissionID)
 	require.NoError(t, err)
 	require.Len(t, snapshot.Decisions, 1, "reopening keeps the decisions")
+	require.Equal(t, firstReason, snapshot.LatestReopeningReason)
 	require.Equal(t, decided.Decision.ID, snapshot.Decisions[0].ID)
 
 	refinalized := finalize(reopened.Review.Revision, "reopen-refinalize")
 	require.Equal(t, model.SubmissionReviewFinalized, refinalized.Review.State)
 	require.Equal(t, 1, refinalized.Review.FlagCount)
+
+	const latestReason = "a second piece of evidence is relevant"
+	reopenedAgain, err := reopen(refinalized.Review.Revision, "reopen-again", latestReason)
+	require.NoError(t, err)
+	assertReviewAuditPrivate(t, ctx, ss, lastReopenAudit, latestReason)
+	snapshot, err = reviews.Get(ctx, submissionID)
+	require.NoError(t, err)
+	require.Equal(t, latestReason, snapshot.LatestReopeningReason, "the snapshot reflects the newest reopening")
+	refinalized = finalize(reopenedAgain.Review.Revision, "reopen-refinalize-again")
 
 	preparation, err := reviews.PrepareRelease(ctx, &store.ExamIntegrityReviewReleasePrepare{
 		SubmissionID: submissionID, ReviewID: reviewID, ExpectedRevision: refinalized.Review.Revision,
@@ -96,7 +107,7 @@ func TestExamIntegrityReviewReopen(t *testing.T, ss store.Store) {
 		store.ExamIntegrityReviewReleaseOperation, "reopen-release", "reopen-release"))
 	require.NoError(t, err)
 
-	_, err = reopen(released.Review.Revision, "reopen-released")
+	_, err = reopen(released.Review.Revision, "reopen-released", firstReason)
 	require.ErrorAs(t, err, &conflict)
 	require.Equal(t, "integrity_review_released", conflict.Constraint, "a released result is final")
 }

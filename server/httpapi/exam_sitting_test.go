@@ -34,7 +34,7 @@ func newSittingAPI(t *testing.T) (*sittingFixture, http.Handler) {
 	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	f := newSittingFixture(t, principal)
-	return f, newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examSittingResource(f.sittingService))
+	return f, newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examSittingResource(f.sittingService, f.people))
 }
 
 func TestExamSittingHTTPScheduleUsesStrictIdempotentCommandAndSafeResponse(t *testing.T) {
@@ -377,6 +377,7 @@ func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d reads = %#v body = %s", response.Code, f.sittingStore.gets, response.Body.String())
 	require.Equal(t, []sittingIdentity{{ExamID: f.examID, SittingID: f.sitting.ID}}, f.sittingStore.gets)
+	require.Contains(t, response.Body.String(), `"candidate_count":0,"candidate_count_is_lower_bound":false`, "a read counts the candidates")
 }
 
 func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {

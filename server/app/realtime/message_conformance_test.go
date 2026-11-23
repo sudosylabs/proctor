@@ -141,6 +141,9 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"manager.sitting_board.changed": func() (Event, error) {
 			return NewManagerSittingBoardChangedEvent(examID, sittingID)
 		},
+		"exam.counts.changed": func() (Event, error) {
+			return NewExamCountsChangedEvent(examID)
+		},
 		"exam_sitting.submissions.changed": func() (Event, error) {
 			return NewSittingSubmissionsChangedEvent(examID, sittingID)
 		},

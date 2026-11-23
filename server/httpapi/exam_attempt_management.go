@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -271,6 +272,23 @@ type sittingCandidateStatusItemResponse struct {
 	Presence                sittingCandidatePresenceResponse     `json:"presence"`
 	Suspension              *sittingCandidateSuspensionResponse  `json:"suspension"`
 	IntegrityAttentionCount int64                                `json:"integrity_attention_count"`
+	// DesktopSetup is present before the sitting opens.
+	DesktopSetup *sittingCandidateDesktopSetupResponse `json:"desktop_setup,omitempty"`
+	// AcknowledgedAt is when the candidate acknowledged the sitting's current
+	// live correction; absent when it is not one or they have not.
+	AcknowledgedAt *string `json:"acknowledged_at,omitempty"`
+	// The panel members below are for callers who may manage the sitting.
+	DeviceName       *string `json:"device_name,omitempty"`
+	ChangedFileCount *int64  `json:"changed_file_count,omitempty"`
+	FocusLossCount   *int64  `json:"focus_loss_count,omitempty"`
+}
+
+// sittingCandidateDesktopSetupResponse names the platform and release of the
+// candidate's newest Desktop registration, never the device or build.
+type sittingCandidateDesktopSetupResponse struct {
+	State    string `json:"state"`
+	Platform string `json:"platform,omitempty"`
+	Release  string `json:"release,omitempty"`
 }
 
 type sittingCandidateIdentityResponse struct {
@@ -321,6 +339,11 @@ type examAttemptManagerResponse struct {
 	LatestParticipation *examAttemptParticipationResponse `json:"latest_participation,omitempty"`
 	CurrentConnection   *examAttemptConnectionResponse    `json:"current_connection,omitempty"`
 	ActiveSuspension    *examAttemptSuspensionResponse    `json:"active_suspension,omitempty"`
+	// EndedByID, EndedBy and EndReasonText are present when a manager ended
+	// the attempt, and only for callers who may manage the sitting.
+	EndedByID     string             `json:"ended_by_user_id,omitempty"`
+	EndedBy       *personRefResponse `json:"ended_by,omitempty"`
+	EndReasonText string             `json:"end_reason_text,omitempty"`
 }
 
 type examAttemptWorkspaceResponse struct {
@@ -480,6 +503,25 @@ func (h examAttemptHandlers) endByManager(request route.Request) (route.Result, 
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
+// withDetail adds a candidate's board details.
+func (r sittingCandidateStatusItemResponse) withDetail(detail attempt.CandidateBoardDetail) sittingCandidateStatusItemResponse {
+	if setup := detail.DesktopSetup; setup != nil {
+		r.DesktopSetup = &sittingCandidateDesktopSetupResponse{State: string(setup.State), Platform: string(setup.Platform), Release: setup.Release}
+	}
+	if detail.CurrentCorrectionAcknowledgedAt.Valid {
+		value := model.FormatRFC3339(detail.CurrentCorrectionAcknowledgedAt.Time)
+		r.AcknowledgedAt = &value
+	}
+	if detail.PanelVisible {
+		name, changed, focus := detail.DeviceName, detail.ChangedFileCount, detail.FocusLossCount
+		if name != "" {
+			r.DeviceName = &name
+		}
+		r.ChangedFileCount, r.FocusLossCount = &changed, &focus
+	}
+	return r
+}
+
 func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route.Result, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
@@ -567,6 +609,7 @@ func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route
 			}
 		}
 
+		mapped = mapped.withDetail(page.Details[item.Candidate.UserID])
 		if item.Suspension != nil {
 			mapped.Suspension = &sittingCandidateSuspensionResponse{
 				ID:               item.Suspension.ID.String(),
@@ -740,9 +783,16 @@ func (h examAttemptHandlers) getManaged(request route.Request) (route.Result, er
 		return route.Result{}, err
 	}
 
-	response, err := examAttemptManagerResponseFromView(view)
+	response, err := examAttemptManagerResponseFromView(view.ExamAttemptManagerSnapshot)
 	if err != nil {
 		return route.Result{}, err
+	}
+	if view.ManagerEnd != nil {
+		refs, nameErr := namePeople(request, h.people, view.ManagerEnd.ActorUserID)
+		if nameErr != nil {
+			return route.Result{}, nameErr
+		}
+		response = response.endedBy(*view.ManagerEnd, refs)
 	}
 
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
@@ -794,11 +844,23 @@ func (h examAttemptHandlers) listManaged(request route.Request) (route.Result, e
 		return route.Result{}, err
 	}
 
+	enders := make([]model.UserID, 0, len(page.ManagerEnds))
+	for _, end := range page.ManagerEnds {
+		enders = append(enders, end.ActorUserID)
+	}
+	refs, err := namePeople(request, h.people, enders...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	response := examAttemptManagerListResponse{Items: make([]examAttemptManagerResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		mapped, mapErr := examAttemptManagerResponseFromView(item)
 		if mapErr != nil {
 			return route.Result{}, mapErr
+		}
+		if end, ended := page.ManagerEnds[item.Attempt.ID]; ended {
+			mapped = mapped.endedBy(end, refs)
 		}
 
 		response.Items = append(response.Items, mapped)
@@ -916,6 +978,12 @@ func managedExamAttemptIDs(request route.Request) (model.ExamID, model.ExamSitti
 		return "", "", "", err
 	}
 	return examID, sittingID, attemptID, nil
+}
+
+// endedBy adds who ended the attempt and why.
+func (r examAttemptManagerResponse) endedBy(end attempt.ManagerEnd, refs people.Refs) examAttemptManagerResponse {
+	r.EndedByID, r.EndedBy, r.EndReasonText = end.ActorUserID.String(), personRef(refs, end.ActorUserID), end.Reason
+	return r
 }
 
 func examAttemptManagerResponseFromView(view store.ExamAttemptManagerSnapshot) (examAttemptManagerResponse, error) {

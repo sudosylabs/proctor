@@ -126,6 +126,8 @@ type reviewStoreFake struct {
 	mode        string
 	student     *model.StudentResult
 	release     *store.ExamIntegrityReviewRelease
+	reopen      *store.ExamIntegrityReviewReopen
+	reopenErr   error
 	draft       *store.ExamIntegrityReviewDraftMutation
 	idempotency *store.CommandIdempotency
 	prepareErr  error

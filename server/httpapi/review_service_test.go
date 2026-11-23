@@ -163,6 +163,7 @@ type reviewLedger struct {
 	discrepancyLists []store.ExamIntegrityDiscrepancyListOptions
 	attemptLists     []store.AttemptEvidenceListOptions
 	decisions        []*store.ExamIntegrityReviewDecisionMutation
+	reopens          []*store.ExamIntegrityReviewReopen
 	commands         []*store.CommandIdempotency
 	resultReads      []model.ExamAttemptID
 	previewReads     []model.SubmissionID
@@ -252,6 +253,18 @@ func (s *reviewLedger) ListAttemptEvidence(_ context.Context, options store.Atte
 
 // SaveDecision commits the decision against the seeded Review, which the
 // request must name at its current revision.
+func (s *reviewLedger) Reopen(
+	_ context.Context,
+	input *store.ExamIntegrityReviewReopen,
+	command *store.CommandIdempotency,
+) (*store.ExamIntegrityReviewMutationResult, error) {
+	s.reopens = append(s.reopens, input)
+	s.commands = append(s.commands, command)
+	review := *s.f.review
+	review.Revision++
+	return &store.ExamIntegrityReviewMutationResult{Authorization: s.f.authorization(), Review: &review}, nil
+}
+
 func (s *reviewLedger) SaveDecision(
 	_ context.Context,
 	input *store.ExamIntegrityReviewDecisionMutation,

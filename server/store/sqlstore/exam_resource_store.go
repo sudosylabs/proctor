@@ -592,10 +592,11 @@ func finalizeExamResourceUpload(
 	result, err = tx.Exec(
 		ctx,
 		`UPDATE exam_drafts
-		SET updated_at = GREATEST(updated_at, ?), revision = ?
+		SET updated_at = GREATEST(updated_at, ?), updated_by_user_id = ?, revision = ?
 		WHERE exam_id = ?
 			AND revision = ?`,
 		input.ChangedAt,
+		input.ActorUserID.String(),
 		newDraftRevision,
 		input.ExamID.String(),
 		input.ExpectedDraftRevision,
@@ -883,7 +884,7 @@ func (s SQLExamResourceStore) UpdateMetadata(
 			if err = requireExamResourceAffected(result, 1, "exam_resource_changed"); err != nil {
 				return nil, err
 			}
-			if err = advanceExamResourceDraft(ctx, tx, input.ExamID, input.ExpectedDraftRevision, input.ChangedAt); err != nil {
+			if err = advanceExamResourceDraft(ctx, tx, input.ExamID, input.ActorUserID, input.ExpectedDraftRevision, input.ChangedAt); err != nil {
 				return nil, err
 			}
 
@@ -1024,7 +1025,7 @@ func (s SQLExamResourceStore) Reorder(
 				}
 			}
 
-			if advanceErr := advanceExamResourceDraft(ctx, tx, input.ExamID, input.ExpectedDraftRevision, input.ChangedAt); advanceErr != nil {
+			if advanceErr := advanceExamResourceDraft(ctx, tx, input.ExamID, input.ActorUserID, input.ExpectedDraftRevision, input.ChangedAt); advanceErr != nil {
 				return examResourceReorderOutcome{}, advanceErr
 			}
 
@@ -1184,7 +1185,7 @@ func (s SQLExamResourceStore) Remove(
 			if err = requireExamResourceAffected(result, shifted, "exam_resource_order"); err != nil {
 				return nil, err
 			}
-			if err = advanceExamResourceDraft(ctx, tx, input.ExamID, input.ExpectedDraftRevision, input.ChangedAt); err != nil {
+			if err = advanceExamResourceDraft(ctx, tx, input.ExamID, input.ActorUserID, input.ExpectedDraftRevision, input.ChangedAt); err != nil {
 				return nil, err
 			}
 
@@ -1212,14 +1213,22 @@ func (s SQLExamResourceStore) Remove(
 	return &store.ExamResourceCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
-func advanceExamResourceDraft(ctx context.Context, tx *sqlxTxWrapper, examID model.ExamID, expected int64, at time.Time) error {
+func advanceExamResourceDraft(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	examID model.ExamID,
+	actorID model.UserID,
+	expected int64,
+	at time.Time,
+) error {
 	result, err := tx.Exec(
 		ctx,
 		`UPDATE exam_drafts
-		SET updated_at = GREATEST(updated_at, ?), revision = revision+1
+		SET updated_at = GREATEST(updated_at, ?), updated_by_user_id = ?, revision = revision+1
 		WHERE exam_id = ?
 			AND revision = ?`,
 		at,
+		actorID.String(),
 		examID.String(),
 		expected,
 	)

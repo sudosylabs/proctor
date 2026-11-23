@@ -70,6 +70,8 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 		ID: examID, AcademicUnitID: unitID, CreatorUserID: principal.UserID, OwnerUserID: principal.UserID,
 		Title: "Systems", UpdatedAt: time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC), Revision: 2, ManagerCount: 1,
 	}}
+	waiting := 3
+	f.exams.actionCounts = map[model.ExamID]store.ExamActionCounts{examID: {NeedsAttention: &waiting}}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?academic_unit_id="+unitID.String()+"&q=systems+design&archive_state=all&limit=25", nil)
 	request.Header.Set("Authorization", "Bearer credential")
@@ -82,6 +84,9 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	require.Equal(t, store.ExamArchiveAll, f.exams.lists[0].ArchiveFilter)
 	require.Equal(t, 26, f.exams.lists[0].Limit, "the catalog reads one past the limit")
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"title":"Systems"`)))
+	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"needs_attention_count":3,"needs_attention_count_is_lower_bound":false`)))
+	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("pending_review_count")), "a count the viewer can't see is left out")
+	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"total":1,"total_is_lower_bound":false`)))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("instructions_markdown")))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("policy")))
 	before := time.Date(2026, 8, 13, 7, 6, 5, 432123789, time.UTC)
@@ -349,7 +354,8 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 
 func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	t.Parallel()
-	view := testExamHTTPView(t, model.NewUserID())
+	editorID := model.NewUserID()
+	view := testExamHTTPView(t, editorID)
 	encoded, err := json.Marshal(examResponseFromView(view))
 	require.NoError(t, err)
 	var document map[string]any
@@ -378,6 +384,7 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	require.Equal(t, float64(1), document["manager_count"])
 	require.Equal(t, float64(0), draft["resource_count"])
 	require.Equal(t, false, draft["has_starter_workspace"])
+	require.Equal(t, editorID.String(), draft["updated_by_user_id"], "the draft names its last editor")
 	require.Equal(t, float64(model.ExamResourceDefaultMaximumCount), capacity["resource_maximum_count"])
 	require.Equal(t, float64(model.ExamWorkspaceDefaultMaximumEntries), capacity["workspace_maximum_entries"])
 }
@@ -387,7 +394,7 @@ func testExamHTTPView(t *testing.T, userID model.UserID) exam.View {
 	at := time.Now().UTC()
 	examRecord, err := model.NewExam(model.NewExamID(), model.NewAcademicUnitID(), userID, at)
 	require.NoError(t, err)
-	draft, err := model.NewExamDraft(examRecord.ID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(examRecord.ID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), userID, at)
 	require.NoError(t, err)
 	return exam.View{Exam: *examRecord, Draft: *draft, OwnerUserID: userID, ManagerCount: 1}
 }
@@ -408,7 +415,7 @@ func TestExamOpenAPIDocument(t *testing.T) {
 	document := readOpenAPIDocument(t)
 	var listOperation openAPIOperation
 	require.NoError(t, json.Unmarshal(document.Paths[model.APIURLSuffix+"/exams"]["get"], &listOperation))
-	require.Equal(t, []string{"academic_unit_id", "archive_state", "cursor", "ends_after", "limit", "q", "sitting_state", "starts_before"}, academicStructureQueryParameterNames(listOperation.Parameters))
+	require.Equal(t, []string{"academic_unit_id", "archive_state", "cursor", "ends_after", "has_sittings", "limit", "q", "sitting_state", "starts_before"}, academicStructureQueryParameterNames(listOperation.Parameters))
 }
 
 func TestEditExamDraftTextOpenAPISchemaRequiresANonNullAuthoredValue(t *testing.T) {

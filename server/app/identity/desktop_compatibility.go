@@ -217,6 +217,36 @@ func (s *Service) ResolveAttemptDesktopBuild(
 	return attempt.DesktopBuildResolution{}, errors.New("Desktop build is missing from the verified catalog")
 }
 
+// AssessDesktopBuilds reports, for each build, whether the verified catalog
+// and the compatibility policy would admit it to an Attempt now. The policy is
+// read once for the whole list. Availability is not considered: it is the
+// installation's state, not the build's.
+func (s *Service) AssessDesktopBuilds(ctx context.Context, builds []model.DesktopBuildTuple) ([]bool, error) {
+	admitted := make([]bool, len(builds))
+	if len(builds) == 0 {
+		return admitted, nil
+	}
+
+	policy, err := s.desktopCompatibilityPolicies.Get(ctx)
+	if err != nil || policy == nil {
+		return nil, desktopCompatibilityPolicyError(err)
+	}
+
+	for index, build := range builds {
+		result, evaluateErr := s.desktopBuilds.evaluate(policy, DesktopCompatibilityQuery{
+			DesktopRelease:   build.DesktopRelease,
+			DesktopBuildID:   build.DesktopBuildID,
+			Platform:         string(build.Platform),
+			Architecture:     string(build.Architecture),
+			RealtimeProtocol: build.RealtimeProtocol,
+		})
+		// A registration whose recorded build is malformed is not admitted;
+		// it is not a fault of the read.
+		admitted[index] = evaluateErr == nil && result.Compatibility == DesktopCompatibilityCompatible
+	}
+	return admitted, nil
+}
+
 // GetDesktopCompatibilityPolicy returns a copy of the current policy.
 func (s *Service) GetDesktopCompatibilityPolicy(
 	ctx context.Context,

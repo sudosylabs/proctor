@@ -56,6 +56,12 @@ type examSummaryResponse struct {
 	SittingCount            int                         `json:"sitting_count"`
 	MatchingSittingCount    int                         `json:"matching_sitting_count"`
 	SittingSummary          *examCatalogSittingResponse `json:"sitting_summary"`
+	// The action counts are present only where the viewer may see what they
+	// count; each stops at 10,000.
+	NeedsAttentionCount             *int  `json:"needs_attention_count,omitempty"`
+	NeedsAttentionCountIsLowerBound *bool `json:"needs_attention_count_is_lower_bound,omitempty"`
+	PendingReviewCount              *int  `json:"pending_review_count,omitempty"`
+	PendingReviewCountIsLowerBound  *bool `json:"pending_review_count_is_lower_bound,omitempty"`
 }
 
 type examCatalogSittingResponse struct {
@@ -70,8 +76,10 @@ type examCatalogSittingResponse struct {
 }
 
 type examListResponse struct {
-	Items      []examSummaryResponse `json:"items"`
-	NextCursor string                `json:"next_cursor,omitempty"`
+	Items             []examSummaryResponse `json:"items"`
+	NextCursor        string                `json:"next_cursor,omitempty"`
+	Total             *int                  `json:"total,omitempty"`
+	TotalIsLowerBound *bool                 `json:"total_is_lower_bound,omitempty"`
 }
 
 type examResponse struct {
@@ -106,6 +114,8 @@ type examDraftResponse struct {
 	Capacity            examCapacityPolicyResponse `json:"capacity"`
 	BaseRevisionID      string                     `json:"base_revision_id,omitempty"`
 	UpdatedAt           string                     `json:"updated_at"`
+	UpdatedByUserID     string                     `json:"updated_by_user_id"`
+	UpdatedBy           *personRefResponse         `json:"updated_by,omitempty"`
 	Revision            int64                      `json:"revision"`
 	ResourceCount       int                        `json:"resource_count"`
 	HasStarterWorkspace bool                       `json:"has_starter_workspace"`
@@ -477,9 +487,15 @@ func (h examHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 	response := examListResponse{Items: make([]examSummaryResponse, 0, len(page.Items))}
+	if response.Total, response.TotalIsLowerBound, err = route.PageTotal(page.Total, !query.BeforeExamID.IsZero()); err != nil {
+		return route.Result{}, err
+	}
 	for _, item := range page.Items {
 		summary := examSummaryResponseFromApplication(item)
 		summary.Creator, summary.Owner = personRef(refs, item.CreatorUserID), personRef(refs, item.OwnerUserID)
+		actions := page.Actions[item.ID]
+		summary.NeedsAttentionCount, summary.NeedsAttentionCountIsLowerBound = cappedCount(actions.NeedsAttention)
+		summary.PendingReviewCount, summary.PendingReviewCountIsLowerBound = cappedCount(actions.PendingReview)
 		response.Items = append(response.Items, summary)
 	}
 
@@ -676,6 +692,15 @@ func examListQuery(request *http.Request) (exam.ListQuery, error) {
 		query.Limit = limit
 	}
 
+	switch raw := values["has_sittings"]; {
+	case len(raw) == 0:
+	case len(raw) == 1 && (raw[0] == "true" || raw[0] == "false"):
+		hasSittings := raw[0] == "true"
+		query.HasSittings = &hasSittings
+	default:
+		return query, errors.New("has_sittings must be true or false")
+	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, err := decodeExamCatalogCursor(raw)
 		if err != nil {
@@ -716,6 +741,15 @@ func examCatalogCursorSpec() route.CursorSpec[examCatalogCursor] {
 			return nil
 		},
 	}
+}
+
+// cappedCount presents an optional count stopped at store.MaximumListCount.
+func cappedCount(count *int) (*int, *bool) {
+	if count == nil {
+		return nil, nil
+	}
+	value, lowerBound := *count, *count == store.MaximumListCount
+	return &value, &lowerBound
 }
 
 func examSummaryResponseFromApplication(summary store.ExamSummary) examSummaryResponse {
@@ -775,8 +809,31 @@ func examIdentityResponseFromModel(record model.Exam) examIdentityResponse {
 	}
 }
 
+// examPolicyResponseFromModel presents a policy set the same way for a Draft
+// and for a Revision.
+func examPolicyResponseFromModel(policy model.ExamPolicySet) examPolicyResponse {
+	return examPolicyResponse{
+		Native:         policy.Native.Clone(),
+		Assistant:      policy.Assistant.Clone(),
+		ConnectionLoss: examConnectionPolicyResponse{Outcome: string(policy.ConnectionLoss.Outcome)},
+		FocusLoss: examFocusPolicyResponse{
+			Enabled:                     policy.FocusLoss.Enabled,
+			MinimumDurationMilliseconds: policy.FocusLoss.MinimumDuration.Milliseconds(),
+			IncidentCount:               policy.FocusLoss.IncidentCount,
+			WindowMilliseconds:          policy.FocusLoss.Window.Milliseconds(),
+			Outcome:                     string(policy.FocusLoss.Outcome),
+		},
+		Execution: examExecutionPolicyDocument{
+			Enabled:     policy.Execution.Enabled,
+			ProfileID:   policy.Execution.Profile.String(),
+			RecordInput: policy.Execution.RecordInput,
+			Terminals:   policy.Execution.Terminals,
+			Preview:     policy.Execution.Preview.Clone(),
+		},
+	}
+}
+
 func examResponseFromView(view exam.View) examResponse {
-	policy := view.Draft.Policy
 	identity := examIdentityResponseFromModel(view.Exam)
 	browserPolicy := view.Draft.BrowserPolicy
 	return examResponse{
@@ -785,32 +842,15 @@ func examResponseFromView(view exam.View) examResponse {
 			ExamID:               view.Draft.ExamID.String(),
 			Title:                view.Draft.Title,
 			InstructionsMarkdown: view.Draft.InstructionsMarkdown,
-			Policy: examPolicyResponse{
-				Native:         policy.Native.Clone(),
-				Assistant:      policy.Assistant.Clone(),
-				ConnectionLoss: examConnectionPolicyResponse{Outcome: string(policy.ConnectionLoss.Outcome)},
-				FocusLoss: examFocusPolicyResponse{
-					Enabled:                     policy.FocusLoss.Enabled,
-					MinimumDurationMilliseconds: policy.FocusLoss.MinimumDuration.Milliseconds(),
-					IncidentCount:               policy.FocusLoss.IncidentCount,
-					WindowMilliseconds:          policy.FocusLoss.Window.Milliseconds(),
-					Outcome:                     string(policy.FocusLoss.Outcome),
-				},
-				Execution: examExecutionPolicyDocument{
-					Enabled:     policy.Execution.Enabled,
-					ProfileID:   policy.Execution.Profile.String(),
-					RecordInput: policy.Execution.RecordInput,
-					Terminals:   policy.Execution.Terminals,
-					Preview:     policy.Execution.Preview.Clone(),
-				},
-			},
-			BrowserPolicy:       browserPolicyDocumentFromModel(browserPolicy),
-			Capacity:            examCapacityPolicyResponseFromModel(view.Capacity),
-			BaseRevisionID:      view.Draft.BaseRevisionID.String(),
-			UpdatedAt:           model.FormatRFC3339(view.Draft.UpdatedAt),
-			Revision:            view.Draft.Revision,
-			ResourceCount:       view.ResourceCount,
-			HasStarterWorkspace: view.HasStarterWorkspace,
+			Policy:               examPolicyResponseFromModel(view.Draft.Policy),
+			BrowserPolicy:        browserPolicyDocumentFromModel(browserPolicy),
+			Capacity:             examCapacityPolicyResponseFromModel(view.Capacity),
+			BaseRevisionID:       view.Draft.BaseRevisionID.String(),
+			UpdatedAt:            model.FormatRFC3339(view.Draft.UpdatedAt),
+			UpdatedByUserID:      view.Draft.UpdatedByUserID.String(),
+			Revision:             view.Draft.Revision,
+			ResourceCount:        view.ResourceCount,
+			HasStarterWorkspace:  view.HasStarterWorkspace,
 		},
 		OwnerUserID:  view.OwnerUserID.String(),
 		ManagerCount: view.ManagerCount,
@@ -822,14 +862,16 @@ func (h examHandlers) namePeople(request route.Request, ids ...model.UserID) (pe
 	return namePeople(request, h.people, ids...)
 }
 
-// examJSON presents an exam with its creator and owner named.
+// examJSON presents an exam with its creator, owner and the draft's last
+// editor named.
 func (h examHandlers) examJSON(request route.Request, status int, view exam.View) (route.Result, error) {
-	refs, err := h.namePeople(request, view.Exam.CreatorUserID, view.Exam.OwnerUserID)
+	refs, err := h.namePeople(request, view.Exam.CreatorUserID, view.Exam.OwnerUserID, view.Draft.UpdatedByUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
 	response := examResponseFromView(view)
 	response.Exam = response.Exam.named(refs)
+	response.Draft.UpdatedBy = personRef(refs, view.Draft.UpdatedByUserID)
 	return route.JSON(status, response), nil
 }
 

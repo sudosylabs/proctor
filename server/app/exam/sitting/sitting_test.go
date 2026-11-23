@@ -74,8 +74,13 @@ var sittingActions = []model.Action{
 	model.ActionSubmissionRelease, model.ActionSubmissionReleaseOverride,
 }
 
-func newFixture(t *testing.T) sittingFixture {
+// newFixture grants the caller every Sitting action unless actions names
+// fewer.
+func newFixture(t *testing.T, actions ...model.Action) sittingFixture {
 	t.Helper()
+	if len(actions) == 0 {
+		actions = sittingActions
+	}
 	userID, unitID := model.NewUserID(), model.NewAcademicUnitID()
 	examID, revisionID := model.NewExamID(), model.NewExamRevisionID()
 	classID, sittingID := model.NewClassID(), model.NewExamSittingID()
@@ -86,7 +91,7 @@ func newFixture(t *testing.T) sittingFixture {
 	memberships := &membershipsFake{items: []*model.AcademicUnitMember{{AcademicUnitID: unitID}}}
 	control := accesstest.New(t, accesstest.Options{
 		Grants: []accesstest.Grant{{
-			UserID: userID, Actions: sittingActions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
+			UserID: userID, Actions: actions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
 		}},
 		Exams:       accessStore,
 		Sittings:    sittingOwnershipFake{sittingID: sittingID, examID: examID},
@@ -195,8 +200,13 @@ type sittingStoreFake struct {
 	items         []store.ExamSittingSnapshot
 	err           error
 	getErr        error
-	acrossOptions []store.ExamSittingAcrossListOptions
-	across        []store.ExamSittingAcrossItem
+	// The read extras.
+	candidateCount int
+	history        []store.ExamSittingHistoryEntry
+	historyRead    bool
+	corrections    []store.ExamSittingCorrectionSummary
+	acrossOptions  []store.ExamSittingAcrossListOptions
+	across         []store.ExamSittingAcrossItem
 }
 
 func (s *sittingStoreFake) ListAcrossExams(_ context.Context, options store.ExamSittingAcrossListOptions) (*store.ExamSittingAcrossPage, error) {

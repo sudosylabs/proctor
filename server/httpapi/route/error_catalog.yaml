@@ -539,6 +539,8 @@ codes:
     description: "An Integrity Review field is invalid; `fields` names the rejected input when known."
   - code: exam.integrity_review.not_found
     description: "The Integrity Review does not exist or is not visible to the caller."
+  - code: exam.integrity_review.result_released
+    description: "The Integrity Review's result is released, so the review can't be reopened."
   - code: exam.integrity_review.revision_conflict
     description: "The supplied Integrity Review revision is stale."
   - code: exam.integrity_review.state_conflict

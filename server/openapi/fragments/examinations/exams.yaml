@@ -74,6 +74,14 @@ paths:
               - all
             default: active
           description: Return active Exams, archived Exams, or all of them. Defaults to active.
+        - name: has_sittings
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: >-
+            true returns only Exams with at least one Sitting; false only Exams with none, such as those not
+            yet scheduled. Omit it for both.
         - name: sitting_state
           in: query
           required: false
@@ -374,6 +382,10 @@ components:
                 workspace_maximum_file_bytes: 10485760
                 workspace_maximum_total_bytes: 52428800
               updated_at: "2026-07-20T10:00:00Z"
+              updated_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+              updated_by:
+                id: c9me3tsk7oyhx1bwuadgz5nqrf
+                display_name: Owen Hughes
               revision: 1
               resource_count: 0
               has_starter_workspace: false
@@ -447,6 +459,16 @@ components:
         next_cursor:
           type: string
           description: Send this back as cursor to get the next page. Omitted on the last page.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Number of Exams, across all pages, that match the filters and that you may see. Present only on the
+            first page. Counting stops at 10,000, and then total_is_lower_bound is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when counting stopped at its bound, so total is "at least". Present with total.
     ExamSummaryResponse:
       type: object
       description: >-
@@ -570,3 +592,24 @@ components:
               format: int64
               minimum: 1
               description: The Sitting's current revision number.
+        needs_attention_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many candidates of the Exam's open and paused Sittings need a manager: suspended, failing a check
+            or with unresolved integrity attention. Present only when you may view the Exam's Sittings. Counting
+            stops at 10,000.
+        needs_attention_count_is_lower_bound:
+          type: boolean
+          description: True when counting stopped at its bound. Present with needs_attention_count.
+        pending_review_count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            How many of the Exam's Submissions have no finalized review. Present only when you may review its
+            Submissions. Counting stops at 10,000.
+        pending_review_count_is_lower_bound:
+          type: boolean
+          description: True when counting stopped at its bound. Present with pending_review_count.

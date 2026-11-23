@@ -511,6 +511,41 @@ func (r *SubmissionReview) Release(expectedRevision int64, actorID UserID, at ti
 	return nil
 }
 
+// SubmissionReviewReopenReasonMaxRunes bounds the private reason a manager
+// gives for reopening a finalized review.
+const SubmissionReviewReopenReasonMaxRunes = 1000
+
+// Reopen returns a finalized, unreleased review to a draft so its decisions
+// can be revised. The decisions stay; the frozen inventory stays as history
+// under its finalization revision. A released result is final.
+func (r *SubmissionReview) Reopen(expectedRevision int64, at time.Time) error {
+	if r == nil ||
+		r.Validate() != nil ||
+		r.State != SubmissionReviewFinalized ||
+		r.ReleaseState != SubmissionReviewWithheld ||
+		r.Revision != expectedRevision {
+		return invalidModelError("SubmissionReview.Reopen", "submission_review", "", "Submission Review cannot be reopened", "")
+	}
+
+	candidate := *r
+	candidate.State = SubmissionReviewDraft
+	candidate.Revision++
+	candidate.FlagCount, candidate.EvidenceCount, candidate.DiscrepancyCount = 0, 0, 0
+	candidate.EvidenceInventoryDigest = ""
+	candidate.FinalizedAt = OptionalTime{}
+	candidate.FinalizedByUserID = ""
+	candidate.UpdatedAt = TimeUTC(at)
+	if candidate.UpdatedAt.Before(r.UpdatedAt) {
+		candidate.UpdatedAt = r.UpdatedAt
+	}
+	if err := candidate.Validate(); err != nil {
+		return err
+	}
+
+	*r = candidate
+	return nil
+}
+
 // StudentResult is everything the candidate sees on release. It leaves out
 // evidence, decisions, private rationale, manager notes and sealed content.
 type StudentResult struct {

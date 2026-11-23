@@ -109,10 +109,10 @@ func updateExamDraftExecution(
 		return nil, err
 	}
 	result, err := tx.Exec(ctx, `UPDATE exam_drafts
-		SET policy = ?::jsonb, updated_at = ?, revision = ?
+		SET policy = ?::jsonb, updated_at = ?, updated_by_user_id = ?, revision = ?
 		WHERE exam_id = ?
 			AND revision = ?`,
-		string(policy), candidate.UpdatedAt, candidate.Revision, input.ExamID.String(), input.ExpectedRevision)
+		string(policy), candidate.UpdatedAt, input.ActorUserID.String(), candidate.Revision, input.ExamID.String(), input.ExpectedRevision)
 	if err != nil {
 		return nil, fmt.Errorf("update exam Draft execution: %w", translateError("exam_draft", input.ExamID.String(), err))
 	}
@@ -124,6 +124,7 @@ func updateExamDraftExecution(
 
 	row.Policy = jsonValue(policy)
 	row.DraftUpdatedAt = candidate.UpdatedAt
+	row.DraftUpdatedBy = input.ActorUserID.String()
 	row.DraftRevision = candidate.Revision
 	auditData, err := model.EncodeAuditData(map[string]any{"exam_id": input.ExamID.String(), "draft_revision": candidate.Revision})
 	if err != nil {

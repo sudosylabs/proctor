@@ -60,7 +60,7 @@ func (a *Authoring) CreateExam(ctx context.Context, inv invocation.Invocation, c
 		return View{}, apperror.Invalid("exam.invalid", "exam").Wrap(err)
 	}
 
-	draft, err := model.NewExamDraft(examID, command.Title, command.InstructionsMarkdown, model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(examID, command.Title, command.InstructionsMarkdown, model.DefaultExamPolicySet(), principal.UserID, at)
 	if err != nil {
 		return View{}, apperror.Invalid("exam.invalid", "draft").Wrap(err)
 	}

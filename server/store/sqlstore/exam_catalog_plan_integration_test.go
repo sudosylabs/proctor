@@ -89,7 +89,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 		_ = tx.Rollback()
 		require.NoError(t, err)
 	}
-	drafts, err := tx.PrepareContext(ctx, `COPY exam_drafts (exam_id, title, instructions_markdown, policy, updated_at, revision) FROM STDIN`)
+	drafts, err := tx.PrepareContext(ctx, `COPY exam_drafts (exam_id, title, instructions_markdown, policy, updated_at, updated_by_user_id, revision) FROM STDIN`)
 	if err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
@@ -100,7 +100,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 		if index%100 == 0 {
 			title = fmt.Sprintf("Needle catalog %04d", index)
 		}
-		if _, err = drafts.ExecContext(ctx, id.String(), title, "", `{}`, updatedAt, 1); err != nil {
+		if _, err = drafts.ExecContext(ctx, id.String(), title, "", `{}`, updatedAt, actor.ID.String(), 1); err != nil {
 			_ = drafts.Close()
 			_ = tx.Rollback()
 			require.NoError(t, err)
@@ -165,7 +165,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			query, args := examCatalogQuery(test.options)
+			query, args := examCatalogQuery(test.options, false)
 			var encoded []byte
 			require.NoError(t, persistence.GetMaster().Get(ctx, &encoded, `EXPLAIN (ANALYZE, FORMAT JSON) `+query, args...))
 			var documents []examCatalogPlanDocument
@@ -187,7 +187,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 			Query: "needle catalog 4900", ArchiveFilter: store.ExamArchiveAll, Limit: 20,
 			Visibility: store.ExamListVisibility{ActorUserID: actor.ID, OverrideInstitutionWide: true},
 		}
-		query, args := examCatalogQuery(options)
+		query, args := examCatalogQuery(options, false)
 		tx, err := persistence.GetMaster().DB().BeginTxx(ctx, nil)
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback() }()

@@ -1256,6 +1256,18 @@ func (s *examAuthoringStore) List(ctx context.Context, arg1 store.ExamListOption
 	})
 }
 
+func (s *examAuthoringStore) Count(ctx context.Context, arg1 store.ExamListOptions, arg2 int) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) {
+		return s.ExamAuthoringStore.Count(ctx, arg1, arg2)
+	})
+}
+
+func (s *examAuthoringStore) CountExamActions(ctx context.Context, arg1 store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.ExamID]store.ExamActionCounts, error) {
+		return s.ExamAuthoringStore.CountExamActions(ctx, arg1)
+	})
+}
+
 func (s *examAuthoringStore) Archive(ctx context.Context, arg1 *store.ExamArchive, command *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.Archive(ctx, arg1, command)
@@ -1280,6 +1292,12 @@ func (s *examAuthoringStore) Get(ctx context.Context, arg1 model.ExamID, arg2 mo
 func (s *examAuthoringStore) Resolve(ctx context.Context, arg1 model.ExamID) (*model.Exam, error) {
 	return retryCall1(ctx, s.layer, func() (*model.Exam, error) {
 		return s.ExamAuthoringStore.Resolve(ctx, arg1)
+	})
+}
+
+func (s *examRevisionStore) CheckPublication(ctx context.Context, arg1 *store.ExamPublicationCheck) (*store.ExamPublicationCheckResult, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamPublicationCheckResult, error) {
+		return s.ExamRevisionStore.CheckPublication(ctx, arg1)
 	})
 }
 
@@ -1388,6 +1406,30 @@ func (s *examSittingStore) EarlyClose(ctx context.Context, arg1 *store.ExamSitti
 	})
 }
 
+func (s *examSittingStore) ListCandidateBoardTargets(ctx context.Context, arg1 model.UserID, arg2 model.ExamSittingID, arg3 int) ([]store.ExamSittingInvalidationTarget, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamSittingInvalidationTarget, error) {
+		return s.ExamSittingStore.ListCandidateBoardTargets(ctx, arg1, arg2, arg3)
+	})
+}
+
+func (s *examSittingStore) CountCandidates(ctx context.Context, arg1 []model.ExamSittingID) (map[model.ExamSittingID]int, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.ExamSittingID]int, error) {
+		return s.ExamSittingStore.CountCandidates(ctx, arg1)
+	})
+}
+
+func (s *examSittingStore) ListHistory(ctx context.Context, arg1 model.ExamSittingID, arg2 int) ([]store.ExamSittingHistoryEntry, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamSittingHistoryEntry, error) {
+		return s.ExamSittingStore.ListHistory(ctx, arg1, arg2)
+	})
+}
+
+func (s *examSittingStore) ListCorrections(ctx context.Context, arg1 model.ExamSittingID) ([]store.ExamSittingCorrectionSummary, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamSittingCorrectionSummary, error) {
+		return s.ExamSittingStore.ListCorrections(ctx, arg1)
+	})
+}
+
 func (s *examAttemptStore) ListCandidateStarterWorkspace(ctx context.Context, arg1 store.CandidateAttemptAccess, arg2 int) ([]store.CandidateStarterWorkspaceFile, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.CandidateStarterWorkspaceFile, error) {
 		return s.ExamAttemptStore.ListCandidateStarterWorkspace(ctx, arg1, arg2)
@@ -1454,6 +1496,18 @@ func (s *examAttemptStore) Get(ctx context.Context, arg1 model.ExamID, arg2 mode
 func (s *examAttemptStore) List(ctx context.Context, arg1 store.ExamAttemptManagerListOptions) ([]store.ExamAttemptManagerSnapshot, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.ExamAttemptManagerSnapshot, error) {
 		return s.ExamAttemptStore.List(ctx, arg1)
+	})
+}
+
+func (s *examAttemptStore) ListSittingCandidateDetails(ctx context.Context, arg1 store.SittingCandidateDetailOptions) ([]store.SittingCandidateDetail, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.SittingCandidateDetail, error) {
+		return s.ExamAttemptStore.ListSittingCandidateDetails(ctx, arg1)
+	})
+}
+
+func (s *examAttemptStore) ListManagerEnds(ctx context.Context, arg1 model.ExamSittingID, arg2 []model.ExamAttemptID) ([]store.ExamAttemptManagerEnd, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.ExamAttemptManagerEnd, error) {
+		return s.ExamAttemptStore.ListManagerEnds(ctx, arg1, arg2)
 	})
 }
 

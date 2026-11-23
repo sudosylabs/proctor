@@ -32,6 +32,9 @@ type Dependencies struct {
 // revocation or authorization change owes.
 type Service struct {
 	deps Dependencies
+	// examCounts throttles exam.counts.changed, which follows board and
+	// submissions events.
+	examCounts *ThrottledPublisher
 }
 
 // New returns a Service whose sink and cluster fan-out are attached later.
@@ -45,7 +48,13 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Attempts == nil {
 		return nil, errors.New("realtime session attempt targets are required")
 	}
-	return &Service{deps: deps}, nil
+	service := &Service{deps: deps}
+	examCounts, err := NewThrottledPublisher(service, examCountsWindow, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	service.examCounts = examCounts
+	return service, nil
 }
 
 // AttachClusterFanout must be called once before the node becomes ready. Peer
@@ -64,6 +73,7 @@ func (s *Service) AttachSink(sink Sink) error {
 func (s *Service) Publish(ctx context.Context, event Event) error {
 	err := s.deps.Delivery.Publish(ctx, event)
 	if err == nil {
+		s.noteExamCounts(ctx, event)
 		return nil
 	}
 	var invalid *InvalidPublicationError

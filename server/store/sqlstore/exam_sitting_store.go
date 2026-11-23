@@ -1102,10 +1102,17 @@ func (s SQLExamSittingStore) ListNoShows(
 		return nil, store.NewErrInvalidInput("exam_sitting", "no_show_list", nil)
 	}
 
-	var rows []string
-	if err := s.GetMaster().Select(ctx, &rows, `SELECT DISTINCT cm.user_id
+	var rows []struct {
+		CandidateUserID string    `db:"user_id"`
+		Username        string    `db:"username"`
+		DisplayName     string    `db:"display_name"`
+		MemberSince     time.Time `db:"member_since"`
+	}
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT cm.user_id, candidate.username, candidate.display_name,
+			MIN(cm.start_at) AS member_since
 		FROM exam_sittings s
 		JOIN class_members cm ON cm.class_id = s.class_id
+		JOIN users candidate ON candidate.id = cm.user_id
 		WHERE s.id = ?
 			AND s.state IN ('closing', 'closed')
 			AND s.opened_at IS NOT NULL
@@ -1119,19 +1126,25 @@ func (s SQLExamSittingStore) ListNoShows(
 				WHERE a.exam_sitting_id = s.id
 					AND a.candidate_user_id = cm.user_id
 			)
+		GROUP BY cm.user_id, candidate.username, candidate.display_name
 		ORDER BY cm.user_id
 		LIMIT ?`, options.SittingID.String(), options.AfterCandidateUserID.String(), options.Limit); err != nil {
 		return nil, fmt.Errorf("list Exam Sitting no-shows: %w", err)
 	}
 
 	result := make([]store.ExamSittingNoShow, 0, len(rows))
-	for _, raw := range rows {
-		candidateID, err := model.ParseUserID(raw)
-		if err != nil {
-			return nil, invalidPersistedState("exam_sitting_no_show", "candidate_user_id", err)
+	for _, row := range rows {
+		candidateID, err := model.ParseUserID(row.CandidateUserID)
+		if err != nil || row.Username == "" || row.DisplayName == "" || row.MemberSince.IsZero() {
+			return nil, invalidPersistedState("exam_sitting_no_show", "candidate", errors.Join(err, errors.New("invalid no-show")))
 		}
 
-		result = append(result, store.ExamSittingNoShow{CandidateUserID: candidateID})
+		result = append(result, store.ExamSittingNoShow{
+			CandidateUserID:  candidateID,
+			Username:         row.Username,
+			DisplayName:      row.DisplayName,
+			ClassMemberSince: model.TimeUTC(row.MemberSince),
+		})
 	}
 
 	return result, nil

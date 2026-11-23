@@ -180,6 +180,7 @@ func (s *Service) ExchangeDesktopAuthorization(
 		return nil, s.withdrawUndisclosedDesktopSession(ctx, inv, institution.ID, result, nonceErr)
 	}
 
+	s.publishDesktopSetupChanged(ctx, result.Session.UserID)
 	return &DesktopAuthorizationExchangeResult{
 		Session:      result.Session,
 		Registration: result.Registration,

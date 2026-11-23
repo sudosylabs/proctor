@@ -68,7 +68,7 @@ func TestPrepareExamAuthoringCreationRejectsBrokenAggregate(t *testing.T) {
 	at := time.Now().UTC()
 	exam, err := model.NewExam(model.NewExamID(), model.NewAcademicUnitID(), model.NewUserID(), at)
 	require.NoError(t, err)
-	draft, err := model.NewExamDraft(exam.ID, "Test", "", model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(exam.ID, "Test", "", model.DefaultExamPolicySet(), exam.CreatorUserID, at)
 	require.NoError(t, err)
 	manager, err := model.NewExamManager(exam.ID, model.NewUserID(), exam.CreatorUserID, at)
 	require.NoError(t, err)

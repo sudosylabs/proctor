@@ -65,6 +65,28 @@ func TestIntegrityReviewHTTPMapsStrictDecisionAndPrivateManagerProjection(t *tes
 	require.Len(t, f.reviewStore.decisions, 1, "duplicate JSON reaches no Store write")
 }
 
+func TestIntegrityReviewHTTPReopenSendsTheReasonToTheStore(t *testing.T) {
+	t.Parallel()
+	f := newReviewFixture(t)
+	httpAPI := f.api(t)
+	path := "/api/v1/submissions/" + f.submission.ID.String() + "/review/reopen"
+	body := `{"submission_review_id":"` + f.review.ID.String() + `","expected_revision":2,"reason":"The clip needs another look."}`
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer credential")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "reopen-once")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
+	require.Len(t, f.reviewStore.reopens, 1, "the reopen reached the Store once")
+	reopen := f.reviewStore.reopens[0]
+	require.Equal(t, f.review.ID, reopen.ReviewID)
+	require.Equal(t, int64(2), reopen.ExpectedRevision)
+	require.Equal(t, "The clip needs another look.", reopen.Reason)
+	require.Equal(t, f.caller.UserID, reopen.ActorUserID)
+	require.Equal(t, sha256.Sum256([]byte("reopen-once")), f.reviewStore.commands[0].KeyDigest)
+}
+
 func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)

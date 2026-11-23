@@ -11,6 +11,7 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 const (
@@ -52,6 +53,9 @@ func resourceLocalizationDefinitions() []localization.Definition {
 		localization.Definition{ID: systemAdministratorRoleNameID, Origin: localizationOrigin},
 		localization.Definition{ID: systemAdministratorRoleDescriptionID, Origin: localizationOrigin},
 	)
+	for _, reason := range store.ExamPublicationProblemReasons() {
+		definitions = append(definitions, localization.Definition{ID: examDraftProblemLocalizationID(reason), Origin: localizationOrigin})
+	}
 	definitions = append(definitions, accessPolicyLocalizationDefinitions()...)
 	definitions = append(definitions, integrityFlagSummaryLocalizationDefinitions()...)
 	return append(definitions, auditSummaryLocalizationDefinitions()...)

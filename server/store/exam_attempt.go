@@ -1426,6 +1426,12 @@ type ExamAttemptStore interface {
 	// ListSittingCandidateStatuses returns one page of a sitting's candidates
 	// with each one's attempt, presence, suspension and integrity state.
 	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
+	// ListSittingCandidateDetails reads the board details of one page of
+	// candidates in one query. A candidate with nothing to report is absent.
+	ListSittingCandidateDetails(context.Context, SittingCandidateDetailOptions) ([]SittingCandidateDetail, error)
+	// ListManagerEnds returns, for the given attempts of one sitting, who
+	// ended each one a manager ended. Automatic ends are absent.
+	ListManagerEnds(context.Context, model.ExamSittingID, []model.ExamAttemptID) ([]ExamAttemptManagerEnd, error)
 	// ListSessionRevocationInvalidationTargets returns the exams and sittings
 	// of the candidate's attempts that were suspended through a participation
 	// bound to one of the given sessions.

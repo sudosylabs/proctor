@@ -18,6 +18,10 @@ import (
 
 type attemptStoreFake struct {
 	f                               *fixture
+	candidateDetails                []store.SittingCandidateDetail
+	detailOptions                   *store.SittingCandidateDetailOptions
+	managerEnds                     []store.ExamAttemptManagerEnd
+	managerEndReads                 [][]model.ExamAttemptID
 	screenClipRequest               *store.ExamAttemptScreenClipRequest
 	screenClipErr                   error
 	screenClipReplayed              bool
@@ -307,6 +311,16 @@ func (f *attemptStoreFake) ListSittingCandidateStatuses(
 			ByPresenceState: map[store.SittingCandidatePresenceState]int64{store.SittingCandidateConnected: 3}, WithAttention: 1}
 	}
 	return page, nil
+}
+
+func (f *attemptStoreFake) ListSittingCandidateDetails(_ context.Context, options store.SittingCandidateDetailOptions) ([]store.SittingCandidateDetail, error) {
+	f.detailOptions = &options
+	return f.candidateDetails, nil
+}
+
+func (f *attemptStoreFake) ListManagerEnds(_ context.Context, _ model.ExamSittingID, attemptIDs []model.ExamAttemptID) ([]store.ExamAttemptManagerEnd, error) {
+	f.managerEndReads = append(f.managerEndReads, attemptIDs)
+	return f.managerEnds, nil
 }
 
 func (*attemptStoreFake) ListSessionRevocationInvalidationTargets(

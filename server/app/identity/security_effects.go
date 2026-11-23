@@ -98,6 +98,17 @@ func (s *Service) sessionsRevoked(
 // publishSessionsChanged is for changes that end no session, such as a rename;
 // a revocation announces itself through SessionsRevoked. It is best effort, and
 // operation names what failed in the log.
+// publishDesktopSetupChanged tells the boards that list the user that their
+// Desktop setup changed. It is best effort, after commit.
+func (s *Service) publishDesktopSetupChanged(ctx context.Context, userID model.UserID) {
+	if s.sittings == nil {
+		return
+	}
+	if err := realtime.PublishCandidateSittingBoardsChanged(ctx, s.publisher, s.sittings, userID); err != nil {
+		s.publisher.Report(ctx, "manager.sitting_board.changed", err)
+	}
+}
+
 func (s *Service) publishSessionsChanged(ctx context.Context, userID model.UserID, operation string) {
 	event, err := realtime.NewCurrentUserSessionsChangedEvent(userID)
 	if err == nil {

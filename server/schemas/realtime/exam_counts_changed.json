@@ -1,0 +1,14 @@
+{
+  "title": "Exam counts changed",
+  "description": "Names the Exam whose catalogue counts should be refetched. No count, candidate or Submission is named.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    }
+  }
+}

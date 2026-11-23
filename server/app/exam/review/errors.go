@@ -28,6 +28,7 @@ var storeErrors = apperror.StoreTable{
 		"integrity_decision_revision": "exam.integrity_review.revision_conflict",
 		"integrity_review_incomplete": "exam.integrity_review.incomplete",
 		"integrity_review_too_large":  "exam.integrity_review.too_large",
+		"integrity_review_released":   "exam.integrity_review.result_released",
 	},
 	NotFound:     "exam.integrity_review.not_found",
 	Conflict:     "exam.integrity_review.state_conflict",

@@ -374,6 +374,12 @@ func TestExamIntegrityReviewStore(t *testing.T) {
 		storetest.ExamIntegrityReviewSQLProbe{ConcurrentPeer: NewSQLExamIntegrityReviewStore(peerPersistence)})
 }
 
+func TestExamIntegrityReviewReopen(t *testing.T) {
+	persistence := openTestStore(t)
+	resetTestStore(t, persistence)
+	storetest.TestExamIntegrityReviewReopen(t, persistence)
+}
+
 func TestExamRecordsStore(t *testing.T) {
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)

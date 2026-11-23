@@ -23,6 +23,7 @@ type Publication struct {
 	revisions           store.ExamRevisionStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
+	content             RevisionContent
 
 	authorizer         *access.Authorizer
 	auditor            access.MutationAuditAdapter
@@ -41,6 +42,7 @@ type PublicationDependencies struct {
 	Persistence       store.ExamRevisionStore
 	Access            store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore
+	Content           RevisionContent
 	Authorizer        *access.Authorizer
 	Auditor           *access.Auditor
 	Publisher         realtime.Publisher
@@ -61,6 +63,7 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 	if deps.Persistence == nil ||
 		deps.Access == nil ||
 		deps.Memberships == nil ||
+		deps.Content == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
 		deps.Publisher == nil ||
@@ -73,6 +76,7 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 		revisions:           deps.Persistence,
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
+		content:             deps.Content,
 		authorizer:          deps.Authorizer,
 		auditor:             deps.Auditor.MutationAudit(),
 		publisher:           deps.Publisher,

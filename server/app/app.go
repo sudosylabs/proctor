@@ -61,6 +61,7 @@ type App struct {
 	// area's endpoints declare.
 	ExamPeople       *people.Resolver
 	ReviewPeople     *people.Resolver
+	SittingPeople    *people.Resolver
 	AttemptPeople    *people.Resolver
 	InvitationPeople *people.Resolver
 	// AdministrationPeople names people for the directory and the academic

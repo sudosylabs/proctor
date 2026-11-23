@@ -198,7 +198,7 @@ func (a *accessFake) Get(context.Context, model.ExamID, model.UserID) (*store.Ex
 	if a.archived {
 		exam.ArchivedAt = model.OptionalTimeFrom(at)
 	}
-	draft, _ := model.NewExamDraft(a.f.examID, "Exam", "", model.DefaultExamPolicySet(), at)
+	draft, _ := model.NewExamDraft(a.f.examID, "Exam", "", model.DefaultExamPolicySet(), a.f.userID, at)
 	draft.Revision = a.draftRevision
 	return &store.ExamAuthoringSnapshot{Exam: exam, Draft: draft, ActorIsManager: true}, nil
 }

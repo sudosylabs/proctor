@@ -91,6 +91,9 @@ func (s *Service) RevokeDesktopRegistration(
 			ctx, principal.UserID, sessionIDs(result.Sessions), result.TokenHashes,
 		)
 	}
+	if !result.AlreadyRevoked {
+		s.publishDesktopSetupChanged(ctx, principal.UserID)
+	}
 
 	return nil
 }
@@ -149,6 +152,7 @@ func (s *Service) RenameDesktopRegistration(
 	}
 	// Desktop sessions are listed under their registration's name.
 	s.publishSessionsChanged(ctx, principal.UserID, "desktop_registration.renamed")
+	s.publishDesktopSetupChanged(ctx, principal.UserID)
 	return renamed, nil
 }
 

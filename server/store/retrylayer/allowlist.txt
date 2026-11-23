@@ -58,6 +58,8 @@ ExamAuthoringStore.UpdateDraftFocusLoss                    command
 ExamAuthoringStore.UpdateDraftExecution                    command
 ExamAuthoringStore.UpdateDraftAssistant command
 ExamAuthoringStore.List                                    always
+ExamAuthoringStore.Count                                   always
+ExamAuthoringStore.CountExamActions                        always
 ExamAuthoringStore.Archive                                 command
 ExamAuthoringStore.Access                                  always
 ExamAuthoringStore.Get                                     always
@@ -65,12 +67,17 @@ ExamAuthoringStore.Resolve                                 always
 ExamAuthoringStore.UpdateDraftNativePolicy                 command
 
 ExamRevisionStore.GetSummary                               always
+ExamRevisionStore.CheckPublication                         always
 ExamRevisionStore.List                                     always
 ExamRevisionStore.GetSnapshot                              always
 
 ExamSittingStore.Resolve                                   always
 ExamSittingStore.Get                                       always
 ExamSittingStore.List                                      always
+ExamSittingStore.ListCandidateBoardTargets                 always
+ExamSittingStore.CountCandidates                           always
+ExamSittingStore.ListHistory                               always
+ExamSittingStore.ListCorrections                           always
 ExamSittingStore.Schedule                                  command
 ExamSittingStore.UpdateSchedule                            command
 ExamSittingStore.Cancel                                    command
@@ -89,6 +96,8 @@ ExamAttemptStore.SuspendAttempt                            command
 ExamAttemptStore.ReallowAttempt                            command
 ExamAttemptStore.Get                                       always
 ExamAttemptStore.List                                      always
+ExamAttemptStore.ListSittingCandidateDetails               always
+ExamAttemptStore.ListManagerEnds                           always
 ExamAttemptStore.GetCandidatePresentation                  always
 ExamAttemptStore.ResolveCandidateAccess                    always
 ExamAttemptStore.ResolveCandidateResource                  always

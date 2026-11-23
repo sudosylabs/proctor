@@ -60,7 +60,7 @@ func productionResources(
 		academicUnitResource(application.Academic),
 		examResource(application.ExamAuthoring, application.ExamPeople),
 		examRevisionResource(application.ExamPublication, application.ExamPeople),
-		examSittingResource(application.Sittings),
+		examSittingResource(application.Sittings, application.SittingPeople),
 		examSittingAcrossResource(application.Sittings),
 		examSittingCorrectionResource(application.Corrections),
 		examResourceResource(application.Resources),

@@ -497,6 +497,10 @@ func (d desktopBuilds) ResolveAttemptDesktopBuild(context.Context, model.Princip
 	return attempt.DesktopBuildResolution{Build: d.f.build, CompatibilityPolicyRevision: 1}, nil
 }
 
+func (d desktopBuilds) AssessDesktopBuilds(_ context.Context, builds []model.DesktopBuildTuple) ([]bool, error) {
+	return make([]bool, len(builds)), nil
+}
+
 func (d desktopBuilds) ResolveNativeDeliveryBuild(context.Context, attempt.NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {
 	return d.f.build, nil
 }

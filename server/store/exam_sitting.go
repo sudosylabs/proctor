@@ -207,6 +207,11 @@ type ExamSittingNoShowListOptions struct {
 // has no attempt.
 type ExamSittingNoShow struct {
 	CandidateUserID model.UserID
+	Username        string
+	DisplayName     string
+	// ClassMemberSince is when the membership the candidate held at OpenedAt
+	// began.
+	ClassMemberSince time.Time
 }
 
 // ExamSittingCancellation cancels a scheduled sitting. PrivateReason is
@@ -360,6 +365,21 @@ type ExamSittingStore interface {
 	AdvanceDue(context.Context, *ExamSittingDueAdvance) (*ExamSittingLifecycleResult, error)
 	FinishSealing(context.Context, *ExamSittingFinishSealing) (*ExamSittingLifecycleResult, error)
 	ListNoShows(context.Context, ExamSittingNoShowListOptions) ([]ExamSittingNoShow, error)
+	// ListCandidateBoardTargets returns the sittings, scheduled or running,
+	// whose board lists the user now: as a current class member or through
+	// an Attempt. Ordered by sitting ID after the exclusive cursor; the limit
+	// is 1..201.
+	ListCandidateBoardTargets(context.Context, model.UserID, model.ExamSittingID, int) ([]ExamSittingInvalidationTarget, error)
+	// CountCandidates counts each sitting's candidates, the set its board
+	// lists, in one query, stopping at MaximumListCount. A sitting it cannot
+	// see is absent from the result.
+	CountCandidates(context.Context, []model.ExamSittingID) (map[model.ExamSittingID]int, error)
+	// ListHistory returns up to limit (at most ExamSittingHistoryMaximum)
+	// manager actions with their private reasons, newest first.
+	ListHistory(context.Context, model.ExamSittingID, int) ([]ExamSittingHistoryEntry, error)
+	// ListCorrections returns the sitting's live corrections in order, with
+	// their acknowledgement counts.
+	ListCorrections(context.Context, model.ExamSittingID) ([]ExamSittingCorrectionSummary, error)
 	GetMailFanout(context.Context, model.MailOccurrenceID) (*ExamSittingMailFanoutSnapshot, error)
 	ListMailRecipients(context.Context, ExamSittingMailRecipientPageRequest) (*ExamSittingMailRecipientPage, error)
 	CommitMailRecipient(context.Context, *ExamSittingMailRecipientCommit) (*ExamSittingMailRecipientResult, error)

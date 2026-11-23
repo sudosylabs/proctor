@@ -21,6 +21,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -192,6 +193,32 @@ type examSittingResponse struct {
 	CanceledAt       string `json:"canceled_at,omitempty"`
 	ReasonCode       string `json:"reason_code,omitempty"`
 	Revision         int64  `json:"revision"`
+	// The members below are present on reads, not on a mutation's result.
+	CandidateCount             *int                          `json:"candidate_count,omitempty"`
+	CandidateCountIsLowerBound *bool                         `json:"candidate_count_is_lower_bound,omitempty"`
+	Corrections                []examSittingCorrectionEntry  `json:"corrections,omitempty"`
+	History                    []examSittingHistoryEntryWire `json:"history,omitempty"`
+}
+
+// examSittingCorrectionEntry is one live correction and how many of the
+// candidates it applies to have acknowledged it.
+type examSittingCorrectionEntry struct {
+	RevisionID              string `json:"revision_id"`
+	Number                  int64  `json:"number"`
+	EffectiveAt             string `json:"effective_at"`
+	AcknowledgementRequired bool   `json:"acknowledgement_required"`
+	AcknowledgedCount       int    `json:"acknowledged_count"`
+	RequiredCount           int    `json:"required_count"`
+}
+
+// examSittingHistoryEntryWire is one manager action with the manager's
+// private reason, for the sitting's managers only.
+type examSittingHistoryEntryWire struct {
+	Kind   string             `json:"kind"`
+	At     string             `json:"at"`
+	ByID   string             `json:"by_user_id"`
+	By     *personRefResponse `json:"by,omitempty"`
+	Reason string             `json:"reason"`
 }
 
 type examSittingListResponse struct {
@@ -200,7 +227,9 @@ type examSittingListResponse struct {
 }
 
 type examSittingNoShowResponse struct {
-	CandidateUserID string `json:"candidate_user_id"`
+	CandidateUserID  string                           `json:"candidate_user_id"`
+	Candidate        sittingCandidateIdentityResponse `json:"candidate"`
+	ClassMemberSince string                           `json:"class_member_since"`
 }
 
 type examSittingNoShowListResponse struct {
@@ -222,10 +251,13 @@ type examSittingCursorWire struct {
 	ID      string `json:"id"`
 }
 
-type examSittingHandlers struct{ app *sitting.Service }
+type examSittingHandlers struct {
+	app    *sitting.Service
+	people *people.Resolver
+}
 
-func examSittingResource(app *sitting.Service) route.Resource {
-	h := examSittingHandlers{app: app}
+func examSittingResource(app *sitting.Service, resolver *people.Resolver) route.Resource {
+	h := examSittingHandlers{app: app, people: resolver}
 	collection := "/exams/{exam_id}/sittings"
 	member := "/exams/{exam_id}/sittings/{exam_sitting_id}"
 	cancel := "/exams/{exam_id}/sittings/{exam_sitting_id}/cancel"
@@ -491,7 +523,15 @@ func (h examSittingHandlers) listNoShows(request route.Request) (route.Result, e
 
 	response := examSittingNoShowListResponse{Items: make([]examSittingNoShowResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examSittingNoShowResponse{CandidateUserID: item.CandidateUserID.String()})
+		response.Items = append(response.Items, examSittingNoShowResponse{
+			CandidateUserID: item.CandidateUserID.String(),
+			Candidate: sittingCandidateIdentityResponse{
+				UserID:      item.CandidateUserID.String(),
+				Username:    item.Username,
+				DisplayName: item.DisplayName,
+			},
+			ClassMemberSince: model.FormatRFC3339(item.ClassMemberSince),
+		})
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
@@ -600,11 +640,51 @@ func (h examSittingHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	view, err := h.app.GetExamSitting(request.Context, request.Invocation(), examID, sittingID)
+	read, err := h.app.ReadExamSitting(request.Context, request.Invocation(), examID, sittingID)
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, examSittingResponseFromView(view)), nil
+
+	response := examSittingResponseFromView(read.ExamSittingSnapshot).withCandidates(read.Candidates)
+	response.Corrections = make([]examSittingCorrectionEntry, 0, len(read.Corrections))
+	for _, correction := range read.Corrections {
+		response.Corrections = append(response.Corrections, examSittingCorrectionEntry{
+			RevisionID:              correction.RevisionID.String(),
+			Number:                  correction.Number,
+			EffectiveAt:             model.FormatRFC3339(correction.EffectiveAt),
+			AcknowledgementRequired: correction.AcknowledgementRequired,
+			AcknowledgedCount:       correction.AcknowledgedCount,
+			RequiredCount:           correction.RequiredCount,
+		})
+	}
+	if read.HistoryVisible {
+		actors := make([]model.UserID, 0, len(read.History))
+		for _, entry := range read.History {
+			actors = append(actors, entry.ActorUserID)
+		}
+		refs, nameErr := namePeople(request, h.people, actors...)
+		if nameErr != nil {
+			return route.Result{}, nameErr
+		}
+		response.History = make([]examSittingHistoryEntryWire, 0, len(read.History))
+		for _, entry := range read.History {
+			response.History = append(response.History, examSittingHistoryEntryWire{
+				Kind:   string(entry.Kind),
+				At:     model.FormatRFC3339(entry.At),
+				ByID:   entry.ActorUserID.String(),
+				By:     personRef(refs, entry.ActorUserID),
+				Reason: entry.Reason,
+			})
+		}
+	}
+	return route.JSON(http.StatusOK, response), nil
+}
+
+// withCandidates adds a read's candidate count.
+func (r examSittingResponse) withCandidates(candidates sitting.CandidateCount) examSittingResponse {
+	count, lowerBound := candidates.Count, candidates.IsLowerBound
+	r.CandidateCount, r.CandidateCountIsLowerBound = &count, &lowerBound
+	return r
 }
 
 func (h examSittingHandlers) list(request route.Request) (route.Result, error) {
@@ -663,22 +743,22 @@ func (h examSittingHandlers) list(request route.Request) (route.Result, error) {
 		query.BeforeScheduledStartAt, query.BeforeSittingID = cursor.StartAt, cursor.ID
 	}
 
-	page, err := h.app.ListExamSittings(request.Context, request.Invocation(), query)
+	items, hasMore, err := h.app.ListExamSittingsWithCounts(request.Context, request.Invocation(), query)
 	if err != nil {
 		return route.Result{}, err
 	}
 
-	response := examSittingListResponse{Items: make([]examSittingResponse, 0, len(page.Items))}
-	for _, view := range page.Items {
-		response.Items = append(response.Items, examSittingResponseFromView(view))
+	response := examSittingListResponse{Items: make([]examSittingResponse, 0, len(items))}
+	for _, item := range items {
+		response.Items = append(response.Items, examSittingResponseFromView(item.ExamSittingSnapshot).withCandidates(item.Candidates))
 	}
 
-	if page.HasMore && len(page.Items) == 0 {
+	if hasMore && len(items) == 0 {
 		return route.Result{}, route.Unpresentable(errors.New("sitting page made no progress"))
 	}
 
-	if page.HasMore {
-		last := page.Items[len(page.Items)-1].Sitting
+	if hasMore {
+		last := items[len(items)-1].Sitting
 		if last == nil {
 			return route.Result{}, route.ErrUnpresentable
 		}

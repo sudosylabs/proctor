@@ -124,6 +124,7 @@ func New(deps Dependencies) (*App, error) {
 	return &App{
 		ExamPeople:           people.New(deps.Store, authorizer).Reporting("exam.unavailable"),
 		ReviewPeople:         people.New(deps.Store, authorizer).Reporting("exam.integrity_review.unavailable"),
+		SittingPeople:        people.New(deps.Store, authorizer).Reporting("exam.sitting.unavailable"),
 		AttemptPeople:        people.New(deps.Store, authorizer).Reporting("exam.attempt.unavailable"),
 		InvitationPeople:     people.New(deps.Store, authorizer).Reporting("invitation.unavailable"),
 		AdministrationPeople: people.New(deps.Store, authorizer).Reporting("administration.unavailable"),
@@ -392,6 +393,7 @@ func newIdentity(
 ) (*identity.Service, error) {
 	return identity.New(identity.Dependencies{
 		Store:                     deps.Store,
+		Sittings:                  deps.Store.ExamSitting(),
 		Cache:                     deps.Cache,
 		Registry:                  deps.Registry,
 		Authorizer:                authorizer,

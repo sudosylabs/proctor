@@ -1043,6 +1043,7 @@ CREATE TABLE exam_drafts (
     browser_policy jsonb NOT NULL DEFAULT '{"enabled":false}'::jsonb,
     base_revision_id varchar(26),
     updated_at timestamptz NOT NULL,
+    updated_by_user_id varchar(26) NOT NULL REFERENCES users(id),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     CONSTRAINT exam_drafts_title_check CHECK (char_length(title) BETWEEN 1 AND 200),
     CONSTRAINT exam_drafts_instructions_markdown_check
@@ -1053,6 +1054,8 @@ CREATE TABLE exam_drafts (
 
 CREATE INDEX exam_drafts_title_search_idx
     ON exam_drafts USING gin (title gin_trgm_ops);
+
+CREATE INDEX exam_drafts_updated_by_user_id_idx ON exam_drafts (updated_by_user_id);
 
 CREATE TABLE exam_managers (
     exam_id varchar(26) NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
@@ -3238,6 +3241,26 @@ CREATE TABLE submission_review_release_preparations (
         CHECK (submission_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
 );
 
+-- Each manager reopening of a finalized review, with the manager's private
+-- reason. Append-only: it is the record of why a decision was revisited.
+CREATE TABLE submission_review_reopenings (
+    submission_review_id varchar(26) NOT NULL REFERENCES submission_reviews(id) ON DELETE CASCADE,
+    review_revision bigint NOT NULL CHECK (review_revision > 1),
+    actor_user_id varchar(26) NOT NULL REFERENCES users(id),
+    reason text NOT NULL,
+    reopened_at timestamptz NOT NULL,
+    PRIMARY KEY (submission_review_id, review_revision),
+    CONSTRAINT submission_review_reopenings_reason_check CHECK (
+        reason = btrim(reason) AND char_length(reason) BETWEEN 1 AND 1000 AND octet_length(reason) <= 4000
+    ),
+    CONSTRAINT submission_review_reopenings_submissio_b3fd9e0b_canonical_check
+        CHECK (submission_review_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT submission_review_reopenings_actor_user_id_canonical_check
+        CHECK (actor_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
+);
+
+CREATE INDEX submission_review_reopenings_actor_user_id_idx ON submission_review_reopenings (actor_user_id);
+
 CREATE TABLE integrity_review_decisions (
     id varchar(26) PRIMARY KEY,
     submission_review_id varchar(26) NOT NULL,
@@ -3329,6 +3352,17 @@ BEGIN
        (OLD.state='draft' OR EXISTS(SELECT 1 FROM submission_review_finalizations WHERE submission_review_id=OLD.id AND finalization_revision<=OLD.revision)) THEN RETURN NEW; END IF;
     IF NEW.delivery_inventory_revision IS DISTINCT FROM OLD.delivery_inventory_revision THEN
        RAISE EXCEPTION 'Review inventory revision is server-owned' USING ERRCODE='55000'; END IF;
+    -- A manager may reopen a finalized review whose result is still withheld.
+    -- Its finalization snapshot and inventory stay as history.
+    IF OLD.state = 'finalized' AND OLD.release_state = 'withheld' AND NEW.state = 'draft' AND
+       NEW.release_state = 'withheld' AND NEW.manager_notes = OLD.manager_notes AND
+       NEW.student_remarks_markdown = OLD.student_remarks_markdown AND NEW.flag_count = 0 AND
+       NEW.evidence_count = 0 AND NEW.discrepancy_count = 0 AND NEW.evidence_inventory_digest IS NULL AND
+       NEW.finalized_at IS NULL AND NEW.finalized_by_user_id IS NULL AND NEW.released_at IS NULL AND
+       NEW.released_by_user_id IS NULL AND
+       EXISTS(SELECT 1 FROM submission_review_finalizations WHERE submission_review_id=OLD.id AND finalization_revision<=OLD.revision) THEN
+        RETURN NEW;
+    END IF;
     IF OLD.state = 'draft' AND NEW.state = 'draft' AND NEW.release_state = 'withheld' AND
        NEW.flag_count = 0 AND NEW.evidence_count = 0 AND NEW.discrepancy_count = 0 AND NEW.evidence_inventory_digest IS NULL AND
        NEW.finalized_at IS NULL AND NEW.finalized_by_user_id IS NULL AND NEW.released_at IS NULL AND NEW.released_by_user_id IS NULL THEN
@@ -4575,7 +4609,9 @@ ALTER TABLE exam_drafts
     ADD CONSTRAINT exam_drafts_exam_id_canonical_check
     CHECK (exam_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT exam_drafts_base_revision_id_canonical_check
-    CHECK (base_revision_id IS NULL OR base_revision_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (base_revision_id IS NULL OR base_revision_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_drafts_updated_by_user_id_canonical_check
+    CHECK (updated_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE exam_managers
     ADD CONSTRAINT exam_managers_exam_id_canonical_check

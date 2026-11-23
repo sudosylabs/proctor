@@ -129,6 +129,11 @@ components:
                 workspace_maximum_total_bytes: 52428800
               base_revision_id: t1oekp5dqa7nwrzhcx3by9mug4
               updated_at: "2026-08-03T14:20:00Z"
+              updated_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+              updated_by:
+                id: c9me3tsk7oyhx1bwuadgz5nqrf
+                display_name: Owen Hughes
+                username: ohughes
               revision: 9
               resource_count: 2
               has_starter_workspace: true
@@ -305,6 +310,7 @@ components:
         - browser_policy
         - capacity
         - updated_at
+        - updated_by_user_id
         - revision
         - resource_count
         - has_starter_workspace
@@ -336,6 +342,14 @@ components:
           type: string
           format: date-time
           description: When the Draft last changed.
+        updated_by_user_id:
+          $ref: "#/components/schemas/ID"
+          description: >-
+            The User who made the Draft's latest change, including a Resource or Starter Workspace change and
+            publishing.
+        updated_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: The User who made the Draft's latest change, named.
         revision:
           type: integer
           format: int64

@@ -287,6 +287,9 @@ type authoringStoreFake struct {
 	draftRevision      int64
 	archive            *store.ExamArchive
 	listOptions        store.ExamListOptions
+	countOptions       *store.ExamListOptions
+	actionOptions      *store.ExamActionCountOptions
+	actionCounts       map[model.ExamID]store.ExamActionCounts
 	summaries          []store.ExamSummary
 	managerSummaries   []store.ExamManagerSummary
 	managerListOptions store.ExamManagerListOptions
@@ -333,6 +336,18 @@ func (f *authoringStoreFake) List(_ context.Context, options store.ExamListOptio
 	*f.order = append(*f.order, "store.list")
 	f.listOptions = options
 	return append([]store.ExamSummary(nil), f.summaries...), f.err
+}
+
+// CountExamActions returns the fixture's counts and records what was asked.
+func (f *authoringStoreFake) CountExamActions(_ context.Context, options store.ExamActionCountOptions) (map[model.ExamID]store.ExamActionCounts, error) {
+	f.actionOptions = &options
+	return f.actionCounts, f.err
+}
+
+// Count counts the listed summaries; it is a read, so it joins no order log.
+func (f *authoringStoreFake) Count(_ context.Context, options store.ExamListOptions, maximum int) (int, error) {
+	f.countOptions = &options
+	return min(len(f.summaries), maximum), f.err
 }
 func (f *authoringStoreFake) Archive(_ context.Context, input *store.ExamArchive, command *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
 	*f.order = append(*f.order, "store.archive")
@@ -502,7 +517,7 @@ func (f *authoringStoreFake) Get(_ context.Context, examID model.ExamID, _ model
 	if f.archived {
 		exam.ArchivedAt = model.OptionalTimeFrom(at)
 	}
-	draft, _ := model.NewExamDraft(examID, "Test", "", model.DefaultExamPolicySet(), at)
+	draft, _ := model.NewExamDraft(examID, "Test", "", model.DefaultExamPolicySet(), f.actorID, at)
 	if f.draftRevision > 0 {
 		draft.Revision = f.draftRevision
 	}

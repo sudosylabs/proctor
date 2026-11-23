@@ -97,9 +97,13 @@ type AcademicAdministrationFilter struct {
 	AcademicUnitID   model.AcademicUnitID
 	RoleIDs          []model.RoleID
 	State            string
+	MFA              UserMFAFilter
 	NeverSignedIn    bool
 	LastActiveAfter  time.Time
 	LastActiveBefore time.Time
+	// Reason is a user.disable's reason, written to every disabled person's
+	// audit entry and to the batch's.
+	Reason string
 	// RoleID is the role a role_binding.create or role_binding.end applies.
 	RoleID model.RoleID
 	// AffiliationKind is the kind an affiliation.add or affiliation.end

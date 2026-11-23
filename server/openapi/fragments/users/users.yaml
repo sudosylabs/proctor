@@ -106,6 +106,31 @@ paths:
             enum:
               - active
               - disabled
+        - name: mfa
+          in: query
+          required: false
+          description: >-
+            Keeps Users whose account has two-step verification on (`enabled`) or off (`disabled`). On means
+            an active Proctor authenticator app; a second factor an external sign-in provider checks does not
+            count. Only callers who can see two-step verification (Institution-wide user.view, or
+            user.mfa.reset) can use it; anyone else gets `request.invalid` on `mfa`.
+          schema:
+            type: string
+            enum:
+              - enabled
+              - disabled
+        - name: role_holder
+          in: query
+          required: false
+          description: >-
+            With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with
+            `mfa=disabled` it lists exactly the role holders the access policy preflight counts in
+            `role_holders_without_mfa_count`. Only Institution-wide user.view can use it; anyone else gets
+            `request.invalid` on `role_holder`. The only accepted value is `true`.
+          schema:
+            type: boolean
+            enum:
+              - true
         - name: never_signed_in
           in: query
           required: false
@@ -415,6 +440,10 @@ components:
                 last_name: Berg
                 profile_picture_url: /api/v1/users/ih1r84kij94nrwis97rft6rduh/profile-picture
                 profile_picture_kind: default
+                mfa:
+                  enabled: true
+                  method: authenticator_app
+                  enabled_at: '2026-03-14T10:22:00Z'
                 summary:
                   affiliations:
                     - kind: teacher
@@ -665,8 +694,33 @@ components:
             `profile_picture_kind` for that.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
+        mfa:
+          $ref: '#/components/schemas/UserMFAResponse'
         summary:
           $ref: '#/components/schemas/UserDirectorySummary'
+    UserMFAResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        Whether the User's account has two-step verification on: an active Proctor authenticator app. It belongs
+        to the account; how strongly a sign-in was proved belongs to each Session. A second factor an external
+        sign-in provider checks does not turn it on. It is present only if you hold Institution-wide user.view or
+        user.mfa.reset, and never says "off" to anyone else: for them it is left out. It never shows recovery
+        codes or a setup that has not been finished.
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: True while the account has an active Proctor authenticator app.
+        method:
+          type: string
+          enum: [authenticator_app]
+          description: The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later.
+        enabled_at:
+          type: string
+          format: date-time
+          description: When two-step verification was turned on. Present only while `enabled` is true.
     UserDirectorySummary:
       type: object
       additionalProperties: false

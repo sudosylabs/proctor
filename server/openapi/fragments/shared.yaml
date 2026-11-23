@@ -557,6 +557,8 @@ components:
             `profile_picture_kind` for that.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
+        mfa:
+          $ref: '#/components/schemas/UserMFAResponse'
     ProfilePictureKind:
       type: string
       enum:

@@ -262,6 +262,8 @@ const (
 	methodChangeCount                               methodName = "change_count"
 	methodListDirectorySummaries                    methodName = "list_directory_summaries"
 	methodListIdentities                            methodName = "list_identities"
+	methodListMFAStates                             methodName = "list_mfa_states"
+	methodListMemberships                           methodName = "list_memberships"
 	methodListVisibleSummariesByUsers               methodName = "list_visible_summaries_by_users"
 	methodCountDeliveries                           methodName = "count_deliveries"
 	methodCountOpenOnboardingImports                methodName = "count_open_onboarding_imports"

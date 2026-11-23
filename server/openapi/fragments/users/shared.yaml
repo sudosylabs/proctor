@@ -30,3 +30,5 @@ components:
             profile_picture_url: /api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture?v=14
             profile_picture_changed_at: '2026-06-12T14:05:00Z'
             profile_picture_kind: custom
+            mfa:
+              enabled: false

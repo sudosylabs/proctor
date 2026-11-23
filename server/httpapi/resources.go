@@ -80,6 +80,7 @@ func productionResources(
 		affiliationResource(application.Academic),
 		academicUnitMemberResource(application.Academic),
 		classMemberResource(application.Academic),
+		userMembershipResource(application.Academic),
 		invitationResource(application.Onboarding, application.People),
 		onboardingImportResource(application.Onboarding),
 		studentProgressionResource(application.Onboarding),

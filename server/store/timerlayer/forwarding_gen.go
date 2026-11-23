@@ -57,6 +57,8 @@ type timedStores struct {
 	examRecordsOnce                sync.Once
 	examExport                     store.ExamExportStore
 	examExportOnce                 sync.Once
+	auditExport                    store.AuditExportStore
+	auditExportOnce                sync.Once
 	examResource                   store.ExamResourceStore
 	examResourceOnce               sync.Once
 	examCorrection                 store.ExamCorrectionStore
@@ -236,6 +238,11 @@ type timedExamRecordsStore struct {
 type timedExamExportStore struct {
 	layer *Layer
 	next  store.ExamExportStore
+}
+
+type timedAuditExportStore struct {
+	layer *Layer
+	next  store.AuditExportStore
 }
 
 type timedExamResourceStore struct {
@@ -636,6 +643,16 @@ func (l *Layer) ExamExport() store.ExamExportStore {
 		}
 	})
 	return l.stores.examExport
+}
+
+func (l *Layer) AuditExport() store.AuditExportStore {
+	l.stores.auditExportOnce.Do(func() {
+		next := l.next.AuditExport()
+		if next != nil {
+			l.stores.auditExport = &timedAuditExportStore{layer: l, next: next}
+		}
+	})
+	return l.stores.auditExport
 }
 
 func (l *Layer) ExamResource() store.ExamResourceStore {
@@ -2405,6 +2422,54 @@ func (s *timedExamExportStore) CompletePurge(arg0 context.Context, arg1 store.Ex
 func (s *timedExamExportStore) ListBuildTitles(arg0 context.Context, arg1 []model.JobID) ([]store.ExamExportBuildTitle, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamExport, methodListBuildTitles), func(callCtx context.Context) ([]store.ExamExportBuildTitle, error) {
 		return s.next.ListBuildTitles(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) Create(arg0 context.Context, arg1 *store.AuditExportCreation, arg2 *store.CommandIdempotency) (*model.AuditExport, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAuditExport, methodCreate), func(callCtx context.Context) (*model.AuditExport, error) {
+		return s.next.Create(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAuditExportStore) Get(arg0 context.Context, arg1 model.AuditExportID) (*store.AuditExportRead, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAuditExport, methodGet), func(callCtx context.Context) (*store.AuditExportRead, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) BeginBuild(arg0 context.Context, arg1 *store.AuditExportBuild) (*store.AuditExportSnapshot, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAuditExport, methodBeginBuild), func(callCtx context.Context) (*store.AuditExportSnapshot, error) {
+		return s.next.BeginBuild(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) Publish(arg0 context.Context, arg1 *store.AuditExportPublication) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAuditExport, methodPublish), func(callCtx context.Context) error {
+		return s.next.Publish(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) FinishWriter(arg0 context.Context, arg1 store.AuditExportArtifact) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAuditExport, methodFinishWriter), func(callCtx context.Context) error {
+		return s.next.FinishWriter(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) Reconcile(arg0 context.Context, arg1 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAuditExport, methodReconcile), func(callCtx context.Context) (int, error) {
+		return s.next.Reconcile(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) BeginPurgeBatch(arg0 context.Context, arg1 int) ([]store.AuditExportArtifact, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAuditExport, methodBeginPurgeBatch), func(callCtx context.Context) ([]store.AuditExportArtifact, error) {
+		return s.next.BeginPurgeBatch(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) CompletePurge(arg0 context.Context, arg1 store.AuditExportArtifact) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAuditExport, methodCompletePurge), func(callCtx context.Context) error {
+		return s.next.CompletePurge(callCtx, arg1)
 	})
 }
 
@@ -4739,6 +4804,7 @@ var (
 	_ store.ExamIntegrityReviewStore        = (*timedExamIntegrityReviewStore)(nil)
 	_ store.ExamRecordsStore                = (*timedExamRecordsStore)(nil)
 	_ store.ExamExportStore                 = (*timedExamExportStore)(nil)
+	_ store.AuditExportStore                = (*timedAuditExportStore)(nil)
 	_ store.ExamResourceStore               = (*timedExamResourceStore)(nil)
 	_ store.ExamCorrectionStore             = (*timedExamCorrectionStore)(nil)
 	_ store.ExamStarterWorkspaceStore       = (*timedExamStarterWorkspaceStore)(nil)

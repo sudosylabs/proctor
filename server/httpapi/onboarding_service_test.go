@@ -331,6 +331,8 @@ func (c onboardingCatalog) File() store.FileStore                     { return s
 func (c onboardingCatalog) UserSettings() store.UserSettingsStore {
 	return struct{ store.UserSettingsStore }{}
 }
+func (c onboardingCatalog) AuditExport() store.AuditExportStore { return nil }
+
 func (c onboardingCatalog) EnvironmentProfile() store.EnvironmentProfileStore {
 	return nil
 }

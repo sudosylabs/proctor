@@ -85,6 +85,15 @@
           "$ref": "#/components/schemas/ID"
         }
       },
+      "AuditExportID": {
+        "description": "ID of the audit export.",
+        "in": "path",
+        "name": "audit_export_id",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ID"
+        }
+      },
       "BrowserSourceSessionID": {
         "description": "ID of the browser activity source: a lowercase UUID version 4 that the Desktop assigned when it started the source.",
         "in": "path",
@@ -1174,6 +1183,24 @@
           }
         },
         "description": "The kind of Affiliation for the User in the path and, optionally, when it starts and ends.",
+        "required": true
+      },
+      "CreateAuditExport": {
+        "content": {
+          "application/json": {
+            "example": {
+              "action": [
+                "role_binding.manage"
+              ],
+              "created_after": "2026-09-01T00:00:00Z",
+              "format": "csv"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CreateAuditExportRequest"
+            }
+          }
+        },
+        "description": "The audit listing's filters, under its query parameter names, and the file format. Every filter is optional and narrows the same way it narrows the listing.",
         "required": true
       },
       "CreateClass": {
@@ -3472,6 +3499,123 @@
               "const": "no-store",
               "type": "string"
             }
+          }
+        }
+      },
+      "AuditExportAccepted": {
+        "content": {
+          "application/json": {
+            "example": {
+              "created_at": "2026-09-01T12:00:00Z",
+              "event_count": 1280,
+              "expires_at": "2026-09-04T12:00:00Z",
+              "format": "csv",
+              "id": "rpn96r4g3jfk3t41u4dus44bzc",
+              "job_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+              "redacted": false,
+              "state": "queued"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AuditExportResponse"
+            }
+          }
+        },
+        "description": "The export was queued with a fixed expiry.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "AuditExportFile": {
+        "content": {
+          "application/jsonl": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "text/csv": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          }
+        },
+        "description": "The export file, checked against its hash.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          },
+          "Content-Disposition": {
+            "description": "Marks the response as an attachment, with a safe file name chosen by the server.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "ETag": {
+            "description": "SHA-256 of the file, in double quotes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Content-Type-Options": {
+            "description": "Always `nosniff`, so browsers don't guess a different content type.",
+            "schema": {
+              "const": "nosniff",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AuditExportGone": {
+        "content": {
+          "application/problem+json": {
+            "example": {
+              "code": "audit.export.expired",
+              "detail": "The audit export has expired.",
+              "request_id": "req_docs_audit_export_expired",
+              "status": 410,
+              "title": "Export expired",
+              "type": "https://docs.example.edu/problems/audit.export.expired"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        },
+        "description": "The export's fixed expiry has passed, so new downloads are refused.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "AuditExportOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "created_at": "2026-09-01T12:00:00Z",
+              "event_count": 1280,
+              "expires_at": "2026-09-04T12:00:00Z",
+              "format": "csv",
+              "id": "rpn96r4g3jfk3t41u4dus44bzc",
+              "job_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+              "ready_at": "2026-09-01T12:00:09Z",
+              "redacted": false,
+              "sha256": "5d41a2b8c9e0f17263a4b5c6d7e8f9011a2b3c4d5e6f708192a3b4c5d6e7f809",
+              "size_bytes": 412044,
+              "state": "ready"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AuditExportResponse"
+            }
+          }
+        },
+        "description": "The export's details. Only the User who asked for it sees them.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
           }
         }
       },
@@ -15026,6 +15170,86 @@
         ],
         "type": "object"
       },
+      "AuditExportResponse": {
+        "additionalProperties": false,
+        "description": "A request for a temporary file of audit Events, and its state.",
+        "properties": {
+          "created_at": {
+            "description": "Time the export was requested. The expiry counts from this time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "event_count": {
+            "description": "Number of Events matched when the export was requested, and once it is ready, the number in the file.",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expires_at": {
+            "description": "Time after which the file can't be downloaded. It is fixed when the export is requested.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "format": {
+            "description": "Format of the file.",
+            "enum": [
+              "csv",
+              "jsonl"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "ID of the export."
+          },
+          "job_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The background Job that builds the file. Its `job.changed` events tell you when it finishes."
+          },
+          "ready_at": {
+            "description": "Time the file became ready. Present only while the export is ready.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "redacted": {
+            "description": "True for an Academic Unit auditor's export, whose Events carry the same redacted fields as their listing.",
+            "type": "boolean"
+          },
+          "sha256": {
+            "description": "SHA-256 of the file, in lowercase hexadecimal. Present only while the export is ready.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "size_bytes": {
+            "description": "Size of the file, in bytes. Present only while the export is ready.",
+            "format": "int64",
+            "maximum": 536870912,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "description": "`queued` while the file is being built, `ready` when it can be downloaded, `failed` if building failed, and `expired` after `expires_at`.",
+            "enum": [
+              "queued",
+              "ready",
+              "failed",
+              "expired"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "format",
+          "redacted",
+          "state",
+          "job_id",
+          "event_count",
+          "created_at",
+          "expires_at"
+        ],
+        "type": "object"
+      },
       "AuditListResponse": {
         "additionalProperties": false,
         "description": "One page of audit Events you can see.",
@@ -19131,6 +19355,84 @@
         ],
         "type": "object"
       },
+      "CreateAuditExportRequest": {
+        "additionalProperties": false,
+        "description": "Filters for a new audit export, and its format.",
+        "properties": {
+          "action": {
+            "description": "Include only Events with one of these actions.",
+            "items": {
+              "$ref": "#/components/schemas/AuditAction"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          "actor_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "Include only Events where this User performed the action."
+          },
+          "created_after": {
+            "description": "Include only Events at or after this time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_before": {
+            "description": "Include only Events before this time. A later time, or none, means the time of the request.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "format": {
+            "description": "`csv` for a spreadsheet, with a header row, or `jsonl` for one JSON object per line.",
+            "enum": [
+              "csv",
+              "jsonl"
+            ],
+            "type": "string"
+          },
+          "kind": {
+            "description": "Include only reads or only changes.",
+            "enum": [
+              "read",
+              "change"
+            ],
+            "type": "string"
+          },
+          "order": {
+            "default": "desc",
+            "description": "Order of the Events in the file, newest first unless `asc`.",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "type": "string"
+          },
+          "resource_id": {
+            "description": "Include only Events on this resource. Send it with `resource_type`.",
+            "type": "string"
+          },
+          "resource_type": {
+            "description": "Include only Events on this resource. Send it with `resource_id`.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Include only Events with this status.",
+            "enum": [
+              "attempt",
+              "success",
+              "fail"
+            ],
+            "type": "string"
+          },
+          "subject_user_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "Include only Events about this User."
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "type": "object"
+      },
       "CreateClassRequest": {
         "additionalProperties": false,
         "description": "The Academic Period and display fields for a new Class.",
@@ -22581,6 +22883,12 @@
           "assistant_profile.name_in_use",
           "assistant_profile.not_found",
           "assistant_profile.unavailable",
+          "audit.export.expired",
+          "audit.export.limit",
+          "audit.export.not_found",
+          "audit.export.not_ready",
+          "audit.export.policy_unconfigured",
+          "audit.export.unavailable",
           "audit.internal",
           "audit.query.invalid",
           "audit.unavailable",
@@ -28315,6 +28623,8 @@
           "academic_administration_preview.authorization_lost",
           "academic_administration_preview.target_conflict",
           "academic_administration_preview.too_many_users",
+          "audit.export.expired",
+          "audit.export.unavailable",
           "database.unavailable",
           "dependency.unavailable",
           "exam.export.expired",
@@ -28569,6 +28879,8 @@
         "enum": [
           "academic_administration_preview.resolve",
           "audit.attempt_sweep",
+          "audit_export.build",
+          "audit_export.cleanup",
           "command_outcome.cleanup",
           "domain_event.dispatch",
           "exam_export.build",
@@ -43000,6 +43312,234 @@
           "audit.unavailable",
           "request.invalid",
           "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/audits/exports": {
+      "post": {
+        "description": "Queues a CSV or JSON Lines file of the audit Events the audit listing would show you for the same filters. Your audit visibility is frozen when you ask: with Institution-wide `audit.view` the file has every matching Event, and an Academic Unit auditor's file has the same redacted Events their listing shows. Events written after the request aren't included. The file has the listing's fields under the listing's names, except `summary`, `actor` and `repeat`. It never has raw request parameters, earlier state or results. At most 100,000 Events fit in one export, and a larger selection is refused, so narrow the filters. The policy's export lifetime must be set to 1 to 7 days, and the expiry counts from the request. The request is audited. Watch `job_id` for `job.changed`, or poll the export, to see when it is ready.",
+        "operationId": "createAuditExport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateAuditExport"
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/AuditExportAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Export the audit history to a file",
+        "tags": [
+          "Roles and access"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.internal",
+          "audit.query.invalid",
+          "audit.unavailable",
+          "audit.export.limit",
+          "audit.export.not_found",
+          "audit.export.policy_unconfigured",
+          "audit.export.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/audits/exports/{audit_export_id}": {
+      "get": {
+        "description": "Only the User who asked for the export can read it, and only while they still hold the audit visibility it was made with. Another User's export is not found. The state is `queued`, `ready`, `failed` or `expired`. An expired export never returns its hash. The expiry shown is fixed, even if the policy changes later.",
+        "operationId": "getAuditExport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AuditExportID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AuditExportOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get an audit export",
+        "tags": [
+          "Roles and access"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "audit.export.not_found",
+          "audit.export.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/audits/exports/{audit_export_id}/download": {
+      "get": {
+        "description": "Only the User who asked for the export can download it, while it is ready and unexpired and they still hold the audit visibility it was made with. The response is a `text/csv` or `application/jsonl` attachment with private, no-store caching and a file name that carries only the export ID. CSV cells a spreadsheet would read as a formula start with an apostrophe. The `ETag` header and the `sha256` field give the file's SHA-256. Expiry blocks new downloads but doesn't cut off one already in progress.",
+        "operationId": "downloadAuditExport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AuditExportID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AuditExportFile"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/AuditExportGone"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Download an audit export",
+        "tags": [
+          "Roles and access"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "audit.export.not_found",
+          "audit.export.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "audit.export.expired",
+          "audit.export.not_ready",
           "authentication.required",
           "authentication.token_invalid",
           "authentication.credential_ambiguous",

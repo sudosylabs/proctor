@@ -5450,6 +5450,44 @@ CREATE TABLE exam_export_artifacts (
 CREATE INDEX exam_export_artifacts_cleanup_idx ON exam_export_artifacts (reconcile_after, export_id, attempt_id);
 ALTER TABLE retention_source_protections ADD CONSTRAINT retention_source_protections_export_fkey FOREIGN KEY (export_id) REFERENCES exam_exports(id);
 
+-- Temporary files of audit events. Visibility is the requester's audit
+-- visibility, frozen at the request and checked again on every read. The
+-- query holds the frozen filters and exists only while the file is pending.
+-- Jobs contain IDs only.
+CREATE TABLE audit_exports (
+    id varchar(26) PRIMARY KEY,
+    requester_user_id varchar(26) NOT NULL REFERENCES users(id),
+    format varchar(8) NOT NULL CHECK (format IN ('csv','jsonl')),
+    redacted boolean NOT NULL,
+    state varchar(16) NOT NULL CHECK (state IN ('queued','ready','failed','expired')),
+    created_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL CHECK (expires_at > created_at AND expires_at <= created_at + interval '168 hours'),
+    event_count integer NOT NULL CHECK (event_count BETWEEN 0 AND 100000),
+    job_id varchar(26) NOT NULL UNIQUE,
+    visibility jsonb NOT NULL CHECK (octet_length(visibility::text) <= 65536),
+    query jsonb,
+    archive_attempt_id varchar(26),
+    archive_size_bytes bigint,
+    archive_sha256 char(64),
+    ready_at timestamptz,
+    CHECK (query IS NULL OR octet_length(query::text) <= 65536),
+    CHECK ((state = 'queued' AND query IS NOT NULL) OR (state <> 'queued' AND query IS NULL)),
+    CHECK ((state = 'ready' AND archive_attempt_id IS NOT NULL AND archive_size_bytes BETWEEN 0 AND 536870912 AND archive_sha256 ~ '^[0-9a-f]{64}$' AND ready_at >= created_at AND ready_at < expires_at) OR
+        (state <> 'ready' AND archive_attempt_id IS NULL AND archive_size_bytes IS NULL AND archive_sha256 IS NULL AND ready_at IS NULL))
+);
+CREATE INDEX audit_exports_requester_user_id_idx ON audit_exports (requester_user_id);
+CREATE INDEX audit_exports_cleanup_idx ON audit_exports (expires_at, id);
+CREATE TABLE audit_export_artifacts (
+    export_id varchar(26) NOT NULL REFERENCES audit_exports(id),
+    attempt_id varchar(26) NOT NULL,
+    created_at timestamptz NOT NULL,
+    writer_finished boolean NOT NULL DEFAULT false,
+    observed_absent_at timestamptz,
+    reconcile_after timestamptz NOT NULL,
+    PRIMARY KEY (export_id, attempt_id)
+);
+CREATE INDEX audit_export_artifacts_cleanup_idx ON audit_export_artifacts (reconcile_after, export_id, attempt_id);
+
 CREATE TABLE retention_purge_objects (
     retirement_id varchar(26) NOT NULL REFERENCES retention_retirements(id),
     object_id varchar(26) NOT NULL,
@@ -5519,6 +5557,22 @@ CREATE TRIGGER retention_holds_creation_cancel_audit_expiry AFTER INSERT OR UPDA
 CREATE TRIGGER retention_holds_release_cancel_audit_expiry AFTER INSERT OR UPDATE OF release_audit_event_id ON retention_holds FOR EACH ROW EXECUTE FUNCTION cancel_referenced_audit_expiry('release_audit_event_id');
 
 -- Canonical identifiers for examination records, retention, exports, and recovery.
+
+ALTER TABLE audit_export_artifacts
+    ADD CONSTRAINT audit_export_artifacts_attempt_id_canonical_check
+    CHECK (attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_export_artifacts_export_id_canonical_check
+    CHECK (export_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE audit_exports
+    ADD CONSTRAINT audit_exports_archive_attempt_id_canonical_check
+    CHECK (archive_attempt_id IS NULL OR archive_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_exports_id_canonical_check
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_exports_job_id_canonical_check
+    CHECK (job_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_exports_requester_user_id_canonical_check
+    CHECK (requester_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE exam_export_artifacts
     ADD CONSTRAINT exam_export_artifacts_attempt_id_canonical_check

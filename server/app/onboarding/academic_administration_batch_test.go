@@ -240,6 +240,7 @@ func (c *batchCatalog) RetentionPolicy() store.RetentionPolicyStore       { retu
 func (c *batchCatalog) Retention() store.RetentionStore                   { return c.retention }
 func (c *batchCatalog) PluginSettings() store.PluginSettingsStore         { return nil }
 func (c *batchCatalog) EnvironmentProfile() store.EnvironmentProfileStore { return nil }
+func (c *batchCatalog) AuditExport() store.AuditExportStore               { return nil }
 func (c *batchCatalog) PasswordCredential() store.PasswordCredentialStore { return c.passwords }
 func (c *batchCatalog) Session() store.SessionStore                       { return c.session }
 func (c *batchCatalog) SessionCredential() store.SessionCredentialStore   { return c.credentials }

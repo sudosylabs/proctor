@@ -39,6 +39,7 @@ var entityIDs = []idSpec{
 	{typeName: "RetentionPreviewID", fieldName: "retention_preview_id", constructorSubject: "retention preview"},
 	{typeName: "RetentionRetirementID", fieldName: "retention_retirement_id", constructorSubject: "retention retirement"},
 	{typeName: "ExamExportID", fieldName: "exam_export_id", constructorSubject: "examination export"},
+	{typeName: "AuditExportID", fieldName: "audit_export_id", constructorSubject: "audit export"},
 	{typeName: "AttemptParticipationID", fieldName: "attempt_participation_id", constructorSubject: "attempt-participation"},
 	{typeName: "AttemptConnectionID", fieldName: "attempt_connection_id", constructorSubject: "attempt-connection"},
 	{typeName: "AssistantProfileID", fieldName: "assistant_profile_id", constructorSubject: "assistant-profile"},

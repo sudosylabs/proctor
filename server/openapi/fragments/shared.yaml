@@ -1248,6 +1248,12 @@ components:
         - assistant_profile.name_in_use
         - assistant_profile.not_found
         - assistant_profile.unavailable
+        - audit.export.expired
+        - audit.export.limit
+        - audit.export.not_found
+        - audit.export.not_ready
+        - audit.export.policy_unconfigured
+        - audit.export.unavailable
         - audit.internal
         - audit.query.invalid
         - audit.unavailable

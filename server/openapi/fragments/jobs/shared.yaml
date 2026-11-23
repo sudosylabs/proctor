@@ -39,6 +39,8 @@ components:
       enum:
         - academic_administration_preview.resolve
         - audit.attempt_sweep
+        - audit_export.build
+        - audit_export.cleanup
         - command_outcome.cleanup
         - domain_event.dispatch
         - exam_export.build
@@ -86,6 +88,8 @@ components:
         - academic_administration_preview.authorization_lost
         - academic_administration_preview.target_conflict
         - academic_administration_preview.too_many_users
+        - audit.export.expired
+        - audit.export.unavailable
         - database.unavailable
         - dependency.unavailable
         - exam.export.expired

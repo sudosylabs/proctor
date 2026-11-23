@@ -329,7 +329,8 @@ func (s SQLAuditStore) List(
 // Count counts through the same filter and visibility as List, without its
 // keyset, order, or limit, reading at most one row past maximum.
 func (s SQLAuditStore) Count(ctx context.Context, options store.AuditListOptions, maximum int) (int, error) {
-	if !store.ValidCountMaximum(maximum) {
+	// The export needs one sentinel row beyond its own capacity.
+	if !store.ValidCountMaximum(maximum) && maximum != model.AuditExportMaximumEvents+1 {
 		return 0, store.NewErrInvalidInput("audit_event", "count_maximum", maximum)
 	}
 	query, err := filterAuditList(sq.Select("audit_events.id").From("audit_events"), options)

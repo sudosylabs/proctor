@@ -304,6 +304,7 @@ func (s *LifecycleStore) RetentionPolicy() store.RetentionPolicyStore {
 
 func (s *LifecycleStore) ExamRecords() store.ExamRecordsStore       { return lifecycleExamRecordsStore{} }
 func (s *LifecycleStore) ExamExport() store.ExamExportStore         { return lifecycleExamExportStore{} }
+func (s *LifecycleStore) AuditExport() store.AuditExportStore       { return nil }
 func (s *LifecycleStore) Retention() store.RetentionStore           { return lifecycleRetentionStore{} }
 func (s *LifecycleStore) AcademicUnit() store.AcademicUnitStore     { return lifecycleAcademicUnitStore{} }
 func (s *LifecycleStore) Programme() store.ProgrammeStore           { return nil }

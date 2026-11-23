@@ -105,6 +105,7 @@ type SQLStoreStores struct {
 	examIntegrityReview        store.ExamIntegrityReviewStore
 	examRecords                store.ExamRecordsStore
 	examExport                 store.ExamExportStore
+	auditExport                store.AuditExportStore
 	examResource               store.ExamResourceStore
 	examCorrection             store.ExamCorrectionStore
 	examStarterWorkspace       store.ExamStarterWorkspaceStore
@@ -284,6 +285,7 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.retention = newSQLRetentionStore(sqlStore)
 	sqlStore.stores.examRecords = newSQLExamRecordsStore(sqlStore)
 	sqlStore.stores.examExport = NewSQLExamExportStore(sqlStore)
+	sqlStore.stores.auditExport = newSQLAuditExportStore(sqlStore)
 	sqlStore.stores.clusterDiscovery = newSQLClusterDiscoveryStore(sqlStore)
 	sqlStore.stores.servingNodeLease = newSQLServingNodeLeaseStore(sqlStore)
 	sqlStore.stores.commandOutcome = newSQLCommandOutcomeStore(sqlStore)
@@ -555,7 +557,8 @@ var _ store.Store = (*SQLStore)(nil)
 
 func (ss *SQLStore) ExamRecords() store.ExamRecordsStore { return ss.stores.examRecords }
 
-func (ss *SQLStore) ExamExport() store.ExamExportStore { return ss.stores.examExport }
+func (ss *SQLStore) ExamExport() store.ExamExportStore   { return ss.stores.examExport }
+func (ss *SQLStore) AuditExport() store.AuditExportStore { return ss.stores.auditExport }
 
 func (ss *SQLStore) AssistantProfile() store.AssistantProfileStore { return ss.stores.assistantProfile }
 

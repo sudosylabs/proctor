@@ -108,7 +108,7 @@ func auditResource(app *administration.Service) route.Resource {
 	h := auditHandlers{app: app}
 	return route.NewResource(
 		"audits",
-		route.Endpoint{
+		append([]route.Endpoint{{
 			Method: http.MethodGet,
 			Path:   "/audits",
 			Auth:   route.AuthPrincipalRequired,
@@ -123,20 +123,21 @@ func auditResource(app *administration.Service) route.Resource {
 			},
 			Handle: h.list,
 		},
-		route.Endpoint{
-			Method: http.MethodGet,
-			Path:   "/users/me/audits",
-			Auth:   route.AuthSessionRequired,
-			Errors: []string{
-				"authorization.request.invalid",
-				"authorization.unavailable",
-				"audit.query.invalid",
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
+			route.Endpoint{
+				Method: http.MethodGet,
+				Path:   "/users/me/audits",
+				Auth:   route.AuthSessionRequired,
+				Errors: []string{
+					"authorization.request.invalid",
+					"authorization.unavailable",
+					"audit.query.invalid",
+					"audit.unavailable",
+					"request.invalid",
+					"resource.not_found",
+				},
+				Handle: h.listSelf,
 			},
-			Handle: h.listSelf,
-		},
+		}, auditExportEndpoints(h)...)...,
 	)
 }
 

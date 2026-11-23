@@ -34,6 +34,7 @@ const (
 	aggregateRetentionPolicy            aggregateName = "retention_policy"
 	aggregateRetention                  aggregateName = "retention"
 	aggregateExamExport                 aggregateName = "exam_export"
+	aggregateAuditExport                aggregateName = "audit_export"
 	aggregateDesktopRegistration        aggregateName = "desktop_registration"
 	aggregateDomainEvent                aggregateName = "domain_event"
 	aggregateExternalIdentity           aggregateName = "external_identity"

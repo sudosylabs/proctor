@@ -47,6 +47,8 @@ type Dependencies struct {
 	// Plugins nil makes plugin administration unavailable.
 	Plugins            PluginCatalog
 	AssistantProviders []string
+	// AuditExportContent nil makes audit exports unavailable.
+	AuditExportContent AuditExportContent
 	Now                func() time.Time
 }
 
@@ -68,6 +70,9 @@ type Service struct {
 	environmentProfiles store.EnvironmentProfileStore
 	assistantProfiles   store.AssistantProfileStore
 	assistantProviders  []string
+	// auditExports and auditExportContent are both needed for audit exports.
+	auditExports       store.AuditExportStore
+	auditExportContent AuditExportContent
 
 	authorizer *access.Authorizer
 	people     *people.Resolver
@@ -135,6 +140,8 @@ func New(deps Dependencies) (*Service, error) {
 		environmentProfiles:     catalog.EnvironmentProfile(),
 		assistantProfiles:       catalog.AssistantProfile(),
 		assistantProviders:      append([]string(nil), deps.AssistantProviders...),
+		auditExports:            catalog.AuditExport(),
+		auditExportContent:      deps.AuditExportContent,
 		retention:               catalog.Retention(),
 		classes:                 catalog.Class(),
 		authorizer:              deps.Authorizer,

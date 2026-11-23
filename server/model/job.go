@@ -505,6 +505,8 @@ var jobTypes = []JobType{
 	JobTypeAcademicAdministrationPreviewResolve,
 	JobTypeExamExportBuild,
 	JobTypeExamExportCleanup,
+	JobTypeAuditExportBuild,
+	JobTypeAuditExportCleanup,
 	JobTypeDomainEventDispatch,
 }
 

@@ -8,7 +8,9 @@
 package httpapi
 
 import (
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/people"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -34,4 +36,14 @@ func personRef(refs people.Refs, id model.UserID) *personRefResponse {
 		response.ProfilePictureURL = "/api/v1/users/" + ref.ID.String() + "/profile-picture"
 	}
 	return response
+}
+
+// namePeople names the people an authorized record refers to. A failure is
+// reported as unavailable, the code the endpoint already declares.
+func namePeople(request route.Request, resolver *people.Resolver, unavailable apperror.Code, ids ...model.UserID) (people.Refs, error) {
+	refs, err := resolver.Resolve(request.Context, request.Invocation().Principal(), ids)
+	if err != nil {
+		return nil, apperror.New(unavailable).Wrap(err)
+	}
+	return refs, nil
 }

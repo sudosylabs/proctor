@@ -19,13 +19,15 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/exam/review"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 type examIntegrityReviewHandlers struct {
-	app *review.Service
+	app    *review.Service
+	people *people.Resolver
 }
 
 type examIntegrityReviewIDCursor struct {
@@ -155,35 +157,39 @@ func decodeDuplicateFreeExamIntegrityReviewObject(encoded []byte, target any) er
 }
 
 type examIntegrityReviewDecisionResponse struct {
-	InventoryStale   bool   `json:"inventory_stale"`
-	ID               string `json:"id"`
-	IntegrityFlagID  string `json:"integrity_flag_id"`
-	Outcome          string `json:"outcome"`
-	Revision         int64  `json:"revision"`
-	ActorUserID      string `json:"actor_user_id"`
-	PrivateRationale string `json:"private_rationale"`
-	DecidedAt        string `json:"decided_at"`
+	InventoryStale   bool               `json:"inventory_stale"`
+	ID               string             `json:"id"`
+	IntegrityFlagID  string             `json:"integrity_flag_id"`
+	Outcome          string             `json:"outcome"`
+	Revision         int64              `json:"revision"`
+	ActorUserID      string             `json:"actor_user_id"`
+	Actor            *personRefResponse `json:"actor,omitempty"`
+	PrivateRationale string             `json:"private_rationale"`
+	DecidedAt        string             `json:"decided_at"`
 }
 
 type examSubmissionReviewResponse struct {
-	ID                      string `json:"id"`
-	SubmissionID            string `json:"submission_id"`
-	State                   string `json:"state"`
-	ReleaseState            string `json:"release_state"`
-	Revision                int64  `json:"revision"`
-	CreatedByUserID         string `json:"created_by_user_id"`
-	ManagerNotes            string `json:"manager_notes"`
-	StudentRemarksMarkdown  string `json:"student_remarks_markdown"`
-	FlagCount               int    `json:"flag_count"`
-	EvidenceCount           int    `json:"evidence_count"`
-	DiscrepancyCount        int    `json:"discrepancy_count"`
-	EvidenceInventoryDigest string `json:"evidence_inventory_digest,omitempty"`
-	CreatedAt               string `json:"created_at"`
-	UpdatedAt               string `json:"updated_at"`
-	FinalizedAt             string `json:"finalized_at,omitempty"`
-	FinalizedByUserID       string `json:"finalized_by_user_id,omitempty"`
-	ReleasedAt              string `json:"released_at,omitempty"`
-	ReleasedByUserID        string `json:"released_by_user_id,omitempty"`
+	ID                      string             `json:"id"`
+	SubmissionID            string             `json:"submission_id"`
+	State                   string             `json:"state"`
+	ReleaseState            string             `json:"release_state"`
+	Revision                int64              `json:"revision"`
+	CreatedByUserID         string             `json:"created_by_user_id"`
+	CreatedBy               *personRefResponse `json:"created_by,omitempty"`
+	ManagerNotes            string             `json:"manager_notes"`
+	StudentRemarksMarkdown  string             `json:"student_remarks_markdown"`
+	FlagCount               int                `json:"flag_count"`
+	EvidenceCount           int                `json:"evidence_count"`
+	DiscrepancyCount        int                `json:"discrepancy_count"`
+	EvidenceInventoryDigest string             `json:"evidence_inventory_digest,omitempty"`
+	CreatedAt               string             `json:"created_at"`
+	UpdatedAt               string             `json:"updated_at"`
+	FinalizedAt             string             `json:"finalized_at,omitempty"`
+	FinalizedByUserID       string             `json:"finalized_by_user_id,omitempty"`
+	FinalizedBy             *personRefResponse `json:"finalized_by,omitempty"`
+	ReleasedAt              string             `json:"released_at,omitempty"`
+	ReleasedByUserID        string             `json:"released_by_user_id,omitempty"`
+	ReleasedBy              *personRefResponse `json:"released_by,omitempty"`
 }
 
 type examIntegrityReviewResponse struct {
@@ -330,8 +336,8 @@ type studentExamResultResponse struct {
 	ReleasedAt             string `json:"released_at"`
 }
 
-func examIntegrityReviewResource(app *review.Service) route.Resource {
-	h := examIntegrityReviewHandlers{app: app}
+func examIntegrityReviewResource(app *review.Service, resolver *people.Resolver) route.Resource {
+	h := examIntegrityReviewHandlers{app: app, people: resolver}
 	flags := "/submissions/{submission_id}/integrity-flags"
 	discrepancies := "/submissions/{submission_id}/integrity-discrepancies"
 	evidence := "/submissions/{submission_id}/integrity-flags/{integrity_flag_id}/evidence"
@@ -618,6 +624,24 @@ func (h examIntegrityReviewHandlers) get(request route.Request) (route.Result, e
 	if err != nil {
 		return route.Result{}, err
 	}
+	ids := make([]model.UserID, 0, 3+len(response.Decisions))
+	if response.Review != nil {
+		ids = append(ids, response.Review.people()...)
+	}
+	for _, decision := range response.Decisions {
+		ids = append(ids, model.UserID(decision.ActorUserID))
+	}
+	refs, err := namePeople(request, h.people, "exam.integrity_review.unavailable", ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	if response.Review != nil {
+		named := response.Review.named(refs)
+		response.Review = &named
+	}
+	for i := range response.Decisions {
+		response.Decisions[i].Actor = personRef(refs, model.UserID(response.Decisions[i].ActorUserID))
+	}
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
@@ -828,7 +852,7 @@ func (h examIntegrityReviewHandlers) saveDecision(request route.Request) (route.
 		return route.Result{}, err
 	}
 
-	return reviewMutationResult(result)
+	return h.reviewMutationResult(request, result)
 }
 
 func (h examIntegrityReviewHandlers) update(request route.Request) (route.Result, error) {
@@ -863,7 +887,7 @@ func (h examIntegrityReviewHandlers) update(request route.Request) (route.Result
 		return route.Result{}, err
 	}
 
-	return reviewMutationResult(result)
+	return h.reviewMutationResult(request, result)
 }
 
 type integrityReviewTerminalOperation uint8
@@ -920,7 +944,7 @@ func (h examIntegrityReviewHandlers) terminal(request route.Request,
 		return route.Result{}, err
 	}
 
-	return reviewMutationResult(result)
+	return h.reviewMutationResult(request, result)
 }
 
 func (h examIntegrityReviewHandlers) studentResult(request route.Request) (route.Result, error) {
@@ -944,7 +968,7 @@ func (h examIntegrityReviewHandlers) studentResult(request route.Request) (route
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func reviewMutationResult(result review.Result) (route.Result, error) {
+func (h examIntegrityReviewHandlers) reviewMutationResult(request route.Request, result review.Result) (route.Result, error) {
 	if result.Review == nil {
 		return route.Result{}, errors.New("Integrity Review application returned an empty Review")
 	}
@@ -955,8 +979,18 @@ func reviewMutationResult(result review.Result) (route.Result, error) {
 		CandidateUserID: result.Authorization.CandidateUserID.String(),
 		Review:          examSubmissionReviewDTO(*result.Review),
 	}
+	ids := response.Review.people()
+	if result.Decision != nil {
+		ids = append(ids, result.Decision.ActorUserID)
+	}
+	refs, err := namePeople(request, h.people, "exam.integrity_review.unavailable", ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response.Review = response.Review.named(refs)
 	if result.Decision != nil {
 		decision := examIntegrityReviewDecisionDTO(*result.Decision)
+		decision.Actor = personRef(refs, result.Decision.ActorUserID)
 		response.Decision = &decision
 	}
 
@@ -1251,4 +1285,17 @@ func (h examIntegrityReviewHandlers) previewUsage(request route.Request) (route.
 			LastUsedAt: model.FormatRFC3339(entry.LastUsedAt)}
 	}
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+// people lists who created, finalized and released the review.
+func (r examSubmissionReviewResponse) people() []model.UserID {
+	return []model.UserID{model.UserID(r.CreatedByUserID), model.UserID(r.FinalizedByUserID), model.UserID(r.ReleasedByUserID)}
+}
+
+// named fills the review's people from refs.
+func (r examSubmissionReviewResponse) named(refs people.Refs) examSubmissionReviewResponse {
+	r.CreatedBy = personRef(refs, model.UserID(r.CreatedByUserID))
+	r.FinalizedBy = personRef(refs, model.UserID(r.FinalizedByUserID))
+	r.ReleasedBy = personRef(refs, model.UserID(r.ReleasedByUserID))
+	return r
 }

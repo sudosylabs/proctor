@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -45,6 +46,8 @@ type examSummaryResponse struct {
 	AcademicUnitDisplayName string                      `json:"academic_unit_display_name"`
 	CreatorUserID           string                      `json:"creator_user_id"`
 	OwnerUserID             string                      `json:"owner_user_id"`
+	Creator                 *personRefResponse          `json:"creator,omitempty"`
+	Owner                   *personRefResponse          `json:"owner,omitempty"`
 	Title                   string                      `json:"title"`
 	UpdatedAt               string                      `json:"updated_at"`
 	ArchivedAt              *string                     `json:"archived_at,omitempty"`
@@ -79,15 +82,17 @@ type examResponse struct {
 }
 
 type examIdentityResponse struct {
-	ID                string  `json:"id"`
-	AcademicUnitID    string  `json:"academic_unit_id"`
-	CreatorUserID     string  `json:"creator_user_id"`
-	OwnerUserID       string  `json:"owner_user_id"`
-	DefaultRevisionID string  `json:"default_revision_id,omitempty"`
-	CreatedAt         string  `json:"created_at"`
-	UpdatedAt         string  `json:"updated_at"`
-	ArchivedAt        *string `json:"archived_at,omitempty"`
-	Revision          int64   `json:"revision"`
+	ID                string             `json:"id"`
+	AcademicUnitID    string             `json:"academic_unit_id"`
+	CreatorUserID     string             `json:"creator_user_id"`
+	OwnerUserID       string             `json:"owner_user_id"`
+	Creator           *personRefResponse `json:"creator,omitempty"`
+	Owner             *personRefResponse `json:"owner,omitempty"`
+	DefaultRevisionID string             `json:"default_revision_id,omitempty"`
+	CreatedAt         string             `json:"created_at"`
+	UpdatedAt         string             `json:"updated_at"`
+	ArchivedAt        *string            `json:"archived_at,omitempty"`
+	Revision          int64              `json:"revision"`
 }
 
 type examDraftResponse struct {
@@ -126,10 +131,13 @@ type examFocusPolicyResponse struct {
 	Outcome                     string `json:"outcome"`
 }
 
-type examHandlers struct{ app *exam.Authoring }
+type examHandlers struct {
+	app    *exam.Authoring
+	people *people.Resolver
+}
 
-func examResource(app *exam.Authoring) route.Resource {
-	h := examHandlers{app: app}
+func examResource(app *exam.Authoring, resolver *people.Resolver) route.Resource {
+	h := examHandlers{app: app, people: resolver}
 	collection := "/exams"
 	member := "/exams/{exam_id}"
 	draft := "/exams/{exam_id}/draft"
@@ -460,9 +468,19 @@ func (h examHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
+	ids := make([]model.UserID, 0, 2*len(page.Items))
+	for _, item := range page.Items {
+		ids = append(ids, item.CreatorUserID, item.OwnerUserID)
+	}
+	refs, err := h.namePeople(request, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response := examListResponse{Items: make([]examSummaryResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examSummaryResponseFromApplication(item))
+		summary := examSummaryResponseFromApplication(item)
+		summary.Creator, summary.Owner = personRef(refs, item.CreatorUserID), personRef(refs, item.OwnerUserID)
+		response.Items = append(response.Items, summary)
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
@@ -504,7 +522,7 @@ func (h examHandlers) create(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusCreated, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusCreated, view)
 }
 
 func (h examHandlers) get(request route.Request) (route.Result, error) {
@@ -516,7 +534,7 @@ func (h examHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusOK, view)
 }
 
 func (h examHandlers) editDraftText(request route.Request) (route.Result, error) {
@@ -550,7 +568,7 @@ func (h examHandlers) editDraftText(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusOK, view)
 }
 
 func (h examHandlers) archive(request route.Request) (route.Result, error) {
@@ -576,7 +594,11 @@ func (h examHandlers) archive(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examIdentityResponseFromModel(archived)), nil
+	refs, err := h.namePeople(request, archived.CreatorUserID, archived.OwnerUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, examIdentityResponseFromModel(archived).named(refs)), nil
 }
 
 func examIDFromRequest(request route.Request) (model.ExamID, error) {
@@ -793,4 +815,27 @@ func examResponseFromView(view exam.View) examResponse {
 		OwnerUserID:  view.OwnerUserID.String(),
 		ManagerCount: view.ManagerCount,
 	}
+}
+
+// namePeople names the people an authorized exam record refers to.
+func (h examHandlers) namePeople(request route.Request, ids ...model.UserID) (people.Refs, error) {
+	return namePeople(request, h.people, "exam.unavailable", ids...)
+}
+
+// examJSON presents an exam with its creator and owner named.
+func (h examHandlers) examJSON(request route.Request, status int, view exam.View) (route.Result, error) {
+	refs, err := h.namePeople(request, view.Exam.CreatorUserID, view.Exam.OwnerUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := examResponseFromView(view)
+	response.Exam = response.Exam.named(refs)
+	return route.JSON(status, response), nil
+}
+
+// named fills the creator and owner from refs.
+func (r examIdentityResponse) named(refs people.Refs) examIdentityResponse {
+	r.Creator = personRef(refs, model.UserID(r.CreatorUserID))
+	r.Owner = personRef(refs, model.UserID(r.OwnerUserID))
+	return r
 }

@@ -286,7 +286,7 @@ func (h examHandlers) configureDraftFocusLoss(request route.Request) (route.Resu
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusOK, view)
 }
 
 func (h examHandlers) configureDraftExecution(request route.Request) (route.Result, error) {
@@ -317,7 +317,7 @@ func (h examHandlers) configureDraftExecution(request route.Request) (route.Resu
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusOK, view)
 }
 
 func (h examHandlers) configureDraftBrowserPolicy(request route.Request) (route.Result, error) {
@@ -349,7 +349,7 @@ func (h examHandlers) configureDraftBrowserPolicy(request route.Request) (route.
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusOK, view)
 }
 
 func (h examHandlers) configureDraftNativePolicy(request route.Request) (route.Result, error) {
@@ -379,7 +379,7 @@ func (h examHandlers) configureDraftNativePolicy(request route.Request) (route.R
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusOK, view)
 }
 
 func (r *configureExamDraftNativePolicyRequest) UnmarshalJSON(data []byte) error {
@@ -431,5 +431,5 @@ func (h examHandlers) configureDraftAssistant(request route.Request) (route.Resu
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+	return h.examJSON(request, http.StatusOK, view)
 }

@@ -197,7 +197,7 @@ func (h accessPolicyHandlers) get(request route.Request) (route.Result, error) {
 	}
 	actors, err := h.app.NamePeople(request.Context, request.Invocation(), accessPolicyActors(view))
 	if err != nil {
-		return route.Result{}, err
+		return route.Result{}, apperror.New("access_policy.unavailable").Wrap(err)
 	}
 	return route.JSON(http.StatusOK, accessPolicyResponseFromView(request.HTTP, view, actors)), nil
 }
@@ -257,7 +257,7 @@ func (h accessPolicyHandlers) replace(request route.Request) (route.Result, erro
 
 	actors, err := h.app.NamePeople(request.Context, request.Invocation(), accessPolicyActors(view))
 	if err != nil {
-		return route.Result{}, err
+		return route.Result{}, apperror.New("access_policy.unavailable").Wrap(err)
 	}
 	return route.JSON(http.StatusOK, accessPolicyResponseFromView(request.HTTP, view, actors)), nil
 }

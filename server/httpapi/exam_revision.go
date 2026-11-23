@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -40,6 +41,7 @@ type examRevisionResponse struct {
 	StarterWorkspaceEntryCount int                        `json:"starter_workspace_entry_count"`
 	StarterWorkspaceTotalBytes int64                      `json:"starter_workspace_total_bytes"`
 	PublishedByUserID          string                     `json:"published_by_user_id"`
+	PublishedBy                *personRefResponse         `json:"published_by,omitempty"`
 	PublishedAt                string                     `json:"published_at"`
 	BaseRevisionID             string                     `json:"base_revision_id,omitempty"`
 	PublicationKind            string                     `json:"publication_kind"`
@@ -55,10 +57,13 @@ type examRevisionCursor struct {
 	RevisionID string `json:"revision_id"`
 }
 
-type examRevisionHandlers struct{ app *exam.Publication }
+type examRevisionHandlers struct {
+	app    *exam.Publication
+	people *people.Resolver
+}
 
-func examRevisionResource(app *exam.Publication) route.Resource {
-	h := examRevisionHandlers{app: app}
+func examRevisionResource(app *exam.Publication, resolver *people.Resolver) route.Resource {
+	h := examRevisionHandlers{app: app, people: resolver}
 	collection := "/exams/{exam_id}/revisions"
 	member := "/exams/{exam_id}/revisions/{exam_revision_id}"
 	return route.NewResource(
@@ -146,7 +151,13 @@ func (h examRevisionHandlers) publish(request route.Request) (route.Result, erro
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusCreated, examRevisionResponseFromSummary(summary)), nil
+	refs, err := namePeople(request, h.people, "exam.unavailable", summary.PublishedByUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := examRevisionResponseFromSummary(summary)
+	response.PublishedBy = personRef(refs, summary.PublishedByUserID)
+	return route.JSON(http.StatusCreated, response), nil
 }
 
 func (h examRevisionHandlers) get(request route.Request) (route.Result, error) {
@@ -160,7 +171,13 @@ func (h examRevisionHandlers) get(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examRevisionResponseFromSummary(summary)), nil
+	refs, err := namePeople(request, h.people, "exam.unavailable", summary.PublishedByUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := examRevisionResponseFromSummary(summary)
+	response.PublishedBy = personRef(refs, summary.PublishedByUserID)
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func (h examRevisionHandlers) list(request route.Request) (route.Result, error) {
@@ -193,9 +210,19 @@ func (h examRevisionHandlers) list(request route.Request) (route.Result, error) 
 		return route.Result{}, err
 	}
 
+	publishers := make([]model.UserID, 0, len(page.Items))
+	for _, item := range page.Items {
+		publishers = append(publishers, item.PublishedByUserID)
+	}
+	refs, err := namePeople(request, h.people, "exam.unavailable", publishers...)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response := examRevisionListResponse{Items: make([]examRevisionResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examRevisionResponseFromSummary(item))
+		revision := examRevisionResponseFromSummary(item)
+		revision.PublishedBy = personRef(refs, item.PublishedByUserID)
+		response.Items = append(response.Items, revision)
 	}
 
 	if page.HasMore && len(page.Items) == 0 {

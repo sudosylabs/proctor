@@ -480,9 +480,15 @@ components:
         creator_user_id:
           $ref: "#/components/schemas/ID"
           description: The User who created the Exam.
+        creator:
+          $ref: '#/components/schemas/PersonRef'
+          description: The User who created the Exam, named.
         owner_user_id:
           $ref: "#/components/schemas/ID"
           description: The User who currently owns the Exam.
+        owner:
+          $ref: '#/components/schemas/PersonRef'
+          description: The Exam's owner, named.
         title:
           type: string
           minLength: 1

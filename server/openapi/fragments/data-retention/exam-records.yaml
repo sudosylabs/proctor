@@ -761,6 +761,9 @@ components:
         actor_user_id:
           $ref: '#/components/schemas/ID'
           description: User who recorded the waiver.
+        actor:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who recorded the waiver, named.
         recorded_at:
           type: string
           format: date-time
@@ -843,6 +846,9 @@ components:
         created_by_user_id:
           $ref: '#/components/schemas/ID'
           description: User who created the hold.
+        created_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who placed the hold, named.
         reason_code:
           type: string
           enum:
@@ -868,6 +874,9 @@ components:
         released_by_user_id:
           $ref: '#/components/schemas/ID'
           description: User who released the hold. Omitted while it is active.
+        released_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who released the hold, named. Omitted while it is held.
         release_reason_code:
           type: string
           enum:

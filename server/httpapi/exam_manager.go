@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -30,11 +31,13 @@ type removeExamManagerRequest struct {
 type transferExamOwnershipRequest = addExamManagerRequest
 
 type examManagerResponse struct {
-	UserID          string `json:"user_id"`
-	GrantedByUserID string `json:"granted_by_user_id"`
-	GrantedAt       string `json:"granted_at"`
-	IsCreator       bool   `json:"is_creator"`
-	IsOwner         bool   `json:"is_owner"`
+	UserID          string             `json:"user_id"`
+	User            *personRefResponse `json:"user,omitempty"`
+	GrantedByUserID string             `json:"granted_by_user_id"`
+	GrantedBy       *personRefResponse `json:"granted_by,omitempty"`
+	GrantedAt       string             `json:"granted_at"`
+	IsCreator       bool               `json:"is_creator"`
+	IsOwner         bool               `json:"is_owner"`
 }
 
 type examManagerListResponse struct {
@@ -82,9 +85,17 @@ func (h examHandlers) listManagers(request route.Request) (route.Result, error) 
 		return route.Result{}, err
 	}
 
+	ids := make([]model.UserID, 0, 2*len(page.Items))
+	for _, item := range page.Items {
+		ids = append(ids, item.Manager.UserID, item.Manager.GrantedByUserID)
+	}
+	refs, err := h.namePeople(request, ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response := examManagerListResponse{Items: make([]examManagerResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
-		response.Items = append(response.Items, examManagerResponseFromSummary(item))
+		response.Items = append(response.Items, examManagerResponseFromSummary(item).named(refs))
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
@@ -131,7 +142,14 @@ func (h examHandlers) addManager(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusCreated, examManagerChangeResponseFromApplication(change, true)), nil
+	refs, err := h.namePeople(request, change.Manager.UserID, change.Manager.GrantedByUserID,
+		change.Exam.CreatorUserID, change.Exam.OwnerUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := examManagerChangeResponseFromApplication(change, true)
+	response.Exam, response.Manager = response.Exam.named(refs), response.Manager.named(refs)
+	return route.JSON(http.StatusCreated, response), nil
 }
 
 func (h examHandlers) removeManager(request route.Request) (route.Result, error) {
@@ -163,7 +181,14 @@ func (h examHandlers) removeManager(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examManagerChangeResponseFromApplication(change, false)), nil
+	refs, err := h.namePeople(request, change.Manager.UserID, change.Manager.GrantedByUserID,
+		change.Exam.CreatorUserID, change.Exam.OwnerUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := examManagerChangeResponseFromApplication(change, false)
+	response.Exam, response.Manager = response.Exam.named(refs), response.Manager.named(refs)
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func (h examHandlers) transferOwner(request route.Request) (route.Result, error) {
@@ -192,7 +217,14 @@ func (h examHandlers) transferOwner(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusOK, examManagerChangeResponseFromApplication(change, true)), nil
+	refs, err := h.namePeople(request, change.Manager.UserID, change.Manager.GrantedByUserID,
+		change.Exam.CreatorUserID, change.Exam.OwnerUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := examManagerChangeResponseFromApplication(change, true)
+	response.Exam, response.Manager = response.Exam.named(refs), response.Manager.named(refs)
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func parseExamManagerRequest(rawUserID string, revision int64) (model.UserID, error) {
@@ -248,4 +280,11 @@ func examManagerChangeResponseFromApplication(change store.ExamManagerCommandRes
 		IsCreator:       change.Manager.UserID == change.Exam.CreatorUserID,
 		IsOwner:         present && change.Manager.UserID == change.Exam.OwnerUserID,
 	}}
+}
+
+// named fills the manager and who granted it from refs.
+func (r examManagerResponse) named(refs people.Refs) examManagerResponse {
+	r.User = personRef(refs, model.UserID(r.UserID))
+	r.GrantedBy = personRef(refs, model.UserID(r.GrantedByUserID))
+	return r
 }

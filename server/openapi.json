@@ -22512,6 +22512,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "creator": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The User who created the Exam, named."
+          },
           "creator_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The User who created the Exam. This never changes."
@@ -22523,6 +22527,10 @@
           "id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Exam ID."
+          },
+          "owner": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The Exam's owner, named."
           },
           "owner_user_id": {
             "$ref": "#/components/schemas/ID",
@@ -22910,6 +22918,10 @@
         "additionalProperties": false,
         "description": "The current private decision on one integrity Flag.",
         "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who made the decision, named."
+          },
           "actor_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The manager who made the current decision."
@@ -23154,6 +23166,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "granted_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who added this manager, named."
+          },
           "granted_by_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The User who made this person a Manager. For the creator, this is the creator."
@@ -23165,6 +23181,10 @@
           "is_owner": {
             "description": "True when this User currently owns the Exam. In the response to a removal, it is always false, because the User no longer manages the Exam.",
             "type": "boolean"
+          },
+          "user": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The manager, named."
           },
           "user_id": {
             "$ref": "#/components/schemas/ID",
@@ -23635,6 +23655,10 @@
             "description": "When the Revision was published.",
             "format": "date-time",
             "type": "string"
+          },
+          "published_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who published the Revision, named."
           },
           "published_by_user_id": {
             "$ref": "#/components/schemas/ID",
@@ -24844,6 +24868,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "created_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who started the review, named."
+          },
           "created_by_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The manager who created the Review."
@@ -24868,6 +24896,10 @@
             "description": "When the Review was finalized. Present only once it is finalized.",
             "format": "date-time",
             "type": "string"
+          },
+          "finalized_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who finalized the review, named. Omitted until it is finalized."
           },
           "finalized_by_user_id": {
             "$ref": "#/components/schemas/ID",
@@ -24900,6 +24932,10 @@
             "description": "When the result was released. Present only once it is released.",
             "format": "date-time",
             "type": "string"
+          },
+          "released_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who released the result, named. Omitted until it is released."
           },
           "released_by_user_id": {
             "$ref": "#/components/schemas/ID",
@@ -24969,6 +25005,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "creator": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The User who created the Exam, named."
+          },
           "creator_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The User who created the Exam."
@@ -24986,6 +25026,10 @@
             "description": "How many of the Exam's Sittings match the Sitting filters. Without Sitting filters, this equals sitting_count.",
             "minimum": 0,
             "type": "integer"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The Exam's owner, named."
           },
           "owner_user_id": {
             "$ref": "#/components/schemas/ID",
@@ -32414,6 +32458,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "created_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who placed the hold, named."
+          },
           "created_by_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "User who created the hold."
@@ -32478,6 +32526,10 @@
             "description": "Time the hold was released. Omitted while it is active.",
             "format": "date-time",
             "type": "string"
+          },
+          "released_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who released the hold, named. Omitted while it is held."
           },
           "released_by_user_id": {
             "$ref": "#/components/schemas/ID",
@@ -35430,6 +35482,10 @@
         "additionalProperties": false,
         "description": "A recorded decision that a Submission's current inventory needs no finalized Review.",
         "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who recorded the waiver, named."
+          },
           "actor_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "User who recorded the waiver."

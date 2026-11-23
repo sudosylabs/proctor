@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -49,6 +50,7 @@ type examFixture struct {
 	archives    *examExportArchives
 	mail        *examManagerMail
 	publisher   *realtimetest.Publisher
+	people      *people.Resolver
 
 	authoring   *exam.Authoring
 	publication *exam.Publication
@@ -134,6 +136,7 @@ func newExamFixture(t *testing.T, caller model.Principal, actions ...model.Actio
 		Now: time.Now, NewID: model.NewExamExportID, NewJobID: model.NewJobID,
 	})
 	require.NoError(t, err)
+	f.people = testPeople(f.users, f.access.Authorizer)
 	return f
 }
 

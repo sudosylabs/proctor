@@ -40,7 +40,7 @@ func TestExamAssistantHTTPStrictBoundary(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			logger, _ := routetest.NewLogger(t)
 			f := newExamFixture(t, principal)
-			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring))
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResource(f.authoring, f.people))
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+f.examID.String()+"/draft/assistant", bytes.NewBufferString(body))
 			req.Header.Set("Authorization", "Bearer credential")
 			req.Header.Set("Content-Type", "application/json")

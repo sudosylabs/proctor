@@ -127,7 +127,7 @@ func (f *reviewFixture) AuthenticateDPoP(ctx context.Context, token, _, _, _ str
 func (f *reviewFixture) api(t *testing.T) *route.API {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
-	return newFocusedResourceAPI(t, logger, f, examIntegrityReviewResource(f.service))
+	return newFocusedResourceAPI(t, logger, f, examIntegrityReviewResource(f.service, testPeople(f.users, f.access.Authorizer)))
 }
 
 // request is an authenticated request; the bearer token chooses the caller.

@@ -12,15 +12,19 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type examRecordsHandlers struct{ app *exam.Records }
+type examRecordsHandlers struct {
+	app    *exam.Records
+	people *people.Resolver
+}
 
-func examRecordsResource(app *exam.Records) route.Resource {
-	h := examRecordsHandlers{app: app}
+func examRecordsResource(app *exam.Records, resolver *people.Resolver) route.Resource {
+	h := examRecordsHandlers{app: app, people: resolver}
 	completion := "/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion"
 	waiver := "/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/review-waiver"
 	holds := "/exams/{exam_id}/retention-holds"
@@ -240,36 +244,39 @@ type examRecordsSnapshotResponse struct {
 	PendingReviews  int64                         `json:"pending_reviews"`
 }
 type submissionReviewWaiverResponse struct {
-	DeliveryInventoryRevision int64  `json:"delivery_inventory_revision"`
-	InventoryInvalidated      bool   `json:"inventory_invalidated"`
-	SubmissionID              string `json:"submission_id"`
-	Revision                  int64  `json:"revision"`
-	ReviewRevision            int64  `json:"review_revision"`
-	DiscrepancyCount          int64  `json:"discrepancy_count"`
-	ActorUserID               string `json:"actor_user_id"`
-	RecordedAt                string `json:"recorded_at"`
-	ReasonCode                string `json:"reason_code"`
-	PrivateReason             string `json:"private_reason"`
+	DeliveryInventoryRevision int64              `json:"delivery_inventory_revision"`
+	InventoryInvalidated      bool               `json:"inventory_invalidated"`
+	SubmissionID              string             `json:"submission_id"`
+	Revision                  int64              `json:"revision"`
+	ReviewRevision            int64              `json:"review_revision"`
+	DiscrepancyCount          int64              `json:"discrepancy_count"`
+	ActorUserID               string             `json:"actor_user_id"`
+	Actor                     *personRefResponse `json:"actor,omitempty"`
+	RecordedAt                string             `json:"recorded_at"`
+	ReasonCode                string             `json:"reason_code"`
+	PrivateReason             string             `json:"private_reason"`
 }
 type submissionReviewWaiverEnvelope struct {
 	Waiver *submissionReviewWaiverResponse `json:"waiver"`
 }
 type retentionHoldResponse struct {
-	ID                              string `json:"id"`
-	ExamID                          string `json:"exam_id"`
-	SittingID                       string `json:"exam_sitting_id,omitempty"`
-	SubmissionID                    string `json:"submission_id,omitempty"`
-	Revision                        int64  `json:"revision"`
-	CreatedAt                       string `json:"created_at"`
-	CreatedByUserID                 string `json:"created_by_user_id"`
-	ReasonCode                      string `json:"reason_code"`
-	PrivateReason                   string `json:"private_reason"`
-	ReleasedAt                      string `json:"released_at,omitempty"`
-	ReleasedByUserID                string `json:"released_by_user_id,omitempty"`
-	ReleaseReasonCode               string `json:"release_reason_code,omitempty"`
-	ReleasePrivateReason            string `json:"release_private_reason,omitempty"`
-	WorkRetiredSubmissionCount      int64  `json:"work_retired_submission_count"`
-	IntegrityRetiredSubmissionCount int64  `json:"integrity_retired_submission_count"`
+	ID                              string             `json:"id"`
+	ExamID                          string             `json:"exam_id"`
+	SittingID                       string             `json:"exam_sitting_id,omitempty"`
+	SubmissionID                    string             `json:"submission_id,omitempty"`
+	Revision                        int64              `json:"revision"`
+	CreatedAt                       string             `json:"created_at"`
+	CreatedByUserID                 string             `json:"created_by_user_id"`
+	CreatedBy                       *personRefResponse `json:"created_by,omitempty"`
+	ReasonCode                      string             `json:"reason_code"`
+	PrivateReason                   string             `json:"private_reason"`
+	ReleasedAt                      string             `json:"released_at,omitempty"`
+	ReleasedByUserID                string             `json:"released_by_user_id,omitempty"`
+	ReleasedBy                      *personRefResponse `json:"released_by,omitempty"`
+	ReleaseReasonCode               string             `json:"release_reason_code,omitempty"`
+	ReleasePrivateReason            string             `json:"release_private_reason,omitempty"`
+	WorkRetiredSubmissionCount      int64              `json:"work_retired_submission_count"`
+	IntegrityRetiredSubmissionCount int64              `json:"integrity_retired_submission_count"`
 }
 type retentionHoldPageResponse struct {
 	Items      []retentionHoldResponse `json:"items"`
@@ -344,9 +351,15 @@ func (h examRecordsHandlers) getWaiver(request route.Request) (route.Result, err
 		return route.Result{}, err
 	}
 
+	refs, err := namePeople(request, h.people, "exam.unavailable", value.ActorUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	waiver := recordsWaiverResponse(value)
+	waiver.Actor = personRef(refs, value.ActorUserID)
 	return route.JSON(
 		http.StatusOK,
-		submissionReviewWaiverEnvelope{Waiver: recordsWaiverResponse(value)},
+		submissionReviewWaiverEnvelope{Waiver: waiver},
 	).WithHeaders(privateNoStoreHeaders()), nil
 }
 func (h examRecordsHandlers) waive(request route.Request) (route.Result, error) {
@@ -403,9 +416,15 @@ func (h examRecordsHandlers) waive(request route.Request) (route.Result, error) 
 		return route.Result{}, route.ErrUnpresentable
 	}
 
+	refs, err := namePeople(request, h.people, "exam.unavailable", value.ActorUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	waiver := recordsWaiverResponse(value)
+	waiver.Actor = personRef(refs, value.ActorUserID)
 	return route.JSON(
 		http.StatusOK,
-		submissionReviewWaiverEnvelope{Waiver: recordsWaiverResponse(value)},
+		submissionReviewWaiverEnvelope{Waiver: waiver},
 	).WithHeaders(privateNoStoreHeaders()), nil
 }
 func (h examRecordsHandlers) createHold(request route.Request) (route.Result, error) {
@@ -440,7 +459,11 @@ func (h examRecordsHandlers) createHold(request route.Request) (route.Result, er
 		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return route.JSON(http.StatusCreated, recordsHoldResponse(*value)).WithHeaders(privateNoStoreHeaders()), nil
+	refs, err := namePeople(request, h.people, "exam.unavailable", value.CreatedByUserID, value.ReleasedByUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusCreated, recordsHoldResponse(*value).named(refs)).WithHeaders(privateNoStoreHeaders()), nil
 }
 func (h examRecordsHandlers) releaseHold(request route.Request) (route.Result, error) {
 	examID, err := examSittingExamID(request)
@@ -486,7 +509,11 @@ func (h examRecordsHandlers) releaseHold(request route.Request) (route.Result, e
 		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return route.JSON(http.StatusOK, recordsHoldResponse(*value)).WithHeaders(privateNoStoreHeaders()), nil
+	refs, err := namePeople(request, h.people, "exam.unavailable", value.CreatedByUserID, value.ReleasedByUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, recordsHoldResponse(*value).named(refs)).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func (h examRecordsHandlers) listHolds(request route.Request) (route.Result, error) {
@@ -549,9 +576,17 @@ func (h examRecordsHandlers) listHolds(request route.Request) (route.Result, err
 		return route.Result{}, route.ErrUnpresentable
 	}
 
+	ids := make([]model.UserID, 0, 2*len(page.Holds))
+	for _, hold := range page.Holds {
+		ids = append(ids, hold.CreatedByUserID, hold.ReleasedByUserID)
+	}
+	refs, err := namePeople(request, h.people, "exam.unavailable", ids...)
+	if err != nil {
+		return route.Result{}, err
+	}
 	response := retentionHoldPageResponse{Items: make([]retentionHoldResponse, 0, len(page.Holds))}
 	for _, hold := range page.Holds {
-		response.Items = append(response.Items, recordsHoldResponse(hold))
+		response.Items = append(response.Items, recordsHoldResponse(hold).named(refs))
 	}
 
 	if page.HasMore {
@@ -698,4 +733,11 @@ func recordsHoldCursorSpec(scope model.RetentionHoldScope, includeReleased bool)
 			return nil
 		},
 	}
+}
+
+// named fills who placed and who released the hold from refs.
+func (r retentionHoldResponse) named(refs people.Refs) retentionHoldResponse {
+	r.CreatedBy = personRef(refs, model.UserID(r.CreatedByUserID))
+	r.ReleasedBy = personRef(refs, model.UserID(r.ReleasedByUserID))
+	return r
 }

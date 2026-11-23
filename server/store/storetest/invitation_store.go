@@ -1479,7 +1479,8 @@ func scopedRoleInvitationAcceptanceFixture(t *testing.T, ctx context.Context, ss
 ) *store.ScopedRoleInvitationAcceptance {
 	t.Helper()
 	binding := &model.RoleBinding{UserID: userID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
-		ScopeType: invitation.ScopeType, ScopeID: invitation.ScopeID, StartsAt: invitation.EffectiveStartsAt(at), EndsAt: invitation.IntendedEndsAt}
+		ScopeType: invitation.ScopeType, ScopeID: invitation.ScopeID, StartsAt: invitation.EffectiveStartsAt(at), EndsAt: invitation.IntendedEndsAt,
+		GrantedByUserID: invitation.InviterUserID, GrantedVia: model.RoleBindingGrantedByInvitation}
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	attempt, err := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: userID, SessionID: sessionID,
 		Action: "invitation.accept", Resource: model.Resource{Type: resourceTypeForScopedInvitation(invitation), ID: invitation.ScopeID},

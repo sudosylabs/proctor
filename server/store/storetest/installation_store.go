@@ -137,6 +137,8 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 	require.True(t, winner.Role.BuiltIn)
 	require.Equal(t, model.RoleScopeInstitution, winner.RoleBinding.ScopeType)
 	require.Equal(t, winner.Institution.ID.String(), winner.RoleBinding.ScopeID)
+	require.Equal(t, model.RoleBindingGrantedAtBootstrap, winner.RoleBinding.GrantedVia)
+	require.True(t, winner.RoleBinding.GrantedByUserID.IsZero(), "nobody granted the bootstrap Role")
 	require.NotNil(t, winner.AccessPolicy)
 	require.NoError(t, winner.AccessPolicy.Validate())
 	require.Equal(t, int64(1), winner.AccessPolicy.Revision)

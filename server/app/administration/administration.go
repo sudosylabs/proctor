@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -67,6 +68,7 @@ type Service struct {
 	assistantProviders  []string
 
 	authorizer *access.Authorizer
+	people     *people.Resolver
 	// auditor fails the attempt of a mutation that does not commit; the store
 	// completes a committed one.
 	auditor      access.MutationAuditAdapter
@@ -133,6 +135,7 @@ func New(deps Dependencies) (*Service, error) {
 		assistantProviders:      append([]string(nil), deps.AssistantProviders...),
 		retention:               catalog.Retention(),
 		authorizer:              deps.Authorizer,
+		people:                  people.New(catalog.User(), deps.Authorizer),
 		auditor:                 deps.Auditor.MutationAudit(),
 		publisher:               deps.Publisher,
 		mail:                    deps.Mail,

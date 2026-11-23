@@ -1682,6 +1682,12 @@ CREATE TABLE role_bindings (
     scope_id varchar(26) NOT NULL,
     start_at timestamptz NOT NULL,
     end_at timestamptz,
+    -- Who granted the Role, kept for the record. An invitation row names its
+    -- inviter, who is the importer for an imported invitation; the bootstrap
+    -- row has no person behind it.
+    granted_by_user_id varchar(26) REFERENCES users(id),
+    granted_via varchar(16) NOT NULL CHECK (granted_via IN ('manual', 'invitation', 'bootstrap')),
+    CONSTRAINT role_bindings_granted_by_check CHECK ((granted_via = 'bootstrap') = (granted_by_user_id IS NULL)),
     CONSTRAINT role_bindings_start_at_end_at_check CHECK (end_at IS NULL OR end_at > start_at),
     CONSTRAINT role_bindings_lifecycle_check CHECK (updated_at >= created_at)
 );
@@ -4937,7 +4943,9 @@ ALTER TABLE role_bindings
     ADD CONSTRAINT role_bindings_origin_academic_unit_member_id_canonical_check
     CHECK (origin_academic_unit_member_id IS NULL OR origin_academic_unit_member_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT role_bindings_scope_id_canonical_check
-    CHECK (scope_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (scope_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT role_bindings_granted_by_user_id_canonical_check
+    CHECK (granted_by_user_id IS NULL OR granted_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE sessions
     ADD CONSTRAINT sessions_id_canonical_check

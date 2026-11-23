@@ -273,6 +273,8 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 		ScopeID:                    invitation.AcademicUnitID.String(),
 		StartsAt:                   effectiveStart,
 		EndsAt:                     invitation.IntendedEndsAt,
+		GrantedByUserID:            invitation.InviterUserID,
+		GrantedVia:                 model.RoleBindingGrantedByInvitation,
 	}
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	prepared, err := s.mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: account, At: at})
@@ -402,6 +404,8 @@ func (s *Service) acceptScopedRoleByClaimHash(
 		ScopeID:            invitation.ScopeID,
 		StartsAt:           invitation.EffectiveStartsAt(at),
 		EndsAt:             invitation.IntendedEndsAt,
+		GrantedByUserID:    invitation.InviterUserID,
+		GrantedVia:         model.RoleBindingGrantedByInvitation,
 	}
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	if err = binding.Validate(); err != nil {

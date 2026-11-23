@@ -340,6 +340,30 @@ components:
       type: string
       pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
       description: A Proctor identifier, 26 lowercase z-base-32 characters. Compare it as an exact string.
+    PersonRef:
+      description: >-
+        A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the
+        record gets the person's presented name: their display name, or their username when it is empty. The
+        username and profile picture are included only when the reader can see that User in the directory.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+          description: The User's ID. It is kept after the account is removed.
+        display_name:
+          type: string
+          maxLength: 512
+          description: The person's presented name. Omitted when the account has been removed.
+        username:
+          type: string
+          maxLength: 64
+          description: The username. Omitted unless the reader can see this User in the directory.
+        profile_picture_url:
+          type: string
+          description: Same-origin path of the User's profile picture. Omitted unless the reader can see this User.
     ExamResourceMediaType:
       type: string
       description: The media type of an Exam Resource file.
@@ -647,6 +671,9 @@ components:
         - scope_type
         - scope_id
         - start_at
+        - role
+        - scope
+        - granted_via
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -682,6 +709,54 @@ components:
           type: string
           format: date-time
           description: Time the grant stops. Omitted for a grant with no end.
+        role:
+          type: object
+          additionalProperties: false
+          description: The Role granted, named.
+          required:
+            - id
+          properties:
+            id:
+              $ref: '#/components/schemas/ID'
+            display_name:
+              type: string
+              maxLength: 512
+              description: The Role's display name, localized for the protected System Administrator role. Omitted for an archived Role.
+        scope:
+          type: object
+          additionalProperties: false
+          description: The scope the grant applies to, named.
+          required:
+            - type
+            - id
+          properties:
+            type:
+              type: string
+              enum:
+                - institution
+                - academic_unit
+                - class
+              description: Kind of scope.
+            id:
+              $ref: '#/components/schemas/ID'
+            name:
+              type: string
+              maxLength: 512
+              description: The Institution, Academic Unit or Class display name. Omitted when it is archived.
+        granted_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: >-
+            Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is
+            the importer for an imported invitation. Omitted only for the grant made at installation.
+        granted_via:
+          type: string
+          enum:
+            - manual
+            - invitation
+            - bootstrap
+          description: >-
+            How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`),
+            or at installation (`bootstrap`).
     JobStatus:
       type: string
       description: >-

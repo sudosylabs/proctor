@@ -118,6 +118,19 @@ func roleResource(app *administration.Service) route.Resource {
 		"roles",
 		route.Endpoint{
 			Method: http.MethodGet,
+			Path:   "/permissions",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			Handle: h.listPermissions,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
 			Path:   "/roles",
 			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{

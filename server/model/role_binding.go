@@ -22,6 +22,24 @@ const (
 	RoleScopeClass        RoleScopeType = "class"
 )
 
+// RoleBindingGrantedVia says how a Role Binding came to exist.
+type RoleBindingGrantedVia string
+
+const (
+	RoleBindingGrantedManually     RoleBindingGrantedVia = "manual"
+	RoleBindingGrantedByInvitation RoleBindingGrantedVia = "invitation"
+	RoleBindingGrantedAtBootstrap  RoleBindingGrantedVia = "bootstrap"
+)
+
+// IsValid reports whether v is a known way of granting.
+func (v RoleBindingGrantedVia) IsValid() bool {
+	switch v {
+	case RoleBindingGrantedManually, RoleBindingGrantedByInvitation, RoleBindingGrantedAtBootstrap:
+		return true
+	}
+	return false
+}
+
 // RoleBinding assigns one role to one user at one scope for a time range.
 // Inheritance is evaluated by authorization from the resource hierarchy, never
 // copied into sessions. ScopeID is a plain string because its table depends
@@ -42,6 +60,11 @@ type RoleBinding struct {
 	ScopeID                    string
 	StartsAt                   time.Time
 	EndsAt                     OptionalTime // absent means open-ended
+	// GrantedByUserID is the person who granted the Role: the actor of a
+	// manual grant or the inviter of an invitation, who is the importer for an
+	// imported invitation. Only the bootstrap grant has none.
+	GrantedByUserID UserID
+	GrantedVia      RoleBindingGrantedVia
 }
 
 // PrepareCreate stamps the ID and creation time and defaults StartsAt to it;
@@ -95,6 +118,15 @@ func (rb *RoleBinding) Validate() error {
 	}
 	if !rb.RoleID.IsValid() {
 		return invalidModelError(where, "role_binding", "role_id", "must be a valid identifier", details)
+	}
+	if !rb.GrantedVia.IsValid() {
+		return invalidModelError(where, "role_binding", "granted_via", "must be manual, invitation or bootstrap", details)
+	}
+	if !rb.GrantedByUserID.IsZero() && !rb.GrantedByUserID.IsValid() {
+		return invalidModelError(where, "role_binding", "granted_by_user_id", "must be empty or a valid identifier", details)
+	}
+	if (rb.GrantedVia == RoleBindingGrantedAtBootstrap) != rb.GrantedByUserID.IsZero() {
+		return invalidModelError(where, "role_binding", "granted_by_user_id", "is required except for the bootstrap grant", details)
 	}
 	if !rb.OriginInvitationID.IsZero() && !rb.OriginInvitationID.IsValid() {
 		return invalidModelError(where, "role_binding", "origin_invitation_id", "must be empty or a valid identifier", details)
@@ -194,6 +226,8 @@ func (rb *RoleBinding) Auditable() map[string]any {
 		"scope_id":                       rb.ScopeID,
 		"start_at":                       MillisFromTime(rb.StartsAt),
 		"end_at":                         rb.EndsAt.Millis(),
+		"granted_by_user_id":             rb.GrantedByUserID.String(),
+		"granted_via":                    string(rb.GrantedVia),
 	}
 }
 

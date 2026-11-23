@@ -28,10 +28,11 @@ func TestAuthorizationAuditCanonicalIDConstraintsRejectNoncanonicalValues(t *tes
 	canonical := model.NewID()
 	tests := []struct{ name, query, constraint string }{
 		{name: "role id", query: `INSERT INTO roles (id, created_at, updated_at, name, display_name) VALUES ('bad', ?, ?, 'bad-role', 'Bad')`, constraint: "roles_id_canonical_check"},
-		{name: "binding id", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at) VALUES ('bad', ?, ?, ?, ?, 'institution', ?, ?)`, constraint: "role_bindings_id_canonical_check"},
-		{name: "binding user", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at) VALUES (?, ?, ?, 'bad', ?, 'institution', ?, ?)`, constraint: "role_bindings_user_id_canonical_check"},
-		{name: "binding role", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at) VALUES (?, ?, ?, ?, 'bad', 'institution', ?, ?)`, constraint: "role_bindings_role_id_canonical_check"},
-		{name: "binding scope", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at) VALUES (?, ?, ?, ?, ?, 'institution', 'bad', ?)`, constraint: "role_bindings_scope_id_canonical_check"},
+		{name: "binding id", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at, granted_via) VALUES ('bad', ?, ?, ?, ?, 'institution', ?, ?, 'bootstrap')`, constraint: "role_bindings_id_canonical_check"},
+		{name: "binding user", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at, granted_via) VALUES (?, ?, ?, 'bad', ?, 'institution', ?, ?, 'bootstrap')`, constraint: "role_bindings_user_id_canonical_check"},
+		{name: "binding role", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at, granted_via) VALUES (?, ?, ?, ?, 'bad', 'institution', ?, ?, 'bootstrap')`, constraint: "role_bindings_role_id_canonical_check"},
+		{name: "binding scope", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at, granted_via) VALUES (?, ?, ?, ?, ?, 'institution', 'bad', ?, 'bootstrap')`, constraint: "role_bindings_scope_id_canonical_check"},
+		{name: "binding granter", query: `INSERT INTO role_bindings (id, created_at, updated_at, user_id, role_id, scope_type, scope_id, start_at, granted_via, granted_by_user_id) VALUES (?, ?, ?, ?, ?, 'institution', ?, ?, 'manual', 'bad')`, constraint: "role_bindings_granted_by_user_id_canonical_check"},
 		{name: "audit id", query: `INSERT INTO audit_events (id, created_at, updated_at, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES ('bad', ?, ?, 'audit.view', 'institution', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_id_canonical_check"},
 		{name: "audit actor", query: `INSERT INTO audit_events (id, created_at, updated_at, actor_id, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'bad', 'audit.view', 'institution', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_actor_id_canonical_check"},
 		{name: "audit session", query: `INSERT INTO audit_events (id, created_at, updated_at, session_id, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'bad', 'audit.view', 'institution', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_session_id_canonical_check"},
@@ -60,6 +61,8 @@ func canonicalConstraintArgs(name, canonical string, at time.Time) []any {
 		return []any{at, at, canonical, canonical, canonical, at}
 	case "binding user", "binding role", "binding scope":
 		return []any{canonical, at, at, canonical, canonical, at}
+	case "binding granter":
+		return []any{canonical, at, at, canonical, canonical, canonical, at}
 	case "audit id":
 		return []any{at, at, canonical, canonical}
 	case "audit user without subject":

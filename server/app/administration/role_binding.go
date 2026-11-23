@@ -220,10 +220,12 @@ func (s *Service) CreateRoleBinding(
 	}
 
 	candidate := &model.RoleBinding{
-		UserID:    userID,
-		RoleID:    roleID,
-		ScopeType: command.ScopeType,
-		ScopeID:   scopeID,
+		UserID:          userID,
+		RoleID:          roleID,
+		ScopeType:       command.ScopeType,
+		ScopeID:         scopeID,
+		GrantedByUserID: inv.Principal().UserID,
+		GrantedVia:      model.RoleBindingGrantedManually,
 	}
 	if command.StartAt > 0 {
 		candidate.StartsAt = model.TimeFromMillis(command.StartAt)

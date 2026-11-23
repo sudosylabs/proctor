@@ -210,7 +210,7 @@ func ensureScopedRoleInvitationBinding(
 		ctx,
 		&row,
 		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
-			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		FROM role_bindings
 		WHERE user_id = ?
 			AND role_id = ?
@@ -279,7 +279,7 @@ func replayScopedRoleInvitation(
 		ctx,
 		&row,
 		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
-			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		FROM role_bindings
 		WHERE id = ?
 			AND user_id = ?`,
@@ -927,7 +927,7 @@ func ensureInvitationRoleBinding(
 		ctx,
 		&row,
 		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
-			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		FROM role_bindings
 		WHERE user_id = ?
 			AND role_id = ?
@@ -1049,7 +1049,7 @@ func replayTeacherAcademicUnitInvitation(
 		ctx,
 		&bindingRow,
 		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
-			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		FROM role_bindings
 		WHERE id = ?
 			AND user_id = ?`,

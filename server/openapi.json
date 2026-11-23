@@ -7529,8 +7529,18 @@
               },
               "role_binding": {
                 "created_at": "2026-08-01T09:00:00Z",
+                "granted_via": "bootstrap",
                 "id": "6xoche483hwrx5rpu8jzjoe7qg",
+                "role": {
+                  "display_name": "System Administrator",
+                  "id": "hmyjmj68dw6gdxctnghbrhwcth"
+                },
                 "role_id": "hmyjmj68dw6gdxctnghbrhwcth",
+                "scope": {
+                  "id": "p6y6sf8ac6m5if373fkkebj7j6",
+                  "name": "Northbridge Institute",
+                  "type": "institution"
+                },
                 "scope_id": "p6y6sf8ac6m5if373fkkebj7j6",
                 "scope_type": "institution",
                 "start_at": "2026-08-01T09:00:00Z",
@@ -8725,6 +8735,51 @@
           }
         }
       },
+      "PermissionCatalogueOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "areas": [
+                {
+                  "area": "exams",
+                  "title": "Exams"
+                },
+                {
+                  "area": "sittings",
+                  "title": "Sittings"
+                }
+              ],
+              "permissions": [
+                {
+                  "area": "exams",
+                  "description": "Edit the exams you manage.",
+                  "name": "exam.manage",
+                  "scope_types": [
+                    "institution",
+                    "academic_unit"
+                  ],
+                  "title": "Manage exams"
+                },
+                {
+                  "area": "exams",
+                  "description": "Edit exams without being an exam manager, through the audited administrator path.",
+                  "name": "exam.manage.override",
+                  "override_of": "exam.manage",
+                  "scope_types": [
+                    "institution",
+                    "academic_unit"
+                  ],
+                  "title": "Manage any exam"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/PermissionCatalogueResponse"
+            }
+          }
+        },
+        "description": "The permission catalogue"
+      },
       "PersonalAccessTokenCreated": {
         "content": {
           "application/json": {
@@ -9529,8 +9584,22 @@
           "application/json": {
             "example": {
               "created_at": "2026-07-28T15:04:00Z",
+              "granted_by": {
+                "display_name": "Priya Raman",
+                "id": "sjebyge5cpbop1xwo4eds74ejb"
+              },
+              "granted_via": "manual",
               "id": "g63dcrphk8idgyjgzbrpajosz6",
+              "role": {
+                "display_name": "Teacher",
+                "id": "1asb7sk89dp1ex339fkh3te5t4"
+              },
               "role_id": "1asb7sk89dp1ex339fkh3te5t4",
+              "scope": {
+                "id": "14j8umgczgrdp95w77zuxmxfu9",
+                "name": "Mathematics",
+                "type": "academic_unit"
+              },
               "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
               "scope_type": "academic_unit",
               "start_at": "2026-08-01T00:00:00Z",
@@ -9550,8 +9619,22 @@
             "example": {
               "created_at": "2026-07-28T15:04:00Z",
               "end_at": "2026-09-30T12:00:00Z",
+              "granted_by": {
+                "display_name": "Priya Raman",
+                "id": "sjebyge5cpbop1xwo4eds74ejb"
+              },
+              "granted_via": "manual",
               "id": "g63dcrphk8idgyjgzbrpajosz6",
+              "role": {
+                "display_name": "Teacher",
+                "id": "1asb7sk89dp1ex339fkh3te5t4"
+              },
               "role_id": "1asb7sk89dp1ex339fkh3te5t4",
+              "scope": {
+                "id": "14j8umgczgrdp95w77zuxmxfu9",
+                "name": "Mathematics",
+                "type": "academic_unit"
+              },
               "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
               "scope_type": "academic_unit",
               "start_at": "2026-08-01T00:00:00Z",
@@ -9572,8 +9655,22 @@
               "items": [
                 {
                   "created_at": "2026-08-01T09:30:00Z",
+                  "granted_by": {
+                    "display_name": "Priya Raman",
+                    "id": "sjebyge5cpbop1xwo4eds74ejb"
+                  },
+                  "granted_via": "manual",
                   "id": "g63dcrphk8idgyjgzbrpajosz6",
+                  "role": {
+                    "display_name": "Teacher",
+                    "id": "1asb7sk89dp1ex339fkh3te5t4"
+                  },
                   "role_id": "1asb7sk89dp1ex339fkh3te5t4",
+                  "scope": {
+                    "id": "14j8umgczgrdp95w77zuxmxfu9",
+                    "name": "Mathematics",
+                    "type": "academic_unit"
+                  },
                   "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
                   "scope_type": "academic_unit",
                   "start_at": "2026-08-01T09:30:00Z",
@@ -9583,8 +9680,22 @@
                 {
                   "created_at": "2026-02-10T08:00:00Z",
                   "end_at": "2026-07-31T17:00:00Z",
+                  "granted_by": {
+                    "display_name": "Priya Raman",
+                    "id": "sjebyge5cpbop1xwo4eds74ejb"
+                  },
+                  "granted_via": "manual",
                   "id": "889766ufjgio6kbpzjbufozksq",
+                  "role": {
+                    "display_name": "Teacher",
+                    "id": "iqcx3qc9sbbt6ocshszfqgq6ci"
+                  },
                   "role_id": "iqcx3qc9sbbt6ocshszfqgq6ci",
+                  "scope": {
+                    "id": "fotnmte5o3j9wftdm5rtbfofqr",
+                    "name": "Year 2 Statistics",
+                    "type": "class"
+                  },
                   "scope_id": "fotnmte5o3j9wftdm5rtbfofqr",
                   "scope_type": "class",
                   "start_at": "2026-02-10T08:00:00Z",
@@ -30503,6 +30614,145 @@
         ],
         "type": "object"
       },
+      "PermissionArea": {
+        "description": "A group of permissions. The server owns the grouping.",
+        "enum": [
+          "exams",
+          "sittings",
+          "submissions",
+          "records",
+          "people",
+          "structure",
+          "access",
+          "operations"
+        ],
+        "type": "string"
+      },
+      "PermissionAreaResponse": {
+        "additionalProperties": false,
+        "description": "One group of permissions.",
+        "properties": {
+          "area": {
+            "$ref": "#/components/schemas/PermissionArea"
+          },
+          "title": {
+            "description": "The area's title in the request's language.",
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
+          "area",
+          "title"
+        ],
+        "type": "object"
+      },
+      "PermissionCatalogueResponse": {
+        "additionalProperties": false,
+        "description": "Every permission a custom Role can hold, and the areas that group them.",
+        "properties": {
+          "areas": {
+            "description": "Every area, in the order a role editor shows them.",
+            "items": {
+              "$ref": "#/components/schemas/PermissionAreaResponse"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          "permissions": {
+            "description": "The permissions, sorted by `name`.",
+            "items": {
+              "$ref": "#/components/schemas/PermissionResponse"
+            },
+            "maxItems": 500,
+            "type": "array"
+          }
+        },
+        "required": [
+          "permissions",
+          "areas"
+        ],
+        "type": "object"
+      },
+      "PermissionResponse": {
+        "additionalProperties": false,
+        "description": "One permission a custom Role can hold.",
+        "properties": {
+          "area": {
+            "$ref": "#/components/schemas/PermissionArea"
+          },
+          "description": {
+            "description": "One sentence on what the permission allows, in the request's language.",
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "name": {
+            "description": "The permission's name, as a Role's `permissions` lists it.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "override_of": {
+            "description": "For an override permission, the permission it widens through the audited administrator path. Omitted otherwise.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "scope_types": {
+            "description": "The scopes a Role Binding can grant this permission at. A Binding at an Academic Unit also covers the Exams, Sittings, Programmes and Classes under it.",
+            "items": {
+              "enum": [
+                "institution",
+                "academic_unit",
+                "class"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "type": "array"
+          },
+          "title": {
+            "description": "A short title in the request's language.",
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description",
+          "area",
+          "scope_types"
+        ],
+        "type": "object"
+      },
+      "PersonRef": {
+        "additionalProperties": false,
+        "description": "A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the record gets the person's presented name: their display name, or their username when it is empty. The username and profile picture are included only when the reader can see that User in the directory.",
+        "properties": {
+          "display_name": {
+            "description": "The person's presented name. Omitted when the account has been removed.",
+            "maxLength": 512,
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The User's ID. It is kept after the account is removed."
+          },
+          "profile_picture_url": {
+            "description": "Same-origin path of the User's profile picture. Omitted unless the reader can see this User.",
+            "type": "string"
+          },
+          "username": {
+            "description": "The username. Omitted unless the reader can see this User in the directory.",
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "PersonalAccessTokenCreationResponse": {
         "additionalProperties": false,
         "properties": {
@@ -32871,12 +33121,71 @@
             "format": "date-time",
             "type": "string"
           },
+          "granted_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is the importer for an imported invitation. Omitted only for the grant made at installation."
+          },
+          "granted_via": {
+            "description": "How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`), or at installation (`bootstrap`).",
+            "enum": [
+              "manual",
+              "invitation",
+              "bootstrap"
+            ],
+            "type": "string"
+          },
           "id": {
             "$ref": "#/components/schemas/ID"
+          },
+          "role": {
+            "additionalProperties": false,
+            "description": "The Role granted, named.",
+            "properties": {
+              "display_name": {
+                "description": "The Role's display name, localized for the protected System Administrator role. Omitted for an archived Role.",
+                "maxLength": 512,
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/ID"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
           },
           "role_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Role granted."
+          },
+          "scope": {
+            "additionalProperties": false,
+            "description": "The scope the grant applies to, named.",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ID"
+              },
+              "name": {
+                "description": "The Institution, Academic Unit or Class display name. Omitted when it is archived.",
+                "maxLength": 512,
+                "type": "string"
+              },
+              "type": {
+                "description": "Kind of scope.",
+                "enum": [
+                  "institution",
+                  "academic_unit",
+                  "class"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "type": "object"
           },
           "scope_id": {
             "$ref": "#/components/schemas/ID",
@@ -32909,7 +33218,10 @@
           "role_id",
           "scope_type",
           "scope_id",
-          "start_at"
+          "start_at",
+          "role",
+          "scope",
+          "granted_via"
         ],
         "type": "object"
       },
@@ -57562,6 +57874,66 @@
           "$ref": "#/components/parameters/OnboardingImportID"
         }
       ]
+    },
+    "/api/v1/permissions": {
+      "get": {
+        "description": "Lists every permission a custom Role can hold, sorted by `name`, with its title and description in the request's language, the area it belongs to, and the scopes a Role Binding can grant it at. The list is the same for every Institution and changes only with the server version. An override permission names the permission it widens in `override_of`. Permissions kept for the protected System Administrator role, and capabilities that come only from a person's relationships, are not listed. Requires role.view.",
+        "operationId": "listPermissions",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PermissionCatalogueOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the permissions a Role can hold",
+        "tags": [
+          "Roles and access"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "administration.unavailable",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
     },
     "/api/v1/plugins": {
       "get": {

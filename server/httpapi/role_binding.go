@@ -33,19 +33,56 @@ type createRoleBindingRequest struct {
 }
 
 type roleBindingResponse struct {
-	ID         string              `json:"id"`
-	CreatedAt  string              `json:"created_at"`
-	UpdatedAt  string              `json:"updated_at"`
-	ArchivedAt string              `json:"archived_at,omitempty"`
-	UserID     string              `json:"user_id"`
-	RoleID     string              `json:"role_id"`
-	ScopeType  model.RoleScopeType `json:"scope_type"`
-	ScopeID    string              `json:"scope_id"`
-	StartAt    string              `json:"start_at"`
-	EndAt      string              `json:"end_at,omitempty"`
+	ID         string                   `json:"id"`
+	CreatedAt  string                   `json:"created_at"`
+	UpdatedAt  string                   `json:"updated_at"`
+	ArchivedAt string                   `json:"archived_at,omitempty"`
+	UserID     string                   `json:"user_id"`
+	RoleID     string                   `json:"role_id"`
+	ScopeType  model.RoleScopeType      `json:"scope_type"`
+	ScopeID    string                   `json:"scope_id"`
+	StartAt    string                   `json:"start_at"`
+	EndAt      string                   `json:"end_at,omitempty"`
+	Role       roleBindingRoleResponse  `json:"role"`
+	Scope      roleBindingScopeResponse `json:"scope"`
+	GrantedBy  *personRefResponse       `json:"granted_by,omitempty"`
+	GrantedVia string                   `json:"granted_via"`
 }
 
-func roleBindingResponseFromModel(binding *model.RoleBinding) roleBindingResponse {
+// roleBindingRoleResponse omits DisplayName for an archived Role.
+type roleBindingRoleResponse struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name,omitempty"`
+}
+
+// roleBindingScopeResponse omits Name for an archived scope.
+type roleBindingScopeResponse struct {
+	Type model.RoleScopeType `json:"type"`
+	ID   string              `json:"id"`
+	Name string              `json:"name,omitempty"`
+}
+
+func roleBindingResponseFromModel(
+	request *http.Request,
+	binding *model.RoleBinding,
+	names administration.RoleBindingNames,
+) roleBindingResponse {
+	role := roleBindingRoleResponse{ID: binding.RoleID.String()}
+	if named, ok := names.Roles[binding.RoleID]; ok {
+		role.DisplayName = named.DisplayName
+		if named.Name == model.SystemAdministratorRoleName {
+			role.DisplayName = route.Translate(request, systemAdministratorRoleNameID, named.DisplayName)
+		}
+	}
+	scope := roleBindingScopeResponse{Type: binding.ScopeType, ID: binding.ScopeID}
+	switch binding.ScopeType {
+	case model.RoleScopeInstitution:
+		scope.Name = names.Institution
+	case model.RoleScopeAcademicUnit:
+		scope.Name = names.AcademicUnits[model.AcademicUnitID(binding.ScopeID)]
+	case model.RoleScopeClass:
+		scope.Name = names.Classes[model.ClassID(binding.ScopeID)]
+	}
 	return roleBindingResponse{
 		ID:         binding.ID.String(),
 		CreatedAt:  model.FormatRFC3339(binding.CreatedAt),
@@ -57,7 +94,26 @@ func roleBindingResponseFromModel(binding *model.RoleBinding) roleBindingRespons
 		ScopeID:    binding.ScopeID,
 		StartAt:    model.FormatRFC3339(binding.StartsAt),
 		EndAt:      binding.EndsAt.FormatRFC3339(),
+		Role:       role,
+		Scope:      scope,
+		GrantedBy:  personRef(names.People, binding.GrantedByUserID),
+		GrantedVia: string(binding.GrantedVia),
 	}
+}
+
+// roleBindingMapper names a page of bindings and returns the mapper that
+// presents them.
+func (h roleBindingHandlers) mapper(
+	request route.Request,
+	bindings []*model.RoleBinding,
+) (func(*model.RoleBinding) roleBindingResponse, error) {
+	names, err := h.app.NameRoleBindings(request.Context, request.Invocation(), bindings)
+	if err != nil {
+		return nil, err
+	}
+	return func(binding *model.RoleBinding) roleBindingResponse {
+		return roleBindingResponseFromModel(request.HTTP, binding, names)
+	}, nil
 }
 
 type roleBindingHandlers struct {
@@ -141,6 +197,10 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
+	present, err := h.mapper(request, bindings.Items)
+	if err != nil {
+		return route.Result{}, err
+	}
 	envelope, err := route.BoundedList(
 		request,
 		"Role Binding",
@@ -148,7 +208,7 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 		func(binding *model.RoleBinding) route.BoundedKey {
 			return route.BoundedKey{At: binding.CreatedAt, ID: binding.ID.String()}
 		},
-		roleBindingResponseFromModel,
+		present,
 	)
 	if err != nil {
 		return route.Result{}, err
@@ -209,10 +269,14 @@ func (h roleBindingHandlers) listByRoles(request route.Request, values url.Value
 		return route.Result{}, err
 	}
 
+	present, err := h.mapper(request, bindings.Items)
+	if err != nil {
+		return route.Result{}, err
+	}
 	envelope, err := route.NewList(
 		bindings.Items,
 		bindings.HasMore,
-		roleBindingResponseFromModel,
+		present,
 		func(last *model.RoleBinding) (string, error) {
 			return route.EncodeCursor(roleHolderCursor{
 				Roles:     roles,
@@ -301,7 +365,11 @@ func (h roleBindingHandlers) create(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
-	return route.JSON(http.StatusCreated, roleBindingResponseFromModel(saved)), nil
+	present, err := h.mapper(request, []*model.RoleBinding{saved})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusCreated, present(saved)), nil
 }
 
 func (h roleBindingHandlers) end(request route.Request) (route.Result, error) {
@@ -317,5 +385,9 @@ func (h roleBindingHandlers) end(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, roleBindingResponseFromModel(ended)), nil
+	present, err := h.mapper(request, []*model.RoleBinding{ended})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, present(ended)), nil
 }

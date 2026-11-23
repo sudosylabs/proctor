@@ -61,6 +61,8 @@ type roleBindingRow struct {
 	ScopeID                    string              `db:"scope_id"`
 	StartAt                    time.Time           `db:"start_at"`
 	EndAt                      sql.NullTime        `db:"end_at"`
+	GrantedByUserID            sql.NullString      `db:"granted_by_user_id"`
+	GrantedVia                 string              `db:"granted_via"`
 }
 
 func roleBindingSliceColumns() []string {
@@ -77,6 +79,8 @@ func roleBindingSliceColumns() []string {
 		"role_bindings.scope_id",
 		"role_bindings.start_at",
 		"role_bindings.end_at",
+		"role_bindings.granted_by_user_id",
+		"role_bindings.granted_via",
 	}
 }
 
@@ -300,11 +304,11 @@ func insertRoleBinding(ctx context.Context, tx *sqlxTxWrapper, candidate *model.
 	if _, err := tx.NamedExec(ctx, `
 		INSERT INTO role_bindings (
 			id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id, origin_academic_unit_member_id,
-			scope_type, scope_id, start_at, end_at
+			scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		)
 		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :user_id, :role_id, :origin_invitation_id, :origin_academic_unit_member_id,
-			:scope_type, :scope_id, :start_at, :end_at
+			:scope_type, :scope_id, :start_at, :end_at, :granted_by_user_id, :granted_via
 		)`, &row); err != nil {
 		return fmt.Errorf(
 			"save role binding: %w",
@@ -1014,7 +1018,7 @@ func findExactRoleBinding(ctx context.Context, tx sqlxExecutor, candidate *model
 		ctx,
 		&row,
 		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
-			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		FROM role_bindings
 		WHERE user_id = ?
 			AND role_id = ?
@@ -1066,7 +1070,7 @@ func getRoleBindingInTransaction(ctx context.Context, tx sqlxExecutor, id string
 		ctx,
 		&row,
 		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
-			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via
 		FROM role_bindings
 		WHERE id = ?
 			AND archived_at IS NULL`,
@@ -1095,6 +1099,7 @@ func endRoleBinding(
 	if err := tx.Get(ctx, &current, `
 		SELECT rb.id, rb.created_at, rb.updated_at, rb.archived_at, rb.user_id,
 		       rb.role_id, rb.scope_type, rb.scope_id, rb.start_at, rb.end_at,
+		       rb.origin_invitation_id, rb.origin_academic_unit_member_id, rb.granted_by_user_id, rb.granted_via,
 		       r.name AS role_name
 		  FROM role_bindings rb
 		  JOIN roles r ON r.id = rb.role_id AND r.archived_at IS NULL
@@ -1135,7 +1140,7 @@ func endRoleBinding(
 		   SET updated_at = GREATEST(updated_at, $1), end_at = $1
 		 WHERE id = $2
 		RETURNING id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id, origin_academic_unit_member_id,
-		          scope_type, scope_id, start_at, end_at`, at, id); err != nil {
+		          scope_type, scope_id, start_at, end_at, granted_by_user_id, granted_via`, at, id); err != nil {
 		return nil, translateError("role_binding", id, err)
 	}
 	return row.model()
@@ -1155,6 +1160,8 @@ func newRoleBindingRow(binding *model.RoleBinding) roleBindingRow {
 		ScopeID:                    binding.ScopeID,
 		StartAt:                    UTCTime(binding.StartsAt),
 		EndAt:                      NullTimeFromOptional(binding.EndsAt),
+		GrantedByUserID:            nullableID(binding.GrantedByUserID.String()),
+		GrantedVia:                 string(binding.GrantedVia),
 	}
 }
 
@@ -1190,6 +1197,8 @@ func (row roleBindingRow) model() (*model.RoleBinding, error) {
 		ScopeID:                    row.ScopeID,
 		StartsAt:                   row.StartAt.UTC(),
 		EndsAt:                     OptionalTimeFromNullTime(row.EndAt),
+		GrantedByUserID:            model.UserID(row.GrantedByUserID.String),
+		GrantedVia:                 model.RoleBindingGrantedVia(row.GrantedVia),
 	}
 	if err := validatePersistedModel("role_binding", value); err != nil {
 		return nil, err

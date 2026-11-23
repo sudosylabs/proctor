@@ -41,6 +41,7 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 			Binding: &model.RoleBinding{
 				UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 				ScopeID: institution.ID.String(), StartsAt: model.TimeUTC(at),
+				GrantedByUserID: user.ID, GrantedVia: model.RoleBindingGrantedManually,
 			},
 			AuditEventID: model.NewAuditEventID(), AuditAt: at,
 		})
@@ -61,6 +62,7 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 			Binding: &model.RoleBinding{
 				UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 				ScopeID: institution.ID.String(), StartsAt: model.TimeUTC(at),
+				GrantedByUserID: user.ID, GrantedVia: model.RoleBindingGrantedManually,
 			},
 			ExpectedRoleUpdatedAt: staleUpdatedAt, ExpectedRolePermissions: stalePermissions,
 			AuditEventID: attempt.ID, AuditAt: at,
@@ -77,12 +79,15 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 			Binding: &model.RoleBinding{
 				UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeInstitution,
 				ScopeID: institution.ID.String(), StartsAt: model.TimeUTC(at),
+				GrantedByUserID: user.ID, GrantedVia: model.RoleBindingGrantedManually,
 			},
 			ExpectedRoleUpdatedAt: role.UpdatedAt, ExpectedRolePermissions: append([]string(nil), role.Permissions...),
 			Recipient: new(*user), Notice: createNotice,
 			AuditEventID: attempt.ID, AuditAt: at,
 		})
 		require.NoError(t, err)
+		require.Equal(t, model.RoleBindingGrantedManually, saved.GrantedVia, "the grant keeps how it was made")
+		require.Equal(t, user.ID, saved.GrantedByUserID, "the grant keeps who made it")
 		require.NoError(t, requireClassMemberMail(t, ctx, ss, createNotice, model.MailTemplateAuthorizationInstitutionRoleAssigned))
 		endAttempt, err := ss.Audit().Save(ctx, &model.AuditEvent{
 			Action:    string(model.ActionRoleManage),

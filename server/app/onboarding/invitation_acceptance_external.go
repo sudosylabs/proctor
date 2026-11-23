@@ -113,6 +113,8 @@ func (s *Service) acceptExternalIdentity(
 			ScopeID:                    invitation.AcademicUnitID.String(),
 			StartsAt:                   effectiveStart,
 			EndsAt:                     invitation.IntendedEndsAt,
+			GrantedByUserID:            invitation.InviterUserID,
+			GrantedVia:                 model.RoleBindingGrantedByInvitation,
 		}
 		input.RoleBinding.PrepareCreate(model.NewRoleBindingID(), at)
 		input.RequiredActions = []model.Action{model.ActionInvitationCreate, model.ActionAcademicUnitMembersManage}
@@ -126,6 +128,8 @@ func (s *Service) acceptExternalIdentity(
 			ScopeID:            invitation.ScopeID,
 			StartsAt:           effectiveStart,
 			EndsAt:             invitation.IntendedEndsAt,
+			GrantedByUserID:    invitation.InviterUserID,
+			GrantedVia:         model.RoleBindingGrantedByInvitation,
 		}
 		input.RoleBinding.PrepareCreate(model.NewRoleBindingID(), at)
 		input.RequiredActions = []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage}

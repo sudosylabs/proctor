@@ -64,6 +64,22 @@
     "translation": "View academic units"
   },
   {
+    "id": "access.action.access_policy.manage.description",
+    "translation": "Change how people sign in, how long sessions last and who needs two-step verification."
+  },
+  {
+    "id": "access.action.access_policy.manage.title",
+    "translation": "Manage the access policy"
+  },
+  {
+    "id": "access.action.access_policy.view.description",
+    "translation": "Read how people sign in, how long sessions last and who needs two-step verification."
+  },
+  {
+    "id": "access.action.access_policy.view.title",
+    "translation": "View the access policy"
+  },
+  {
     "id": "access.action.audit.view.description",
     "translation": "Read the installation's audit history."
   },
@@ -160,6 +176,54 @@
     "translation": "Publish exams"
   },
   {
+    "id": "access.action.exam.records.complete.description",
+    "translation": "Mark a sitting’s records complete so retention can begin."
+  },
+  {
+    "id": "access.action.exam.records.complete.override.description",
+    "translation": "Complete exam records without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.records.complete.override.title",
+    "translation": "Complete records of any exam"
+  },
+  {
+    "id": "access.action.exam.records.complete.title",
+    "translation": "Complete exam records"
+  },
+  {
+    "id": "access.action.exam.records.export.description",
+    "translation": "Download a sitting’s submissions, reviews and integrity records."
+  },
+  {
+    "id": "access.action.exam.records.export.override.description",
+    "translation": "Export exam records without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.records.export.override.title",
+    "translation": "Export records of any exam"
+  },
+  {
+    "id": "access.action.exam.records.export.title",
+    "translation": "Export exam records"
+  },
+  {
+    "id": "access.action.exam.records.hold.description",
+    "translation": "Place and release holds that keep an exam’s records from being deleted."
+  },
+  {
+    "id": "access.action.exam.records.hold.override.description",
+    "translation": "Hold exam records without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.records.hold.override.title",
+    "translation": "Hold records of any exam"
+  },
+  {
+    "id": "access.action.exam.records.hold.title",
+    "translation": "Hold exam records"
+  },
+  {
     "id": "access.action.exam.sitting.create.description",
     "translation": "Schedule sittings of exams you manage."
   },
@@ -224,6 +288,14 @@
     "translation": "View exams"
   },
   {
+    "id": "access.action.external_identity.manage.description",
+    "translation": "Unlink a person’s account from an external sign-in provider."
+  },
+  {
+    "id": "access.action.external_identity.manage.title",
+    "translation": "Manage sign-in links"
+  },
+  {
     "id": "access.action.institution.manage.description",
     "translation": "Update the institution's settings."
   },
@@ -280,12 +352,28 @@
     "translation": "Manage mail delivery"
   },
   {
+    "id": "access.action.mail.rekey.description",
+    "translation": "Replace the key that protects stored mail."
+  },
+  {
+    "id": "access.action.mail.rekey.title",
+    "translation": "Rotate mail keys"
+  },
+  {
     "id": "access.action.mail.view.description",
     "translation": "Read the delivery status of outgoing mail."
   },
   {
     "id": "access.action.mail.view.title",
     "translation": "View mail delivery"
+  },
+  {
+    "id": "access.action.mfa.rekey.description",
+    "translation": "Replace the key that protects two-step verification secrets."
+  },
+  {
+    "id": "access.action.mfa.rekey.title",
+    "translation": "Rotate two-step keys"
   },
   {
     "id": "access.action.onboarding_batch.manage.description",
@@ -334,6 +422,46 @@
   {
     "id": "access.action.programme_level.view.title",
     "translation": "View programme levels"
+  },
+  {
+    "id": "access.action.retention_policy.view.description",
+    "translation": "Read how long records are kept and which are due for deletion."
+  },
+  {
+    "id": "access.action.retention_policy.view.title",
+    "translation": "View data retention"
+  },
+  {
+    "id": "access.action.role.manage.description",
+    "translation": "Create roles and change what they allow."
+  },
+  {
+    "id": "access.action.role.manage.title",
+    "translation": "Manage roles"
+  },
+  {
+    "id": "access.action.role.view.description",
+    "translation": "Read roles and what they allow."
+  },
+  {
+    "id": "access.action.role.view.title",
+    "translation": "View roles"
+  },
+  {
+    "id": "access.action.role_binding.manage.description",
+    "translation": "Give people roles and end them, within what you hold yourself."
+  },
+  {
+    "id": "access.action.role_binding.manage.title",
+    "translation": "Give and remove roles"
+  },
+  {
+    "id": "access.action.role_binding.view.description",
+    "translation": "See who holds which roles, and where."
+  },
+  {
+    "id": "access.action.role_binding.view.title",
+    "translation": "View who holds roles"
   },
   {
     "id": "access.action.session.manage.description",
@@ -422,6 +550,38 @@
   {
     "id": "access.action.user.view.title",
     "translation": "View users"
+  },
+  {
+    "id": "access.area.access.title",
+    "translation": "Access"
+  },
+  {
+    "id": "access.area.exams.title",
+    "translation": "Exams"
+  },
+  {
+    "id": "access.area.operations.title",
+    "translation": "Operations"
+  },
+  {
+    "id": "access.area.people.title",
+    "translation": "People"
+  },
+  {
+    "id": "access.area.records.title",
+    "translation": "Records"
+  },
+  {
+    "id": "access.area.sittings.title",
+    "translation": "Sittings"
+  },
+  {
+    "id": "access.area.structure.title",
+    "translation": "Structure"
+  },
+  {
+    "id": "access.area.submissions.title",
+    "translation": "Submissions"
   },
   {
     "id": "audit.action.academic.progression.manage",

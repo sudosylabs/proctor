@@ -304,3 +304,39 @@ func (s *settingsDocumentStore) Replace(_ context.Context, input *store.UserSett
 	s.replacement, s.idempotency = input, command
 	return s.result, nil
 }
+
+// ListDisplayNames names every unarchived user the fake holds.
+func (s *directoryUserStore) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+	names := make([]store.UserDisplayName, 0, len(ids))
+	for _, id := range ids {
+		user, ok := s.byID[id]
+		if !ok || user.ArchivedAt.Valid {
+			continue
+		}
+		name := user.DisplayName
+		if name == "" {
+			name = user.Username
+		}
+		names = append(names, store.UserDisplayName{UserID: id, DisplayName: name})
+	}
+	return names, nil
+}
+
+// ListVisibleDisplayNames treats only institution-wide visibility as seeing
+// anyone, which is enough to tell a visible person from a hidden one.
+func (s *directoryUserStore) ListVisibleDisplayNames(ctx context.Context, ids []model.UserID, visibility store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	if !visibility.InstitutionWide {
+		return nil, nil
+	}
+	return s.ListDisplayNames(ctx, ids)
+}
+
+func (s *directoryUserStore) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
+	identities := make([]store.UserIdentity, 0, len(ids))
+	for _, id := range ids {
+		if user, ok := s.byID[id]; ok {
+			identities = append(identities, store.UserIdentity{ID: id, Username: user.Username, DisplayName: user.DisplayName, Email: user.Email})
+		}
+	}
+	return identities, nil
+}

@@ -1,0 +1,175 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/permissions:
+    get:
+      operationId: listPermissions
+      summary: List the permissions a Role can hold
+      tags:
+        - Roles and access
+      description: >-
+        Lists every permission a custom Role can hold, sorted by `name`, with its title and description in the
+        request's language, the area it belongs to, and the scopes a Role Binding can grant it at. The list is
+        the same for every Institution and changes only with the server version. An override permission names
+        the permission it widens in `override_of`. Permissions kept for the protected System Administrator role,
+        and capabilities that come only from a person's relationships, are not listed. Requires role.view.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - administration.unavailable
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: '#/components/responses/PermissionCatalogueOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    PermissionCatalogueOK:
+      description: The permission catalogue
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PermissionCatalogueResponse'
+          example:
+            permissions:
+              - name: exam.manage
+                title: Manage exams
+                description: Edit the exams you manage.
+                area: exams
+                scope_types:
+                  - institution
+                  - academic_unit
+              - name: exam.manage.override
+                title: Manage any exam
+                description: Edit exams without being an exam manager, through the audited administrator path.
+                area: exams
+                scope_types:
+                  - institution
+                  - academic_unit
+                override_of: exam.manage
+            areas:
+              - area: exams
+                title: Exams
+              - area: sittings
+                title: Sittings
+  schemas:
+    PermissionCatalogueResponse:
+      description: Every permission a custom Role can hold, and the areas that group them.
+      type: object
+      additionalProperties: false
+      required:
+        - permissions
+        - areas
+      properties:
+        permissions:
+          type: array
+          maxItems: 500
+          description: The permissions, sorted by `name`.
+          items:
+            $ref: '#/components/schemas/PermissionResponse'
+        areas:
+          type: array
+          maxItems: 32
+          description: Every area, in the order a role editor shows them.
+          items:
+            $ref: '#/components/schemas/PermissionAreaResponse'
+    PermissionAreaResponse:
+      description: One group of permissions.
+      type: object
+      additionalProperties: false
+      required:
+        - area
+        - title
+      properties:
+        area:
+          $ref: '#/components/schemas/PermissionArea'
+        title:
+          type: string
+          maxLength: 256
+          description: The area's title in the request's language.
+    PermissionArea:
+      type: string
+      enum:
+        - exams
+        - sittings
+        - submissions
+        - records
+        - people
+        - structure
+        - access
+        - operations
+      description: A group of permissions. The server owns the grouping.
+    PermissionResponse:
+      description: One permission a custom Role can hold.
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - title
+        - description
+        - area
+        - scope_types
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          description: The permission's name, as a Role's `permissions` lists it.
+        title:
+          type: string
+          maxLength: 256
+          description: A short title in the request's language.
+        description:
+          type: string
+          maxLength: 1024
+          description: One sentence on what the permission allows, in the request's language.
+        area:
+          $ref: '#/components/schemas/PermissionArea'
+        scope_types:
+          type: array
+          minItems: 1
+          maxItems: 3
+          description: >-
+            The scopes a Role Binding can grant this permission at. A Binding at an Academic Unit also covers
+            the Exams, Sittings, Programmes and Classes under it.
+          items:
+            type: string
+            enum:
+              - institution
+              - academic_unit
+              - class
+        override_of:
+          type: string
+          maxLength: 128
+          description: >-
+            For an override permission, the permission it widens through the audited administrator path.
+            Omitted otherwise.

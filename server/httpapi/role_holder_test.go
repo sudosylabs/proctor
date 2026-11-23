@@ -53,7 +53,7 @@ func TestRoleBindingListByRolesBindsItsCursorToTheRoleSet(t *testing.T) {
 	roles := "role_id=" + reader.String() + "&role_id=" + marker.String()
 
 	first := decode(serve(roles + "&limit=2"))
-	require.Equal(t, []roleBindingResponse{roleBindingResponseFromModel(newest), roleBindingResponseFromModel(older)}, first.Items)
+	require.Equal(t, []string{newest.ID.String(), older.ID.String()}, roleBindingResponseIDs(first.Items))
 	require.NotNil(t, first.Total, "the first page carries its total")
 	require.Equal(t, 3, *first.Total)
 	require.NotNil(t, first.TotalIsLowerBound)
@@ -69,7 +69,7 @@ func TestRoleBindingListByRolesBindsItsCursorToTheRoleSet(t *testing.T) {
 
 	cursor := "&cursor=" + url.QueryEscape(first.NextCursor)
 	later := decode(serve("role_id=" + marker.String() + "&role_id=" + reader.String() + "&role_id=" + marker.String() + "&limit=2" + cursor))
-	require.Equal(t, []roleBindingResponse{roleBindingResponseFromModel(oldest)}, later.Items)
+	require.Equal(t, []string{oldest.ID.String()}, roleBindingResponseIDs(later.Items))
 	require.Nil(t, later.Total, "a later page carries no total")
 	require.Nil(t, later.TotalIsLowerBound)
 	require.Empty(t, later.NextCursor)
@@ -151,4 +151,12 @@ func TestRoleListPresentsHoldersAndContinuesByName(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &one))
 	require.JSONEq(t, `{"bindings":2,"users":2,"scopes":1,"bindings_is_lower_bound":false,"users_is_lower_bound":false,"scopes_is_lower_bound":false}`,
 		string(one["holders"]), "a single Role read carries its holders too")
+}
+
+func roleBindingResponseIDs(items []roleBindingResponse) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return ids
 }

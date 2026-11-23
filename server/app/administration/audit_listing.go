@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -52,6 +53,9 @@ type AuditEventPage struct {
 	paging.Counted[*model.AuditEvent]
 	Names    store.AuditNames
 	Redacted bool
+	// Actors names who did each event. Who acted is part of the record, so
+	// every reader of the event gets their presented name.
+	Actors people.Refs
 }
 
 // ListAuditEvents returns a page of audit events within the caller's audit
@@ -129,6 +133,22 @@ func (s *Service) ListAuditEvents(
 	page.Total = total
 	if page.Names, err = s.auditNames(ctx, inv.Principal(), page.Items, page.Redacted); err != nil {
 		return AuditEventPage{}, err
+	}
+	actors := make([]model.UserID, 0, len(page.Items))
+	for _, event := range page.Items {
+		actors = append(actors, event.ActorID)
+	}
+	if page.Actors, err = s.people.Resolve(ctx, inv.Principal(), actors); err != nil {
+		return AuditEventPage{}, auditListingError(err)
+	}
+	// The summary names the actor the same way the actor field does.
+	if page.Names.Users == nil {
+		page.Names.Users = map[model.UserID]string{}
+	}
+	for id, actor := range page.Actors {
+		if !actor.Removed() {
+			page.Names.Users[id] = actor.DisplayName
+		}
 	}
 	return page, nil
 }

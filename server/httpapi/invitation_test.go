@@ -29,7 +29,7 @@ import (
 func invitationAPI(t *testing.T, fixture *onboardingFixture, principal model.Principal) http.Handler {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
-	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service))
+	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service, fixture.people))
 }
 
 func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {
@@ -186,7 +186,7 @@ func TestInvitationAdministrationHTTPRejectsMalformedCursor(t *testing.T) {
 	principal := fixture.principal(model.AuthenticationSingleFactor)
 	principal.ClientType = model.SessionClientCLI
 	logger, logs := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service, fixture.people))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations?cursor=not-a-cursor", nil)
 	request.Header.Set("Authorization", "Bearer pat")
 	response := httptest.NewRecorder()
@@ -203,7 +203,7 @@ func TestInvitationAcceptanceHTTPReturnsOnlyRecordIDsForFreshAndReplay(t *testin
 			invitation, claim := fixture.pendingStudentInvitation(t, fixture.addClass("Biology 101"), "student@example.edu")
 			fixture.invitations.replayAcceptance = replayed
 			logger, _ := routetest.NewLogger(t)
-			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, invitationResource(fixture.service))
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, invitationResource(fixture.service, fixture.people))
 			body, _ := json.Marshal(map[string]string{"claim": claim, "password": "correct horse battery staple", "username": "student"})
 			request := newJSONRequest(http.MethodPost, "/api/v1/invitations/student-class/accept", bytes.NewReader(body))
 			response := httptest.NewRecorder()
@@ -381,4 +381,29 @@ func TestScopedRoleInvitationHTTPRequiresAuthenticatedExistingUserAndInstitution
 	patAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusUnauthorized, response.Code, "institution Role PAT issue = %d %s", response.Code, response.Body.String())
 	require.Len(t, fixture.invitations.scopedRoleIssues, issued, "a PAT issue reached the Store")
+}
+
+// TestInvitationAdministrationNamesInviterAndScope pins the names beside an
+// administered Invitation's IDs: who issued it and where it admits someone.
+func TestInvitationAdministrationNamesInviterAndScope(t *testing.T) {
+	t.Parallel()
+	fixture := newOnboardingFixture(t)
+	fixture.users.add(&model.User{ID: fixture.callerID, Username: "priya", DisplayName: "Priya Raman"})
+	class := fixture.addClass("Biology 101")
+	invitation, _ := fixture.pendingStudentInvitation(t, class, "student@example.edu")
+	httpAPI := invitationAPI(t, fixture, fixture.principal(model.AuthenticationMultiFactor))
+
+	request := newJSONRequest(http.MethodGet, "/api/v1/invitations/"+invitation.ID.String(), nil)
+	request.Header.Set("Authorization", "Bearer token")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var got invitationAdministrationResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &got))
+	require.NotNil(t, got.Inviter)
+	require.Equal(t, fixture.callerID.String(), got.Inviter.ID)
+	require.Equal(t, "Priya Raman", got.Inviter.DisplayName)
+	require.Equal(t, roleBindingScopeResponse{Type: model.RoleScopeClass, ID: class.ID.String()}, got.Scope,
+		"the scope is named only when the lookup finds it")
+	require.Nil(t, got.Role, "a student Invitation grants no Role")
 }

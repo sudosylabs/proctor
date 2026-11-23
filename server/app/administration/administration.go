@@ -135,7 +135,7 @@ func New(deps Dependencies) (*Service, error) {
 		assistantProviders:      append([]string(nil), deps.AssistantProviders...),
 		retention:               catalog.Retention(),
 		authorizer:              deps.Authorizer,
-		people:                  people.New(catalog.User(), deps.Authorizer),
+		people:                  people.New(catalog, deps.Authorizer),
 		auditor:                 deps.Auditor.MutationAudit(),
 		publisher:               deps.Publisher,
 		mail:                    deps.Mail,

@@ -51,6 +51,13 @@ components:
             expires_at: '2026-08-27T10:00:00Z'
             email: student.one@example.edu
             inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+            inviter:
+              id: rpn96r4g3jfk3t41u4dus44bzc
+              display_name: Priya Raman
+            scope:
+              type: class
+              id: sjebyge5cpbop1xwo4eds74ejb
+              name: Year 1 Mathematics A
             created_at: '2026-08-20T10:00:00Z'
             updated_at: '2026-08-20T10:00:03Z'
             revision: 1
@@ -247,6 +254,7 @@ components:
         - expires_at
         - email
         - inviter_user_id
+        - scope
         - created_at
         - updated_at
         - revision
@@ -315,6 +323,43 @@ components:
         inviter_user_id:
           $ref: '#/components/schemas/ID'
           description: The User who issued the Invitation.
+        inviter:
+          $ref: '#/components/schemas/PersonRef'
+          description: The User who issued the Invitation, named. For an imported Invitation, this is the importer.
+        role:
+          type: object
+          additionalProperties: false
+          description: The Role the Invitation grants, named. Omitted for an Invitation that grants no Role.
+          required:
+            - id
+          properties:
+            id:
+              $ref: '#/components/schemas/ID'
+            display_name:
+              type: string
+              maxLength: 512
+              description: The Role's display name. Omitted for an archived Role.
+        scope:
+          type: object
+          additionalProperties: false
+          description: Where the Invitation admits the person, named.
+          required:
+            - type
+            - id
+          properties:
+            type:
+              type: string
+              enum:
+                - institution
+                - academic_unit
+                - class
+              description: Kind of scope.
+            id:
+              $ref: '#/components/schemas/ID'
+            name:
+              type: string
+              maxLength: 512
+              description: The Institution, Academic Unit or Class display name. Omitted when it is archived.
         accepted_user_id:
           $ref: '#/components/schemas/ID'
           description: The User who accepted the Invitation. Present only once accepted.

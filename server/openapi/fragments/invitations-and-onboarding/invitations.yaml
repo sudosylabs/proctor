@@ -434,6 +434,13 @@ components:
                 expires_at: '2026-08-27T10:00:00Z'
                 email: student.one@example.edu
                 inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+                inviter:
+                  id: rpn96r4g3jfk3t41u4dus44bzc
+                  display_name: Priya Raman
+                scope:
+                  type: class
+                  id: sjebyge5cpbop1xwo4eds74ejb
+                  name: Year 1 Mathematics A
                 created_at: '2026-08-20T10:00:00Z'
                 updated_at: '2026-08-20T10:00:03Z'
                 revision: 1
@@ -457,6 +464,16 @@ components:
                 expires_at: '2026-08-17T09:00:00Z'
                 email: teacher.one@example.edu
                 inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+                inviter:
+                  id: rpn96r4g3jfk3t41u4dus44bzc
+                  display_name: Priya Raman
+                role:
+                  id: nybc6xhg593upqice3sdeyro5k
+                  display_name: Teacher
+                scope:
+                  type: academic_unit
+                  id: 889766ufjgio6kbpzjbufozksq
+                  name: Computer Science
                 accepted_user_id: xgqjjg7fnyeqnueo58grucaoqy
                 created_at: '2026-08-10T09:00:00Z'
                 updated_at: '2026-08-11T15:42:10Z'

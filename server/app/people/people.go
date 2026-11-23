@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package people names the users a record refers to, such as who granted a
+// Package people names the users and records a record refers to, such as who granted a
 // Role or who paused a Sitting. Who acted is part of a record, so a reader of
 // the record always gets the person's presented name; the username and the
 // profile picture follow the reader's own user.view visibility.
@@ -50,14 +50,22 @@ func (r Refs) Get(id model.UserID) (Ref, bool) {
 
 // Resolver reads names for one page at a time.
 type Resolver struct {
-	users      store.UserStore
-	authorizer *access.Authorizer
+	users        store.UserStore
+	audits       store.AuditStore
+	institutions store.InstitutionStore
+	authorizer   *access.Authorizer
 }
 
-// New returns a Resolver. A service built without a user store still builds;
-// naming then fails, so only a projection that names people is unavailable.
-func New(users store.UserStore, authorizer *access.Authorizer) *Resolver {
-	return &Resolver{users: users, authorizer: authorizer}
+// New returns a Resolver over the catalog. A service built without a user or
+// audit store still builds; naming then fails, so only a projection that
+// names people or records is unavailable.
+func New(catalog store.Catalog, authorizer *access.Authorizer) *Resolver {
+	if catalog == nil {
+		return &Resolver{authorizer: authorizer}
+	}
+	return &Resolver{
+		users: catalog.User(), audits: catalog.Audit(), institutions: catalog.Institution(), authorizer: authorizer,
+	}
 }
 
 var errUnavailable = errors.New("people resolver is not configured")
@@ -131,4 +139,57 @@ func distinctUserIDs(ids []model.UserID) []model.UserID {
 		result = append(result, id)
 	}
 	return result
+}
+
+// Records lists the roles, units and classes a page of authorized records
+// refers to, so they are named in one bounded read per kind.
+type Records struct {
+	Roles         []model.RoleID
+	AcademicUnits []model.AcademicUnitID
+	Classes       []model.ClassID
+}
+
+// RecordNames are the current names Records found. An archived or missing
+// record has no name. A role keeps its Name so the protected System
+// Administrator role can be shown localized.
+type RecordNames struct {
+	Roles         map[model.RoleID]store.AuditRoleName
+	AcademicUnits map[model.AcademicUnitID]string
+	Classes       map[model.ClassID]string
+}
+
+// NameRecords names what an authorized record refers to. The reader already
+// sees the IDs, so the names add nothing the reader could not learn; it
+// grants nothing itself.
+func (r *Resolver) NameRecords(ctx context.Context, records Records) (RecordNames, error) {
+	if len(records.Roles)+len(records.AcademicUnits)+len(records.Classes) == 0 {
+		return RecordNames{}, nil
+	}
+	if r == nil || r.audits == nil {
+		return RecordNames{}, errUnavailable
+	}
+	names, err := r.audits.ListNames(ctx, store.AuditNameOptions{
+		RoleIDs:                     records.Roles,
+		AcademicUnitIDs:             records.AcademicUnits,
+		AcademicUnitInstitutionWide: true,
+		ClassIDs:                    records.Classes,
+		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
+	})
+	if err != nil {
+		return RecordNames{}, err
+	}
+	return RecordNames{Roles: names.Roles, AcademicUnits: names.AcademicUnits, Classes: names.Classes}, nil
+}
+
+// InstitutionName is the Institution's display name, for a record scoped to
+// the Institution.
+func (r *Resolver) InstitutionName(ctx context.Context) (string, error) {
+	if r == nil || r.institutions == nil {
+		return "", errUnavailable
+	}
+	institution, err := r.institutions.GetSingleton(ctx)
+	if err != nil {
+		return "", err
+	}
+	return institution.DisplayName, nil
 }

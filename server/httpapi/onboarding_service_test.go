@@ -27,6 +27,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -66,6 +67,7 @@ type onboardingFixture struct {
 
 	service        *onboarding.Service
 	administration *administration.Service
+	people         *people.Resolver
 }
 
 // newOnboardingFixture builds the Services over one Institution with one
@@ -150,6 +152,7 @@ func newOnboardingFixture(t *testing.T) *onboardingFixture {
 		RecentAuthenticationTTL: 15 * time.Minute,
 	})
 	require.NoError(t, err)
+	fixture.people = people.New(catalog, fixture.access.Authorizer)
 	return fixture
 }
 
@@ -321,7 +324,7 @@ func (c onboardingCatalog) Affiliation() store.AffiliationStore {
 func (c onboardingCatalog) RoleBinding() store.RoleBindingStore {
 	return struct{ store.RoleBindingStore }{}
 }
-func (c onboardingCatalog) Audit() store.AuditStore                   { return struct{ store.AuditStore }{} }
+func (c onboardingCatalog) Audit() store.AuditStore                   { return onboardingAudit{} }
 func (c onboardingCatalog) Retention() store.RetentionStore           { return struct{ store.RetentionStore }{} }
 func (c onboardingCatalog) PluginSettings() store.PluginSettingsStore { return nil }
 func (c onboardingCatalog) File() store.FileStore                     { return struct{ store.FileStore }{} }
@@ -1059,3 +1062,47 @@ func (f *onboardingFixture) storedFilterPreview(state model.OnboardingImportStat
 func (c onboardingCatalog) AssistantProfile() store.AssistantProfileStore { return nil }
 
 func (c onboardingCatalog) AssistantTranscript() store.AssistantTranscriptStore { return nil }
+
+func (s *onboardingUsers) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	names := make([]store.UserDisplayName, 0, len(ids))
+	for _, id := range ids {
+		if account, ok := s.byID[id]; ok && !account.ArchivedAt.Valid {
+			name := account.DisplayName
+			if name == "" {
+				name = account.Username
+			}
+			names = append(names, store.UserDisplayName{UserID: id, DisplayName: name})
+		}
+	}
+	return names, nil
+}
+
+// ListVisibleDisplayNames sees only through institution-wide visibility.
+func (s *onboardingUsers) ListVisibleDisplayNames(ctx context.Context, ids []model.UserID, visibility store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	if !visibility.InstitutionWide {
+		return nil, nil
+	}
+	return s.ListDisplayNames(ctx, ids)
+}
+
+func (s *onboardingUsers) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	identities := make([]store.UserIdentity, 0, len(ids))
+	for _, id := range ids {
+		if account, ok := s.byID[id]; ok {
+			identities = append(identities, store.UserIdentity{ID: id, Username: account.Username, DisplayName: account.DisplayName})
+		}
+	}
+	return identities, nil
+}
+
+// onboardingAudit names nothing: the onboarding tests assert IDs, and a role
+// or scope name is read through the audit name lookup.
+type onboardingAudit struct{ store.AuditStore }
+
+func (onboardingAudit) ListNames(context.Context, store.AuditNameOptions) (store.AuditNames, error) {
+	return store.AuditNames{}, nil
+}

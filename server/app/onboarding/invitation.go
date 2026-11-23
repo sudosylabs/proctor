@@ -128,6 +128,10 @@ type InvitationView struct {
 	AcademicUnitID   model.AcademicUnitID
 	RoleID           model.RoleID
 	RoleActions      []string
+	// ScopeType and ScopeID are where the invitation admits the person: the
+	// Class, Academic Unit or Institution.
+	ScopeType        model.RoleScopeType
+	ScopeID          string
 	IntendedStartsAt time.Time
 	IntendedEndsAt   model.OptionalTime
 	ExpiresAt        time.Time
@@ -382,6 +386,8 @@ func invitationView(invitation *model.Invitation) InvitationView {
 		AcademicUnitID:   invitation.AcademicUnitID,
 		RoleID:           invitation.RoleID,
 		RoleActions:      append([]string(nil), invitation.RoleActions...),
+		ScopeType:        invitation.ScopeType,
+		ScopeID:          invitation.ScopeID,
 		IntendedStartsAt: invitation.IntendedStartsAt,
 		IntendedEndsAt:   invitation.IntendedEndsAt,
 		ExpiresAt:        invitation.ExpiresAt,

@@ -3410,6 +3410,10 @@
               "items": [
                 {
                   "action": "class.members.manage",
+                  "actor": {
+                    "display_name": "Ada Admin",
+                    "id": "ybndrfg8ejkmcpqxot1uwisza4"
+                  },
                   "actor_id": "ybndrfg8ejkmcpqxot1uwisza4",
                   "created_at": "2026-08-01T09:30:00Z",
                   "id": "ybndrfg8ejkmcpqxot1uwisza3",
@@ -7639,9 +7643,18 @@
               "email": "student.one@example.edu",
               "expires_at": "2026-08-29T14:00:00Z",
               "id": "o514k1ahcaicsys1cko4q4s3y8",
+              "inviter": {
+                "display_name": "Priya Raman",
+                "id": "rpn96r4g3jfk3t41u4dus44bzc"
+              },
               "inviter_user_id": "rpn96r4g3jfk3t41u4dus44bzc",
               "purpose": "student_class",
               "revision": 1,
+              "scope": {
+                "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                "name": "Year 1 Mathematics A",
+                "type": "class"
+              },
               "start_at": "2026-09-01T00:00:00Z",
               "state": "pending",
               "updated_at": "2026-08-22T14:00:00Z"
@@ -7679,9 +7692,18 @@
                   "email": "student.one@example.edu",
                   "expires_at": "2026-08-27T10:00:00Z",
                   "id": "ccrzmhoygspnzijnponpyw4zmu",
+                  "inviter": {
+                    "display_name": "Priya Raman",
+                    "id": "rpn96r4g3jfk3t41u4dus44bzc"
+                  },
                   "inviter_user_id": "rpn96r4g3jfk3t41u4dus44bzc",
                   "purpose": "student_class",
                   "revision": 1,
+                  "scope": {
+                    "id": "sjebyge5cpbop1xwo4eds74ejb",
+                    "name": "Year 1 Mathematics A",
+                    "type": "class"
+                  },
                   "start_at": "2026-09-01T00:00:00Z",
                   "state": "pending",
                   "updated_at": "2026-08-20T10:00:03Z"
@@ -7693,14 +7715,27 @@
                   "email": "teacher.one@example.edu",
                   "expires_at": "2026-08-17T09:00:00Z",
                   "id": "id9tzepftxa3h5uben569yr37h",
+                  "inviter": {
+                    "display_name": "Priya Raman",
+                    "id": "rpn96r4g3jfk3t41u4dus44bzc"
+                  },
                   "inviter_user_id": "rpn96r4g3jfk3t41u4dus44bzc",
                   "purpose": "teacher_academic_unit",
                   "revision": 2,
+                  "role": {
+                    "display_name": "Teacher",
+                    "id": "nybc6xhg593upqice3sdeyro5k"
+                  },
                   "role_actions": [
                     "exam.create",
                     "class.view"
                   ],
                   "role_id": "nybc6xhg593upqice3sdeyro5k",
+                  "scope": {
+                    "id": "889766ufjgio6kbpzjbufozksq",
+                    "name": "Computer Science",
+                    "type": "academic_unit"
+                  },
                   "start_at": "2026-08-10T09:00:00Z",
                   "state": "accepted",
                   "updated_at": "2026-08-11T15:42:10Z"
@@ -7741,9 +7776,18 @@
               "email": "student.one@example.edu",
               "expires_at": "2026-08-27T10:00:00Z",
               "id": "ccrzmhoygspnzijnponpyw4zmu",
+              "inviter": {
+                "display_name": "Priya Raman",
+                "id": "rpn96r4g3jfk3t41u4dus44bzc"
+              },
               "inviter_user_id": "rpn96r4g3jfk3t41u4dus44bzc",
               "purpose": "student_class",
               "revision": 1,
+              "scope": {
+                "id": "sjebyge5cpbop1xwo4eds74ejb",
+                "name": "Year 1 Mathematics A",
+                "type": "class"
+              },
               "start_at": "2026-09-01T00:00:00Z",
               "state": "pending",
               "updated_at": "2026-08-20T10:00:03Z"
@@ -14199,6 +14243,10 @@
             ],
             "description": "The action that was attempted, named like a permission, such as `class.members.manage`.",
             "type": "string"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The User who performed the action, named for every reader of the Event. Omitted with `actor_id`."
           },
           "actor_id": {
             "description": "The User who performed the action. Omitted for actions the system took on its own.",
@@ -25738,6 +25786,10 @@
             "$ref": "#/components/schemas/ID",
             "description": "The ID of the Invitation."
           },
+          "inviter": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The User who issued the Invitation, named. For an imported Invitation, this is the importer."
+          },
           "inviter_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The User who issued the Invitation."
@@ -25758,6 +25810,24 @@
             "minimum": 1,
             "type": "integer"
           },
+          "role": {
+            "additionalProperties": false,
+            "description": "The Role the Invitation grants, named. Omitted for an Invitation that grants no Role.",
+            "properties": {
+              "display_name": {
+                "description": "The Role's display name. Omitted for an archived Role.",
+                "maxLength": 512,
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/ID"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
           "role_actions": {
             "description": "The actions the Role allowed when the Invitation was issued, as recorded in the Invitation.",
             "items": {
@@ -25768,6 +25838,34 @@
           "role_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Role the Invitation grants. Present for every purpose except `student_class`."
+          },
+          "scope": {
+            "additionalProperties": false,
+            "description": "Where the Invitation admits the person, named.",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ID"
+              },
+              "name": {
+                "description": "The Institution, Academic Unit or Class display name. Omitted when it is archived.",
+                "maxLength": 512,
+                "type": "string"
+              },
+              "type": {
+                "description": "Kind of scope.",
+                "enum": [
+                  "institution",
+                  "academic_unit",
+                  "class"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "type": "object"
           },
           "start_at": {
             "description": "When the relationship the Invitation grants starts. When the issuer gave no start, a student Class Invitation starts with its Academic Period and every other Invitation starts when it was issued.",
@@ -25799,6 +25897,7 @@
           "expires_at",
           "email",
           "inviter_user_id",
+          "scope",
           "created_at",
           "updated_at",
           "revision"

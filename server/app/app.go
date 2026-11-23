@@ -25,6 +25,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
 )
@@ -55,6 +56,8 @@ type App struct {
 	Users             *user.Service
 	Search            *search.Service
 	Counts            *administration.Counts
+	// People names the people an authorized record refers to.
+	People            *people.Resolver
 	Realtime          *realtime.Service
 	RealtimeAdmission *RealtimeAdmission
 	// Jobs is nil when the graph has no job store.

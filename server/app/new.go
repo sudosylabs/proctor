@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -121,6 +122,7 @@ func New(deps Dependencies) (*App, error) {
 	}
 
 	return &App{
+		People:            people.New(deps.Store, authorizer),
 		Terminals:         terminals,
 		Previews:          environment.NewPreviews(terminals),
 		Assistant:         assistants,

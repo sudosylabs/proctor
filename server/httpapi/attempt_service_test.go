@@ -246,6 +246,9 @@ type attemptLedger struct {
 	// clip is the one screen clip the Attempt has, once requested.
 	clip     *store.ExamAttemptScreenClipView
 	received []int
+	// activity is the candidate's exam activity page.
+	activity      []store.CandidateExamActivityItem
+	activityLists []store.CandidateExamActivityListOptions
 
 	accesses         []store.CandidateAttemptAccess
 	gets             []attemptRead

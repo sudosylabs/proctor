@@ -50,6 +50,7 @@ var storeErrors = apperror.StoreTable{
 		"exam_attempt_membership":                  "exam.attempt.not_found",
 		"exam_sitting_state":                       "exam.attempt.sitting_not_open",
 		"exam_sitting_deadline_reached":            "exam.attempt.sitting_not_open",
+		"exam_sitting_join_closed":                 "exam.attempt.join_closed",
 		"exam_attempt_state":                       "exam.attempt.state_conflict",
 		"screen_recording_disabled":                "exam.attempt.screen_recording_off",
 		"screen_clip_limit":                        "exam.attempt.screen_clip_limit_reached",

@@ -15,11 +15,16 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
 	BrowserPolicyMaximumRules = 128
 	BrowserPolicyMaximumBytes = 32 * 1024
+	// BrowserPolicyRuleLabelMaxRunes bounds a rule's label, the short name
+	// staff and candidates read in place of the origin.
+	BrowserPolicyRuleLabelMaxRunes = 100
 	// browserPolicyMaximumDocumentBytes bounds the jsonb form, which PostgreSQL
 	// renders with extra spacing; BrowserPolicyMaximumBytes bounds the canonical
 	// encoding that is digested and delivered.
@@ -45,7 +50,10 @@ const (
 )
 
 type BrowserPolicyRule struct {
-	RuleID                   string
+	RuleID string
+	// Label is optional plain text naming the site for people. It plays no
+	// part in matching.
+	Label                    string
 	Origin                   string
 	PathPrefix               string
 	HostMatch                BrowserPolicyHostMatch
@@ -109,8 +117,20 @@ func NewBrowserPolicy(enabled bool, startRuleID string, rules []BrowserPolicyRul
 			).wrap(err)
 		}
 
+		label, err := normalizeBrowserPolicyRuleLabel(policy.Rules[index].Label)
+		if err != nil {
+			return BrowserPolicy{}, invalidModelError(
+				"NewBrowserPolicy",
+				"browser_policy",
+				"",
+				fmt.Sprintf("browser policy rule %d label", index),
+				"",
+			).wrap(err)
+		}
+
 		policy.Rules[index].Origin = origin
 		policy.Rules[index].PathPrefix = prefix
+		policy.Rules[index].Label = label
 	}
 
 	slices.SortFunc(policy.Rules, func(left, right BrowserPolicyRule) int { return strings.Compare(left.RuleID, right.RuleID) })
@@ -161,6 +181,9 @@ func (p BrowserPolicy) Validate() error {
 		if err != nil || prefix != rule.PathPrefix {
 			return invalidModelError("BrowserPolicy.Validate", "browser_policy", "", "invalid canonical Browser Policy path", "")
 		}
+		if label, err := normalizeBrowserPolicyRuleLabel(rule.Label); err != nil || label != rule.Label {
+			return invalidModelError("BrowserPolicy.Validate", "browser_policy", "", "invalid canonical Browser Policy label", "")
+		}
 		if _, exists := ids[rule.RuleID]; exists {
 			return invalidModelError("BrowserPolicy.Validate", "browser_policy", "", "duplicate Browser Policy rule identity", "")
 		}
@@ -188,6 +211,24 @@ func (p BrowserPolicy) Validate() error {
 func (p BrowserPolicy) Clone() BrowserPolicy {
 	p.Rules = append([]BrowserPolicyRule(nil), p.Rules...)
 	return p
+}
+
+// normalizeBrowserPolicyRuleLabel trims the label and strips invisible and
+// bidirectional code points. A label blank afterwards is absent; one with a
+// control character or over the rune bound is invalid.
+func normalizeBrowserPolicyRuleLabel(value string) (string, error) {
+	const where = "normalizeBrowserPolicyRuleLabel"
+	if !utf8.ValidString(value) {
+		return "", invalidModelError(where, "browser_policy_rule", "label", "must be valid UTF-8", "")
+	}
+	label := strings.TrimSpace(SanitizeUnicode(value))
+	if utf8.RuneCountInString(label) > BrowserPolicyRuleLabelMaxRunes {
+		return "", invalidModelError(where, "browser_policy_rule", "label", "is too long", "")
+	}
+	if strings.ContainsFunc(label, unicode.IsControl) {
+		return "", invalidModelError(where, "browser_policy_rule", "label", "must not contain control characters", "")
+	}
+	return label, nil
 }
 
 func validBrowserPolicyRuleID(value string) bool {
@@ -288,6 +329,7 @@ func browserRulePrecedes(candidate, current BrowserPolicyRule) bool {
 
 type browserPolicyRuleWire struct {
 	RuleID                   string                                `json:"rule_id"`
+	Label                    string                                `json:"label,omitempty"`
 	Origin                   string                                `json:"origin"`
 	PathPrefix               string                                `json:"path_prefix"`
 	HostMatch                BrowserPolicyHostMatch                `json:"host_match"`

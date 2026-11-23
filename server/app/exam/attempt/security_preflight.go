@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam/safemarkdown"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -338,6 +339,9 @@ func (s *Service) SecurityPolicyOverview(
 	overview, err := s.securityPreflight.ReadSecurityPolicyOverview(ctx, preflightAccess)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
+	}
+	if overview != nil {
+		overview.InstructionsMarkdown = safemarkdown.Sanitize(overview.InstructionsMarkdown)
 	}
 	return overview, nil
 }

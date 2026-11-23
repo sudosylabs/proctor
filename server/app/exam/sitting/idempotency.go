@@ -33,7 +33,26 @@ func prepareScheduleIdempotency(inv invocation.Invocation, command ScheduleComma
 		ClassID          model.ClassID        `json:"class_id"`
 		ScheduledStartAt time.Time            `json:"scheduled_start_at"`
 		ScheduledEndAt   time.Time            `json:"scheduled_end_at"`
-	}{command.ExamID, command.ExamRevisionID, command.ClassID, command.ScheduledStartAt, command.ScheduledEndAt})
+		JoinOpensAt      *model.OptionalTime  `json:"join_opens_at,omitempty"`
+		JoinClosesAt     *model.OptionalTime  `json:"join_closes_at,omitempty"`
+	}{
+		command.ExamID,
+		command.ExamRevisionID,
+		command.ClassID,
+		command.ScheduledStartAt,
+		command.ScheduledEndAt,
+		presentOptionalTime(command.JoinWindow.OpensAt),
+		presentOptionalTime(command.JoinWindow.ClosesAt),
+	})
+}
+
+// presentOptionalTime leaves an absent join bound out of a fingerprint, so a
+// schedule without a join window fingerprints as it always has.
+func presentOptionalTime(value model.OptionalTime) *model.OptionalTime {
+	if !value.Valid {
+		return nil
+	}
+	return &value
 }
 
 func prepareScheduleUpdateIdempotency(inv invocation.Invocation, command UpdateScheduleCommand) (*store.CommandIdempotency, error) {
@@ -49,6 +68,7 @@ func prepareScheduleUpdateIdempotency(inv invocation.Invocation, command UpdateS
 			ClassID          *model.ClassID        `json:"class_id,omitempty"`
 			ScheduledStartAt *time.Time            `json:"scheduled_start_at,omitempty"`
 			ScheduledEndAt   *time.Time            `json:"scheduled_end_at,omitempty"`
+			JoinWindow       *joinWindowDocument   `json:"join_window,omitempty"`
 		}{
 			command.ExamID,
 			command.SittingID,
@@ -57,6 +77,7 @@ func prepareScheduleUpdateIdempotency(inv invocation.Invocation, command UpdateS
 			command.ClassID,
 			command.ScheduledStartAt,
 			command.ScheduledEndAt,
+			newJoinWindowDocument(command.JoinWindow),
 		},
 	)
 }
@@ -82,6 +103,20 @@ func prepareExtensionIdempotency(inv invocation.Invocation, command ExtendComman
 		ScheduledEndAt   time.Time           `json:"scheduled_end_at"`
 		PrivateReason    string              `json:"private_reason"`
 	}{command.ExamID, command.SittingID, command.ExpectedRevision, command.ScheduledEndAt, command.PrivateReason})
+}
+
+// joinWindowDocument spells a replacement join window in a fingerprint; an
+// empty object removes the window.
+type joinWindowDocument struct {
+	OpensAt  *model.OptionalTime `json:"opens_at,omitempty"`
+	ClosesAt *model.OptionalTime `json:"closes_at,omitempty"`
+}
+
+func newJoinWindowDocument(window *model.ExamSittingJoinWindow) *joinWindowDocument {
+	if window == nil {
+		return nil
+	}
+	return &joinWindowDocument{OpensAt: presentOptionalTime(window.OpensAt), ClosesAt: presentOptionalTime(window.ClosesAt)}
 }
 
 func canonicalTimePointer(value *time.Time) *time.Time {

@@ -64,6 +64,7 @@ type ExamSitting struct {
 	ClassID          ClassID
 	ScheduledStartAt time.Time
 	ScheduledEndAt   time.Time
+	JoinWindow       ExamSittingJoinWindow
 	State            ExamSittingState
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -74,6 +75,63 @@ type ExamSitting struct {
 	CanceledAt       OptionalTime
 	ReasonCode       ExamSittingReasonCode
 	Revision         int64
+}
+
+// ExamSittingJoinWindow is when candidates may join. From OpensAt, at or
+// before the scheduled start, a candidate may prepare while the sitting is
+// still scheduled; the sitting itself, and every Attempt, still starts at the
+// scheduled start. ClosesAt, after the start and at or before the end,
+// refuses first entry from then on while candidates who already started
+// carry on until the end. Either may be absent, and an empty window changes
+// nothing. It is part of the pre-open schedule, so it is frozen once the
+// sitting opens.
+type ExamSittingJoinWindow struct {
+	OpensAt  OptionalTime
+	ClosesAt OptionalTime
+}
+
+// ValidateFor checks the window against the schedule it belongs to.
+func (w ExamSittingJoinWindow) ValidateFor(scheduledStartAt, scheduledEndAt time.Time) error {
+	const where = "ExamSittingJoinWindow.ValidateFor"
+	if w.OpensAt.Valid && (w.OpensAt.Time.IsZero() || w.OpensAt.Time.Location() != time.UTC || w.OpensAt.Time.After(scheduledStartAt)) {
+		return invalidModelError(where, "exam_sitting", "join_opens_at", "must be at or before the scheduled start", "")
+	}
+	if w.ClosesAt.Valid && (w.ClosesAt.Time.Location() != time.UTC ||
+		!w.ClosesAt.Time.After(scheduledStartAt) ||
+		w.ClosesAt.Time.After(scheduledEndAt)) {
+		return invalidModelError(where, "exam_sitting", "join_closes_at", "must be after the scheduled start and at or before the end", "")
+	}
+	return nil
+}
+
+// Equal compares the bounds as instants.
+func (w ExamSittingJoinWindow) Equal(other ExamSittingJoinWindow) bool {
+	return w.OpensAt.Valid == other.OpensAt.Valid && w.OpensAt.Time.Equal(other.OpensAt.Time) &&
+		w.ClosesAt.Valid == other.ClosesAt.Valid && w.ClosesAt.Time.Equal(other.ClosesAt.Time)
+}
+
+// Canonical stores present bounds in UTC microseconds and absent ones as
+// the zero value.
+func (w ExamSittingJoinWindow) Canonical() ExamSittingJoinWindow {
+	if w.OpensAt.Valid {
+		w.OpensAt = OptionalTimeFrom(w.OpensAt.Time)
+	} else {
+		w.OpensAt = OptionalTime{}
+	}
+	if w.ClosesAt.Valid {
+		w.ClosesAt = OptionalTimeFrom(w.ClosesAt.Time)
+	} else {
+		w.ClosesAt = OptionalTime{}
+	}
+	return w
+}
+
+// Waiting reports whether at is in the early-join phase of a sitting still
+// in state and due to start at scheduledStartAt: from OpensAt until the
+// start. A waiting candidate may prepare (the readiness overview and
+// preflight) but holds no Attempt, so nobody gains working time.
+func (w ExamSittingJoinWindow) Waiting(state ExamSittingState, scheduledStartAt, at time.Time) bool {
+	return state == ExamSittingScheduled && w.OpensAt.Valid && !at.Before(w.OpensAt.Time) && at.Before(scheduledStartAt)
 }
 
 // ExamSittingReasonCode is a bounded, candidate-safe lifecycle reason. A
@@ -119,7 +177,9 @@ func NewExamSitting(
 	examID ExamID,
 	examRevisionID ExamRevisionID,
 	classID ClassID,
-	scheduledStartAt, scheduledEndAt, at time.Time,
+	scheduledStartAt, scheduledEndAt time.Time,
+	joinWindow ExamSittingJoinWindow,
+	at time.Time,
 ) (*ExamSitting, error) {
 	sitting := &ExamSitting{
 		ID:               id,
@@ -128,6 +188,7 @@ func NewExamSitting(
 		ClassID:          classID,
 		ScheduledStartAt: TimeUTC(scheduledStartAt),
 		ScheduledEndAt:   TimeUTC(scheduledEndAt),
+		JoinWindow:       joinWindow.Canonical(),
 		State:            ExamSittingScheduled,
 		CreatedAt:        TimeUTC(at),
 		UpdatedAt:        TimeUTC(at),
@@ -146,7 +207,9 @@ func NewExamSitting(
 func (s *ExamSitting) ApplySchedule(
 	examRevisionID ExamRevisionID,
 	classID ClassID,
-	scheduledStartAt, scheduledEndAt, at time.Time,
+	scheduledStartAt, scheduledEndAt time.Time,
+	joinWindow ExamSittingJoinWindow,
+	at time.Time,
 ) (bool, error) {
 	if s == nil {
 		return false, invalidModelError("ExamSitting.ApplySchedule", "exam_sitting", "value", "is required", "")
@@ -156,10 +219,12 @@ func (s *ExamSitting) ApplySchedule(
 	}
 
 	scheduledStartAt, scheduledEndAt = TimeUTC(scheduledStartAt), TimeUTC(scheduledEndAt)
+	joinWindow = joinWindow.Canonical()
 	if s.ExamRevisionID == examRevisionID &&
 		s.ClassID == classID &&
 		s.ScheduledStartAt == scheduledStartAt &&
-		s.ScheduledEndAt == scheduledEndAt {
+		s.ScheduledEndAt == scheduledEndAt &&
+		s.JoinWindow.Equal(joinWindow) {
 		return false, nil
 	}
 
@@ -168,6 +233,7 @@ func (s *ExamSitting) ApplySchedule(
 	candidate.ClassID = classID
 	candidate.ScheduledStartAt = scheduledStartAt
 	candidate.ScheduledEndAt = scheduledEndAt
+	candidate.JoinWindow = joinWindow
 	candidate.UpdatedAt = TimeUTC(at)
 	if candidate.UpdatedAt.Before(s.UpdatedAt) {
 		candidate.UpdatedAt = s.UpdatedAt
@@ -391,6 +457,9 @@ func (s *ExamSitting) Validate() error {
 	}
 	if s.ScheduledStartAt.IsZero() || s.ScheduledEndAt.IsZero() || !s.ScheduledStartAt.Before(s.ScheduledEndAt) {
 		return invalidModelError(where, "exam_sitting", "schedule", "must be a nonempty half-open interval", details)
+	}
+	if err := s.JoinWindow.ValidateFor(s.ScheduledStartAt, s.ScheduledEndAt); err != nil {
+		return err
 	}
 
 	if s.ScheduledStartAt.Location() != time.UTC ||

@@ -78,6 +78,7 @@ type candidateBrowserPolicyResponse struct {
 
 type candidateBrowserPolicyRuleResponse struct {
 	RuleID                   string `json:"rule_id"`
+	Label                    string `json:"label,omitempty"`
 	Origin                   string `json:"origin"`
 	PathPrefix               string `json:"path_prefix"`
 	HostMatch                string `json:"host_match"`
@@ -383,6 +384,7 @@ func candidateBrowserPolicyWire(value *store.CandidateBrowserPolicy) *candidateB
 	for index, rule := range value.Policy.Rules {
 		response.Rules[index] = candidateBrowserPolicyRuleResponse{
 			RuleID:                   rule.RuleID,
+			Label:                    rule.Label,
 			Origin:                   rule.Origin,
 			PathPrefix:               rule.PathPrefix,
 			HostMatch:                string(rule.HostMatch),

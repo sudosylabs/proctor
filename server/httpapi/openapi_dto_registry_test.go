@@ -127,6 +127,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"CancelExamSittingRequest":                       reflect.TypeOf(cancelExamSittingRequest{}),
 	"CandidateAttemptConfiguration":                  reflect.TypeOf(candidateAttemptConfigurationResponse{}),
 	"CandidateBrowserPolicy":                         reflect.TypeOf(candidateBrowserPolicyResponse{}),
+	"CandidateBrowserSite":                           reflect.TypeOf(candidateBrowserSiteResponse{}),
+	"CandidateFocusLossRule":                         reflect.TypeOf(candidateFocusLossRuleResponse{}),
 	"CandidateExamActivityAttemptResponse":           reflect.TypeOf(candidateExamActivityAttemptResponse{}),
 	"CandidateExamActivityItemResponse":              reflect.TypeOf(candidateExamActivityItemResponse{}),
 	"CandidateExamActivityRelationResponse":          reflect.TypeOf(candidateExamActivityRelationResponse{}),
@@ -414,6 +416,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"RoleHolders":                                    reflect.TypeOf(roleHoldersResponse{}),
 	"SaveExamIntegrityDecisionRequest":               reflect.TypeOf(saveExamIntegrityDecisionRequest{}),
 	"ScheduleExamSittingRequest":                     reflect.TypeOf(scheduleExamSittingRequest{}),
+	"ExamSittingJoinWindow":                          reflect.TypeOf(examSittingJoinWindowRequest{}),
 	"ScreenRecordingDisclosure":                      reflect.TypeOf(model.ScreenRecordingDisclosure{}),
 	"SearchResponse":                                 reflect.TypeOf(searchResponse{}),
 	"SecurityCatalogBinding":                         reflect.TypeOf(model.SecurityCatalogBinding{}),
@@ -575,7 +578,12 @@ var openAPIDTOExceptions = map[string]dtoSchemaException{
 	"UpdateProgrammeLevelRequest":     {NonNullable: []string{"expected_revision"}},
 	"UpdateExamSittingScheduleRequest": {NonNullable: []string{
 		"exam_revision_id", "class_id", "scheduled_start_at", "scheduled_end_at",
+		"join_window", "join_window.opens_at", "join_window.closes_at",
 	}},
+	// A join window and its bounds are left out when absent; the handler
+	// refuses null for each.
+	"ScheduleExamSittingRequest": {NonNullable: []string{"join_window", "join_window.opens_at", "join_window.closes_at"}},
+	"ExamSittingJoinWindow":      {NonNullable: []string{"opens_at", "closes_at"}},
 	// Responses that success always fills: the login, refresh, and desktop
 	// exchanges always issue a session, and the schema leaves the bootstrap
 	// result members optional although bootstrap creates all of them.

@@ -342,7 +342,7 @@ func testBrowserPolicyInstitutionPin(t *testing.T, ss store.Store) {
 	creation := newExamAuthoringCreation(t, ctx, ss, unit.ID, creator.ID, at)
 	created, err := ss.ExamAuthoring().Create(ctx, creation, examCommand(creator.ID, "exam.create", "pin-create", "pin-create"))
 	require.NoError(t, err)
-	policy, err := model.NewBrowserPolicy(true, "start", []model.BrowserPolicyRule{{RuleID: "start", Origin: "http://institution.example:8080", PathPrefix: "/exam", HostMatch: model.BrowserPolicyHostExact, BlockedNavigationOutcome: model.BrowserPolicyBlockedNavigationIntegrityEvidence, InstitutionHTTPException: true}})
+	policy, err := model.NewBrowserPolicy(true, "start", []model.BrowserPolicyRule{{RuleID: "start", Label: "Exam portal", Origin: "http://institution.example:8080", PathPrefix: "/exam", HostMatch: model.BrowserPolicyHostExact, BlockedNavigationOutcome: model.BrowserPolicyBlockedNavigationIntegrityEvidence, InstitutionHTTPException: true}})
 	require.NoError(t, err)
 	base := newExamDraftTextUpdate(t, ctx, ss, created.Value.Exam.ID, creator.ID, 1, nil, nil, at.Add(time.Second))
 	input := &store.ExamDraftBrowserPolicyUpdate{ExamID: base.ExamID, ActorUserID: creator.ID, ExpectedRevision: 1, Policy: policy, InstitutionOrigin: "https://unrelated.example:8080", UpdatedAt: base.UpdatedAt, AuditEventID: base.AuditEventID, AuditAt: base.AuditAt}
@@ -364,6 +364,7 @@ func testBrowserPolicyInstitutionPin(t *testing.T, ss store.Store) {
 	reloaded, err := ss.ExamAuthoring().Get(ctx, input.ExamID, creator.ID)
 	require.NoError(t, err)
 	require.NoError(t, reloaded.Draft.BrowserPolicy.ValidateInstitutionOrigin(input.InstitutionOrigin))
+	require.Equal(t, "Exam portal", reloaded.Draft.BrowserPolicy.Rules[0].Label, "the rule label was not stored")
 	digest, err := model.BrowserPolicyDigest(reloaded.Draft.BrowserPolicy)
 	require.NoError(t, err)
 	require.True(t, model.IsValidSHA256Fingerprint(digest), "invalid persisted digest")

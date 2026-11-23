@@ -110,6 +110,10 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 	require.Equal(t, []store.ExamAttemptInvalidationTarget{{ExamID: fixture.examID, SittingID: fixture.sitting.ID,
 		CandidateUserID: fixture.candidate.ID}}, targets)
 
+	suspendedActivity := candidateActivityAttempt(t, ctx, ss, fixture, connected.Attempt.ID)
+	require.Equal(t, model.OptionalTimeFrom(kicked.Suspension.StartedAt), suspendedActivity.SuspendedAt, "the candidate sees when they were stopped")
+	require.False(t, suspendedActivity.ReallowedAt.Valid, "nobody let the candidate back in yet")
+
 	again := kick(fixture.manager.ID, false, kicked.Attempt.Revision)
 	_, err = ss.ExamAttempt().SuspendAttempt(ctx, again,
 		examCommand(fixture.manager.ID, store.ExamAttemptSuspendOperation, "kick-again", "kick-again"))
@@ -128,6 +132,10 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 	require.Equal(t, model.AttemptSuspensionSourceManual, reallowed.Suspension.Source)
 	require.False(t, reallowed.FocusLossWindowReset)
 	require.Equal(t, fixture.manager.ID, reallowed.Suspension.SuspendedByUserID)
+	reallowedActivity := candidateActivityAttempt(t, ctx, ss, fixture, connected.Attempt.ID)
+	require.Equal(t, model.OptionalTimeFrom(kicked.Suspension.StartedAt), reallowedActivity.SuspendedAt, "the latest suspension stays")
+	require.Equal(t, reallowed.Suspension.EndedAt, reallowedActivity.ReallowedAt, "the candidate sees when they were let back in")
+	require.Empty(t, reallowedActivity.SuspensionReasonCode, "a reallowed Attempt carries no current reason")
 
 	// Exact replay returns the original kick even after the episode closed.
 	replay := *first
@@ -148,6 +156,29 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 		examCommand(fixture.manager.ID, store.ExamAttemptSuspendOperation, "kick-ready", "kick-ready"))
 	require.ErrorAs(t, err, &conflict, "SuspendAttempt(ready) error")
 	require.Equal(t, "exam_attempt_state", conflict.Constraint, "SuspendAttempt(ready) error")
+}
+
+// candidateActivityAttempt reads the candidate's own activity for the fixture's
+// sitting, as their Desktop does.
+func candidateActivityAttempt(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,
+	attemptID model.ExamAttemptID,
+) *store.CandidateExamActivityAttempt {
+	t.Helper()
+	activity, err := ss.ExamAttempt().ListCandidateActivity(ctx, store.CandidateExamActivityListOptions{
+		CandidateUserID: fixture.candidate.ID, DesktopSessionID: fixture.session.ID,
+		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
+		Limit: 50,
+	})
+	require.NoError(t, err)
+	for _, item := range activity.Items {
+		if item.SittingID == fixture.sitting.ID {
+			require.NotNil(t, item.Attempt, "the activity lists no Attempt")
+			require.Equal(t, attemptID, item.Attempt.ID)
+			return item.Attempt
+		}
+	}
+	require.FailNow(t, "the activity does not list the sitting")
+	return nil
 }
 
 // ExamAttemptManualSuspensionSQLProbe moves PostgreSQL-owned instants that

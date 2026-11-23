@@ -128,7 +128,7 @@ func TestAccessScopeResolverMapsExamSittingThroughOwningExam(t *testing.T) {
 	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
 	exam, err := model.NewExam(examID, unitID, model.NewUserID(), model.NowUTC())
 	require.NoError(t, err)
-	sitting, err := model.NewExamSitting(sittingID, examID, model.NewExamRevisionID(), model.NewClassID(), model.NowUTC().Add(time.Hour), model.NowUTC().Add(2*time.Hour), model.NowUTC())
+	sitting, err := model.NewExamSitting(sittingID, examID, model.NewExamRevisionID(), model.NewClassID(), model.NowUTC().Add(time.Hour), model.NowUTC().Add(2*time.Hour), model.ExamSittingJoinWindow{}, model.NowUTC())
 	require.NoError(t, err)
 	resolver, err := NewScopeResolver(ScopeResolverDependencies{Institutions: &accessInstitutionStoreFake{}, AcademicUnits: &accessAcademicUnitStoreFake{ancestors: map[string][]*model.AcademicUnit{unitID.String(): {{ID: unitID, InstitutionID: institutionID}}}}, Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{exam: exam}, Sittings: &accessExamSittingStoreFake{snapshot: &store.ExamSittingSnapshot{Sitting: sitting}}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)

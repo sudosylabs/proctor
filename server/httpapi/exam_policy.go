@@ -51,6 +51,7 @@ type browserPolicyDocument struct {
 
 type browserPolicyRuleDocument struct {
 	RuleID                   string `json:"rule_id"`
+	Label                    string `json:"label,omitempty"`
 	Origin                   string `json:"origin"`
 	PathPrefix               string `json:"path_prefix"`
 	HostMatch                string `json:"host_match"`
@@ -124,7 +125,14 @@ func (d *browserPolicyRuleDocument) UnmarshalJSON(encoded []byte) error {
 		}
 	}
 
-	if len(members) != 7 {
+	expected := 7
+	if label, present := members["label"]; present {
+		if bytes.Equal(bytes.TrimSpace(label), []byte("null")) {
+			return errors.New("browser policy rule label must be a string when present")
+		}
+		expected++
+	}
+	if len(members) != expected {
 		return errors.New("browser policy rule contains an unknown field")
 	}
 
@@ -137,6 +145,7 @@ func (d browserPolicyDocument) model() (model.BrowserPolicy, error) {
 	for index, rule := range d.Rules {
 		rules[index] = model.BrowserPolicyRule{
 			RuleID:                   rule.RuleID,
+			Label:                    rule.Label,
 			Origin:                   rule.Origin,
 			PathPrefix:               rule.PathPrefix,
 			HostMatch:                model.BrowserPolicyHostMatch(rule.HostMatch),
@@ -164,6 +173,7 @@ func browserPolicyDocumentFromModel(policy model.BrowserPolicy) browserPolicyDoc
 	for index, rule := range policy.Rules {
 		document.Rules[index] = browserPolicyRuleDocument{
 			RuleID:                   rule.RuleID,
+			Label:                    rule.Label,
 			Origin:                   rule.Origin,
 			PathPrefix:               rule.PathPrefix,
 			HostMatch:                string(rule.HostMatch),

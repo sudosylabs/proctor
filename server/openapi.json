@@ -955,6 +955,7 @@
                     "blocked_navigation_outcome": "record",
                     "host_match": "exact",
                     "institution_http_exception": false,
+                    "label": "Algorithms reference",
                     "origin": "https://reference.example.edu",
                     "path_prefix": "/algorithms",
                     "rule_id": "reference"
@@ -964,6 +965,7 @@
                     "blocked_navigation_outcome": "integrity_evidence",
                     "host_match": "exact_and_subdomains",
                     "institution_http_exception": false,
+                    "label": "Course library",
                     "origin": "https://library.example.edu",
                     "path_prefix": "/",
                     "rule_id": "library"
@@ -2278,6 +2280,10 @@
             "example": {
               "class_id": "ybndrfg8ejkmcpqxot1uwisza4",
               "exam_revision_id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "join_window": {
+                "closes_at": "2026-12-14T09:30:00Z",
+                "opens_at": "2026-12-14T08:50:00Z"
+              },
               "scheduled_end_at": "2026-12-14T11:00:00Z",
               "scheduled_start_at": "2026-12-14T09:00:00Z"
             },
@@ -2527,6 +2533,9 @@
           "application/json": {
             "example": {
               "expected_revision": 3,
+              "join_window": {
+                "opens_at": "2026-12-14T09:20:00Z"
+              },
               "scheduled_end_at": "2026-12-14T11:30:00Z",
               "scheduled_start_at": "2026-12-14T09:30:00Z"
             },
@@ -4074,7 +4083,10 @@
                   ],
                   "attempt": {
                     "id": "o87yi4tenx8kodmcuup1hmtsbo",
+                    "last_saved_at": "2026-09-14T09:52:40Z",
+                    "reallowed_at": "2026-09-14T09:38:15Z",
                     "state": "active",
+                    "suspended_at": "2026-09-14T09:27:04Z",
                     "suspension_reason_code": null
                   },
                   "class": {
@@ -4083,6 +4095,8 @@
                   },
                   "exam_id": "6xoche483hwrx5rpu8jzjoe7qg",
                   "exam_sitting_id": "39kqk53i4cswfzbi7hbai1r8qg",
+                  "join_closes_at": "2026-09-14T09:30:00Z",
+                  "join_opens_at": "2026-09-14T08:50:00Z",
                   "result": null,
                   "scheduled_end_at": "2026-09-14T11:00:00Z",
                   "scheduled_start_at": "2026-09-14T09:00:00Z",
@@ -4122,6 +4136,7 @@
                   "submission": {
                     "id": "xpq79ar61ncrjiouey6d9tgp91",
                     "provenance": "candidate_submitted",
+                    "receipt_code": "7QXR-4M2K-HV9D-3JNP",
                     "submitted_at": "2026-09-07T13:48:10Z"
                   },
                   "title": "Linear Algebra Quiz 2"
@@ -4187,6 +4202,7 @@
                     "blocked_navigation_outcome": "record",
                     "host_match": "exact",
                     "institution_http_exception": false,
+                    "label": "Language reference",
                     "origin": "https://docs.example.org",
                     "path_prefix": "/reference",
                     "rule_id": "language-docs"
@@ -6873,6 +6889,8 @@
               "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
               "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
+              "join_closes_at": "2026-12-14T09:30:00Z",
+              "join_opens_at": "2026-12-14T08:50:00Z",
               "revision": 1,
               "scheduled_end_at": "2026-12-14T11:00:00Z",
               "scheduled_start_at": "2026-12-14T09:00:00Z",
@@ -6974,6 +6992,8 @@
               "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
               "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
+              "join_closes_at": "2026-12-14T09:30:00Z",
+              "join_opens_at": "2026-12-14T08:50:00Z",
               "opened_at": "2026-12-14T09:00:02Z",
               "paused_at": "2026-12-14T09:41:17Z",
               "revision": 3,
@@ -10553,6 +10573,7 @@
           "application/json": {
             "example": {
               "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
+              "receipt_code": "7QXR-4M2K-HV9D-3JNP",
               "released_at": "2026-12-18T15:20:00Z",
               "student_remarks_markdown": "Your submission was reviewed and no further action is needed.",
               "submission_id": "39kqk53i4cswfzbi7hbai1r8qg",
@@ -15853,6 +15874,12 @@
             "description": "Set to true only for an HTTP rule whose host and explicit port are the same as this installation's own HTTPS origin. It must be false for HTTPS rules. It never allows credentials to be sent over HTTP.",
             "type": "boolean"
           },
+          "label": {
+            "description": "An optional short name for the site that staff and candidates read in place of the origin, such as \"PostgreSQL documentation\". Plain text of at most 100 characters. Surrounding spaces and invisible or bidirectional characters are removed when you save, and a label that is then empty is left out. Control characters are rejected. It is frozen with the revision and plays no part in matching.",
+            "maxLength": 400,
+            "minLength": 1,
+            "type": "string"
+          },
           "origin": {
             "description": "The scheme, host and optional port of the site, in ASCII. Use HTTPS. HTTP is accepted only with institution_http_exception. Leave out the default port (443 for HTTPS, 80 for HTTP). The host must be DNS labels or an IPv4 address. Internationalized names, punycode, IPv6, a trailing dot, credentials, a query, a fragment and any path other than / are rejected. A port is a decimal number from 1 to 65535 with no leading zeros. An IP address works only with exact host matching.",
             "format": "uri",
@@ -16498,6 +16525,40 @@
         ],
         "type": "object"
       },
+      "CandidateBrowserSite": {
+        "additionalProperties": false,
+        "description": "One site the Exam browser opens, as the candidate is told it.",
+        "properties": {
+          "label": {
+            "description": "The rule's label, when the Exam gives one.",
+            "maxLength": 400,
+            "minLength": 1,
+            "type": "string"
+          },
+          "origin": {
+            "description": "The scheme, host and optional port of the site.",
+            "format": "uri",
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "path_prefix": {
+            "description": "The path the site covers, and everything below it.",
+            "maxLength": 2048,
+            "pattern": "^/",
+            "type": "string"
+          },
+          "start": {
+            "description": "True for the page the Exam browser opens first.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "origin",
+          "path_prefix",
+          "start"
+        ],
+        "type": "object"
+      },
       "CandidateCapability": {
         "description": "A group of candidate operations that a live correction can hold back until it is acknowledged. `browser` covers the exam browser, `submission` covers submitting the Attempt, and `workspace` covers changing the Workspace.",
         "enum": [
@@ -16613,10 +16674,12 @@
         "type": "object"
       },
       "CandidateExamAccessState": {
-        "description": "Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.",
+        "description": "Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `waiting` means the Sitting's join window is open but the Sitting has not started: the candidate can run the readiness checks and read the instructions, and the Attempt starts at the scheduled start. `join_closed` means the join window has closed before they started. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.",
         "enum": [
           "not_open",
+          "waiting",
           "joinable",
+          "join_closed",
           "resumable",
           "sitting_paused",
           "await_reallow",
@@ -16635,6 +16698,16 @@
           "id": {
             "$ref": "#/components/schemas/ID"
           },
+          "last_saved_at": {
+            "description": "When the workspace last acknowledged a change, from any Proctor Desktop the candidate used. Absent until the first change.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "reallowed_at": {
+            "description": "When an invigilator last let the candidate back in. Absent until that happens.",
+            "format": "date-time",
+            "type": "string"
+          },
           "state": {
             "description": "Current state of the Attempt.",
             "enum": [
@@ -16643,6 +16716,11 @@
               "suspended",
               "submitted"
             ],
+            "type": "string"
+          },
+          "suspended_at": {
+            "description": "When the current suspension began, or the latest one if the candidate was let back in. Absent when the Attempt was never suspended.",
+            "format": "date-time",
             "type": "string"
           },
           "suspension_reason_code": {
@@ -16712,6 +16790,16 @@
           "exam_sitting_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Sitting."
+          },
+          "join_closes_at": {
+            "description": "When the Sitting stops admitting candidates who have not started. Absent when they can start until the end. A candidate who has started can carry on until the end.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "join_opens_at": {
+            "description": "When the candidate can join to prepare: run the readiness checks and read the instructions. The Attempt still starts at scheduled_start_at. Absent when there is no early join.",
+            "format": "date-time",
+            "type": "string"
           },
           "result": {
             "description": "The released result, or null until it is released.",
@@ -16865,6 +16953,11 @@
           "provenance": {
             "$ref": "#/components/schemas/ExamSubmissionProvenance"
           },
+          "receipt_code": {
+            "description": "The Submission's receipt code, the same value returned when it was submitted, in groups of four separated by hyphens.",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$",
+            "type": "string"
+          },
           "submitted_at": {
             "description": "Time the Submission was made.",
             "format": "date-time",
@@ -16873,6 +16966,7 @@
         },
         "required": [
           "id",
+          "receipt_code",
           "submitted_at",
           "provenance"
         ],
@@ -17165,6 +17259,48 @@
           "workspace_cursor",
           "items",
           "refresh_required"
+        ],
+        "type": "object"
+      },
+      "CandidateFocusLossRule": {
+        "additionalProperties": false,
+        "description": "The Exam's focus-loss rule as the candidate is told it before starting, from the Exam Revision the Sitting delivers. count and window_seconds are present only when the rule is on.",
+        "properties": {
+          "count": {
+            "description": "How many times leaving the exam window within window_seconds leads to the outcome.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mode": {
+            "description": "The same value as the policy's focus_loss_mode.",
+            "enum": [
+              "disabled",
+              "observe",
+              "enforce"
+            ],
+            "type": "string"
+          },
+          "outcome": {
+            "description": "What the candidate experiences when the rule trips: nothing visible, a warning, or the Attempt is stopped until a manager lets them back in.",
+            "enum": [
+              "none",
+              "warning",
+              "suspension"
+            ],
+            "type": "string"
+          },
+          "window_seconds": {
+            "description": "The length of the rolling window, in whole seconds. A window with a fraction of a second is rounded up, so it is never shorter than the one that counts.",
+            "format": "int64",
+            "maximum": 14400,
+            "minimum": 10,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "outcome"
         ],
         "type": "object"
       },
@@ -21811,6 +21947,7 @@
           "exam.attempt.environment_unavailable",
           "exam.attempt.focus_loss_conflict",
           "exam.attempt.invalid",
+          "exam.attempt.join_closed",
           "exam.attempt.management_authority_conflict",
           "exam.attempt.not_found",
           "exam.attempt.preview_connection_ended",
@@ -24308,6 +24445,23 @@
         ],
         "type": "object"
       },
+      "ExamSittingJoinWindow": {
+        "additionalProperties": false,
+        "description": "When candidates may join. Leave a bound out for none. From opens_at, at or before the start, candidates can run the readiness checks and read the instructions; Attempts still start when the Sitting opens at the scheduled start. closes_at, after the start and at or before the deadline, refuses first entry from then on with exam.attempt.join_closed, while candidates who already started carry on. The window is frozen once the Sitting opens.",
+        "properties": {
+          "closes_at": {
+            "description": "When candidates who have not started can no longer join.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "opens_at": {
+            "description": "When candidates can join early to prepare.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ExamSittingListResponse": {
         "additionalProperties": false,
         "description": "One page of Sittings, latest scheduled start first.",
@@ -24440,6 +24594,16 @@
             "$ref": "#/components/schemas/ID",
             "description": "The Sitting's ID."
           },
+          "join_closes_at": {
+            "description": "After this time no candidate can start a new Attempt, and admission fails with exam.attempt.join_closed. Candidates who already started can reconnect until the deadline. It is after the scheduled start and at or before the deadline. Present only when set. It is frozen once the Sitting opens.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "join_opens_at": {
+            "description": "When candidates can join early, at or before the scheduled start. From then until the start they can run the readiness checks and read the instructions; nobody can start an Attempt or touch a workspace before the start, so working time is the same for everyone. Present only when set. It is frozen once the Sitting opens.",
+            "format": "date-time",
+            "type": "string"
+          },
           "opened_at": {
             "description": "When the Sitting opened. Omitted until it opens.",
             "format": "date-time",
@@ -24466,7 +24630,7 @@
             "type": "string"
           },
           "scheduled_start_at": {
-            "description": "When the Sitting is scheduled to open.",
+            "description": "When the Sitting opens and every Attempt can start, whether or not candidates joined early.",
             "format": "date-time",
             "type": "string"
           },
@@ -34276,6 +34440,9 @@
             "$ref": "#/components/schemas/ID",
             "description": "The published Exam Revision to deliver. It must belong to this Exam."
           },
+          "join_window": {
+            "$ref": "#/components/schemas/ExamSittingJoinWindow"
+          },
           "scheduled_end_at": {
             "description": "The Sitting's deadline. It must be after the start and inside the Class's Academic Period.",
             "format": "date-time",
@@ -34722,6 +34889,14 @@
           "browser_activity_disclosure": {
             "$ref": "#/components/schemas/BrowserActivityDisclosure"
           },
+          "browser_sites": {
+            "description": "The sites the Exam browser opens, from the Exam Revision the Sitting delivers. Empty when the Exam browser is off. Exactly one is the start page when it is on.",
+            "items": {
+              "$ref": "#/components/schemas/CandidateBrowserSite"
+            },
+            "maxItems": 128,
+            "type": "array"
+          },
           "capability_matrix_digest": {
             "description": "SHA-256 of the exact signed bytes of the release's certification document.",
             "pattern": "^sha256:[0-9a-f]{64}$",
@@ -34733,6 +34908,14 @@
             },
             "maxItems": 32,
             "type": "array"
+          },
+          "focus_loss": {
+            "$ref": "#/components/schemas/CandidateFocusLossRule"
+          },
+          "instructions_markdown": {
+            "description": "The Exam's instructions from the Revision the Sitting delivers, in Markdown cleaned of unsafe content, so a candidate who joined early can read them while they wait. Can be empty.",
+            "maxLength": 65536,
+            "type": "string"
           },
           "policy": {
             "$ref": "#/components/schemas/EffectiveExamSecurityPolicy"
@@ -34763,7 +34946,10 @@
           "capability_matrix_digest",
           "catalog_bindings",
           "browser_activity_disclosure",
-          "screen_recording_disclosure"
+          "screen_recording_disclosure",
+          "focus_loss",
+          "browser_sites",
+          "instructions_markdown"
         ],
         "type": "object"
       },
@@ -36115,6 +36301,11 @@
             "$ref": "#/components/schemas/ID",
             "description": "The candidate's Attempt."
           },
+          "receipt_code": {
+            "description": "The Submission's receipt code, the same value the candidate got when they submitted, in groups of four separated by hyphens.",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$",
+            "type": "string"
+          },
           "released_at": {
             "description": "When the result was released.",
             "format": "date-time",
@@ -36137,6 +36328,7 @@
         "required": [
           "submission_review_id",
           "submission_id",
+          "receipt_code",
           "exam_attempt_id",
           "student_remarks_markdown",
           "released_at"
@@ -37002,6 +37194,11 @@
             "required": [
               "scheduled_end_at"
             ]
+          },
+          {
+            "required": [
+              "join_window"
+            ]
           }
         ],
         "description": "Changes to a Sitting that has not opened yet. Send the current revision and at least one value to change. Members you leave out keep their current value.",
@@ -37019,6 +37216,10 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "join_window": {
+            "$ref": "#/components/schemas/ExamSittingJoinWindow",
+            "description": "A new join window, replacing the whole current one; {} removes it. Left out, the current window is kept and checked against the new times."
           },
           "scheduled_end_at": {
             "description": "A new deadline. It must be after the start and inside the Class's Academic Period.",
@@ -49591,7 +49792,7 @@
     },
     "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
       "get": {
-        "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.",
+        "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview. It works on an open Sitting, and on a scheduled one from its join_opens_at until its scheduled start, so a candidate who joined early can prepare while the Attempt itself waits for the start.",
         "operationId": "getSecurityPolicyOverview",
         "responses": {
           "200": {
@@ -49682,7 +49883,7 @@
         }
       ],
       "post": {
-        "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed.",
+        "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed. During a Sitting's early-join phase, from join_opens_at until its scheduled start, a candidate can prepare and report a preflight to check their machine; Connect stays closed until the Sitting opens, so prepare again then.",
         "operationId": "prepareSecurityPreflight",
         "parameters": [
           {

@@ -1365,6 +1365,7 @@ components:
         - exam.attempt.environment_unavailable
         - exam.attempt.focus_loss_conflict
         - exam.attempt.invalid
+        - exam.attempt.join_closed
         - exam.attempt.management_authority_conflict
         - exam.attempt.not_found
         - exam.attempt.preview_connection_ended

@@ -349,6 +349,7 @@ func TestStudentResultHTTPExposesOnlyReleasedSanitizedProjection(t *testing.T) {
 	require.Equal(t, []model.ExamAttemptID{f.attemptID}, f.reviewStore.resultReads, "the candidate's result was read once")
 	payload := response.Body.String()
 	require.Contains(t, payload, "Approved **remarks**")
+	require.Contains(t, payload, `"receipt_code":"`+f.submission.ReceiptCode.Display()+`"`, "the result names the Submission's receipt")
 	for _, forbidden := range []string{"manager_notes", "private_rationale", "integrity_flag", "evidence", "workspace", "candidate_user_id"} {
 		require.NotContains(t, payload, forbidden, "student result exposed")
 	}

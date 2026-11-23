@@ -23,6 +23,8 @@ components:
             class_id: 1asb7sk89dp1ex339fkh3te5t4
             scheduled_start_at: '2026-12-14T09:00:00Z'
             scheduled_end_at: '2026-12-14T11:00:00Z'
+            join_opens_at: '2026-12-14T08:50:00Z'
+            join_closes_at: '2026-12-14T09:30:00Z'
             state: paused
             created_at: '2026-11-20T14:12:05Z'
             updated_at: '2026-12-14T09:41:17Z'
@@ -112,11 +114,27 @@ components:
         scheduled_start_at:
           type: string
           format: date-time
-          description: When the Sitting is scheduled to open.
+          description: When the Sitting opens and every Attempt can start, whether or not candidates joined early.
         scheduled_end_at:
           type: string
           format: date-time
           description: The Sitting's deadline. An extension moves it later.
+        join_opens_at:
+          type: string
+          format: date-time
+          description: >-
+            When candidates can join early, at or before the scheduled start. From then until the start they can run
+            the readiness checks and read the instructions; nobody can start an Attempt or touch a workspace before
+            the start, so working time is the same for everyone. Present only when set. It is frozen once the Sitting
+            opens.
+        join_closes_at:
+          type: string
+          format: date-time
+          description: >-
+            After this time no candidate can start a new Attempt, and admission fails with
+            exam.attempt.join_closed. Candidates who already started can reconnect until the deadline. It is after
+            the scheduled start and at or before the deadline. Present only when set. It is frozen once the Sitting
+            opens.
         state:
           $ref: '#/components/schemas/ExamSittingState'
         created_at:

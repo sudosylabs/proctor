@@ -1276,7 +1276,7 @@ func newExamAttemptFixtureWithAssistantOptions(t *testing.T, ctx context.Context
 	for scheduleAttempt := 1; ; scheduleAttempt++ {
 		var end time.Time
 		start, end = model.NowUTC().Add(time.Second), model.NowUTC().Add(time.Hour)
-		sitting, err = model.NewExamSitting(model.NewExamSittingID(), created.Value.Exam.ID, published.Revision.ID, class.ID, start, end, now)
+		sitting, err = model.NewExamSitting(model.NewExamSittingID(), created.Value.Exam.ID, published.Revision.ID, class.ID, start, end, model.ExamSittingJoinWindow{}, now)
 		require.NoError(t, err)
 		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, 1, start, end)
 		key := "attempt-sitting-" + string(rune('0'+scheduleAttempt))

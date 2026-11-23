@@ -415,6 +415,15 @@ components:
           maxLength: 64
           pattern: ^[a-z0-9_-]{1,64}$
           description: Your name for this rule, unique within the policy. Lowercase letters, digits, hyphens and underscores.
+        label:
+          type: string
+          minLength: 1
+          maxLength: 400
+          description: >-
+            An optional short name for the site that staff and candidates read in place of the origin, such as
+            "PostgreSQL documentation". Plain text of at most 100 characters. Surrounding spaces and invisible or
+            bidirectional characters are removed when you save, and a label that is then empty is left out. Control
+            characters are rejected. It is frozen with the revision and plays no part in matching.
         origin:
           type: string
           format: uri

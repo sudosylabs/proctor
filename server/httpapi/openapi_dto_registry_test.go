@@ -430,6 +430,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"SittingCandidateIdentityResponse":               reflect.TypeOf(sittingCandidateIdentityResponse{}),
 	"SittingCandidatePresenceResponse":               reflect.TypeOf(sittingCandidatePresenceResponse{}),
 	"SittingCandidateStatusItemResponse":             reflect.TypeOf(sittingCandidateStatusItemResponse{}),
+	"SittingCandidateStatusCounts":                   reflect.TypeOf(sittingCandidateStatusCountsResponse{}),
+	"SittingCandidatePresenceCounts":                 reflect.TypeOf(sittingCandidatePresenceCountsResponse{}),
 	"SittingCandidateSubmissionResponse":             reflect.TypeOf(sittingCandidateSubmissionResponse{}),
 	"SittingCandidateSuspensionResponse":             reflect.TypeOf(sittingCandidateSuspensionResponse{}),
 	"StopDeliveryDetails":                            reflect.TypeOf(model.StopDeliveryDetails{}),

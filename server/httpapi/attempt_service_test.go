@@ -259,6 +259,7 @@ type attemptLedger struct {
 	clipCompletions  []*store.ExamAttemptScreenClipCompletion
 	clipReads        int
 	commands         []*store.CommandIdempotency
+	statusLists      []store.SittingCandidateStatusListOptions
 }
 
 func newAttemptLedger(t *testing.T, f *attemptFixture) *attemptLedger {
@@ -342,8 +343,20 @@ func (s *attemptLedger) List(_ context.Context, options store.ExamAttemptManager
 	return rows[:min(len(rows), options.Limit)], nil
 }
 
-func (s *attemptLedger) ListSittingCandidateStatuses(context.Context, store.SittingCandidateStatusListOptions) (*store.SittingCandidateStatusPage, error) {
-	return &store.SittingCandidateStatusPage{}, nil
+func (s *attemptLedger) ListSittingCandidateStatuses(
+	_ context.Context,
+	options store.SittingCandidateStatusListOptions,
+) (*store.SittingCandidateStatusPage, error) {
+	s.statusLists = append(s.statusLists, options)
+	page := &store.SittingCandidateStatusPage{ServerTime: attemptFixtureTime, ExamID: s.f.examID, SittingID: s.f.sitting.ID,
+		SittingState: model.ExamSittingOpen, SittingRevision: 1, Items: []store.SittingCandidateStatusItem{}}
+	if options.IncludeCounts {
+		page.Counts = &store.SittingCandidateStatusCounts{Total: 4, WithFailedChecks: 1, WithAttention: 2,
+			ByPresenceState: map[store.SittingCandidatePresenceState]int64{
+				store.SittingCandidateConnected: 3, store.SittingCandidateSuspended: 1,
+			}}
+	}
+	return page, nil
 }
 
 func (s *attemptLedger) currentRevision() model.ExamRevisionID {

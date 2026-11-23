@@ -6685,6 +6685,20 @@
         "content": {
           "application/json": {
             "example": {
+              "counts": {
+                "by_presence_state": {
+                  "connected": 1,
+                  "lease_expired": 0,
+                  "not_started": 1,
+                  "ready": 0,
+                  "reconnecting": 0,
+                  "submitted": 0,
+                  "suspended": 0
+                },
+                "total": 2,
+                "with_attention": 0,
+                "with_failed_checks": 0
+              },
               "environments_waiting_capacity": 0,
               "exam_id": "39kqk53i4cswfzbi7hbai1r8qg",
               "exam_sitting_id": "889766ufjgio6kbpzjbufozksq",
@@ -23724,6 +23738,10 @@
         "additionalProperties": false,
         "description": "One page of the candidate-status board for a Sitting.",
         "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/SittingCandidateStatusCounts",
+            "description": "Counts of the whole board at server_time, on the first page only. The filters do not apply to them."
+          },
           "environments_waiting_capacity": {
             "description": "How many of the Sitting's execution environments wait for a host with room, across every page.",
             "format": "int64",
@@ -35112,6 +35130,57 @@
         ],
         "type": "object"
       },
+      "SittingCandidatePresenceCounts": {
+        "additionalProperties": false,
+        "description": "Candidates in each presence state.",
+        "properties": {
+          "connected": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lease_expired": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "not_started": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ready": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reconnecting": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "submitted": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "suspended": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "not_started",
+          "ready",
+          "connected",
+          "reconnecting",
+          "lease_expired",
+          "suspended",
+          "submitted"
+        ],
+        "type": "object"
+      },
       "SittingCandidatePresenceResponse": {
         "additionalProperties": false,
         "description": "The candidate's presence, worked out at server_time.",
@@ -35148,6 +35217,41 @@
           "submitted"
         ],
         "type": "string"
+      },
+      "SittingCandidateStatusCounts": {
+        "additionalProperties": false,
+        "description": "A Sitting's candidates, other than the reader, counted exactly at one instant.",
+        "properties": {
+          "by_presence_state": {
+            "$ref": "#/components/schemas/SittingCandidatePresenceCounts",
+            "description": "Candidates in each presence state. Every state is present."
+          },
+          "total": {
+            "description": "Every candidate of the Sitting.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "with_attention": {
+            "description": "Candidates with unresolved integrity attention.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "with_failed_checks": {
+            "description": "Candidates whose live participation fails an enforced native rule.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_presence_state",
+          "with_failed_checks",
+          "with_attention"
+        ],
+        "type": "object"
       },
       "SittingCandidateStatusItemResponse": {
         "additionalProperties": false,
@@ -53368,11 +53472,60 @@
             }
           },
           {
-            "description": "Cursor from next_cursor of the previous page. Send it back unchanged.",
+            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same filters.",
             "in": "query",
             "name": "cursor",
             "required": false,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep candidates in any of these presence states. Repeat the parameter for more than one state; a state may appear once.",
+            "explode": true,
+            "in": "query",
+            "name": "presence_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SittingCandidatePresenceState"
+              },
+              "maxItems": 7,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "failing keeps candidates whose live participation fails an enforced native rule.",
+            "in": "query",
+            "name": "check",
+            "required": false,
+            "schema": {
+              "enum": [
+                "failing"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "true keeps candidates with unresolved integrity attention.",
+            "in": "query",
+            "name": "attention",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keep candidates whose display name or username contains this text, ignoring case.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
               "type": "string"
             }
           }

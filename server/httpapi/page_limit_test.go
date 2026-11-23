@@ -43,7 +43,7 @@ func TestHandWrittenListParsersRejectInvalidPages(t *testing.T) {
 			return err
 		},
 		"mail deliveries": func(r *http.Request) error { _, _, err := listMailDeliveriesQuery(r); return err },
-		"invitations":     func(r *http.Request) error { _, err := invitationListQuery(r); return err },
+		"invitations":     func(r *http.Request) error { _, _, err := invitationListQuery(r); return err },
 		"memberships": func(r *http.Request) error {
 			_, _, _, err := membershipPageQuery(r, model.Resource{Type: model.ResourceClass, ID: model.NewID()})
 			return err

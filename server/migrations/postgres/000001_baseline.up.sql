@@ -528,6 +528,13 @@ CREATE UNIQUE INDEX invitations_pending_institution_role_package_key
 -- counts pending Invitations; both read this instead of the whole table.
 CREATE INDEX invitations_state_created_at_idx ON invitations (state, created_at DESC, id DESC);
 
+-- The administration list sorts by expiry and searches by a prefix of the
+-- invited address or the suggested name.
+CREATE INDEX invitations_expires_at_idx ON invitations (expires_at, id);
+CREATE INDEX invitations_target_email_prefix_idx ON invitations (lower(target_email) text_pattern_ops);
+CREATE INDEX invitations_suggested_display_name_prefix_idx
+    ON invitations (lower(suggested_display_name) text_pattern_ops);
+
 -- Administrative imports and student progression retain only a seven-day
 -- private preview/report. Job commands contain the opaque aggregate ID;
 -- recipient data remains in these domain-owned tables and is removed with it.
@@ -796,6 +803,12 @@ CREATE UNIQUE INDEX mail_deliveries_occurrence_user_recipient_key
 
 CREATE UNIQUE INDEX mail_deliveries_occurrence_invitation_recipient_key
     ON mail_deliveries (occurrence_id, target_invitation_id)
+    WHERE target_invitation_id IS NOT NULL;
+
+-- An invitation's newest delivery, which its summary and the delivery_state
+-- filter read.
+CREATE INDEX mail_deliveries_target_invitation_newest_idx
+    ON mail_deliveries (target_invitation_id, created_at DESC, id DESC)
     WHERE target_invitation_id IS NOT NULL;
 
 CREATE INDEX mail_deliveries_state_deadline_idx

@@ -26188,6 +26188,12 @@
       "InvitationBatchRequest": {
         "additionalProperties": false,
         "properties": {
+          "expires_in_days": {
+            "description": "How many whole days every new Invitation in the batch can be accepted for, from 1 to 30, given once for the batch. Omit it for the default lifetime. Only the `.create` operations take it; on `resend` or `revoke`, or outside the range, the whole batch is refused with `request.invalid` on `expires_in_days`.",
+            "maximum": 30,
+            "minimum": 1,
+            "type": "integer"
+          },
           "items": {
             "description": "The items to process, from 1 to 200.",
             "items": {
@@ -55537,6 +55543,87 @@
             "required": false,
             "schema": {
               "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Invitations that expire at or after this instant.",
+            "in": "query",
+            "name": "expires_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Invitations that expire before this instant. It must be later than `expires_after`.",
+            "in": "query",
+            "name": "expires_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Invitations whose invited address or suggested display name starts with this text, compared case-insensitively after trimming spaces. It is matched literally, at most 254 characters.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 254,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Invitations whose newest delivery is in one of these states. Repeat the parameter for several states. An Invitation with no delivery matches none.",
+            "explode": true,
+            "in": "query",
+            "name": "delivery_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "queued",
+                  "sending",
+                  "accepted",
+                  "failed",
+                  "suppressed",
+                  "canceled"
+                ],
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Sort by creation (`created`, the default) or expiry (`expires`) time, with Invitation ID breaking ties. A cursor works only with the sort and direction that produced it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "created",
+              "enum": [
+                "created",
+                "expires"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Descending (`desc`, the default, newest or latest first) or ascending (`asc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
               "type": "string"
             }
           },

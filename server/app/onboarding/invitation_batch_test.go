@@ -217,3 +217,56 @@ func TestInvitationBatchRejectsEveryRowWithARepeatedItemKey(t *testing.T) {
 	require.Equal(t, InvitationBatchItemSucceeded, result.Items[2].Status, "repeated-key result=%#v executions", result)
 	require.Equal(t, 1, persistence.issueExecutions, "repeated-key result=%#v executions", result)
 }
+
+// TestInvitationBatchGivesEveryNewInvitationItsOneLifetime pins I2: an
+// issuing batch's expires_in_days, given once, is each new invitation's
+// lifetime, and it is refused out of bounds or on a resend or revoke batch
+// before any row runs.
+func TestInvitationBatchGivesEveryNewInvitationItsOneLifetime(t *testing.T) {
+	now := model.TimeFromMillis(1_800_000_000_000)
+	classID, periodID, actorID := model.NewClassID(), model.NewAcademicPeriodID(), model.NewUserID()
+	class := &model.Class{ID: classID, AcademicPeriodID: periodID}
+	period := &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour), EndsAt: now.Add(90 * 24 * time.Hour)}
+	run := func(t *testing.T, operation InvitationBatchOperation, days int) (*invitationStoreFake, InvitationBatchResult, error) {
+		t.Helper()
+		persistence := &invitationStoreFake{}
+		authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{actorID})
+		composer, _ := newTestMail(t, true)
+		service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorization, composer, now)
+		service.classes, service.periods = invitationClassStoreFake{class: class}, invitationPeriodStoreFake{period: period}
+		service.nodeID, service.recentAuthenticationTTL = "node-a", time.Hour
+		principal := sessionPrincipal(model.AuthenticationSingleFactor, now)
+		principal.UserID = actorID
+		item := InvitationBatchItemCommand{IdempotencyKey: "row-1", TargetEmail: "first@example.edu"}
+		if operation == InvitationBatchResend {
+			item = InvitationBatchItemCommand{IdempotencyKey: "row-1", InvitationID: model.NewInvitationID(), ExpectedRevision: 1}
+		}
+		result, err := service.RunInvitationBatch(context.Background(), invocation.New(principal, model.RequestMetadata{}), RunInvitationBatchCommand{
+			Operation: operation, ScopeType: model.RoleScopeClass, ScopeID: classID.String(), IdempotencyKey: "batch",
+			ExpiresInDays: &days, Items: []InvitationBatchItemCommand{item}})
+		return persistence, result, err
+	}
+
+	persistence, result, err := run(t, InvitationBatchStudentClassCreate, 3)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Succeeded, "%#v", result)
+	require.True(t, now.Add(3*24*time.Hour).Equal(persistence.issued.Invitation.ExpiresAt), "expires_at = %v", persistence.issued.Invitation.ExpiresAt)
+
+	for name, test := range map[string]struct {
+		operation InvitationBatchOperation
+		days      int
+	}{
+		"no lifetime":  {InvitationBatchStudentClassCreate, 0},
+		"too long":     {InvitationBatchStudentClassCreate, 10_000},
+		"resend batch": {InvitationBatchResend, 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			persistence, _, err := run(t, test.operation, test.days)
+			failure, ok := apperror.As(err)
+			require.True(t, ok, "error = %v", err)
+			require.Equal(t, "request.invalid", failure.Code())
+			require.Equal(t, "expires_in_days", failure.Fields()["field"])
+			require.Zero(t, persistence.issueExecutions, "a refused lifetime refuses the batch before any row runs")
+		})
+	}
+}

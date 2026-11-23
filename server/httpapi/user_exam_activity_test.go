@@ -48,7 +48,7 @@ func TestCandidateExamActivityShowsJoinWindowReceiptAndAttemptTimes(t *testing.T
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/exam-activity", nil)
 	request.Header.Set("Authorization", "Bearer candidate")
 	response := httptest.NewRecorder()
-	f.api(t, userProfileResource(nil, f.service, nil)).ServeHTTP(response, request)
+	f.api(t, userProfileResource(nil, f.service, nil, nil)).ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d, body = %s", response.Code, response.Body.String())
 	require.Len(t, f.attemptStore.activityLists, 1)
 	require.Equal(t, f.candidate.UserID, f.attemptStore.activityLists[0].CandidateUserID, "a candidate reads only their own activity")
@@ -89,7 +89,7 @@ func TestCandidateExamActivityLeavesOutTimesThatNeverHappened(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/exam-activity", nil)
 	request.Header.Set("Authorization", "Bearer candidate")
 	response := httptest.NewRecorder()
-	f.api(t, userProfileResource(nil, f.service, nil)).ServeHTTP(response, request)
+	f.api(t, userProfileResource(nil, f.service, nil, nil)).ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d, body = %s", response.Code, response.Body.String())
 	var page struct {
 		Items []map[string]json.RawMessage `json:"items"`

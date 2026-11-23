@@ -1386,11 +1386,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Membership and progression",
     "title": "Run one bounded typed existing-User academic administration batch",
-    "description": "Applies one operation to 1 to 200 existing Users in a single request. Each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. The response reports every item's outcome in request order. Item keys must be unique within the request; repeated keys fail those items with `request.invalid`. An item that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. Role Binding operations, `user.enable`, `user.disable` and `user_sessions.revoke` also need a strong, recent Session.",
+    "description": "Applies one operation to 1 to 200 existing Users in a single request. Each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. The response reports every item's outcome in request order. A direct `user.disable` batch also records one audit entry with its overall outcome. Item keys must be unique within the request; repeated keys fail those items with `request.invalid`. An item that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. Role Binding operations, `user.enable`, `user.disable` and `user_sessions.revoke` also need a strong, recent Session.",
     "href": "/api/reference/run-academic-administration-batch",
     "method": "POST",
     "path": "/api/v1/academic-administration-batches",
-    "searchText": "runacademicadministrationbatch run one bounded typed existing-user academic administration batch applies one operation to 1 to 200 existing users in a single request. each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. the response reports every item's outcome in request order. item keys must be unique within the request; repeated keys fail those items with `request.invalid`. an item that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. role binding operations, `user.enable`, `user.disable` and `user_sessions.revoke` also need a strong, recent session. membership and progression post /api/v1/academic-administration-batches principal_required required authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found authentication.strong_required authentication.reauthentication_required idempotency.key_required idempotency.key_invalid administration.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+    "searchText": "runacademicadministrationbatch run one bounded typed existing-user academic administration batch applies one operation to 1 to 200 existing users in a single request. each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. the response reports every item's outcome in request order. a direct `user.disable` batch also records one audit entry with its overall outcome. item keys must be unique within the request; repeated keys fail those items with `request.invalid`. an item that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. role binding operations, `user.enable`, `user.disable` and `user_sessions.revoke` also need a strong, recent session. membership and progression post /api/v1/academic-administration-batches principal_required required authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found authentication.strong_required authentication.reauthentication_required idempotency.key_required idempotency.key_invalid administration.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:createAcademicAdministrationPreview",
@@ -1705,11 +1705,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Administration",
     "title": "Summarise administration work waiting on the caller",
-    "description": "Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. Each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.",
+    "description": "Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. The other counts apply the same permission and visibility checks as their resource lists, and record permission decisions the same way. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.",
     "href": "/api/reference/get-administration-counts",
     "method": "GET",
     "path": "/api/v1/administration/counts",
-    "searchText": "getadministrationcounts summarise administration work waiting on the caller returns the counts shown as badges in administration navigation. `pending_invitations` counts pending invitations that have not expired. `failed_jobs` counts operator-visible jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the institution's sittings under way (open, paused or closing), for a holder of institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. a count the caller may not list is left out, together with its `_is_lower_bound` flag. if a count can't be read, the request fails rather than reporting zero. counting stops at 1,000: the count is then 1,000 and its flag is true. only an interactive session may read the counts. administration get /api/v1/administration/counts session_required none administration.unavailable authorization.denied authorization.request.invalid authorization.unavailable desktop_compatibility_policy.revision_conflict desktop_compatibility_policy.unavailable invitation.unavailable job.query.invalid job.unavailable mail.unavailable onboarding_import.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "getadministrationcounts summarise administration work waiting on the caller returns the counts shown as badges in administration navigation. `pending_invitations` counts pending invitations that have not expired. `failed_jobs` counts operator-visible jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the institution's sittings under way (open, paused or closing), for a holder of institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. the other counts apply the same permission and visibility checks as their resource lists, and record permission decisions the same way. a count the caller may not list is left out, together with its `_is_lower_bound` flag. if a count can't be read, the request fails rather than reporting zero. counting stops at 1,000: the count is then 1,000 and its flag is true. only an interactive session may read the counts. administration get /api/v1/administration/counts session_required none administration.unavailable authorization.denied authorization.request.invalid authorization.unavailable desktop_compatibility_policy.unavailable invitation.unavailable job.query.invalid job.unavailable mail.unavailable onboarding_import.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:endAffiliation",
@@ -1776,6 +1776,39 @@ export const searchEntries = [
     "method": "GET",
     "path": "/api/v1/audits",
     "searchText": "listauditevents list authorized institution or academic unit audit history lists the audit events you can see through institution-wide or academic unit audit permissions, newest first unless `order=asc` asks for oldest first. events never include the raw request parameters, earlier state, results, credentials, protected content or internal error details. the first page (read without a cursor) also has `total`, the number of matching events across all pages. it is exact up to 10,000. above that it shows 10,000 and `total_is_lower_bound` is true. later pages have no total, so keep the one from the first page. each event also has a `summary` sentence, written from its codes, in the language `accept-language` picks. it falls back to the installation language and then english. it names the actor, the user the event is about, and a user, academic unit or class resource by their current names only if you could see that record now, through `user.view` or `class.members.view`, `academic_unit.view` or `class.view`. otherwise it uses a general phrase such as \"a user\" or \"a class\". for an academic unit auditor the summary names only the action, never the recorded operation or the user the event is about. roles and access get /api/v1/audits principal_required none authorization.denied authorization.request.invalid authorization.unavailable audit.query.invalid audit.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:createAuditExport",
+    "kind": "endpoint",
+    "group": "Roles and access",
+    "title": "Export the audit history to a file",
+    "description": "Queues a CSV or JSON Lines file of the audit Events the audit listing would show you for the same filters. Your audit visibility is frozen when you ask: with Institution-wide `audit.view` the file has every matching Event, and an Academic Unit auditor's file has the same redacted Events their listing shows. Events written after the request aren't included. The file has the listing's fields under the listing's names, except `summary`, `actor` and `repeat`. Both formats flatten `resource` into `resource_type` and `resource_id`. It never has raw request parameters, earlier state or results. At most 100,000 Events fit in one export, and a larger selection is refused, so narrow the filters. The policy's export lifetime must be set to 1 to 7 days, and the expiry counts from the request. The request is audited. Poll the export to see when it is ready. Job viewers can also observe `job.changed` for `job_id`.",
+    "href": "/api/reference/create-audit-export",
+    "method": "POST",
+    "path": "/api/v1/audits/exports",
+    "searchText": "createauditexport export the audit history to a file queues a csv or json lines file of the audit events the audit listing would show you for the same filters. your audit visibility is frozen when you ask: with institution-wide `audit.view` the file has every matching event, and an academic unit auditor's file has the same redacted events their listing shows. events written after the request aren't included. the file has the listing's fields under the listing's names, except `summary`, `actor` and `repeat`. both formats flatten `resource` into `resource_type` and `resource_id`. it never has raw request parameters, earlier state or results. at most 100,000 events fit in one export, and a larger selection is refused, so narrow the filters. the policy's export lifetime must be set to 1 to 7 days, and the expiry counts from the request. the request is audited. poll the export to see when it is ready. job viewers can also observe `job.changed` for `job_id`. roles and access post /api/v1/audits/exports principal_required required authorization.denied authorization.request.invalid authorization.unavailable audit.internal audit.query.invalid audit.unavailable audit.export.limit audit.export.not_found audit.export.policy_unconfigured audit.export.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:getAuditExport",
+    "kind": "endpoint",
+    "group": "Roles and access",
+    "title": "Get an audit export",
+    "description": "Only the User who asked for the export can read it, and only while they still hold the audit visibility it was made with. Another User's export is not found. The state is `queued`, `ready`, `failed` or `expired`. An expired export never returns its hash. The expiry stays fixed even if the policy changes later. A change to the academic ownership hierarchy invalidates exports made with academic subtree visibility.",
+    "href": "/api/reference/get-audit-export",
+    "method": "GET",
+    "path": "/api/v1/audits/exports/{audit_export_id}",
+    "searchText": "getauditexport get an audit export only the user who asked for the export can read it, and only while they still hold the audit visibility it was made with. another user's export is not found. the state is `queued`, `ready`, `failed` or `expired`. an expired export never returns its hash. the expiry stays fixed even if the policy changes later. a change to the academic ownership hierarchy invalidates exports made with academic subtree visibility. roles and access get /api/v1/audits/exports/{audit_export_id} principal_required none authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable audit.export.not_found audit.export.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:downloadAuditExport",
+    "kind": "endpoint",
+    "group": "Roles and access",
+    "title": "Download an audit export",
+    "description": "Only the User who asked for the export can download it, while it is ready and unexpired and they still hold the audit visibility it was made with. The response is a `text/csv` or `application/jsonl` attachment with private, no-store caching and a file name that carries only the export ID. CSV cells a spreadsheet would read as a formula start with an apostrophe. The `ETag` header and the `sha256` field give the file's SHA-256. Expiry blocks new downloads but doesn't cut off one already in progress.",
+    "href": "/api/reference/download-audit-export",
+    "method": "GET",
+    "path": "/api/v1/audits/exports/{audit_export_id}/download",
+    "searchText": "downloadauditexport download an audit export only the user who asked for the export can download it, while it is ready and unexpired and they still hold the audit visibility it was made with. the response is a `text/csv` or `application/jsonl` attachment with private, no-store caching and a file name that carries only the export id. csv cells a spreadsheet would read as a formula start with an apostrophe. the `etag` header and the `sha256` field give the file's sha-256. expiry blocks new downloads but doesn't cut off one already in progress. roles and access get /api/v1/audits/exports/{audit_export_id}/download principal_required none authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable audit.export.not_found audit.export.unavailable request.invalid resource.not_found audit.export.expired audit.export.not_ready authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:startBrowserInvitation",
@@ -2424,7 +2457,7 @@ export const searchEntries = [
     "href": "/api/reference/list-desktop-releases",
     "method": "GET",
     "path": "/api/v1/desktop-releases",
-    "searchText": "listdesktopreleases list the proctor desktop builds this server verifies lists the verified proctor desktop builds compiled into this server release, newest release first, with when each was released and which is the newest for its platform and architecture. the desktop compatibility policy can only narrow this list. it needs access_policy.view on the institution, as reading the policy does. it is empty until signed releases exist. access policy get /api/v1/desktop-releases principal_required none authorization.denied authorization.request.invalid authorization.unavailable desktop_compatibility_policy.revision_conflict desktop_compatibility_policy.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listdesktopreleases list the proctor desktop builds this server verifies lists the verified proctor desktop builds compiled into this server release, newest release first, with when each was released and which is the newest for its platform and architecture. the desktop compatibility policy can only narrow this list. it needs access_policy.view on the institution, as reading the policy does. it is empty until signed releases exist. access policy get /api/v1/desktop-releases principal_required none authorization.denied authorization.request.invalid authorization.unavailable desktop_compatibility_policy.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getPublicAccessDiscovery",
@@ -3608,11 +3641,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Attempts and workspaces",
     "title": "List an Attempt's screen clips",
-    "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to a caller who manages the Sitting, never to a reviewer.",
+    "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. A Sitting manager with submission view can read clips before or after submission and sees the private reason. A reviewer of a submitted Attempt can read the clips without the reason. The candidate cannot use this endpoint for their own Attempt.",
     "href": "/api/reference/list-exam-attempt-screen-clips",
     "method": "GET",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips",
-    "searchText": "listexamattemptscreenclips list an attempt's screen clips lists, newest first, every clip requested for the attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. an incident clip names its integrity flag and a manager clip names who asked for it. the manager's private reason is returned only to a caller who manages the sitting, never to a reviewer. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listexamattemptscreenclips list an attempt's screen clips lists, newest first, every clip requested for the attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. an incident clip names its integrity flag and a manager clip names who asked for it. a sitting manager with submission view can read clips before or after submission and sees the private reason. a reviewer of a submitted attempt can read the clips without the reason. the candidate cannot use this endpoint for their own attempt. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:requestExamAttemptScreenClip",
@@ -3630,11 +3663,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Attempts and workspaces",
     "title": "Play a ready screen clip",
-    "description": "Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed to review its Submission, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
+    "description": "Streams a ready clip to a Sitting manager with submission view or, once the Attempt is submitted, a reviewer of its Submission. The candidate cannot use this endpoint for their own Attempt. It supports a single byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
     "href": "/api/reference/play-exam-attempt-screen-clip",
     "method": "GET",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content",
-    "searchText": "playexamattemptscreenclip play a ready screen clip streams a ready clip to one of the sitting's exam managers, or once the attempt is submitted to someone allowed to review its submission, whole or by one byte range so a player can seek. each playback, a request from the clip's first byte, is audited. multiple ranges, or a range past the clip's end, are refused. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content principal_required none authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "playexamattemptscreenclip play a ready screen clip streams a ready clip to a sitting manager with submission view or, once the attempt is submitted, a reviewer of its submission. the candidate cannot use this endpoint for their own attempt. it supports a single byte range so a player can seek. each playback, a request from the clip's first byte, is audited. multiple ranges, or a range past the clip's end, are refused. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content principal_required none authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getExamSubmission",
@@ -3839,11 +3872,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Integrity review",
     "title": "Release many results of one Sitting",
-    "description": "Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key releases nothing twice: an item this batch released reports released again. A replayed all_finalized batch looks the set up again.",
+    "description": "Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key returns the original selection and outcomes. Reusing it with a different request conflicts. A request still being processed returns an in-progress conflict.",
     "href": "/api/reference/release-exam-sitting-results",
     "method": "POST",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases",
-    "searchText": "releaseexamsittingresults release many results of one sitting releases the results of the named submissions, or of every finalized, withheld submission of the sitting with all_finalized (at most 200 at a time). needs submission.release on the sitting; then each submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. each item reports released, already_released, not_finalized, denied, or failed with an error code. replaying the same idempotency-key releases nothing twice: an item this batch released reports released again. a replayed all_finalized batch looks the set up again. integrity review post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable idempotency.key_required idempotency.key_invalid exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+    "searchText": "releaseexamsittingresults release many results of one sitting releases the results of the named submissions, or of every finalized, withheld submission of the sitting with all_finalized (at most 200 at a time). needs submission.release on the sitting; then each submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. each item reports released, already_released, not_finalized, denied, or failed with an error code. replaying the same idempotency-key returns the original selection and outcomes. reusing it with a different request conflicts. a request still being processed returns an in-progress conflict. integrity review post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:resumeExamSitting",
@@ -4506,17 +4539,6 @@ export const searchEntries = [
     "searchText": "changeretentioncontrol enable or pause institution cleanup turns recurring cleanup on or pauses it. the caller needs `retention_cleanup.manage` and a strong, recent system-administrator sign-in. enabling ties the approval to a fresh retention preview of the exact policy revision, and the policy's grace period must be above zero. every change to the control cancels existing grace. eligible records get a new grace period when scheduling resumes. pausing can't undo retirement that already happened, and doesn't stop the removal of stored files for records already retired. an exact retry returns the recorded result after authorization is checked again. data retention put /api/v1/retention/control strong_recent_session_required required authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable authentication.csrf.invalid audit.unavailable request.invalid retention.invalid retention.conflict retention.unavailable retention_policy.unavailable retention_policy.revision_conflict resource.not_found idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.strong_required authentication.reauthentication_required authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
-    "id": "operation:listRetentionExamSummaries",
-    "kind": "endpoint",
-    "group": "Data retention",
-    "title": "Count retention records by Exam",
-    "description": "Lists the Exams that have retention records, by Exam ID, each with its title and its records counted by category and status the way a Retention Preview counts the Institution. The caller needs `retention_policy.view`. `limit` counts Exams.",
-    "href": "/api/reference/list-retention-exam-summaries",
-    "method": "GET",
-    "path": "/api/v1/retention/exam-summaries",
-    "searchText": "listretentionexamsummaries count retention records by exam lists the exams that have retention records, by exam id, each with its title and its records counted by category and status the way a retention preview counts the institution. the caller needs `retention_policy.view`. `limit` counts exams. data retention get /api/v1/retention/exam-summaries session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
-  },
-  {
     "id": "operation:listInstitutionRetentionHolds",
     "kind": "endpoint",
     "group": "Data retention",
@@ -4554,22 +4576,22 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Data retention",
     "title": "List retention eligibility and retirement status",
-    "description": "Lists the retention status of each Submission's records. The caller needs `retention_policy.view`. File names, answers, evidence and remarks are never included. `limit` counts Submissions, and each Submission adds four items: work, integrity, Browser Activity and security operational. The cursor only works with this listing. A retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. They don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress.",
+    "description": "Lists the retention status of each Submission's records. The caller needs `retention_policy.view`. File names, answers, evidence and remarks are never included. By default, `limit` counts Submissions, and each Submission adds four items covering work, integrity, Browser Activity and security operational records. Set `group_by=exam` to count records by category for each Exam. In that mode, `limit` counts Exams and the response orders them by Exam ID. A cursor continues only the grouping that issued it. A retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. They don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress.",
     "href": "/api/reference/list-retention-records",
     "method": "GET",
     "path": "/api/v1/retention/records",
-    "searchText": "listretentionrecords list retention eligibility and retirement status lists the retention status of each submission's records. the caller needs `retention_policy.view`. file names, answers, evidence and remarks are never included. `limit` counts submissions, and each submission adds four items: work, integrity, browser activity and security operational. the cursor only works with this listing. a retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. they don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress. data retention get /api/v1/retention/records session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listretentionrecords list retention eligibility and retirement status lists the retention status of each submission's records. the caller needs `retention_policy.view`. file names, answers, evidence and remarks are never included. by default, `limit` counts submissions, and each submission adds four items covering work, integrity, browser activity and security operational records. set `group_by=exam` to count records by category for each exam. in that mode, `limit` counts exams and the response orders them by exam id. a cursor continues only the grouping that issued it. a retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. they don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress. data retention get /api/v1/retention/records session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:exportRetentionRecords",
     "kind": "endpoint",
     "group": "Data retention",
     "title": "Download every retention record as CSV",
-    "description": "Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe.",
+    "description": "Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe. Each export is audited.",
     "href": "/api/reference/export-retention-records",
     "method": "GET",
     "path": "/api/v1/retention/records/export",
-    "searchText": "exportretentionrecords download every retention record as csv returns every retention record of the institution as csv, one row per category of each submission, with the exam's title, the eligibility each page was read at (`as_of`) and the policy revision. it holds no content. the caller needs `retention_policy.view`. an institution with more than 50,000 submissions is refused with `retention.invalid`; page the records listing instead. values a spreadsheet would read as a formula start with an apostrophe. data retention get /api/v1/retention/records/export session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "exportretentionrecords download every retention record as csv returns every retention record of the institution as csv, one row per category of each submission, with the exam's title, the eligibility each page was read at (`as_of`) and the policy revision. it holds no content. the caller needs `retention_policy.view`. an institution with more than 50,000 submissions is refused with `retention.invalid`; page the records listing instead. values a spreadsheet would read as a formula start with an apostrophe. each export is audited. data retention get /api/v1/retention/records/export session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:listRoleBindings",
@@ -4752,11 +4774,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Integrity review",
     "title": "List Submissions across the Exams you can see",
-    "description": "Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none&review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts.",
+    "description": "Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none&review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts. Restart without a cursor if its anchor is unavailable.",
     "href": "/api/reference/list-submissions",
     "method": "GET",
     "path": "/api/v1/submissions",
-    "searchText": "listsubmissions list submissions across the exams you can see lists sealed submissions, other than your own, across every exam where you hold submission.view, each with its exam. a row's review appears, and review_state and release_state match it, only where you also hold submission.review on its exam; so review_state=none&review_state=draft lists what is waiting for your review. bounded and cursor-paged; there are no counts. integrity review get /api/v1/submissions principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listsubmissions list submissions across the exams you can see lists sealed submissions, other than your own, across every exam where you hold submission.view, each with its exam. a row's review appears, and review_state and release_state match it, only where you also hold submission.review on its exam; so review_state=none&review_state=draft lists what is waiting for your review. bounded and cursor-paged; there are no counts. restart without a cursor if its anchor is unavailable. integrity review get /api/v1/submissions principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:listSubmissionAssistantTranscript",
@@ -5506,7 +5528,7 @@ export const searchEntries = [
     "title": "Academic Unit updated",
     "description": "Refetch the Academic Unit. The event names it and its parent.",
     "href": "/api/reference/realtime-protocol/academic-unit-updated",
-    "searchText": "academic_unit_updated academic_unit_updated academic unit updated refetch the academic unit. the event names it and its parent. sent when the academic unit itself changes, and when a member joins or leaves it outside a batch, since its member counts moved; a change to who administers it arrives as role_binding.changed. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
+    "searchText": "academic_unit_updated academic_unit_updated academic unit updated refetch the academic unit. the event names it and its parent. sent when the academic unit itself changes, and when a member joins or leaves it outside a batch, since its member counts moved, or when a role binding at the academic unit changes its administrators. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
   },
   {
     "id": "realtime:access_policy_changed",
@@ -5567,9 +5589,9 @@ export const searchEntries = [
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Desktop Compatibility Policy changed",
-    "description": "Refetch the Desktop Compatibility Policy and the Desktop release list. The event has no data.",
+    "description": "Refetch the Desktop Compatibility Policy, release list and open Sitting count.",
     "href": "/api/reference/realtime-protocol/desktop-compatibility-policy-changed",
-    "searchText": "desktop_compatibility_policy.changed desktop_compatibility_policy.changed desktop compatibility policy changed sent after a replacement changes the desktop compatibility policy, including its revoked builds. the policy is institution-wide, so the event names no id beyond its resource. delivered to connections that subscribe to desktop_compatibility_policy.manage on the institution, checked again when it is sent. event institution"
+    "searchText": "desktop_compatibility_policy.changed desktop_compatibility_policy.changed desktop compatibility policy changed sent after a replacement changes the desktop compatibility policy, including its revoked builds, or when a sitting opens or finishes closing. the policy and counts are institution-wide, so the event names no id beyond its resource. delivered to desktop_compatibility_policy.manage subscribers on the institution. event institution"
   },
   {
     "id": "realtime:exam.counts.changed",
@@ -5605,7 +5627,7 @@ export const searchEntries = [
     "title": "Attempt evidence changed",
     "description": "Refetch an Attempt's live evidence.",
     "href": "/api/reference/realtime-protocol/exam-attempt-evidence-changed",
-    "searchText": "exam_attempt.evidence.changed exam_attempt.evidence.changed attempt evidence changed refetch an attempt's live integrity flags, evidence, native conditions and timeline. sent at most once per attempt every 5 seconds; the last change in a burst is always sent. delivered to connections that subscribe to exam.sitting.manage on the exam sitting. event sittings"
+    "searchText": "exam_attempt.evidence.changed exam_attempt.evidence.changed attempt evidence changed refetch an attempt's live integrity flags, evidence, native conditions and timeline. sent at most once per attempt every 5 seconds; the last change in a burst is always sent. delivered to connections that subscribe to exam.sitting.manage on the exam sitting. this subscription also requires submission.view. event sittings"
   },
   {
     "id": "realtime:exam_attempt.focus_loss",
@@ -5632,7 +5654,7 @@ export const searchEntries = [
     "title": "Screen clip changed",
     "description": "Refetch an Attempt's screen clips.",
     "href": "/api/reference/realtime-protocol/exam-attempt-screen-clip-changed",
-    "searchText": "exam_attempt.screen_clip.changed exam_attempt.screen_clip.changed screen clip changed refetch an attempt's screen clips, because one was requested or changed state. delivered to connections that subscribe to exam.sitting.manage on the exam sitting. event sittings"
+    "searchText": "exam_attempt.screen_clip.changed exam_attempt.screen_clip.changed screen clip changed refetch an attempt's screen clips, because one was requested or changed state. delivered to connections that subscribe to exam.sitting.manage on the exam sitting. this subscription also requires submission.view. reviewers can read clips through the submitted attempt without receiving this sitting-wide hint. event sittings"
   },
   {
     "id": "realtime:exam_attempt.security.update",
@@ -5929,7 +5951,7 @@ export const searchEntries = [
     "title": "Sitting submissions changed",
     "description": "Refetch the submission list of one Sitting.",
     "href": "/api/reference/realtime-protocol/exam-sitting-submissions-changed",
-    "searchText": "exam_sitting.submissions.changed exam_sitting.submissions.changed sitting submissions changed refetch the submission list of one sitting, because a submission arrived or a review or result release changed. published once per batch. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
+    "searchText": "exam_sitting.submissions.changed exam_sitting.submissions.changed sitting submissions changed refetch the submission list of one sitting, because a submission arrived or a review or result release changed. published once per batch. delivered to connections that subscribe to submission.view on the exam sitting. event sittings"
   },
   {
     "id": "realtime:exam_sitting_canceled",
@@ -6035,9 +6057,9 @@ export const searchEntries = [
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Invitation changed",
-    "description": "Refetch an Invitation you issued; it reached a new state.",
+    "description": "Refetch an Invitation whose state changed.",
     "href": "/api/reference/realtime-protocol/invitation-changed",
-    "searchText": "invitation.changed invitation.changed invitation changed refetch an invitation you issued; it reached a new state, today when it is accepted. the event names the scope the invitation grants at. delivered to the connections of the user who issued it. event onboarding"
+    "searchText": "invitation.changed invitation.changed invitation changed refetch an invitation whose state changed. the event names the scope the invitation grants at. delivered to invitation.view subscribers at that scope and its enclosing scopes. event onboarding"
   },
   {
     "id": "realtime:job.changed",
@@ -6127,7 +6149,7 @@ export const searchEntries = [
     "title": "Retention changed",
     "description": "Refetch retention; the policy, a hold or an Exam's records due changed.",
     "href": "/api/reference/realtime-protocol/retention-changed",
-    "searchText": "retention.changed retention.changed retention changed refetch retention: the policy was replaced, a hold was placed or released, or an exam's records due for removal changed when a sitting's records were completed. kind says which. delivered to connections that subscribe to retention_policy.view on the institution. event institution"
+    "searchText": "retention.changed retention.changed retention changed refetch retention: the policy was replaced, a hold was placed, released or became due for review, or an exam's records due for removal changed when a sitting's records were completed. kind says which. delivered to connections that subscribe to retention_policy.view on the institution. event institution"
   },
   {
     "id": "realtime:role.changed",
@@ -6443,6 +6465,60 @@ export const searchEntries = [
     "description": "Environment profiles cannot be read or changed now; retry later.",
     "href": "/problems/assistant_profile.unavailable",
     "searchText": "assistant_profile.unavailable assistant profile unavailable 503 environment profiles cannot be read or changed now; retry later."
+  },
+  {
+    "id": "problem:audit.export.expired",
+    "kind": "problem",
+    "group": "Error codes / Audit",
+    "title": "audit.export.expired",
+    "description": "The audit export's fixed expiry has passed, so it can't be downloaded.",
+    "href": "/problems/audit.export.expired",
+    "searchText": "audit.export.expired audit export expired 410 the audit export's fixed expiry has passed, so it can't be downloaded."
+  },
+  {
+    "id": "problem:audit.export.limit",
+    "kind": "problem",
+    "group": "Error codes / Audit",
+    "title": "audit.export.limit",
+    "description": "The audit listing selects more events than one export can hold; narrow the filters.",
+    "href": "/problems/audit.export.limit",
+    "searchText": "audit.export.limit audit export limit 409 the audit listing selects more events than one export can hold; narrow the filters."
+  },
+  {
+    "id": "problem:audit.export.not_found",
+    "kind": "problem",
+    "group": "Error codes / Audit",
+    "title": "audit.export.not_found",
+    "description": "The audit export does not exist or is not the caller's.",
+    "href": "/problems/audit.export.not_found",
+    "searchText": "audit.export.not_found audit export not found 404 the audit export does not exist or is not the caller's."
+  },
+  {
+    "id": "problem:audit.export.not_ready",
+    "kind": "problem",
+    "group": "Error codes / Audit",
+    "title": "audit.export.not_ready",
+    "description": "The audit export is still being built.",
+    "href": "/problems/audit.export.not_ready",
+    "searchText": "audit.export.not_ready audit export not ready 409 the audit export is still being built."
+  },
+  {
+    "id": "problem:audit.export.policy_unconfigured",
+    "kind": "problem",
+    "group": "Error codes / Audit",
+    "title": "audit.export.policy_unconfigured",
+    "description": "The retention policy's export lifetime is 0, so exports can't be created.",
+    "href": "/problems/audit.export.policy_unconfigured",
+    "searchText": "audit.export.policy_unconfigured audit export policy unconfigured 409 the retention policy's export lifetime is 0, so exports can't be created."
+  },
+  {
+    "id": "problem:audit.export.unavailable",
+    "kind": "problem",
+    "group": "Error codes / Audit",
+    "title": "audit.export.unavailable",
+    "description": "The audit export failed or is temporarily unavailable; retry later.",
+    "href": "/problems/audit.export.unavailable",
+    "searchText": "audit.export.unavailable audit export unavailable 503 the audit export failed or is temporarily unavailable; retry later."
   },
   {
     "id": "problem:audit.internal",

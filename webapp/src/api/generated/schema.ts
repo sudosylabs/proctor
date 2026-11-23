@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Run one bounded typed existing-User academic administration batch
-         * @description Applies one operation to 1 to 200 existing Users in a single request. Each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. The response reports every item's outcome in request order.
+         * @description Applies one operation to 1 to 200 existing Users in a single request. Each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. The response reports every item's outcome in request order. A direct `user.disable` batch also records one audit entry with its overall outcome.
          *     Item keys must be unique within the request; repeated keys fail those items with `request.invalid`. An item that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. Role Binding operations, `user.enable`, `user.disable` and `user_sessions.revoke` also need a strong, recent Session.
          */
         post: operations["runAcademicAdministrationBatch"];
@@ -479,7 +479,7 @@ export interface paths {
         };
         /**
          * Summarise administration work waiting on the caller
-         * @description Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. Each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.
+         * @description Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. The other counts apply the same permission and visibility checks as their resource lists, and record permission decisions the same way. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.
          */
         get: operations["getAdministrationCounts"];
         put?: never;
@@ -592,6 +592,66 @@ export interface paths {
          * @description Lists the audit Events you can see through Institution-wide or Academic Unit audit permissions, newest first unless `order=asc` asks for oldest first. Events never include the raw request parameters, earlier state, results, credentials, protected content or internal error details. The first page (read without a cursor) also has `total`, the number of matching Events across all pages. It is exact up to 10,000. Above that it shows 10,000 and `total_is_lower_bound` is true. Later pages have no total, so keep the one from the first page. Each Event also has a `summary` sentence, written from its codes, in the language `Accept-Language` picks. It falls back to the installation language and then English. It names the actor, the User the Event is about, and a User, Academic Unit or Class resource by their current names only if you could see that record now, through `user.view` or `class.members.view`, `academic_unit.view` or `class.view`. Otherwise it uses a general phrase such as "a user" or "a class". For an Academic Unit auditor the summary names only the action, never the recorded operation or the User the Event is about.
          */
         get: operations["listAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audits/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export the audit history to a file
+         * @description Queues a CSV or JSON Lines file of the audit Events the audit listing would show you for the same filters. Your audit visibility is frozen when you ask: with Institution-wide `audit.view` the file has every matching Event, and an Academic Unit auditor's file has the same redacted Events their listing shows. Events written after the request aren't included. The file has the listing's fields under the listing's names, except `summary`, `actor` and `repeat`. Both formats flatten `resource` into `resource_type` and `resource_id`. It never has raw request parameters, earlier state or results. At most 100,000 Events fit in one export, and a larger selection is refused, so narrow the filters. The policy's export lifetime must be set to 1 to 7 days, and the expiry counts from the request. The request is audited. Poll the export to see when it is ready. Job viewers can also observe `job.changed` for `job_id`.
+         */
+        post: operations["createAuditExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audits/exports/{audit_export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an audit export
+         * @description Only the User who asked for the export can read it, and only while they still hold the audit visibility it was made with. Another User's export is not found. The state is `queued`, `ready`, `failed` or `expired`. An expired export never returns its hash. The expiry stays fixed even if the policy changes later. A change to the academic ownership hierarchy invalidates exports made with academic subtree visibility.
+         */
+        get: operations["getAuditExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audits/exports/{audit_export_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download an audit export
+         * @description Only the User who asked for the export can download it, while it is ready and unexpired and they still hold the audit visibility it was made with. The response is a `text/csv` or `application/jsonl` attachment with private, no-store caching and a file name that carries only the export ID. CSV cells a spreadsheet would read as a formula start with an apostrophe. The `ETag` header and the `sha256` field give the file's SHA-256. Expiry blocks new downloads but doesn't cut off one already in progress.
+         */
+        get: operations["downloadAuditExport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4018,7 +4078,7 @@ export interface paths {
         };
         /**
          * List an Attempt's screen clips
-         * @description Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to a caller who manages the Sitting, never to a reviewer.
+         * @description Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. A Sitting manager with submission view can read clips before or after submission and sees the private reason. A reviewer of a submitted Attempt can read the clips without the reason. The candidate cannot use this endpoint for their own Attempt.
          */
         get: operations["listExamAttemptScreenClips"];
         put?: never;
@@ -4051,7 +4111,7 @@ export interface paths {
         };
         /**
          * Play a ready screen clip
-         * @description Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed to review its Submission, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.
+         * @description Streams a ready clip to a Sitting manager with submission view or, once the Attempt is submitted, a reviewer of its Submission. The candidate cannot use this endpoint for their own Attempt. It supports a single byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.
          */
         get: operations["playExamAttemptScreenClip"];
         put?: never;
@@ -4505,7 +4565,7 @@ export interface paths {
         put?: never;
         /**
          * Release many results of one Sitting
-         * @description Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key releases nothing twice: an item this batch released reports released again. A replayed all_finalized batch looks the set up again.
+         * @description Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key returns the original selection and outcomes. Reusing it with a different request conflicts. A request still being processed returns an in-progress conflict.
          */
         post: operations["releaseExamSittingResults"];
         delete?: never;
@@ -5618,26 +5678,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/retention/exam-summaries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Count retention records by Exam
-         * @description Lists the Exams that have retention records, by Exam ID, each with its title and its records counted by category and status the way a Retention Preview counts the Institution. The caller needs `retention_policy.view`. `limit` counts Exams.
-         */
-        get: operations["listRetentionExamSummaries"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/retention/holds": {
         parameters: {
             query?: never;
@@ -5707,7 +5747,7 @@ export interface paths {
         };
         /**
          * List retention eligibility and retirement status
-         * @description Lists the retention status of each Submission's records. The caller needs `retention_policy.view`. File names, answers, evidence and remarks are never included. `limit` counts Submissions, and each Submission adds four items: work, integrity, Browser Activity and security operational. The cursor only works with this listing. A retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. They don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress.
+         * @description Lists the retention status of each Submission's records. The caller needs `retention_policy.view`. File names, answers, evidence and remarks are never included. By default, `limit` counts Submissions, and each Submission adds four items covering work, integrity, Browser Activity and security operational records. Set `group_by=exam` to count records by category for each Exam. In that mode, `limit` counts Exams and the response orders them by Exam ID. A cursor continues only the grouping that issued it. A retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. They don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress.
          */
         get: operations["listRetentionRecords"];
         put?: never;
@@ -5727,7 +5767,7 @@ export interface paths {
         };
         /**
          * Download every retention record as CSV
-         * @description Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe.
+         * @description Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe. Each export is audited.
          */
         get: operations["exportRetentionRecords"];
         put?: never;
@@ -6009,7 +6049,7 @@ export interface paths {
         };
         /**
          * List Submissions across the Exams you can see
-         * @description Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none&review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts.
+         * @description Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none&review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts. Restart without a cursor if its anchor is unavailable.
          */
         get: operations["listSubmissions"];
         put?: never;
@@ -7559,7 +7599,7 @@ export interface components {
             /** @description Rows the operation will change. */
             will_change: number;
         };
-        /** @description One page of Academic Periods, ordered by start time, then name, then identifier. */
+        /** @description One page of Academic Periods in the requested sort order and direction. */
         AcademicPeriodListResponse: {
             /** @description The Academic Periods on this page. */
             items: components["schemas"]["AcademicPeriodResponse"][];
@@ -7653,6 +7693,11 @@ export interface components {
              */
             created_at: string;
             /**
+             * Format: email
+             * @description The member's email address. Present only with Institution-wide user.view.
+             */
+            email?: string;
+            /**
              * Format: date-time
              * @description When the membership stops being in effect. The membership is no longer in effect at this instant. Omitted while it has no end.
              */
@@ -7673,8 +7718,8 @@ export interface components {
              * @description When the membership last changed, for example when it was ended.
              */
             updated_at: string;
-            /** @description Who the member is. */
-            user: components["schemas"]["AcademicUnitMemberUser"];
+            /** @description Who the member is. Username and profile picture follow directory visibility. */
+            user: components["schemas"]["PersonRef"];
             /** @description The member. */
             user_id: components["schemas"]["ID"];
         };
@@ -7727,18 +7772,6 @@ export interface components {
             display_name: string;
             /** @description The ID of the Role. */
             role_id: components["schemas"]["ID"];
-        };
-        /** @description Who the member is. Anyone who can see the Academic Unit's members sees the display name and username. `email` is present only if you hold Institution-wide user.view. */
-        AcademicUnitMemberUser: {
-            /** @description The member's display name. */
-            display_name: string;
-            /**
-             * Format: email
-             * @description The member's email address. Present only if you hold Institution-wide user.view.
-             */
-            email?: string;
-            /** @description The member's username. */
-            username: string;
         };
         AcademicUnitResponse: {
             /** @description Up to three people who administer this Academic Unit: each holds a current Role Binding scoped exactly to it, of a Role that grants academic_unit.manage. Earliest first. Present, possibly empty, only if you hold role_binding.view on the Academic Unit. */
@@ -8564,6 +8597,49 @@ export interface components {
             /** @description The client's User-Agent header, up to 512 characters. Omitted for Academic Unit auditors. */
             user_agent?: string;
         };
+        /** @description A request for a temporary file of audit Events, and its state. */
+        AuditExportResponse: {
+            /**
+             * Format: date-time
+             * @description Time the export was requested. The expiry counts from this time.
+             */
+            created_at: string;
+            /** @description Number of Events matched when the export was requested, and once it is ready, the number in the file. */
+            event_count: number;
+            /**
+             * Format: date-time
+             * @description Time after which the file can't be downloaded. It is fixed when the export is requested.
+             */
+            expires_at: string;
+            /**
+             * @description Format of the file.
+             * @enum {string}
+             */
+            format: "csv" | "jsonl";
+            /** @description ID of the export. */
+            id: components["schemas"]["ID"];
+            /** @description The background Job that builds the file. Job viewers can observe its `job.changed` events. */
+            job_id: components["schemas"]["ID"];
+            /**
+             * Format: date-time
+             * @description Time the file became ready. Present only while the export is ready.
+             */
+            ready_at?: string;
+            /** @description True for an Academic Unit auditor's export, whose Events carry the same redacted fields as their listing. */
+            redacted: boolean;
+            /** @description SHA-256 of the file, in lowercase hexadecimal. Present only while the export is ready. */
+            sha256?: string;
+            /**
+             * Format: int64
+             * @description Size of the file, in bytes. Present only while the export is ready.
+             */
+            size_bytes?: number;
+            /**
+             * @description `queued` while the file is being built, `ready` when it can be downloaded, `failed` if building failed, and `expired` after `expires_at`.
+             * @enum {string}
+             */
+            state: "queued" | "ready" | "failed" | "expired";
+        };
         /** @description One page of audit Events you can see. */
         AuditListResponse: {
             /** @description The Events on this page. */
@@ -9132,7 +9208,7 @@ export interface components {
             host_match: "exact" | "exact_and_subdomains";
             /** @description Set to true only for an HTTP rule whose host and explicit port are the same as this installation's own HTTPS origin. It must be false for HTTPS rules. It never allows credentials to be sent over HTTP. */
             institution_http_exception: boolean;
-            /** @description An optional short name for the site that staff and candidates read in place of the origin, such as "PostgreSQL documentation". Plain text of at most 100 characters. Surrounding spaces and invisible or bidirectional characters are removed when you save, and a label that is then empty is left out. Control characters are rejected. It is frozen with the revision and plays no part in matching. */
+            /** @description An optional short name for the site that staff and candidates read in place of the origin, such as "PostgreSQL documentation". Plain text of at most 400 characters. Surrounding spaces and invisible or bidirectional characters are removed when you save, and a label that is then empty is left out. Control characters are rejected. It is frozen with the revision and plays no part in matching. */
             label?: string;
             /**
              * Format: uri
@@ -9513,16 +9589,8 @@ export interface components {
             exam_id: components["schemas"]["ID"];
             /** @description The Sitting. */
             exam_sitting_id: components["schemas"]["ID"];
-            /**
-             * Format: date-time
-             * @description When the Sitting stops admitting candidates who have not started. Absent when they can start until the end. A candidate who has started can carry on until the end.
-             */
-            join_closes_at?: string;
-            /**
-             * Format: date-time
-             * @description When the candidate can join to prepare: run the readiness checks and read the instructions. The Attempt still starts at scheduled_start_at. Absent when there is no early join.
-             */
-            join_opens_at?: string;
+            /** @description The join window, when either bound is set. */
+            join_window?: components["schemas"]["ExamSittingJoinWindow"];
             /** @description The released result, or null until it is released. */
             result: components["schemas"]["CandidateExamActivityResultResponse"] | null;
             /**
@@ -10036,6 +10104,11 @@ export interface components {
              */
             created_at: string;
             /**
+             * Format: email
+             * @description The student email, present with Institution-wide user.view.
+             */
+            email?: string;
+            /**
              * Format: date-time
              * @description When the enrollment stops being in effect. Omitted while it has no end.
              */
@@ -10053,8 +10126,8 @@ export interface components {
              * @description When the enrollment last changed, for example when it was ended.
              */
             updated_at: string;
-            /** @description Who the student is, named exactly as an Academic Unit member is. `email` is included only if you hold Institution-wide user.view. */
-            user: components["schemas"]["AcademicUnitMemberUser"];
+            /** @description The enrolled student. Directory visibility controls the username and profile picture. */
+            user: components["schemas"]["PersonRef"];
             /** @description The enrolled student. */
             user_id: components["schemas"]["ID"];
         };
@@ -10110,12 +10183,13 @@ export interface components {
              * @description When the student moves, which is this enrollment's `end_at`.
              */
             at: string;
-            /** @description The Class the student moves to. */
-            to_class: {
-                id: components["schemas"]["ID"];
-                /** @description The Class's display name. */
-                name: string;
-            };
+            /** @description The Class the student moves to, when visible to the reader. */
+            to_class: components["schemas"]["ClassRef"];
+        };
+        ClassRef: {
+            /** @description The Class's display name. */
+            display_name: string;
+            id: components["schemas"]["ID"];
         };
         ClassResponse: {
             /** @description The Academic Period the Class runs in. */
@@ -10277,7 +10351,7 @@ export interface components {
             /** @description Name shown to people, 1 to 128 characters. */
             display_name: string;
             /** @description Optional. The kind of Academic Unit. Omitted or empty means `other`. */
-            kind?: components["schemas"]["AcademicUnitKind"];
+            kind?: string | components["schemas"]["AcademicUnitKind"] | "";
             /** @description Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at most 64 characters. It must be unique among the Institution's active Academic Units. */
             name: string;
         };
@@ -10294,6 +10368,50 @@ export interface components {
              * @description When the Affiliation starts. Omit it to start now.
              */
             start_at?: string;
+        };
+        /** @description Filters for a new audit export, and its format. */
+        CreateAuditExportRequest: {
+            /** @description Include only Events with one of these actions. */
+            action?: components["schemas"]["AuditAction"][];
+            /** @description Include only Events where this User performed the action. */
+            actor_id?: components["schemas"]["ID"];
+            /**
+             * Format: date-time
+             * @description Include only Events at or after this time.
+             */
+            created_after?: string;
+            /**
+             * Format: date-time
+             * @description Include only Events before this time. A later time, or none, means the time of the request.
+             */
+            created_before?: string;
+            /**
+             * @description `csv` for a spreadsheet, with a header row, or `jsonl` for one JSON object per line.
+             * @enum {string}
+             */
+            format: "csv" | "jsonl";
+            /**
+             * @description Include only reads or only changes.
+             * @enum {string}
+             */
+            kind?: "read" | "change";
+            /**
+             * @description Order of the Events in the file, newest first unless `asc`.
+             * @default desc
+             * @enum {string}
+             */
+            order: "asc" | "desc";
+            /** @description Include only Events on this resource. Send it with `resource_type`. */
+            resource_id?: string;
+            /** @description Include only Events on this resource. Send it with `resource_id`. */
+            resource_type?: string;
+            /**
+             * @description Include only Events with this status.
+             * @enum {string}
+             */
+            status?: "attempt" | "success" | "fail";
+            /** @description Include only Events about this User. */
+            subject_user_id?: components["schemas"]["ID"];
         };
         /** @description The Academic Period and display fields for a new Class. */
         CreateClassRequest: {
@@ -10357,7 +10475,7 @@ export interface components {
             /** @description Name shown to people, 1 to 128 characters. */
             display_name: string;
             /** @description Optional. The kind of Programme. Omitted or empty means `other`. */
-            kind?: components["schemas"]["ProgrammeKind"];
+            kind?: string | components["schemas"]["ProgrammeKind"] | "";
             /** @description Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at most 64 characters. It must be unique among the Academic Unit's active Programmes. */
             name: string;
         };
@@ -11356,7 +11474,7 @@ export interface components {
          * @description Machine-readable error code. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
          * @enum {string}
          */
-        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "assistant_profile.invalid" | "assistant_profile.limit_reached" | "assistant_profile.name_in_use" | "assistant_profile.not_found" | "assistant_profile.unavailable" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.second_factor_expired" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "environment_profile.invalid" | "environment_profile.limit_reached" | "environment_profile.name_in_use" | "environment_profile.not_found" | "environment_profile.unavailable" | "exam.archived" | "exam.assistant.disabled" | "exam.assistant.profile_unusable" | "exam.attempt.already_connected" | "exam.attempt.assistant_approval_conflict" | "exam.attempt.assistant_approval_not_found" | "exam.attempt.assistant_budget_exhausted" | "exam.attempt.assistant_busy" | "exam.attempt.assistant_disabled" | "exam.attempt.assistant_session_limit" | "exam.attempt.assistant_session_not_found" | "exam.attempt.assistant_turn_not_found" | "exam.attempt.assistant_unavailable" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.environment_changed" | "exam.attempt.environment_ended" | "exam.attempt.environment_not_found" | "exam.attempt.environment_not_running" | "exam.attempt.environment_unavailable" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.join_closed" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.preview_connection_ended" | "exam.attempt.preview_limit_reached" | "exam.attempt.preview_not_allowed" | "exam.attempt.preview_port_closed" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.terminal_exited" | "exam.attempt.terminal_limit_reached" | "exam.attempt.terminal_not_found" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.rate_limited" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.execution.disabled" | "exam.execution.profile_unusable" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
+        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "assistant_profile.invalid" | "assistant_profile.limit_reached" | "assistant_profile.name_in_use" | "assistant_profile.not_found" | "assistant_profile.unavailable" | "audit.export.expired" | "audit.export.limit" | "audit.export.not_found" | "audit.export.not_ready" | "audit.export.policy_unconfigured" | "audit.export.unavailable" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.second_factor_expired" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "environment_profile.invalid" | "environment_profile.limit_reached" | "environment_profile.name_in_use" | "environment_profile.not_found" | "environment_profile.unavailable" | "exam.archived" | "exam.assistant.disabled" | "exam.assistant.profile_unusable" | "exam.attempt.already_connected" | "exam.attempt.assistant_approval_conflict" | "exam.attempt.assistant_approval_not_found" | "exam.attempt.assistant_budget_exhausted" | "exam.attempt.assistant_busy" | "exam.attempt.assistant_disabled" | "exam.attempt.assistant_session_limit" | "exam.attempt.assistant_session_not_found" | "exam.attempt.assistant_turn_not_found" | "exam.attempt.assistant_unavailable" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.environment_changed" | "exam.attempt.environment_ended" | "exam.attempt.environment_not_found" | "exam.attempt.environment_not_running" | "exam.attempt.environment_unavailable" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.join_closed" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.preview_connection_ended" | "exam.attempt.preview_limit_reached" | "exam.attempt.preview_not_allowed" | "exam.attempt.preview_port_closed" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.terminal_exited" | "exam.attempt.terminal_limit_reached" | "exam.attempt.terminal_not_found" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.rate_limited" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.execution.disabled" | "exam.execution.profile_unusable" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.result_released" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
         /** @description An Attempt Connection. */
         ExamAttemptConnectionResponse: {
             /** @description Why the Connection closed. Present only when state is closed. */
@@ -11961,7 +12079,7 @@ export interface components {
              * @enum {string}
              */
             state: "open" | "closed";
-            /** @description One sentence, in the request's language, saying what the policy saw and how often, counting evidence beyond what was kept. It names a browser rule or a desktop check by its identifier and never names an application. */
+            /** @description One sentence, in the request's language, saying what the policy saw and how often, counting evidence beyond what was kept. A browser rule uses its frozen label if available and otherwise its identifier. Desktop check identifiers may appear. Application names stay in the Desktop catalogue. */
             summary: string;
             /**
              * Format: int64
@@ -12038,6 +12156,8 @@ export interface components {
              * @enum {string}
              */
             integrity_state: "settled" | "gapped";
+            /** @description The latest private reopening reason. Only shown with permission to manage the Sitting. */
+            latest_reopening_reason?: string;
             /** @description The count and digest of native condition records kept for the Attempt. */
             native_conditions: components["schemas"]["NativeConditionInventory"];
             /** @description The Review. Omitted until a manager creates one. */
@@ -12158,6 +12278,11 @@ export interface components {
              * @description Number of Submissions in the Sitting.
              */
             submission_count: number;
+        };
+        ExamRef: {
+            /** @description The Exam title. */
+            display_name: string;
+            id: components["schemas"]["ID"];
         };
         /** @description The metadata part of a Resource content replacement. */
         ExamResourceContentReplacementMetadata: {
@@ -12411,21 +12536,17 @@ export interface components {
             /** @description Send this back as cursor to get the next page. Omitted on the last page. */
             next_cursor?: components["schemas"]["NextCursor"];
         };
-        ExamSittingAcrossClass: {
-            display_name: string;
-            id: components["schemas"]["ID"];
-        };
         ExamSittingAcrossItemResponse: {
             /** @description The Academic Unit that owns the Exam. */
             academic_unit_id: components["schemas"]["ID"];
-            class: components["schemas"]["ExamSittingAcrossClass"];
+            class: components["schemas"]["ClassRef"];
             /** @description The candidate board's counts, for an open or paused Sitting only. */
             counts?: components["schemas"]["SittingCandidateStatusCounts"];
-            exam: components["schemas"]["SubmissionListExam"];
+            exam: components["schemas"]["ExamRef"];
             id: components["schemas"]["ID"];
             /**
              * Format: int64
-             * @description Candidates who are suspended, fail an enforced native check, or have unresolved integrity attention, for an open or paused Sitting only.
+             * @description Exact count within one open or paused Sitting. Includes candidates who are suspended, fail an enforced native check, or have unresolved integrity attention.
              */
             needs_attention_count?: number;
             /** Format: int64 */
@@ -12590,15 +12711,15 @@ export interface components {
         };
         /** @description One manager action on a Sitting and the manager's private reason. */
         ExamSittingHistoryEntry: {
+            /** @description The manager who acted, named. */
+            actor?: components["schemas"]["PersonRef"];
+            /** @description The manager who acted. */
+            actor_user_id: components["schemas"]["ID"];
             /**
              * Format: date-time
              * @description When.
              */
             at: string;
-            /** @description The manager who acted, named. */
-            by?: components["schemas"]["PersonRef"];
-            /** @description The manager who acted. */
-            by_user_id: components["schemas"]["ID"];
             /**
              * @description What the manager did.
              * @enum {string}
@@ -12647,7 +12768,7 @@ export interface components {
         /** @description A candidate who was in the Class when the Sitting opened and never started an Attempt. */
         ExamSittingNoShowResponse: {
             /** @description The candidate, in the same shape the candidate statuses use. */
-            candidate: components["schemas"]["SittingCandidateIdentityResponse"];
+            candidate: components["schemas"]["PersonRef"];
             /** @description The candidate's user ID. */
             candidate_user_id: components["schemas"]["ID"];
             /**
@@ -12699,16 +12820,8 @@ export interface components {
             history?: components["schemas"]["ExamSittingHistoryEntry"][];
             /** @description The Sitting's ID. */
             id: components["schemas"]["ID"];
-            /**
-             * Format: date-time
-             * @description After this time no candidate can start a new Attempt, and admission fails with exam.attempt.join_closed. Candidates who already started can reconnect until the deadline. It is after the scheduled start and at or before the deadline. Present only when set. It is frozen once the Sitting opens.
-             */
-            join_closes_at?: string;
-            /**
-             * Format: date-time
-             * @description When candidates can join early, at or before the scheduled start. From then until the start they can run the readiness checks and read the instructions; nobody can start an Attempt or touch a workspace before the start, so working time is the same for everyone. Present only when set. It is frozen once the Sitting opens.
-             */
-            join_opens_at?: string;
+            /** @description The join window, when either bound is set. */
+            join_window?: components["schemas"]["ExamSittingJoinWindow"];
             /**
              * Format: date-time
              * @description When the Sitting opened. Omitted until it opens.
@@ -13136,7 +13249,7 @@ export interface components {
             owner?: components["schemas"]["PersonRef"];
             /** @description The User who currently owns the Exam. */
             owner_user_id: components["schemas"]["ID"];
-            /** @description How many of the Exam's Submissions have no finalized review. Present only when you may review its Submissions. Counting stops at 10,000. */
+            /** @description How many of the Exam's Submissions have no finalized review, excluding your own. Present only when you may view and review the Exam's Submissions. Counting stops at 10,000. */
             pending_review_count?: number;
             /** @description True when counting stopped at its bound. Present with pending_review_count. */
             pending_review_count_is_lower_bound?: boolean;
@@ -13502,27 +13615,14 @@ export interface components {
              * @description The Invitation's revision, which goes up each time it changes. Send it as `expected_revision` to resend, revoke or replace the Invitation.
              */
             revision: number;
-            /** @description The Role the Invitation grants, named. Omitted for an Invitation that grants no Role. */
-            role?: {
-                /** @description The Role's display name. Omitted for an archived Role. */
-                display_name?: string;
-                id: components["schemas"]["ID"];
-            };
+            /** @description The Role granted, with its display name. */
+            role?: components["schemas"]["RoleRef"];
             /** @description The actions the Role allowed when the Invitation was issued, as recorded in the Invitation. */
             role_actions?: string[];
             /** @description The Role the Invitation grants. Present for every purpose except `student_class`. */
             role_id?: components["schemas"]["ID"];
-            /** @description Where the Invitation admits the person, named. */
-            scope: {
-                id: components["schemas"]["ID"];
-                /** @description The Institution, Academic Unit or Class display name. Omitted when it is archived. */
-                name?: string;
-                /**
-                 * @description Kind of scope.
-                 * @enum {string}
-                 */
-                type: "institution" | "academic_unit" | "class";
-            };
+            /** @description Where the grant applies. */
+            scope: components["schemas"]["ScopeRef"];
             /**
              * Format: date-time
              * @description When the relationship the Invitation grants starts. When the issuer gave no start, a student Class Invitation starts with its Academic Period and every other Invitation starts when it was issued.
@@ -13843,7 +13943,7 @@ export interface components {
          * @description Public reason a Job or Job Attempt failed. It never carries internal error detail. The server only uses the values listed here, but later releases may add more. Clients choose their own labels and should show an unknown value in a generic way.
          * @enum {string}
          */
-        JobErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "database.unavailable" | "dependency.unavailable" | "exam.export.expired" | "exam.export.unavailable" | "file.backend_unavailable" | "job.canceled" | "job.checkpoint.invalid" | "job.command.invalid" | "job.invariant_failed" | "mail.delivery.conflict" | "mail.delivery.failed" | "mail.delivery.not_found" | "mail.delivery.unavailable" | "mail.message.invalid" | "mail.payload.unavailable" | "mail.rekey.fenced" | "mail.rekey.incomplete" | "mail.rekey.invariant_failed" | "mail.rekey.payload_unavailable" | "mail.rekey.primary_mismatch" | "mail.sitting.bundle_unavailable" | "mail.sitting.invalid" | "mail.sitting.recipient_unavailable" | "mail.sitting.unavailable" | "mail.transport.acceptance_uncertain" | "mail.transport.permanent" | "mail.transport.temporary" | "mail.transport.unknown" | "mfa.rekey.fenced" | "mfa.rekey.incomplete" | "mfa.rekey.invariant_failed" | "mfa.rekey.primary_mismatch" | "mfa.rekey.secret_unavailable" | "onboarding_import.authorization_lost" | "onboarding_import.file_invalid" | "retention.unavailable" | "student_progression.authorization_lost" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "user.not_found";
+        JobErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "audit.export.expired" | "audit.export.unavailable" | "database.unavailable" | "dependency.unavailable" | "exam.export.expired" | "exam.export.unavailable" | "file.backend_unavailable" | "job.canceled" | "job.checkpoint.invalid" | "job.command.invalid" | "job.invariant_failed" | "mail.delivery.conflict" | "mail.delivery.failed" | "mail.delivery.not_found" | "mail.delivery.unavailable" | "mail.message.invalid" | "mail.payload.unavailable" | "mail.rekey.fenced" | "mail.rekey.incomplete" | "mail.rekey.invariant_failed" | "mail.rekey.payload_unavailable" | "mail.rekey.primary_mismatch" | "mail.sitting.bundle_unavailable" | "mail.sitting.invalid" | "mail.sitting.recipient_unavailable" | "mail.sitting.unavailable" | "mail.transport.acceptance_uncertain" | "mail.transport.permanent" | "mail.transport.temporary" | "mail.transport.unknown" | "mfa.rekey.fenced" | "mfa.rekey.incomplete" | "mfa.rekey.invariant_failed" | "mfa.rekey.primary_mismatch" | "mfa.rekey.secret_unavailable" | "onboarding_import.authorization_lost" | "onboarding_import.file_invalid" | "retention.unavailable" | "student_progression.authorization_lost" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "user.not_found";
         /** @description One page of Jobs. */
         JobListResponse: {
             /** @description Jobs on this page, in the requested order. */
@@ -13937,7 +14037,7 @@ export interface components {
          * @description Type of a background Job. The server only uses the values listed here, but later releases may add more. Clients choose their own labels and should show an unknown value in a generic way.
          * @enum {string}
          */
-        JobType: "academic_administration_preview.resolve" | "audit.attempt_sweep" | "command_outcome.cleanup" | "domain_event.dispatch" | "exam_export.build" | "exam_export.cleanup" | "exam_sitting.lifecycle" | "exam_sitting.lifecycle_recovery" | "exam_sitting.sealing" | "file.purge_expired_content" | "invitation.maintenance" | "job.cleanup" | "mail.cleanup" | "mail.deliver" | "mail.deliver_credential" | "mail.expand_sitting" | "mail.rekey" | "mfa.rekey" | "onboarding_import.execute" | "onboarding_import.parse" | "profile_picture.generate_default" | "profile_picture.reconcile_defaults" | "retention.expire" | "retention.notices" | "retention.purge" | "retention.reconcile" | "session.purge_retired" | "student_progression.preview";
+        JobType: "academic_administration_preview.resolve" | "audit.attempt_sweep" | "audit_export.build" | "audit_export.cleanup" | "command_outcome.cleanup" | "domain_event.dispatch" | "exam_export.build" | "exam_export.cleanup" | "exam_sitting.lifecycle" | "exam_sitting.lifecycle_recovery" | "exam_sitting.sealing" | "file.purge_expired_content" | "invitation.maintenance" | "job.cleanup" | "mail.cleanup" | "mail.deliver" | "mail.deliver_credential" | "mail.expand_sitting" | "mail.rekey" | "mfa.rekey" | "onboarding_import.execute" | "onboarding_import.parse" | "profile_picture.generate_default" | "profile_picture.reconcile_defaults" | "retention.expire" | "retention.notices" | "retention.purge" | "retention.reconcile" | "session.purge_retired" | "student_progression.preview";
         /** @description One timeline entry. Exactly the member its kind names is present. */
         LiveAttemptTimelineItem: {
             /** Format: date-time */
@@ -14351,7 +14451,7 @@ export interface components {
              * Format: date-time
              * @description When this key's current use began: the first payload it encrypted since it last encrypted none. The server has no rotation policy, so it suggests no rotation date.
              */
-            created_at: string;
+            in_use_since: string;
             /** @description ID of the key, a 128-bit value in lowercase hexadecimal. It isn't secret. */
             key_id: string;
         };
@@ -14491,29 +14591,47 @@ export interface components {
         };
         /** @description A screen clip as the Attempt's managers and reviewers list it. */
         ManagedScreenClipResponse: {
+            /** @description Attempt that requested or captured the clip. */
             exam_attempt_id: components["schemas"]["ID"];
             /**
              * @description Why the clip failed; present only when state is failed.
              * @enum {string}
              */
             failure?: "attempt_ended" | "not_recorded" | "upload_deadline" | "rejected";
+            /** @description ID of the clip. */
             id: components["schemas"]["ID"];
             /** @description The integrity Flag an incident clip was taken for. Absent for a manager clip. */
             integrity_flag_id?: components["schemas"]["ID"];
+            /** @description Time range requested from the screen recorder. */
             range: components["schemas"]["ScreenClipRange"];
             /** @description The manager's private reason for a manager clip. Present only for a caller who manages the Sitting. */
             reason?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the clip was requested.
+             */
             requested_at: string;
             /** @description The manager who asked for a manager clip. Absent for an incident clip. */
             requested_by?: components["schemas"]["PersonRef"];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Monotonic revision of the clip.
+             */
             revision: number;
-            /** @enum {string} */
+            /**
+             * @description Whether a manager or an integrity incident requested the clip.
+             * @enum {string}
+             */
             source: "manager" | "incident";
-            /** @enum {string} */
+            /**
+             * @description Current recording and upload state.
+             * @enum {string}
+             */
             state: "requested" | "recording" | "uploading" | "ready" | "failed";
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the clip state last changed.
+             */
             updated_at: string;
         };
         MoveExamStarterWorkspaceEntryRequest: {
@@ -15138,9 +15256,9 @@ export interface components {
             /** @description A short title in the request's language. */
             title: string;
         };
-        /** @description A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the record gets the person's presented name: their display name, or their username when it is empty. The username and profile picture are included only when the reader can see that User in the directory. */
+        /** @description A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the record gets the person's display name when one is set. A username can fill in for an unset display name only when the reader can see that User in the directory. The same visibility controls the username and profile picture fields. */
         PersonRef: {
-            /** @description The person's presented name. Omitted when the account has been removed. */
+            /** @description The person's presented name, if the account has a visible one. */
             display_name?: string;
             /** @description The User's ID. It is kept after the account is removed. */
             id: components["schemas"]["ID"];
@@ -15759,7 +15877,7 @@ export interface components {
          * @description Type of a resource in permission checks and audit records. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
          * @enum {string}
          */
-        ResourceType: "academic_period" | "academic_unit" | "class" | "exam" | "exam_sitting" | "institution" | "mail_delivery" | "programme" | "programme_level" | "submission" | "user";
+        ResourceType: "academic_period" | "academic_unit" | "class" | "exam" | "exam_attempt" | "exam_sitting" | "institution" | "mail_delivery" | "programme" | "programme_level" | "submission" | "user";
         ResultReleaseBatchResponse: {
             items: components["schemas"]["ResultReleaseItemResponse"][];
         };
@@ -15815,12 +15933,6 @@ export interface components {
              */
             updated_at: string;
         };
-        /** @description An Exam named by its draft title. */
-        RetentionExam: {
-            id: components["schemas"]["ID"];
-            /** @description The Exam's draft title. Empty if the Exam has no draft. */
-            title: string;
-        };
         /** @description One page of the Exams that have records, by Exam ID. In each, `eligible_exams` is 1 when the Exam has an eligible record in that category. */
         RetentionExamSummariesResponse: {
             /** Format: date-time */
@@ -15833,7 +15945,7 @@ export interface components {
         /** @description One Exam's retention records, counted by category as a preview counts them. */
         RetentionExamSummary: {
             browser_activity: components["schemas"]["RetentionPreviewCounts"];
-            exam: components["schemas"]["RetentionExam"];
+            exam: components["schemas"]["ExamRef"];
             integrity: components["schemas"]["RetentionPreviewCounts"];
             security_operational: components["schemas"]["RetentionPreviewCounts"];
             work: components["schemas"]["RetentionPreviewCounts"];
@@ -15890,10 +16002,10 @@ export interface components {
         RetentionHoldListItem: {
             /** Format: date-time */
             created_at: string;
-            created_by: components["schemas"]["PersonRef"];
+            created_by?: components["schemas"]["PersonRef"];
             /** @description True when the hold is unreleased and `until` has passed. It still protects its records. */
             due_for_review: boolean;
-            exam: components["schemas"]["RetentionExam"];
+            exam: components["schemas"]["ExamRef"];
             /** @description Held Sitting, or the Sitting of the held Submission. Omitted for an Exam hold. */
             exam_sitting_id?: components["schemas"]["ID"];
             id: components["schemas"]["ID"];
@@ -16211,14 +16323,14 @@ export interface components {
         };
         /** @description Optional settings to preview before saving them, with the same members as the Retention Policy PUT body except `expected_revision`. Every member must be present and not null, or the request is refused with `request.invalid`. The preview counts the current records under these settings and is marked `proposed`. */
         RetentionProposedPolicy: {
-            audit_retention_days?: number | null;
-            browser_activity_retention_days?: number | null;
-            candidate_notices?: boolean | null;
-            deletion_grace_days?: number | null;
-            export_retention_days?: number | null;
-            integrity_retention_days?: number | null;
-            security_operational_retention_days?: number | null;
-            submission_retention_days?: number | null;
+            audit_retention_days: number;
+            browser_activity_retention_days: number;
+            candidate_notices: boolean;
+            deletion_grace_days: number;
+            export_retention_days: number;
+            integrity_retention_days: number;
+            security_operational_retention_days: number;
+            submission_retention_days: number;
         };
         /** @description Retention status of one category of one Submission's records. It contains no content. */
         RetentionRecord: {
@@ -16249,7 +16361,7 @@ export interface components {
              * @description Time the retention period ends and the records become eligible. Omitted when no period applies.
              */
             eligible_at?: string;
-            exam: components["schemas"]["RetentionExam"];
+            exam: components["schemas"]["ExamRef"];
             /** @description Exam the records belong to. */
             exam_id: components["schemas"]["ID"];
             /** @description Sitting the records belong to. */
@@ -16381,33 +16493,20 @@ export interface components {
              * @description Time the grant stops. Omitted for a grant with no end.
              */
             end_at?: string;
-            /** @description Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is the importer for an imported invitation. Omitted only for the grant made at installation. */
+            /** @description Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is the importer for an imported invitation. For a direct CSV grant, this is the importer. Omitted only for the grant made at installation. */
             granted_by?: components["schemas"]["PersonRef"];
             /**
-             * @description How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`), or at installation (`bootstrap`).
+             * @description How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`), through a CSV import (`import`), or at installation (`bootstrap`).
              * @enum {string}
              */
-            granted_via: "manual" | "invitation" | "bootstrap";
+            granted_via: "manual" | "invitation" | "import" | "bootstrap";
             id: components["schemas"]["ID"];
-            /** @description The Role granted, named. */
-            role: {
-                /** @description The Role's display name, localized for the protected System Administrator role. Omitted for an archived Role. */
-                display_name?: string;
-                id: components["schemas"]["ID"];
-            };
+            /** @description The Role granted, with its display name. */
+            role: components["schemas"]["RoleRef"];
             /** @description The Role granted. */
             role_id: components["schemas"]["ID"];
-            /** @description The scope the grant applies to, named. */
-            scope: {
-                id: components["schemas"]["ID"];
-                /** @description The Institution, Academic Unit or Class display name. Omitted when it is archived. */
-                name?: string;
-                /**
-                 * @description Kind of scope.
-                 * @enum {string}
-                 */
-                type: "institution" | "academic_unit" | "class";
-            };
+            /** @description Where the grant applies. */
+            scope: components["schemas"]["ScopeRef"];
             /** @description The Institution, Academic Unit or Class the grant applies to. */
             scope_id: components["schemas"]["ID"];
             /** @description Kind of scope the grant applies to, `institution`, `academic_unit` or `class`. */
@@ -16445,6 +16544,11 @@ export interface components {
             /** @description The Roles on this page, sorted by `name` and then `id`. */
             items: components["schemas"]["RoleResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
+        };
+        RoleRef: {
+            /** @description The Role's display name, localized for the protected System Administrator role. */
+            display_name?: string;
+            id: components["schemas"]["ID"];
         };
         /** @description A named set of permissions. A Role grants nothing by itself. A User gets its permissions only through a Role Binding at a scope. */
         RoleResponse: {
@@ -16520,6 +16624,13 @@ export interface components {
              * @description When the Sitting opens. It must be in the future and inside the Class's Academic Period.
              */
             scheduled_start_at: string;
+        };
+        ScopeRef: {
+            /** @description The scope's display name, if available. */
+            display_name?: string;
+            id: components["schemas"]["ID"];
+            /** @enum {string} */
+            type: "institution" | "academic_unit" | "class";
         };
         ScreenClipChunkResponse: {
             chunk: number;
@@ -17088,15 +17199,6 @@ export interface components {
              */
             waiting_since?: string;
         };
-        /** @description The candidate User. */
-        SittingCandidateIdentityResponse: {
-            /** @description Display name of the candidate. */
-            display_name: string;
-            /** @description ID of the candidate User. */
-            user_id: components["schemas"]["ID"];
-            /** @description Username of the candidate. */
-            username: string;
-        };
         /** @description Candidates in each presence state. */
         SittingCandidatePresenceCounts: {
             /** Format: int64 */
@@ -17140,7 +17242,7 @@ export interface components {
             by_presence_state: components["schemas"]["SittingCandidatePresenceCounts"];
             /**
              * Format: int64
-             * @description Every candidate of the Sitting.
+             * @description Exact number of candidates in the Sitting visible on this board, before filters.
              */
             total: number;
             /**
@@ -17164,7 +17266,7 @@ export interface components {
             /** @description The candidate's Attempt. Null when the candidate has not started. */
             attempt: components["schemas"]["SittingCandidateAttemptResponse"] | null;
             /** @description The candidate User. */
-            candidate: components["schemas"]["SittingCandidateIdentityResponse"];
+            candidate: components["schemas"]["PersonRef"];
             /**
              * Format: int64
              * @description How many workspace files the candidate added, changed or removed against the Starter Workspace. Only for callers who may manage the Sitting.
@@ -17296,7 +17398,7 @@ export interface components {
             /** @description True when counting stopped at 10,000 and there may be more. Present with `total`. */
             total_is_lower_bound?: boolean;
         };
-        /** @description The Sitting's Submissions, other than your own, whatever the filters. */
+        /** @description Exact counts within this Sitting, excluding your own Submission and independent of the filters. */
         SubmissionListCounts: {
             /**
              * Format: int64
@@ -17321,16 +17423,12 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        SubmissionListExam: {
-            id: components["schemas"]["ID"];
-            title: string;
-        };
         /** @description One sealed Submission. A Flag marks something for review; it is not a finding of guilt. */
         SubmissionListItemResponse: {
             /** @description The candidate, as the Sitting's candidate board names them. */
-            candidate: components["schemas"]["SittingCandidateIdentityResponse"];
+            candidate: components["schemas"]["PersonRef"];
             /** @description The Submission's Exam. Present on the list across Exams. */
-            exam?: components["schemas"]["SubmissionListExam"];
+            exam?: components["schemas"]["ExamRef"];
             exam_attempt_id: components["schemas"]["ID"];
             exam_id: components["schemas"]["ID"];
             exam_sitting_id: components["schemas"]["ID"];
@@ -17864,20 +17962,17 @@ export interface components {
              * @description When two-step verification was turned on. Present only while `enabled` is true.
              */
             enabled_at?: string;
-            /**
-             * @description The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later.
-             * @enum {string}
-             */
-            method?: "authenticator_app";
+            /** @description The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later. */
+            method?: string | "authenticator_app";
         };
         UserMembershipListResponse: {
             items: components["schemas"]["UserMembershipResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
         };
         UserMembershipName: {
-            id: components["schemas"]["ID"];
             /** @description The display name. */
-            name: string;
+            display_name: string;
+            id: components["schemas"]["ID"];
         };
         /** @description One current membership. An `academic_unit` entry names its unit. A `class` entry names its Class, programme level, programme and Academic Period. */
         UserMembershipResponse: {
@@ -17886,7 +17981,7 @@ export interface components {
             /** @description The Academic Unit. Present only for `academic_unit` entries. */
             academic_unit?: components["schemas"]["UserMembershipName"];
             /** @description The Class. Present only for `class` entries. */
-            class?: components["schemas"]["UserMembershipName"];
+            class?: components["schemas"]["ClassRef"];
             /**
              * Format: date-time
              * @description When the membership ends. Omitted when it has no end.
@@ -18442,6 +18537,7 @@ export interface components {
                  *         {
                  *           "academic_unit_id": "889766ufjgio6kbpzjbufozksq",
                  *           "created_at": "2026-07-20T14:05:00Z",
+                 *           "email": "teacher.one@example.edu",
                  *           "id": "iqcx3qc9sbbt6ocshszfqgq6ci",
                  *           "roles_here": [
                  *             {
@@ -18454,7 +18550,7 @@ export interface components {
                  *           "updated_at": "2026-07-20T14:05:00Z",
                  *           "user": {
                  *             "display_name": "Teacher One",
-                 *             "email": "teacher.one@example.edu",
+                 *             "id": "ybndrfg8ejkmcpqxot1uwisza3",
                  *             "username": "teacher.one"
                  *           },
                  *           "user_id": "ybndrfg8ejkmcpqxot1uwisza3"
@@ -18462,6 +18558,7 @@ export interface components {
                  *         {
                  *           "academic_unit_id": "889766ufjgio6kbpzjbufozksq",
                  *           "created_at": "2026-07-21T09:00:00Z",
+                 *           "email": "staff.two@example.edu",
                  *           "id": "dfa1x1n7mkthyoziwxnupsmyia",
                  *           "roles_here": [],
                  *           "roles_here_more": 0,
@@ -18469,7 +18566,7 @@ export interface components {
                  *           "updated_at": "2026-07-21T09:00:00Z",
                  *           "user": {
                  *             "display_name": "Staff Two",
-                 *             "email": "staff.two@example.edu",
+                 *             "id": "f6tcxyfofj3n3buuqfjaw9j1jn",
                  *             "username": "staff.two"
                  *           },
                  *           "user_id": "f6tcxyfofj3n3buuqfjaw9j1jn"
@@ -18841,6 +18938,90 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["AttemptEvidenceListResponse"];
+            };
+        };
+        /** @description The export was queued with a fixed expiry. */
+        AuditExportAccepted: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "created_at": "2026-09-01T12:00:00Z",
+                 *       "event_count": 1280,
+                 *       "expires_at": "2026-09-04T12:00:00Z",
+                 *       "format": "csv",
+                 *       "id": "rpn96r4g3jfk3t41u4dus44bzc",
+                 *       "job_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                 *       "redacted": false,
+                 *       "state": "queued"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AuditExportResponse"];
+            };
+        };
+        /** @description The export file, checked against its hash. */
+        AuditExportFile: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                /** @description Marks the response as an attachment, with a safe file name chosen by the server. */
+                "Content-Disposition"?: string;
+                /** @description SHA-256 of the file, in double quotes. */
+                ETag?: string;
+                /** @description Always `nosniff`, so browsers don't guess a different content type. */
+                "X-Content-Type-Options"?: "nosniff";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/jsonl": string;
+                "text/csv": string;
+            };
+        };
+        /** @description The export's fixed expiry has passed, so new downloads are refused. */
+        AuditExportGone: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "audit.export.expired",
+                 *       "detail": "The audit export has expired.",
+                 *       "request_id": "req_docs_audit_export_expired",
+                 *       "status": 410,
+                 *       "title": "Export expired",
+                 *       "type": "https://docs.example.edu/problems/audit.export.expired"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description The export's details. Only the User who asked for it sees them. */
+        AuditExportOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "created_at": "2026-09-01T12:00:00Z",
+                 *       "event_count": 1280,
+                 *       "expires_at": "2026-09-04T12:00:00Z",
+                 *       "format": "csv",
+                 *       "id": "rpn96r4g3jfk3t41u4dus44bzc",
+                 *       "job_id": "wj3drgzdpnf54rxf5d8qd3dqne",
+                 *       "ready_at": "2026-09-01T12:00:09Z",
+                 *       "redacted": false,
+                 *       "sha256": "5d41a2b8c9e0f17263a4b5c6d7e8f9011a2b3c4d5e6f708192a3b4c5d6e7f809",
+                 *       "size_bytes": 412044,
+                 *       "state": "ready"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AuditExportResponse"];
             };
         };
         /** @description Audit Event collection */
@@ -19472,8 +19653,10 @@ export interface components {
                  *           },
                  *           "exam_id": "6xoche483hwrx5rpu8jzjoe7qg",
                  *           "exam_sitting_id": "39kqk53i4cswfzbi7hbai1r8qg",
-                 *           "join_closes_at": "2026-09-14T09:30:00Z",
-                 *           "join_opens_at": "2026-09-14T08:50:00Z",
+                 *           "join_window": {
+                 *             "closes_at": "2026-09-14T09:30:00Z",
+                 *             "opens_at": "2026-09-14T08:50:00Z"
+                 *           },
                  *           "result": null,
                  *           "scheduled_end_at": "2026-09-14T11:00:00Z",
                  *           "scheduled_start_at": "2026-09-14T09:00:00Z",
@@ -19992,12 +20175,13 @@ export interface components {
                  *           "academic_period_id": "p6y6sf8ac6m5if373fkkebj7j6",
                  *           "class_id": "sjebyge5cpbop1xwo4eds74ejb",
                  *           "created_at": "2026-07-28T10:00:00Z",
+                 *           "email": "amara.okafor@example.edu",
                  *           "id": "ih1r84kij94nrwis97rft6rduh",
                  *           "start_at": "2026-09-01T00:00:00Z",
                  *           "updated_at": "2026-07-28T10:00:00Z",
                  *           "user": {
                  *             "display_name": "Amara Okafor",
-                 *             "email": "amara.okafor@example.edu",
+                 *             "id": "5ebqfbnezgahdbx9oy7rfr6oro",
                  *             "username": "aokafor"
                  *           },
                  *           "user_id": "5ebqfbnezgahdbx9oy7rfr6oro"
@@ -20006,20 +20190,21 @@ export interface components {
                  *           "academic_period_id": "p6y6sf8ac6m5if373fkkebj7j6",
                  *           "class_id": "sjebyge5cpbop1xwo4eds74ejb",
                  *           "created_at": "2026-07-28T10:00:02Z",
+                 *           "email": "tomas.lindqvist@example.edu",
                  *           "end_at": "2027-01-11T00:00:00Z",
                  *           "id": "xpq79ar61ncrjiouey6d9tgp91",
                  *           "start_at": "2026-09-01T00:00:00Z",
                  *           "transfer": {
                  *             "at": "2027-01-11T00:00:00Z",
                  *             "to_class": {
-                 *               "id": "8kpous3h9nfemqtwz47ydgjcx1",
-                 *               "name": "Year 1, Group B"
+                 *               "display_name": "Year 1, Group B",
+                 *               "id": "8kpous3h9nfemqtwz47ydgjcx1"
                  *             }
                  *           },
                  *           "updated_at": "2026-07-28T10:00:02Z",
                  *           "user": {
                  *             "display_name": "Tomas Lindqvist",
-                 *             "email": "tomas.lindqvist@example.edu",
+                 *             "id": "17778cuf6b17rhtapprfjozet8",
                  *             "username": "tlindqvist"
                  *           },
                  *           "user_id": "17778cuf6b17rhtapprfjozet8"
@@ -22133,7 +22318,7 @@ export interface components {
                  *           },
                  *           "candidate": {
                  *             "display_name": "Ada Student",
-                 *             "user_id": "nybc6xhg593upqice3sdeyro5k",
+                 *             "id": "nybc6xhg593upqice3sdeyro5k",
                  *             "username": "student.ada"
                  *           },
                  *           "current_class_membership": true,
@@ -22170,7 +22355,7 @@ export interface components {
                  *           "attempt": null,
                  *           "candidate": {
                  *             "display_name": "Bo Student",
-                 *             "user_id": "dfa1x1n7mkthyoziwxnupsmyia",
+                 *             "id": "dfa1x1n7mkthyoziwxnupsmyia",
                  *             "username": "student.bo"
                  *           },
                  *           "current_class_membership": true,
@@ -22250,8 +22435,10 @@ export interface components {
                  *       "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
                  *       "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
                  *       "id": "14j8umgczgrdp95w77zuxmxfu9",
-                 *       "join_closes_at": "2026-12-14T09:30:00Z",
-                 *       "join_opens_at": "2026-12-14T08:50:00Z",
+                 *       "join_window": {
+                 *         "closes_at": "2026-12-14T09:30:00Z",
+                 *         "opens_at": "2026-12-14T08:50:00Z"
+                 *       },
                  *       "revision": 1,
                  *       "scheduled_end_at": "2026-12-14T11:00:00Z",
                  *       "scheduled_start_at": "2026-12-14T09:00:00Z",
@@ -22320,7 +22507,7 @@ export interface components {
                  *         {
                  *           "candidate": {
                  *             "display_name": "Asha Rao",
-                 *             "user_id": "sjebyge5cpbop1xwo4eds74ejb",
+                 *             "id": "sjebyge5cpbop1xwo4eds74ejb",
                  *             "username": "arao"
                  *           },
                  *           "candidate_user_id": "sjebyge5cpbop1xwo4eds74ejb",
@@ -22329,7 +22516,7 @@ export interface components {
                  *         {
                  *           "candidate": {
                  *             "display_name": "Tomas Kim",
-                 *             "user_id": "hmyjmj68dw6gdxctnghbrhwcth",
+                 *             "id": "hmyjmj68dw6gdxctnghbrhwcth",
                  *             "username": "tkim"
                  *           },
                  *           "candidate_user_id": "hmyjmj68dw6gdxctnghbrhwcth",
@@ -22356,8 +22543,10 @@ export interface components {
                  *       "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
                  *       "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
                  *       "id": "14j8umgczgrdp95w77zuxmxfu9",
-                 *       "join_closes_at": "2026-12-14T09:30:00Z",
-                 *       "join_opens_at": "2026-12-14T08:50:00Z",
+                 *       "join_window": {
+                 *         "closes_at": "2026-12-14T09:30:00Z",
+                 *         "opens_at": "2026-12-14T08:50:00Z"
+                 *       },
                  *       "opened_at": "2026-12-14T09:00:02Z",
                  *       "paused_at": "2026-12-14T09:41:17Z",
                  *       "revision": 3,
@@ -22865,8 +23054,8 @@ export interface components {
                  *         },
                  *         "role_id": "hmyjmj68dw6gdxctnghbrhwcth",
                  *         "scope": {
+                 *           "display_name": "Northbridge Institute",
                  *           "id": "p6y6sf8ac6m5if373fkkebj7j6",
-                 *           "name": "Northbridge Institute",
                  *           "type": "institution"
                  *         },
                  *         "scope_id": "p6y6sf8ac6m5if373fkkebj7j6",
@@ -22976,8 +23165,8 @@ export interface components {
                  *       "purpose": "student_class",
                  *       "revision": 1,
                  *       "scope": {
+                 *         "display_name": "Year 1 Mathematics A",
                  *         "id": "ybndrfg8ejkmcpqxot1uwisza3",
-                 *         "name": "Year 1 Mathematics A",
                  *         "type": "class"
                  *       },
                  *       "start_at": "2026-09-01T00:00:00Z",
@@ -23022,8 +23211,8 @@ export interface components {
                  *           "purpose": "student_class",
                  *           "revision": 1,
                  *           "scope": {
+                 *             "display_name": "Year 1 Mathematics A",
                  *             "id": "sjebyge5cpbop1xwo4eds74ejb",
-                 *             "name": "Year 1 Mathematics A",
                  *             "type": "class"
                  *           },
                  *           "start_at": "2026-09-01T00:00:00Z",
@@ -23054,8 +23243,8 @@ export interface components {
                  *           ],
                  *           "role_id": "nybc6xhg593upqice3sdeyro5k",
                  *           "scope": {
+                 *             "display_name": "Computer Science",
                  *             "id": "889766ufjgio6kbpzjbufozksq",
-                 *             "name": "Computer Science",
                  *             "type": "academic_unit"
                  *           },
                  *           "start_at": "2026-08-10T09:00:00Z",
@@ -23103,8 +23292,8 @@ export interface components {
                  *       "purpose": "student_class",
                  *       "revision": 1,
                  *       "scope": {
+                 *         "display_name": "Year 1 Mathematics A",
                  *         "id": "sjebyge5cpbop1xwo4eds74ejb",
-                 *         "name": "Year 1 Mathematics A",
                  *         "type": "class"
                  *       },
                  *       "start_at": "2026-09-01T00:00:00Z",
@@ -23560,12 +23749,12 @@ export interface components {
                  *       "active": [
                  *         {
                  *           "active_references": 1284,
-                 *           "created_at": "2026-09-14T08:00:00Z",
+                 *           "in_use_since": "2026-09-14T08:00:00Z",
                  *           "key_id": "7d3e9a10c4b2f6e8a1d5c7b9e3f20a46"
                  *         },
                  *         {
                  *           "active_references": 37,
-                 *           "created_at": "2026-03-02T10:30:00Z",
+                 *           "in_use_since": "2026-03-02T10:30:00Z",
                  *           "key_id": "2b8f4c6a0e1d3957b2c4e6f8a0b1c3d5"
                  *         }
                  *       ],
@@ -24729,105 +24918,14 @@ export interface components {
                 "application/json": components["schemas"]["RetentionPreviewResponse"];
             };
         };
-        /** @description One page of retention records. Each Submission adds four items, one per category. */
+        /** @description One page of retention records by Submission, or one page of Exam summaries with `group_by=exam`. */
         RetentionRecordsOK: {
             headers: {
                 "Cache-Control": components["headers"]["PrivateNoStore"];
                 [name: string]: unknown;
             };
             content: {
-                /**
-                 * @example {
-                 *       "as_of": "2026-09-01T12:00:00Z",
-                 *       "items": [
-                 *         {
-                 *           "blocker": "retention_period",
-                 *           "category": "work",
-                 *           "completed_at": "2026-06-01T12:00:00Z",
-                 *           "completion_current": true,
-                 *           "completion_revision": 2,
-                 *           "eligible_at": "2027-06-01T12:00:00Z",
-                 *           "exam": {
-                 *             "id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *             "title": "Algorithms final"
-                 *           },
-                 *           "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *           "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                 *           "has_integrity": true,
-                 *           "held": false,
-                 *           "shared_published_objects": 1,
-                 *           "submission_id": "zq993bky9h3uj4saw8iywi38cy"
-                 *         },
-                 *         {
-                 *           "blocker": "retention_period",
-                 *           "category": "integrity",
-                 *           "completed_at": "2026-06-01T12:00:00Z",
-                 *           "completion_current": true,
-                 *           "completion_revision": 2,
-                 *           "eligible_at": "2027-06-01T12:00:00Z",
-                 *           "exam": {
-                 *             "id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *             "title": "Algorithms final"
-                 *           },
-                 *           "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *           "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                 *           "has_integrity": true,
-                 *           "held": false,
-                 *           "shared_published_objects": 0,
-                 *           "submission_id": "zq993bky9h3uj4saw8iywi38cy"
-                 *         },
-                 *         {
-                 *           "blocker": "",
-                 *           "category": "browser_activity",
-                 *           "completed_at": "2026-06-01T12:00:00Z",
-                 *           "completion_current": true,
-                 *           "completion_revision": 2,
-                 *           "eligible_at": "2026-08-30T12:00:00Z",
-                 *           "exam": {
-                 *             "id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *             "title": "Algorithms final"
-                 *           },
-                 *           "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *           "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                 *           "has_integrity": true,
-                 *           "held": false,
-                 *           "retirement": {
-                 *             "completion_revision": 2,
-                 *             "control_revision": 2,
-                 *             "id": "5ebqfbnezgahdbx9oy7rfr6oro",
-                 *             "policy_revision": 3,
-                 *             "purge_pending": 0,
-                 *             "purge_verified": 0,
-                 *             "retire_after": "2026-09-07T02:00:00Z",
-                 *             "scheduled_at": "2026-08-31T02:00:00Z",
-                 *             "state": "grace"
-                 *           },
-                 *           "shared_published_objects": 0,
-                 *           "submission_id": "zq993bky9h3uj4saw8iywi38cy"
-                 *         },
-                 *         {
-                 *           "blocker": "retention_unconfigured",
-                 *           "category": "security_operational",
-                 *           "completed_at": "2026-06-01T12:00:00Z",
-                 *           "completion_current": true,
-                 *           "completion_revision": 2,
-                 *           "exam": {
-                 *             "id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *             "title": "Algorithms final"
-                 *           },
-                 *           "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                 *           "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                 *           "has_integrity": true,
-                 *           "held": false,
-                 *           "shared_published_objects": 0,
-                 *           "submission_id": "zq993bky9h3uj4saw8iywi38cy"
-                 *         }
-                 *       ],
-                 *       "next_cursor": "eyJhZnRlcl9zdWJtaXNzaW9uX2lkIjoienE5OTMifQ",
-                 *       "policy_revision": 3
-                 *     }
-                 */
-                "application/json": components["schemas"]["RetentionRecordsResponse"];
+                "application/json": components["schemas"]["RetentionRecordsResponse"] | components["schemas"]["RetentionExamSummariesResponse"];
             };
         };
         /** @description Role Binding created */
@@ -24851,8 +24949,8 @@ export interface components {
                  *       },
                  *       "role_id": "1asb7sk89dp1ex339fkh3te5t4",
                  *       "scope": {
+                 *         "display_name": "Mathematics",
                  *         "id": "14j8umgczgrdp95w77zuxmxfu9",
-                 *         "name": "Mathematics",
                  *         "type": "academic_unit"
                  *       },
                  *       "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
@@ -24887,8 +24985,8 @@ export interface components {
                  *       },
                  *       "role_id": "1asb7sk89dp1ex339fkh3te5t4",
                  *       "scope": {
+                 *         "display_name": "Mathematics",
                  *         "id": "14j8umgczgrdp95w77zuxmxfu9",
-                 *         "name": "Mathematics",
                  *         "type": "academic_unit"
                  *       },
                  *       "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
@@ -24924,8 +25022,8 @@ export interface components {
                  *           },
                  *           "role_id": "1asb7sk89dp1ex339fkh3te5t4",
                  *           "scope": {
+                 *             "display_name": "Mathematics",
                  *             "id": "14j8umgczgrdp95w77zuxmxfu9",
-                 *             "name": "Mathematics",
                  *             "type": "academic_unit"
                  *           },
                  *           "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
@@ -24949,8 +25047,8 @@ export interface components {
                  *           },
                  *           "role_id": "iqcx3qc9sbbt6ocshszfqgq6ci",
                  *           "scope": {
+                 *             "display_name": "Year 2 Statistics",
                  *             "id": "fotnmte5o3j9wftdm5rtbfofqr",
-                 *             "name": "Year 2 Statistics",
                  *             "type": "class"
                  *           },
                  *           "scope_id": "fotnmte5o3j9wftdm5rtbfofqr",
@@ -25935,8 +26033,8 @@ export interface components {
                  *       "items": [
                  *         {
                  *           "academic_unit": {
-                 *             "id": "14j8umgczgrdp95w77zuxmxfu9",
-                 *             "name": "Computer Science"
+                 *             "display_name": "Computer Science",
+                 *             "id": "14j8umgczgrdp95w77zuxmxfu9"
                  *           },
                  *           "id": "3yqk1oxnmb8gxe4cwa6r1ytsjy",
                  *           "kind": "academic_unit",
@@ -25944,23 +26042,23 @@ export interface components {
                  *         },
                  *         {
                  *           "academic_period": {
-                 *             "id": "c4sxtxwr3pd8gmk1o5y9nazhqe",
-                 *             "name": "2026/27"
+                 *             "display_name": "2026/27",
+                 *             "id": "c4sxtxwr3pd8gmk1o5y9nazhqe"
                  *           },
                  *           "class": {
-                 *             "id": "mx1kgmf7h3drjxs5ub8n3o4wpe",
-                 *             "name": "CS2 Group A"
+                 *             "display_name": "CS2 Group A",
+                 *             "id": "mx1kgmf7h3drjxs5ub8n3o4wpe"
                  *           },
                  *           "end_at": "2027-07-01T00:00:00Z",
                  *           "id": "q8n4cx7oufyp5nm1bdt3wh9eia",
                  *           "kind": "class",
                  *           "programme": {
-                 *             "id": "kd5u7xdgpbn8zw3r1sfoey9mqc",
-                 *             "name": "BSc Computing"
+                 *             "display_name": "BSc Computing",
+                 *             "id": "kd5u7xdgpbn8zw3r1sfoey9mqc"
                  *           },
                  *           "programme_level": {
-                 *             "id": "o9g8oyzef7r1eihn5t3ypu4cwa",
-                 *             "name": "Year 2"
+                 *             "display_name": "Year 2",
+                 *             "id": "o9g8oyzef7r1eihn5t3ypu4cwa"
                  *           },
                  *           "start_at": "2026-09-01T00:00:00Z"
                  *         }
@@ -26113,6 +26211,8 @@ export interface components {
         AffiliationID: components["schemas"]["ID"];
         /** @description The identifier of an entry in the Attempt Workspace. */
         AttemptWorkspaceEntryID: components["schemas"]["ID"];
+        /** @description ID of the audit export. */
+        AuditExportID: components["schemas"]["ID"];
         /** @description ID of the browser activity source: a lowercase UUID version 4 that the Desktop assigned when it started the source. */
         BrowserSourceSessionID: string;
         /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
@@ -26754,6 +26854,21 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["CreateAffiliationRequest"];
+            };
+        };
+        /** @description The audit listing's filters, under its query parameter names, and the file format. Every filter is optional and narrows the same way it narrows the listing. */
+        CreateAuditExport: {
+            content: {
+                /**
+                 * @example {
+                 *       "action": [
+                 *         "role_binding.manage"
+                 *       ],
+                 *       "created_after": "2026-09-01T00:00:00Z",
+                 *       "format": "csv"
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreateAuditExportRequest"];
             };
         };
         /** @description The Academic Period, machine name and display text for a new Class under the Programme Level in the path. */
@@ -28764,7 +28879,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -28967,6 +29081,72 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createAuditExport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["CreateAuditExport"];
+        responses: {
+            202: components["responses"]["AuditExportAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getAuditExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID of the audit export. */
+                audit_export_id: components["parameters"]["AuditExportID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AuditExportOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    downloadAuditExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID of the audit export. */
+                audit_export_id: components["parameters"]["AuditExportID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AuditExportFile"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            410: components["responses"]["AuditExportGone"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -30158,7 +30338,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -31876,8 +32055,8 @@ export interface operations {
                      *             "with_failed_checks": 1
                      *           },
                      *           "exam": {
-                     *             "id": "39kqk53i4cswfzbi7hbai1r8qg",
-                     *             "title": "Algorithms final"
+                     *             "display_name": "Algorithms final",
+                     *             "id": "39kqk53i4cswfzbi7hbai1r8qg"
                      *           },
                      *           "id": "889766ufjgio6kbpzjbufozksq",
                      *           "needs_attention_count": 3,
@@ -31897,7 +32076,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -33416,7 +33594,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -33485,7 +33662,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -33536,7 +33712,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -33900,7 +34075,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -33943,9 +34117,9 @@ export interface operations {
                 presence_state?: components["schemas"]["SittingCandidatePresenceState"][];
                 /** @description failing keeps candidates whose live participation fails an enforced native rule. */
                 check?: "failing";
-                /** @description true keeps candidates with unresolved integrity attention. */
-                attention?: "true";
-                /** @description Keep candidates whose display name or username contains this text, ignoring case. */
+                /** @description True keeps candidates with unresolved integrity attention. False leaves the list unfiltered. */
+                attention?: boolean;
+                /** @description Keep candidates whose display name contains this text, ignoring case. */
                 q?: string;
             };
             header?: never;
@@ -34365,12 +34539,12 @@ export interface operations {
                 /** @description Keep Submissions whose result is withheld or released. A Submission with no review is withheld. */
                 release_state?: ("withheld" | "released")[];
                 /** @description true keeps Submissions with at least one integrity Flag, false those with none. */
-                has_flags?: "true" | "false";
-                /** @description submitted lists the earliest Submission first; name lists by the candidate's display name. */
+                has_flags?: boolean;
+                /** @description submitted lists the earliest Submission first; name lists by display name, using the username as a sort key when the display name is empty. */
                 sort?: "submitted" | "name";
                 /** @description Maximum number of items to return in this page. */
                 limit?: components["parameters"]["PageLimit"];
-                /** @description Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters. */
+                /** @description Send next_cursor from the previous page unchanged with the same sort and filters. Restart without a cursor if its anchor is unavailable. */
                 cursor?: string;
             };
             header?: never;
@@ -34404,7 +34578,7 @@ export interface operations {
                      *         {
                      *           "candidate": {
                      *             "display_name": "Ada Student",
-                     *             "user_id": "nybc6xhg593upqice3sdeyro5k",
+                     *             "id": "nybc6xhg593upqice3sdeyro5k",
                      *             "username": "student.ada"
                      *           },
                      *           "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
@@ -34439,7 +34613,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -35919,45 +36092,14 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
-    listRetentionExamSummaries: {
-        parameters: {
-            query?: {
-                /** @description Maximum number of items to return in this page. */
-                limit?: components["parameters"]["PageLimit"];
-                /** @description The `next_cursor` from the previous page, sent back exactly as received. Omit it to get the first page. */
-                cursor?: components["parameters"]["PageCursor"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One page of Exam summaries */
-            200: {
-                headers: {
-                    "Cache-Control": components["headers"]["PrivateNoStore"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RetentionExamSummariesResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
     listInstitutionRetentionHolds: {
         parameters: {
             query?: {
                 /** @description Keeps the holds on this Exam. */
                 exam_id?: components["schemas"]["ID"];
+                /** @description Include released holds as well as holds that still protect records. */
                 include_released?: boolean;
+                /** @description Keep only holds placed for this reason. */
                 reason_code?: "institution_request" | "integrity_review" | "records_review" | "review_not_required" | "case_closed" | "mistake" | "other";
                 /** @description Maximum number of items to return in this page. */
                 limit?: components["parameters"]["PageLimit"];
@@ -35988,8 +36130,8 @@ export interface operations {
                      *           },
                      *           "due_for_review": true,
                      *           "exam": {
-                     *             "id": "xpq79ar61ncrjiouey6d9tgp91",
-                     *             "title": "Algorithms final"
+                     *             "display_name": "Algorithms final",
+                     *             "id": "xpq79ar61ncrjiouey6d9tgp91"
                      *           },
                      *           "exam_sitting_id": "4z3cy1rp9cucq7qo1g9mq94dj3",
                      *           "id": "yftfs48pasu5fd6czhcwz6b4x3",
@@ -36059,8 +36201,10 @@ export interface operations {
     listRetentionRecords: {
         parameters: {
             query?: {
-                /** @description Maximum number of Submissions to include. Each one adds a work, an integrity, a Browser Activity and a security operational item. */
-                limit?: number;
+                /** @description Set to `exam` for per-Exam summaries. Omit it to list records by Submission. */
+                group_by?: "exam";
+                /** @description Maximum number of items to return in this page. */
+                limit?: components["parameters"]["PageLimit"];
                 /** @description The `next_cursor` value from the previous page. Treat it as an unreadable token and pass it unchanged. */
                 cursor?: string;
             };
@@ -36497,12 +36641,12 @@ export interface operations {
                 /** @description Keep Submissions whose result is withheld or released. A Submission with no review is withheld. */
                 release_state?: ("withheld" | "released")[];
                 /** @description true keeps Submissions with at least one integrity Flag, false those with none. */
-                has_flags?: "true" | "false";
-                /** @description submitted lists the earliest Submission first; name lists by the candidate's display name. */
+                has_flags?: boolean;
+                /** @description submitted lists the earliest Submission first; name lists by display name, using the username as a sort key when the display name is empty. */
                 sort?: "submitted" | "name";
                 /** @description Maximum number of items to return in this page. */
                 limit?: components["parameters"]["PageLimit"];
-                /** @description Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters. */
+                /** @description Send next_cursor from the previous page unchanged with the same sort and filters. Restart without a cursor if its anchor is unavailable. */
                 cursor?: string;
             };
             header?: never;
@@ -36524,12 +36668,12 @@ export interface operations {
                      *         {
                      *           "candidate": {
                      *             "display_name": "Ada Student",
-                     *             "user_id": "nybc6xhg593upqice3sdeyro5k",
+                     *             "id": "nybc6xhg593upqice3sdeyro5k",
                      *             "username": "student.ada"
                      *           },
                      *           "exam": {
-                     *             "id": "wj3drgzdpnf54rxf5d8qd3dqne",
-                     *             "title": "Algorithms final"
+                     *             "display_name": "Algorithms final",
+                     *             "id": "wj3drgzdpnf54rxf5d8qd3dqne"
                      *           },
                      *           "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
                      *           "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
@@ -36555,7 +36699,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -37043,8 +37186,8 @@ export interface operations {
                 state?: "active" | "disabled";
                 /** @description Keeps Users whose account has two-step verification on (`enabled`) or off (`disabled`). On means an active Proctor authenticator app; a second factor an external sign-in provider checks does not count. Only callers who can see two-step verification (Institution-wide user.view, or user.mfa.reset) can use it; anyone else gets `request.invalid` on `mfa`. */
                 mfa?: "enabled" | "disabled";
-                /** @description With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with `mfa=disabled` it lists exactly the role holders the access policy preflight counts in `role_holders_without_mfa_count`. Only Institution-wide user.view can use it; anyone else gets `request.invalid` on `role_holder`. The only accepted value is `true`. */
-                role_holder?: true;
+                /** @description With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with `mfa=disabled` it lists exactly the role holders the access policy preflight counts in `role_holders_without_mfa_count`. Using `true` requires Institution-wide `user.view`. Omit the filter or send `false` to leave the list unfiltered. */
+                role_holder?: boolean;
                 /** @description With `true`, keeps Users who have never signed in. Activity is first recorded when a User gets a Session. Only Institution-wide user.view can filter on activity; anyone else gets `request.invalid`. You can't combine it with `last_active_after` or `last_active_before`. */
                 never_signed_in?: boolean;
                 /** @description Keeps Users last active at or after this RFC 3339 time. A User who was never active does not match. Only Institution-wide user.view can filter on activity; anyone else gets `request.invalid`. */

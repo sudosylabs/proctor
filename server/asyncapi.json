@@ -368,7 +368,8 @@
               "action": "academic_unit.view",
               "data": {
                 "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
-                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj"
+                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj",
+                "schema_version": 1
               },
               "event": "academic_unit_archived",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
@@ -429,7 +430,8 @@
               "action": "academic_unit.view",
               "data": {
                 "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
-                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj"
+                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj",
+                "schema_version": 1
               },
               "event": "academic_unit_created",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
@@ -482,7 +484,7 @@
         "title": "Academic Unit created"
       },
       "academic_unit_updated": {
-        "description": "Refetch the Academic Unit. The event names it and its parent. Sent when the Academic Unit itself changes, and when a member joins or leaves it outside a batch, since its member counts moved; a change to who administers it arrives as role_binding.changed. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "description": "Refetch the Academic Unit. The event names it and its parent. Sent when the Academic Unit itself changes, and when a member joins or leaves it outside a batch, since its member counts moved, or when a role binding at the Academic Unit changes its administrators. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
         "examples": [
           {
             "name": "example",
@@ -490,7 +492,8 @@
               "action": "academic_unit.view",
               "data": {
                 "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
-                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj"
+                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj",
+                "schema_version": 1
               },
               "event": "academic_unit_updated",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
@@ -887,7 +890,7 @@
         "title": "Current user Sessions changed"
       },
       "desktop_compatibility_policy.changed": {
-        "description": "Sent after a replacement changes the Desktop Compatibility Policy, including its revoked builds. The policy is Institution-wide, so the event names no ID beyond its resource. Delivered to connections that subscribe to desktop_compatibility_policy.manage on the Institution, checked again when it is sent.",
+        "description": "Sent after a replacement changes the Desktop Compatibility Policy, including its revoked builds, or when a Sitting opens or finishes closing. The policy and counts are Institution-wide, so the event names no ID beyond its resource. Delivered to desktop_compatibility_policy.manage subscribers on the Institution.",
         "examples": [
           {
             "name": "example",
@@ -933,7 +936,7 @@
             }
           ]
         },
-        "summary": "Refetch the Desktop Compatibility Policy and the Desktop release list. The event has no data.",
+        "summary": "Refetch the Desktop Compatibility Policy, release list and open Sitting count.",
         "tags": [
           {
             "name": "event"
@@ -952,7 +955,8 @@
             "payload": {
               "action": "exam.view",
               "data": {
-                "exam_id": "ia56br8kpous3h9nfemqtwz47y"
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "schema_version": 1
               },
               "event": "exam.counts.changed",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
@@ -1121,7 +1125,7 @@
         "title": "Connect to the Exam Attempt"
       },
       "exam_attempt.evidence.changed": {
-        "description": "Refetch an Attempt's live integrity Flags, evidence, native conditions and timeline. Sent at most once per Attempt every 5 seconds; the last change in a burst is always sent. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting.",
+        "description": "Refetch an Attempt's live integrity Flags, evidence, native conditions and timeline. Sent at most once per Attempt every 5 seconds; the last change in a burst is always sent. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting. This subscription also requires submission.view.",
         "examples": [
           {
             "name": "example",
@@ -1131,7 +1135,8 @@
                 "as_of": "2026-08-01T09:44:55Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
                 "exam_id": "ia56br8kpous3h9nfemqtwz47y",
-                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8"
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "schema_version": 1
               },
               "event": "exam_attempt.evidence.changed",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
@@ -1297,7 +1302,7 @@
         "title": "Renew the Exam Attempt Participation"
       },
       "exam_attempt.screen_clip.changed": {
-        "description": "Refetch an Attempt's screen clips, because one was requested or changed state. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting.",
+        "description": "Refetch an Attempt's screen clips, because one was requested or changed state. Delivered to connections that subscribe to exam.sitting.manage on the exam sitting. This subscription also requires submission.view. Reviewers can read clips through the submitted Attempt without receiving this Sitting-wide hint.",
         "examples": [
           {
             "name": "example",
@@ -1307,6 +1312,7 @@
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
                 "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "schema_version": 1,
                 "screen_clip_id": "twz47ydgjcx1ia56br8kpous3h"
               },
               "event": "exam_attempt.screen_clip.changed",
@@ -1562,6 +1568,7 @@
               "data": {
                 "call_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "expires_at": "2026-08-01T09:35:00Z",
                 "summary": "go test ./...",
@@ -1625,6 +1632,7 @@
               "data": {
                 "ended_at": "2026-11-21T12:00:00Z",
                 "exam_attempt_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "8kpous3h9nfemqtwz47ydgjcx1",
                 "outcome": "stopped",
                 "tag": "assistant:1"
@@ -1684,6 +1692,7 @@
             "payload": {
               "data": {
                 "exam_attempt_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "8kpous3h9nfemqtwz47ydgjcx1",
                 "started_at": "2026-11-21T12:00:00Z",
                 "tag": "assistant:1"
@@ -1743,6 +1752,7 @@
             "payload": {
               "data": {
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "index": 0,
                 "text": "Look at the loop's exit condition: ",
@@ -1804,6 +1814,7 @@
               "data": {
                 "call_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "outcome": "ok",
                 "phase": "ended",
@@ -1866,6 +1877,7 @@
               "data": {
                 "ended_at": "2026-08-01T09:30:04Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "stop_reason": "end_turn",
                 "turn_id": "ia56br8kpous3h9nfemqtwz47y",
@@ -1933,6 +1945,7 @@
               "data": {
                 "conversation_id": "8kpous3h9nfemqtwz47ydgjcx1",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "started_at": "2026-08-01T09:30:00Z",
                 "turn_id": "ia56br8kpous3h9nfemqtwz47y"
@@ -1993,6 +2006,7 @@
               "data": {
                 "changed_at": "2026-08-01T09:30:04Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "reason": "rate_limited",
                 "retry_after_seconds": 20,
@@ -2882,7 +2896,8 @@
               "action": "exam.view",
               "data": {
                 "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
-                "exam_id": "ia56br8kpous3h9nfemqtwz47y"
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "schema_version": 1
               },
               "event": "exam_created",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
@@ -3391,15 +3406,16 @@
         "title": "Exam Revision published"
       },
       "exam_sitting.submissions.changed": {
-        "description": "Refetch the submission list of one Sitting, because a Submission arrived or a review or result release changed. Published once per batch. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "description": "Refetch the submission list of one Sitting, because a Submission arrived or a review or result release changed. Published once per batch. Delivered to connections that subscribe to submission.view on the exam sitting.",
         "examples": [
           {
             "name": "example",
             "payload": {
-              "action": "exam.sitting.view",
+              "action": "submission.view",
               "data": {
                 "exam_id": "ia56br8kpous3h9nfemqtwz47y",
-                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8"
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "schema_version": 1
               },
               "event": "exam_sitting.submissions.changed",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
@@ -3420,7 +3436,7 @@
             {
               "properties": {
                 "action": {
-                  "const": "exam.sitting.view",
+                  "const": "submission.view",
                   "type": "string"
                 },
                 "data": {
@@ -4168,11 +4184,12 @@
         "title": "Hello"
       },
       "invitation.changed": {
-        "description": "Refetch an Invitation you issued; it reached a new state, today when it is accepted. The event names the scope the Invitation grants at. Delivered to the connections of the User who issued it.",
+        "description": "Refetch an Invitation whose state changed. The event names the scope the Invitation grants at. Delivered to invitation.view subscribers at that scope and its enclosing scopes.",
         "examples": [
           {
             "name": "example",
             "payload": {
+              "action": "invitation.view",
               "data": {
                 "invitation_id": "6br8kpous3h9nfemqtwz47ydgj",
                 "schema_version": 1,
@@ -4183,11 +4200,10 @@
               "event": "invitation.changed",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
               "resource": {
-                "id": "",
-                "type": ""
+                "id": "z47ydgjcx1ia56br8kpous3h9n",
+                "type": "class"
               },
-              "sequence": 42,
-              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+              "sequence": 42
             }
           }
         ],
@@ -4198,12 +4214,11 @@
               "$ref": "#/components/schemas/event_frame"
             },
             {
-              "not": {
-                "required": [
-                  "action"
-                ]
-              },
               "properties": {
+                "action": {
+                  "const": "invitation.view",
+                  "type": "string"
+                },
                 "data": {
                   "$ref": "#/components/schemas/invitation_changed"
                 },
@@ -4214,14 +4229,14 @@
               },
               "required": [
                 "event",
-                "user_id",
+                "action",
                 "data"
               ],
               "type": "object"
             }
           ]
         },
-        "summary": "Refetch an Invitation you issued; it reached a new state.",
+        "summary": "Refetch an Invitation whose state changed.",
         "tags": [
           {
             "name": "event"
@@ -4749,7 +4764,7 @@
         "title": "Resynchronization required"
       },
       "retention.changed": {
-        "description": "Refetch retention: the policy was replaced, a hold was placed or released, or an Exam's records due for removal changed when a Sitting's records were completed. kind says which. Delivered to connections that subscribe to retention_policy.view on the institution.",
+        "description": "Refetch retention: the policy was replaced, a hold was placed, released or became due for review, or an Exam's records due for removal changed when a Sitting's records were completed. kind says which. Delivered to connections that subscribe to retention_policy.view on the institution.",
         "examples": [
           {
             "name": "example",
@@ -5334,9 +5349,14 @@
           },
           "parent_academic_unit_id": {
             "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
           }
         },
         "required": [
+          "schema_version",
           "academic_unit_id"
         ],
         "title": "Academic Unit changed",
@@ -5372,9 +5392,14 @@
           },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
           }
         },
         "required": [
+          "schema_version",
           "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
@@ -5666,6 +5691,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5694,6 +5722,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "turn_id",
@@ -5717,6 +5746,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5736,6 +5768,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "tag",
@@ -5752,6 +5785,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5765,6 +5801,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "tag",
@@ -5778,6 +5815,9 @@
         "description": "One chunk of the assistant's reply, numbered from zero within the turn. Deltas are hints: a client that misses one reloads the transcript.",
         "properties": {
           "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
             "$ref": "#/components/schemas/id"
           },
           "exam_sitting_id": {
@@ -5797,6 +5837,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "turn_id",
@@ -5814,6 +5855,9 @@
             "$ref": "#/components/schemas/id"
           },
           "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
             "$ref": "#/components/schemas/id"
           },
           "exam_sitting_id": {
@@ -5839,6 +5883,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "turn_id",
@@ -5857,6 +5902,9 @@
             "$ref": "#/components/schemas/instant"
           },
           "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
             "$ref": "#/components/schemas/id"
           },
           "exam_sitting_id": {
@@ -5903,6 +5951,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "turn_id",
@@ -5923,6 +5972,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5934,6 +5986,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "turn_id",
@@ -5951,6 +6004,9 @@
             "$ref": "#/components/schemas/instant"
           },
           "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
             "$ref": "#/components/schemas/id"
           },
           "exam_sitting_id": {
@@ -5975,6 +6031,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "turn_id",
@@ -6727,9 +6784,14 @@
         "properties": {
           "exam_id": {
             "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
           }
         },
         "required": [
+          "schema_version",
           "exam_id"
         ],
         "title": "Exam counts changed",
@@ -6744,9 +6806,14 @@
           },
           "exam_id": {
             "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
           }
         },
         "required": [
+          "schema_version",
           "exam_id",
           "academic_unit_id"
         ],
@@ -7223,7 +7290,7 @@
       },
       "invitation_changed": {
         "additionalProperties": false,
-        "description": "Names an Invitation the addressed User issued, the state it reached and the scope it grants at. The accepting User is never included.",
+        "description": "Names an Invitation visible in the addressed scope, the state it reached and the scope it grants at. The accepting User is never included.",
         "properties": {
           "invitation_id": {
             "$ref": "#/components/schemas/id"
@@ -7559,11 +7626,16 @@
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          },
           "screen_clip_id": {
             "$ref": "#/components/schemas/id"
           }
         },
         "required": [
+          "schema_version",
           "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
@@ -7752,9 +7824,14 @@
           },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
           }
         },
         "required": [
+          "schema_version",
           "exam_id",
           "exam_sitting_id"
         ],

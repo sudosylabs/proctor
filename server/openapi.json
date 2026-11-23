@@ -3089,6 +3089,7 @@
                 {
                   "academic_unit_id": "889766ufjgio6kbpzjbufozksq",
                   "created_at": "2026-07-20T14:05:00Z",
+                  "email": "teacher.one@example.edu",
                   "id": "iqcx3qc9sbbt6ocshszfqgq6ci",
                   "roles_here": [
                     {
@@ -3101,7 +3102,7 @@
                   "updated_at": "2026-07-20T14:05:00Z",
                   "user": {
                     "display_name": "Teacher One",
-                    "email": "teacher.one@example.edu",
+                    "id": "ybndrfg8ejkmcpqxot1uwisza3",
                     "username": "teacher.one"
                   },
                   "user_id": "ybndrfg8ejkmcpqxot1uwisza3"
@@ -3109,6 +3110,7 @@
                 {
                   "academic_unit_id": "889766ufjgio6kbpzjbufozksq",
                   "created_at": "2026-07-21T09:00:00Z",
+                  "email": "staff.two@example.edu",
                   "id": "dfa1x1n7mkthyoziwxnupsmyia",
                   "roles_here": [],
                   "roles_here_more": 0,
@@ -3116,7 +3118,7 @@
                   "updated_at": "2026-07-21T09:00:00Z",
                   "user": {
                     "display_name": "Staff Two",
-                    "email": "staff.two@example.edu",
+                    "id": "f6tcxyfofj3n3buuqfjaw9j1jn",
                     "username": "staff.two"
                   },
                   "user_id": "f6tcxyfofj3n3buuqfjaw9j1jn"
@@ -4306,8 +4308,10 @@
                   },
                   "exam_id": "6xoche483hwrx5rpu8jzjoe7qg",
                   "exam_sitting_id": "39kqk53i4cswfzbi7hbai1r8qg",
-                  "join_closes_at": "2026-09-14T09:30:00Z",
-                  "join_opens_at": "2026-09-14T08:50:00Z",
+                  "join_window": {
+                    "closes_at": "2026-09-14T09:30:00Z",
+                    "opens_at": "2026-09-14T08:50:00Z"
+                  },
                   "result": null,
                   "scheduled_end_at": "2026-09-14T11:00:00Z",
                   "scheduled_start_at": "2026-09-14T09:00:00Z",
@@ -4879,12 +4883,13 @@
                   "academic_period_id": "p6y6sf8ac6m5if373fkkebj7j6",
                   "class_id": "sjebyge5cpbop1xwo4eds74ejb",
                   "created_at": "2026-07-28T10:00:00Z",
+                  "email": "amara.okafor@example.edu",
                   "id": "ih1r84kij94nrwis97rft6rduh",
                   "start_at": "2026-09-01T00:00:00Z",
                   "updated_at": "2026-07-28T10:00:00Z",
                   "user": {
                     "display_name": "Amara Okafor",
-                    "email": "amara.okafor@example.edu",
+                    "id": "5ebqfbnezgahdbx9oy7rfr6oro",
                     "username": "aokafor"
                   },
                   "user_id": "5ebqfbnezgahdbx9oy7rfr6oro"
@@ -4893,20 +4898,21 @@
                   "academic_period_id": "p6y6sf8ac6m5if373fkkebj7j6",
                   "class_id": "sjebyge5cpbop1xwo4eds74ejb",
                   "created_at": "2026-07-28T10:00:02Z",
+                  "email": "tomas.lindqvist@example.edu",
                   "end_at": "2027-01-11T00:00:00Z",
                   "id": "xpq79ar61ncrjiouey6d9tgp91",
                   "start_at": "2026-09-01T00:00:00Z",
                   "transfer": {
                     "at": "2027-01-11T00:00:00Z",
                     "to_class": {
-                      "id": "8kpous3h9nfemqtwz47ydgjcx1",
-                      "name": "Year 1, Group B"
+                      "display_name": "Year 1, Group B",
+                      "id": "8kpous3h9nfemqtwz47ydgjcx1"
                     }
                   },
                   "updated_at": "2026-07-28T10:00:02Z",
                   "user": {
                     "display_name": "Tomas Lindqvist",
-                    "email": "tomas.lindqvist@example.edu",
+                    "id": "17778cuf6b17rhtapprfjozet8",
                     "username": "tlindqvist"
                   },
                   "user_id": "17778cuf6b17rhtapprfjozet8"
@@ -7242,7 +7248,7 @@
                   },
                   "candidate": {
                     "display_name": "Ada Student",
-                    "user_id": "nybc6xhg593upqice3sdeyro5k",
+                    "id": "nybc6xhg593upqice3sdeyro5k",
                     "username": "student.ada"
                   },
                   "current_class_membership": true,
@@ -7279,7 +7285,7 @@
                   "attempt": null,
                   "candidate": {
                     "display_name": "Bo Student",
-                    "user_id": "dfa1x1n7mkthyoziwxnupsmyia",
+                    "id": "dfa1x1n7mkthyoziwxnupsmyia",
                     "username": "student.bo"
                   },
                   "current_class_membership": true,
@@ -7368,8 +7374,10 @@
               "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
               "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
-              "join_closes_at": "2026-12-14T09:30:00Z",
-              "join_opens_at": "2026-12-14T08:50:00Z",
+              "join_window": {
+                "closes_at": "2026-12-14T09:30:00Z",
+                "opens_at": "2026-12-14T08:50:00Z"
+              },
               "revision": 1,
               "scheduled_end_at": "2026-12-14T11:00:00Z",
               "scheduled_start_at": "2026-12-14T09:00:00Z",
@@ -7444,7 +7452,7 @@
                 {
                   "candidate": {
                     "display_name": "Asha Rao",
-                    "user_id": "sjebyge5cpbop1xwo4eds74ejb",
+                    "id": "sjebyge5cpbop1xwo4eds74ejb",
                     "username": "arao"
                   },
                   "candidate_user_id": "sjebyge5cpbop1xwo4eds74ejb",
@@ -7453,7 +7461,7 @@
                 {
                   "candidate": {
                     "display_name": "Tomas Kim",
-                    "user_id": "hmyjmj68dw6gdxctnghbrhwcth",
+                    "id": "hmyjmj68dw6gdxctnghbrhwcth",
                     "username": "tkim"
                   },
                   "candidate_user_id": "hmyjmj68dw6gdxctnghbrhwcth",
@@ -7483,8 +7491,10 @@
               "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
               "exam_revision_id": "ih1r84kij94nrwis97rft6rduh",
               "id": "14j8umgczgrdp95w77zuxmxfu9",
-              "join_closes_at": "2026-12-14T09:30:00Z",
-              "join_opens_at": "2026-12-14T08:50:00Z",
+              "join_window": {
+                "closes_at": "2026-12-14T09:30:00Z",
+                "opens_at": "2026-12-14T08:50:00Z"
+              },
               "opened_at": "2026-12-14T09:00:02Z",
               "paused_at": "2026-12-14T09:41:17Z",
               "revision": 3,
@@ -8110,8 +8120,8 @@
                 },
                 "role_id": "hmyjmj68dw6gdxctnghbrhwcth",
                 "scope": {
+                  "display_name": "Northbridge Institute",
                   "id": "p6y6sf8ac6m5if373fkkebj7j6",
-                  "name": "Northbridge Institute",
                   "type": "institution"
                 },
                 "scope_id": "p6y6sf8ac6m5if373fkkebj7j6",
@@ -8220,8 +8230,8 @@
               "purpose": "student_class",
               "revision": 1,
               "scope": {
+                "display_name": "Year 1 Mathematics A",
                 "id": "ybndrfg8ejkmcpqxot1uwisza3",
-                "name": "Year 1 Mathematics A",
                 "type": "class"
               },
               "start_at": "2026-09-01T00:00:00Z",
@@ -8269,8 +8279,8 @@
                   "purpose": "student_class",
                   "revision": 1,
                   "scope": {
+                    "display_name": "Year 1 Mathematics A",
                     "id": "sjebyge5cpbop1xwo4eds74ejb",
-                    "name": "Year 1 Mathematics A",
                     "type": "class"
                   },
                   "start_at": "2026-09-01T00:00:00Z",
@@ -8301,8 +8311,8 @@
                   ],
                   "role_id": "nybc6xhg593upqice3sdeyro5k",
                   "scope": {
+                    "display_name": "Computer Science",
                     "id": "889766ufjgio6kbpzjbufozksq",
-                    "name": "Computer Science",
                     "type": "academic_unit"
                   },
                   "start_at": "2026-08-10T09:00:00Z",
@@ -8353,8 +8363,8 @@
               "purpose": "student_class",
               "revision": 1,
               "scope": {
+                "display_name": "Year 1 Mathematics A",
                 "id": "sjebyge5cpbop1xwo4eds74ejb",
-                "name": "Year 1 Mathematics A",
                 "type": "class"
               },
               "start_at": "2026-09-01T00:00:00Z",
@@ -8843,12 +8853,12 @@
               "active": [
                 {
                   "active_references": 1284,
-                  "created_at": "2026-09-14T08:00:00Z",
+                  "in_use_since": "2026-09-14T08:00:00Z",
                   "key_id": "7d3e9a10c4b2f6e8a1d5c7b9e3f20a46"
                 },
                 {
                   "active_references": 37,
-                  "created_at": "2026-03-02T10:30:00Z",
+                  "in_use_since": "2026-03-02T10:30:00Z",
                   "key_id": "2b8f4c6a0e1d3957b2c4e6f8a0b1c3d5"
                 }
               ],
@@ -10148,101 +10158,176 @@
       "RetentionRecordsOK": {
         "content": {
           "application/json": {
-            "example": {
-              "as_of": "2026-09-01T12:00:00Z",
-              "items": [
-                {
-                  "blocker": "retention_period",
-                  "category": "work",
-                  "completed_at": "2026-06-01T12:00:00Z",
-                  "completion_current": true,
-                  "completion_revision": 2,
-                  "eligible_at": "2027-06-01T12:00:00Z",
-                  "exam": {
-                    "id": "xpq79ar61ncrjiouey6d9tgp91",
-                    "title": "Algorithms final"
-                  },
-                  "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                  "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                  "has_integrity": true,
-                  "held": false,
-                  "shared_published_objects": 1,
-                  "submission_id": "zq993bky9h3uj4saw8iywi38cy"
-                },
-                {
-                  "blocker": "retention_period",
-                  "category": "integrity",
-                  "completed_at": "2026-06-01T12:00:00Z",
-                  "completion_current": true,
-                  "completion_revision": 2,
-                  "eligible_at": "2027-06-01T12:00:00Z",
-                  "exam": {
-                    "id": "xpq79ar61ncrjiouey6d9tgp91",
-                    "title": "Algorithms final"
-                  },
-                  "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                  "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                  "has_integrity": true,
-                  "held": false,
-                  "shared_published_objects": 0,
-                  "submission_id": "zq993bky9h3uj4saw8iywi38cy"
-                },
-                {
-                  "blocker": "",
-                  "category": "browser_activity",
-                  "completed_at": "2026-06-01T12:00:00Z",
-                  "completion_current": true,
-                  "completion_revision": 2,
-                  "eligible_at": "2026-08-30T12:00:00Z",
-                  "exam": {
-                    "id": "xpq79ar61ncrjiouey6d9tgp91",
-                    "title": "Algorithms final"
-                  },
-                  "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                  "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                  "has_integrity": true,
-                  "held": false,
-                  "retirement": {
-                    "completion_revision": 2,
-                    "control_revision": 2,
-                    "id": "5ebqfbnezgahdbx9oy7rfr6oro",
-                    "policy_revision": 3,
-                    "purge_pending": 0,
-                    "purge_verified": 0,
-                    "retire_after": "2026-09-07T02:00:00Z",
-                    "scheduled_at": "2026-08-31T02:00:00Z",
-                    "state": "grace"
-                  },
-                  "shared_published_objects": 0,
-                  "submission_id": "zq993bky9h3uj4saw8iywi38cy"
-                },
-                {
-                  "blocker": "retention_unconfigured",
-                  "category": "security_operational",
-                  "completed_at": "2026-06-01T12:00:00Z",
-                  "completion_current": true,
-                  "completion_revision": 2,
-                  "exam": {
-                    "id": "xpq79ar61ncrjiouey6d9tgp91",
-                    "title": "Algorithms final"
-                  },
-                  "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
-                  "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
-                  "has_integrity": true,
-                  "held": false,
-                  "shared_published_objects": 0,
-                  "submission_id": "zq993bky9h3uj4saw8iywi38cy"
+            "examples": {
+              "by_exam": {
+                "summary": "Records grouped by Exam",
+                "value": {
+                  "as_of": "2026-09-01T12:00:00Z",
+                  "items": [
+                    {
+                      "browser_activity": {
+                        "awaiting_deadline": 0,
+                        "eligible": 0,
+                        "eligible_exams": 0,
+                        "export_protected": 0,
+                        "held": 1,
+                        "incomplete": 0,
+                        "retired": 0,
+                        "supporting_work": 0,
+                        "total": 1,
+                        "unconfigured": 0
+                      },
+                      "exam": {
+                        "display_name": "Algorithms final",
+                        "id": "xpq79ar61ncrjiouey6d9tgp91"
+                      },
+                      "integrity": {
+                        "awaiting_deadline": 0,
+                        "eligible": 0,
+                        "eligible_exams": 0,
+                        "export_protected": 0,
+                        "held": 1,
+                        "incomplete": 0,
+                        "retired": 0,
+                        "supporting_work": 0,
+                        "total": 1,
+                        "unconfigured": 0
+                      },
+                      "security_operational": {
+                        "awaiting_deadline": 0,
+                        "eligible": 0,
+                        "eligible_exams": 0,
+                        "export_protected": 0,
+                        "held": 1,
+                        "incomplete": 0,
+                        "retired": 0,
+                        "supporting_work": 0,
+                        "total": 1,
+                        "unconfigured": 0
+                      },
+                      "work": {
+                        "awaiting_deadline": 0,
+                        "eligible": 0,
+                        "eligible_exams": 0,
+                        "export_protected": 0,
+                        "held": 1,
+                        "incomplete": 0,
+                        "retired": 0,
+                        "supporting_work": 0,
+                        "total": 1,
+                        "unconfigured": 0
+                      }
+                    }
+                  ],
+                  "policy_revision": 3
                 }
-              ],
-              "next_cursor": "eyJhZnRlcl9zdWJtaXNzaW9uX2lkIjoienE5OTMifQ",
-              "policy_revision": 3
+              },
+              "by_submission": {
+                "summary": "Records by Submission",
+                "value": {
+                  "as_of": "2026-09-01T12:00:00Z",
+                  "items": [
+                    {
+                      "blocker": "retention_period",
+                      "category": "work",
+                      "completed_at": "2026-06-01T12:00:00Z",
+                      "completion_current": true,
+                      "completion_revision": 2,
+                      "eligible_at": "2027-06-01T12:00:00Z",
+                      "exam": {
+                        "display_name": "Algorithms final",
+                        "id": "xpq79ar61ncrjiouey6d9tgp91"
+                      },
+                      "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
+                      "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
+                      "has_integrity": true,
+                      "held": false,
+                      "shared_published_objects": 1,
+                      "submission_id": "zq993bky9h3uj4saw8iywi38cy"
+                    },
+                    {
+                      "blocker": "retention_period",
+                      "category": "integrity",
+                      "completed_at": "2026-06-01T12:00:00Z",
+                      "completion_current": true,
+                      "completion_revision": 2,
+                      "eligible_at": "2027-06-01T12:00:00Z",
+                      "exam": {
+                        "display_name": "Algorithms final",
+                        "id": "xpq79ar61ncrjiouey6d9tgp91"
+                      },
+                      "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
+                      "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
+                      "has_integrity": true,
+                      "held": false,
+                      "shared_published_objects": 0,
+                      "submission_id": "zq993bky9h3uj4saw8iywi38cy"
+                    },
+                    {
+                      "blocker": "",
+                      "category": "browser_activity",
+                      "completed_at": "2026-06-01T12:00:00Z",
+                      "completion_current": true,
+                      "completion_revision": 2,
+                      "eligible_at": "2026-08-30T12:00:00Z",
+                      "exam": {
+                        "display_name": "Algorithms final",
+                        "id": "xpq79ar61ncrjiouey6d9tgp91"
+                      },
+                      "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
+                      "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
+                      "has_integrity": true,
+                      "held": false,
+                      "retirement": {
+                        "completion_revision": 2,
+                        "control_revision": 2,
+                        "id": "5ebqfbnezgahdbx9oy7rfr6oro",
+                        "policy_revision": 3,
+                        "purge_pending": 0,
+                        "purge_verified": 0,
+                        "retire_after": "2026-09-07T02:00:00Z",
+                        "scheduled_at": "2026-08-31T02:00:00Z",
+                        "state": "grace"
+                      },
+                      "shared_published_objects": 0,
+                      "submission_id": "zq993bky9h3uj4saw8iywi38cy"
+                    },
+                    {
+                      "blocker": "retention_unconfigured",
+                      "category": "security_operational",
+                      "completed_at": "2026-06-01T12:00:00Z",
+                      "completion_current": true,
+                      "completion_revision": 2,
+                      "exam": {
+                        "display_name": "Algorithms final",
+                        "id": "xpq79ar61ncrjiouey6d9tgp91"
+                      },
+                      "exam_id": "xpq79ar61ncrjiouey6d9tgp91",
+                      "exam_sitting_id": "17778cuf6b17rhtapprfjozet8",
+                      "has_integrity": true,
+                      "held": false,
+                      "shared_published_objects": 0,
+                      "submission_id": "zq993bky9h3uj4saw8iywi38cy"
+                    }
+                  ],
+                  "next_cursor": "eyJhZnRlcl9zdWJtaXNzaW9uX2lkIjoienE5OTMifQ",
+                  "policy_revision": 3
+                }
+              }
             },
             "schema": {
-              "$ref": "#/components/schemas/RetentionRecordsResponse"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RetentionRecordsResponse"
+                },
+                {
+                  "$ref": "#/components/schemas/RetentionExamSummariesResponse"
+                }
+              ]
             }
           }
         },
-        "description": "One page of retention records. Each Submission adds four items, one per category.",
+        "description": "One page of retention records by Submission, or one page of Exam summaries with `group_by=exam`.",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/PrivateNoStore"
@@ -10266,8 +10351,8 @@
               },
               "role_id": "1asb7sk89dp1ex339fkh3te5t4",
               "scope": {
+                "display_name": "Mathematics",
                 "id": "14j8umgczgrdp95w77zuxmxfu9",
-                "name": "Mathematics",
                 "type": "academic_unit"
               },
               "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
@@ -10301,8 +10386,8 @@
               },
               "role_id": "1asb7sk89dp1ex339fkh3te5t4",
               "scope": {
+                "display_name": "Mathematics",
                 "id": "14j8umgczgrdp95w77zuxmxfu9",
-                "name": "Mathematics",
                 "type": "academic_unit"
               },
               "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
@@ -10337,8 +10422,8 @@
                   },
                   "role_id": "1asb7sk89dp1ex339fkh3te5t4",
                   "scope": {
+                    "display_name": "Mathematics",
                     "id": "14j8umgczgrdp95w77zuxmxfu9",
-                    "name": "Mathematics",
                     "type": "academic_unit"
                   },
                   "scope_id": "14j8umgczgrdp95w77zuxmxfu9",
@@ -10362,8 +10447,8 @@
                   },
                   "role_id": "iqcx3qc9sbbt6ocshszfqgq6ci",
                   "scope": {
+                    "display_name": "Year 2 Statistics",
                     "id": "fotnmte5o3j9wftdm5rtbfofqr",
-                    "name": "Year 2 Statistics",
                     "type": "class"
                   },
                   "scope_id": "fotnmte5o3j9wftdm5rtbfofqr",
@@ -11450,8 +11535,8 @@
               "items": [
                 {
                   "academic_unit": {
-                    "id": "14j8umgczgrdp95w77zuxmxfu9",
-                    "name": "Computer Science"
+                    "display_name": "Computer Science",
+                    "id": "14j8umgczgrdp95w77zuxmxfu9"
                   },
                   "id": "3yqk1oxnmb8gxe4cwa6r1ytsjy",
                   "kind": "academic_unit",
@@ -11459,23 +11544,23 @@
                 },
                 {
                   "academic_period": {
-                    "id": "c4sxtxwr3pd8gmk1o5y9nazhqe",
-                    "name": "2026/27"
+                    "display_name": "2026/27",
+                    "id": "c4sxtxwr3pd8gmk1o5y9nazhqe"
                   },
                   "class": {
-                    "id": "mx1kgmf7h3drjxs5ub8n3o4wpe",
-                    "name": "CS2 Group A"
+                    "display_name": "CS2 Group A",
+                    "id": "mx1kgmf7h3drjxs5ub8n3o4wpe"
                   },
                   "end_at": "2027-07-01T00:00:00Z",
                   "id": "q8n4cx7oufyp5nm1bdt3wh9eia",
                   "kind": "class",
                   "programme": {
-                    "id": "kd5u7xdgpbn8zw3r1sfoey9mqc",
-                    "name": "BSc Computing"
+                    "display_name": "BSc Computing",
+                    "id": "kd5u7xdgpbn8zw3r1sfoey9mqc"
                   },
                   "programme_level": {
-                    "id": "o9g8oyzef7r1eihn5t3ypu4cwa",
-                    "name": "Year 2"
+                    "display_name": "Year 2",
+                    "id": "o9g8oyzef7r1eihn5t3ypu4cwa"
                   },
                   "start_at": "2026-09-01T00:00:00Z"
                 }
@@ -12376,7 +12461,7 @@
       },
       "AcademicPeriodListResponse": {
         "additionalProperties": false,
-        "description": "One page of Academic Periods, ordered by start time, then name, then identifier.",
+        "description": "One page of Academic Periods in the requested sort order and direction.",
         "properties": {
           "items": {
             "description": "The Academic Periods on this page.",
@@ -12580,6 +12665,12 @@
             "format": "date-time",
             "type": "string"
           },
+          "email": {
+            "description": "The member's email address. Present only with Institution-wide user.view.",
+            "format": "email",
+            "maxLength": 254,
+            "type": "string"
+          },
           "end_at": {
             "description": "When the membership stops being in effect. The membership is no longer in effect at this instant. Omitted while it has no end.",
             "format": "date-time",
@@ -12613,8 +12704,8 @@
             "type": "string"
           },
           "user": {
-            "$ref": "#/components/schemas/AcademicUnitMemberUser",
-            "description": "Who the member is."
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who the member is. Username and profile picture follow directory visibility."
           },
           "user_id": {
             "$ref": "#/components/schemas/ID",
@@ -12729,30 +12820,6 @@
         "required": [
           "role_id",
           "display_name"
-        ],
-        "type": "object"
-      },
-      "AcademicUnitMemberUser": {
-        "additionalProperties": false,
-        "description": "Who the member is. Anyone who can see the Academic Unit's members sees the display name and username. `email` is present only if you hold Institution-wide user.view.",
-        "properties": {
-          "display_name": {
-            "description": "The member's display name.",
-            "type": "string"
-          },
-          "email": {
-            "description": "The member's email address. Present only if you hold Institution-wide user.view.",
-            "format": "email",
-            "type": "string"
-          },
-          "username": {
-            "description": "The member's username.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "display_name",
-          "username"
         ],
         "type": "object"
       },
@@ -15219,7 +15286,7 @@
           },
           "job_id": {
             "$ref": "#/components/schemas/ID",
-            "description": "The background Job that builds the file. Its `job.changed` events tell you when it finishes."
+            "description": "The background Job that builds the file. Job viewers can observe its `job.changed` events."
           },
           "ready_at": {
             "description": "Time the file became ready. Present only while the export is ready.",
@@ -16622,7 +16689,7 @@
             "type": "boolean"
           },
           "label": {
-            "description": "An optional short name for the site that staff and candidates read in place of the origin, such as \"PostgreSQL documentation\". Plain text of at most 100 characters. Surrounding spaces and invisible or bidirectional characters are removed when you save, and a label that is then empty is left out. Control characters are rejected. It is frozen with the revision and plays no part in matching.",
+            "description": "An optional short name for the site that staff and candidates read in place of the origin, such as \"PostgreSQL documentation\". Plain text of at most 400 characters. Surrounding spaces and invisible or bidirectional characters are removed when you save, and a label that is then empty is left out. Control characters are rejected. It is frozen with the revision and plays no part in matching.",
             "maxLength": 400,
             "minLength": 1,
             "type": "string"
@@ -17538,15 +17605,9 @@
             "$ref": "#/components/schemas/ID",
             "description": "The Sitting."
           },
-          "join_closes_at": {
-            "description": "When the Sitting stops admitting candidates who have not started. Absent when they can start until the end. A candidate who has started can carry on until the end.",
-            "format": "date-time",
-            "type": "string"
-          },
-          "join_opens_at": {
-            "description": "When the candidate can join to prepare: run the readiness checks and read the instructions. The Attempt still starts at scheduled_start_at. Absent when there is no early join.",
-            "format": "date-time",
-            "type": "string"
+          "join_window": {
+            "$ref": "#/components/schemas/ExamSittingJoinWindow",
+            "description": "The join window, when either bound is set."
           },
           "result": {
             "description": "The released result, or null until it is released.",
@@ -18834,6 +18895,11 @@
             "format": "date-time",
             "type": "string"
           },
+          "email": {
+            "description": "The student email, present with Institution-wide user.view.",
+            "format": "email",
+            "type": "string"
+          },
           "end_at": {
             "description": "When the enrollment stops being in effect. Omitted while it has no end.",
             "format": "date-time",
@@ -18857,8 +18923,8 @@
             "type": "string"
           },
           "user": {
-            "$ref": "#/components/schemas/AcademicUnitMemberUser",
-            "description": "Who the student is, named exactly as an Academic Unit member is. `email` is included only if you hold Institution-wide user.view."
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The enrolled student. Directory visibility controls the username and profile picture."
           },
           "user_id": {
             "$ref": "#/components/schemas/ID",
@@ -18973,27 +19039,31 @@
             "type": "string"
           },
           "to_class": {
-            "additionalProperties": false,
-            "description": "The Class the student moves to.",
-            "properties": {
-              "id": {
-                "$ref": "#/components/schemas/ID"
-              },
-              "name": {
-                "description": "The Class's display name.",
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "name"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/ClassRef",
+            "description": "The Class the student moves to, when visible to the reader."
           }
         },
         "required": [
           "to_class",
           "at"
+        ],
+        "type": "object"
+      },
+      "ClassRef": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "The Class's display name.",
+            "maxLength": 512,
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "id",
+          "display_name"
         ],
         "type": "object"
       },
@@ -19353,8 +19423,17 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/AcademicUnitKind",
-            "description": "Optional. The kind of Academic Unit. Omitted or empty means `other`."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcademicUnitKind"
+              },
+              {
+                "const": "",
+                "type": "string"
+              }
+            ],
+            "description": "Optional. The kind of Academic Unit. Omitted or empty means `other`.",
+            "type": "string"
           },
           "name": {
             "description": "Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at most 64 characters. It must be unique among the Institution's active Academic Units.",
@@ -19632,8 +19711,17 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/ProgrammeKind",
-            "description": "Optional. The kind of Programme. Omitted or empty means `other`."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgrammeKind"
+              },
+              {
+                "const": "",
+                "type": "string"
+              }
+            ],
+            "description": "Optional. The kind of Programme. Omitted or empty means `other`.",
+            "type": "string"
           },
           "name": {
             "description": "Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at most 64 characters. It must be unique among the Academic Unit's active Programmes.",
@@ -23101,6 +23189,7 @@
           "exam.integrity_review.incomplete",
           "exam.integrity_review.invalid",
           "exam.integrity_review.not_found",
+          "exam.integrity_review.result_released",
           "exam.integrity_review.revision_conflict",
           "exam.integrity_review.state_conflict",
           "exam.integrity_review.too_large",
@@ -24434,7 +24523,8 @@
             "type": "string"
           },
           "summary": {
-            "description": "One sentence, in the request's language, saying what the policy saw and how often, counting evidence beyond what was kept. It names a browser rule or a desktop check by its identifier and never names an application.",
+            "description": "One sentence, in the request's language, saying what the policy saw and how often, counting evidence beyond what was kept. A browser rule uses its frozen label if available and otherwise its identifier. Desktop check identifiers may appear. Application names stay in the Desktop catalogue.",
+            "maxLength": 1024,
             "type": "string"
           },
           "unresolved_missing_count": {
@@ -24605,6 +24695,12 @@
               "settled",
               "gapped"
             ],
+            "type": "string"
+          },
+          "latest_reopening_reason": {
+            "description": "The latest private reopening reason. Only shown with permission to manage the Sitting.",
+            "maxLength": 1000,
+            "minLength": 1,
             "type": "string"
           },
           "native_conditions": {
@@ -24879,6 +24975,23 @@
           "sitting_state",
           "submission_count",
           "pending_reviews"
+        ],
+        "type": "object"
+      },
+      "ExamRef": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "The Exam title.",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "id",
+          "display_name"
         ],
         "type": "object"
       },
@@ -25462,22 +25575,6 @@
         ],
         "type": "object"
       },
-      "ExamSittingAcrossClass": {
-        "additionalProperties": false,
-        "properties": {
-          "display_name": {
-            "type": "string"
-          },
-          "id": {
-            "$ref": "#/components/schemas/ID"
-          }
-        },
-        "required": [
-          "id",
-          "display_name"
-        ],
-        "type": "object"
-      },
       "ExamSittingAcrossItemResponse": {
         "additionalProperties": false,
         "properties": {
@@ -25486,20 +25583,20 @@
             "description": "The Academic Unit that owns the Exam."
           },
           "class": {
-            "$ref": "#/components/schemas/ExamSittingAcrossClass"
+            "$ref": "#/components/schemas/ClassRef"
           },
           "counts": {
             "$ref": "#/components/schemas/SittingCandidateStatusCounts",
             "description": "The candidate board's counts, for an open or paused Sitting only."
           },
           "exam": {
-            "$ref": "#/components/schemas/SubmissionListExam"
+            "$ref": "#/components/schemas/ExamRef"
           },
           "id": {
             "$ref": "#/components/schemas/ID"
           },
           "needs_attention_count": {
-            "description": "Candidates who are suspended, fail an enforced native check, or have unresolved integrity attention, for an open or paused Sitting only.",
+            "description": "Exact count within one open or paused Sitting. Includes candidates who are suspended, fail an enforced native check, or have unresolved integrity attention.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -25863,18 +25960,18 @@
         "additionalProperties": false,
         "description": "One manager action on a Sitting and the manager's private reason.",
         "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The manager who acted, named."
+          },
+          "actor_user_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The manager who acted."
+          },
           "at": {
             "description": "When.",
             "format": "date-time",
             "type": "string"
-          },
-          "by": {
-            "$ref": "#/components/schemas/PersonRef",
-            "description": "The manager who acted, named."
-          },
-          "by_user_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "The manager who acted."
           },
           "kind": {
             "description": "What the manager did.",
@@ -25895,7 +25992,7 @@
         "required": [
           "kind",
           "at",
-          "by_user_id",
+          "actor_user_id",
           "reason"
         ],
         "type": "object"
@@ -25989,7 +26086,7 @@
         "description": "A candidate who was in the Class when the Sitting opened and never started an Attempt.",
         "properties": {
           "candidate": {
-            "$ref": "#/components/schemas/SittingCandidateIdentityResponse",
+            "$ref": "#/components/schemas/PersonRef",
             "description": "The candidate, in the same shape the candidate statuses use."
           },
           "candidate_user_id": {
@@ -26086,15 +26183,9 @@
             "$ref": "#/components/schemas/ID",
             "description": "The Sitting's ID."
           },
-          "join_closes_at": {
-            "description": "After this time no candidate can start a new Attempt, and admission fails with exam.attempt.join_closed. Candidates who already started can reconnect until the deadline. It is after the scheduled start and at or before the deadline. Present only when set. It is frozen once the Sitting opens.",
-            "format": "date-time",
-            "type": "string"
-          },
-          "join_opens_at": {
-            "description": "When candidates can join early, at or before the scheduled start. From then until the start they can run the readiness checks and read the instructions; nobody can start an Attempt or touch a workspace before the start, so working time is the same for everyone. Present only when set. It is frozen once the Sitting opens.",
-            "format": "date-time",
-            "type": "string"
+          "join_window": {
+            "$ref": "#/components/schemas/ExamSittingJoinWindow",
+            "description": "The join window, when either bound is set."
           },
           "opened_at": {
             "description": "When the Sitting opened. Omitted until it opens.",
@@ -27043,7 +27134,7 @@
             "description": "The User who currently owns the Exam."
           },
           "pending_review_count": {
-            "description": "How many of the Exam's Submissions have no finalized review. Present only when you may review its Submissions. Counting stops at 10,000.",
+            "description": "How many of the Exam's Submissions have no finalized review, excluding your own. Present only when you may view and review the Exam's Submissions. Counting stops at 10,000.",
             "maximum": 10000,
             "minimum": 0,
             "type": "integer"
@@ -27892,22 +27983,8 @@
             "type": "integer"
           },
           "role": {
-            "additionalProperties": false,
-            "description": "The Role the Invitation grants, named. Omitted for an Invitation that grants no Role.",
-            "properties": {
-              "display_name": {
-                "description": "The Role's display name. Omitted for an archived Role.",
-                "maxLength": 512,
-                "type": "string"
-              },
-              "id": {
-                "$ref": "#/components/schemas/ID"
-              }
-            },
-            "required": [
-              "id"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/RoleRef",
+            "description": "The Role granted, with its display name."
           },
           "role_actions": {
             "description": "The actions the Role allowed when the Invitation was issued, as recorded in the Invitation.",
@@ -27921,32 +27998,8 @@
             "description": "The Role the Invitation grants. Present for every purpose except `student_class`."
           },
           "scope": {
-            "additionalProperties": false,
-            "description": "Where the Invitation admits the person, named.",
-            "properties": {
-              "id": {
-                "$ref": "#/components/schemas/ID"
-              },
-              "name": {
-                "description": "The Institution, Academic Unit or Class display name. Omitted when it is archived.",
-                "maxLength": 512,
-                "type": "string"
-              },
-              "type": {
-                "description": "Kind of scope.",
-                "enum": [
-                  "institution",
-                  "academic_unit",
-                  "class"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "id"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/ScopeRef",
+            "description": "Where the grant applies."
           },
           "start_at": {
             "description": "When the relationship the Invitation grants starts. When the issuer gave no start, a student Class Invitation starts with its Academic Period and every other Invitation starts when it was issued.",
@@ -28993,7 +29046,7 @@
             "items": {
               "$ref": "#/components/schemas/LiveAttemptTimelineItem"
             },
-            "maxItems": 100,
+            "maxItems": 200,
             "type": "array"
           },
           "next_cursor": {
@@ -29023,7 +29076,7 @@
             "items": {
               "$ref": "#/components/schemas/ExamIntegrityEvidenceResponse"
             },
-            "maxItems": 100,
+            "maxItems": 200,
             "type": "array"
           },
           "next_cursor": {
@@ -29053,7 +29106,7 @@
             "items": {
               "$ref": "#/components/schemas/ExamIntegrityFlagResponse"
             },
-            "maxItems": 100,
+            "maxItems": 200,
             "type": "array"
           },
           "next_cursor": {
@@ -29083,7 +29136,7 @@
             "items": {
               "$ref": "#/components/schemas/NativeConditionEvidence"
             },
-            "maxItems": 100,
+            "maxItems": 200,
             "type": "array"
           },
           "next_cursor": {
@@ -29897,7 +29950,7 @@
             "minimum": 1,
             "type": "integer"
           },
-          "created_at": {
+          "in_use_since": {
             "description": "When this key's current use began: the first payload it encrypted since it last encrypted none. The server has no rotation policy, so it suggests no rotation date.",
             "format": "date-time",
             "type": "string"
@@ -29911,7 +29964,7 @@
         "required": [
           "key_id",
           "active_references",
-          "created_at"
+          "in_use_since"
         ],
         "type": "object"
       },
@@ -30247,7 +30300,8 @@
         "description": "A screen clip as the Attempt's managers and reviewers list it.",
         "properties": {
           "exam_attempt_id": {
-            "$ref": "#/components/schemas/ID"
+            "$ref": "#/components/schemas/ID",
+            "description": "Attempt that requested or captured the clip."
           },
           "failure": {
             "description": "Why the clip failed; present only when state is failed.",
@@ -30260,20 +30314,23 @@
             "type": "string"
           },
           "id": {
-            "$ref": "#/components/schemas/ID"
+            "$ref": "#/components/schemas/ID",
+            "description": "ID of the clip."
           },
           "integrity_flag_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The integrity Flag an incident clip was taken for. Absent for a manager clip."
           },
           "range": {
-            "$ref": "#/components/schemas/ScreenClipRange"
+            "$ref": "#/components/schemas/ScreenClipRange",
+            "description": "Time range requested from the screen recorder."
           },
           "reason": {
             "description": "The manager's private reason for a manager clip. Present only for a caller who manages the Sitting.",
             "type": "string"
           },
           "requested_at": {
+            "description": "When the clip was requested.",
             "format": "date-time",
             "type": "string"
           },
@@ -30282,11 +30339,13 @@
             "description": "The manager who asked for a manager clip. Absent for an incident clip."
           },
           "revision": {
+            "description": "Monotonic revision of the clip.",
             "format": "int64",
             "minimum": 1,
             "type": "integer"
           },
           "source": {
+            "description": "Whether a manager or an integrity incident requested the clip.",
             "enum": [
               "manager",
               "incident"
@@ -30294,6 +30353,7 @@
             "type": "string"
           },
           "state": {
+            "description": "Current recording and upload state.",
             "enum": [
               "requested",
               "recording",
@@ -30304,6 +30364,7 @@
             "type": "string"
           },
           "updated_at": {
+            "description": "When the clip state last changed.",
             "format": "date-time",
             "type": "string"
           }
@@ -32607,10 +32668,12 @@
         "properties": {
           "display_name": {
             "description": "The file's display name, or its first and last names. Omitted when the file gave none.",
+            "maxLength": 513,
             "type": "string"
           },
           "email_masked": {
             "description": "The file's email address masked the way mail deliveries mask a recipient, such as `a***@example.edu`. Omitted when the row holds no address.",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -33201,10 +33264,10 @@
       },
       "PersonRef": {
         "additionalProperties": false,
-        "description": "A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the record gets the person's presented name: their display name, or their username when it is empty. The username and profile picture are included only when the reader can see that User in the directory.",
+        "description": "A person a record refers to, such as who granted a Role or who paused a Sitting. Anyone who can read the record gets the person's display name when one is set. A username can fill in for an unset display name only when the reader can see that User in the directory. The same visibility controls the username and profile picture fields.",
         "properties": {
           "display_name": {
-            "description": "The person's presented name. Omitted when the account has been removed.",
+            "description": "The person's presented name, if the account has a visible one.",
             "maxLength": 512,
             "type": "string"
           },
@@ -34688,6 +34751,7 @@
           "academic_unit",
           "class",
           "exam",
+          "exam_attempt",
           "exam_sitting",
           "institution",
           "mail_delivery",
@@ -34819,24 +34883,6 @@
         ],
         "type": "object"
       },
-      "RetentionExam": {
-        "additionalProperties": false,
-        "description": "An Exam named by its draft title.",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/ID"
-          },
-          "title": {
-            "description": "The Exam's draft title. Empty if the Exam has no draft.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title"
-        ],
-        "type": "object"
-      },
       "RetentionExamSummariesResponse": {
         "additionalProperties": false,
         "description": "One page of the Exams that have records, by Exam ID. In each, `eligible_exams` is 1 when the Exam has an eligible record in that category.",
@@ -34875,7 +34921,7 @@
             "$ref": "#/components/schemas/RetentionPreviewCounts"
           },
           "exam": {
-            "$ref": "#/components/schemas/RetentionExam"
+            "$ref": "#/components/schemas/ExamRef"
           },
           "integrity": {
             "$ref": "#/components/schemas/RetentionPreviewCounts"
@@ -34984,7 +35030,7 @@
             "type": "boolean"
           },
           "exam": {
-            "$ref": "#/components/schemas/RetentionExam"
+            "$ref": "#/components/schemas/ExamRef"
           },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/ID",
@@ -35044,7 +35090,6 @@
           "exam",
           "revision",
           "created_at",
-          "created_by",
           "reason_code",
           "due_for_review"
         ],
@@ -35673,60 +35718,46 @@
         "properties": {
           "audit_retention_days": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
           "browser_activity_retention_days": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
           "candidate_notices": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "deletion_grace_days": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
           "export_retention_days": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
           "integrity_retention_days": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
           "security_operational_retention_days": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
           "submission_retention_days": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           }
         },
+        "required": [
+          "submission_retention_days",
+          "integrity_retention_days",
+          "browser_activity_retention_days",
+          "security_operational_retention_days",
+          "audit_retention_days",
+          "export_retention_days",
+          "deletion_grace_days",
+          "candidate_notices"
+        ],
         "type": "object"
       },
       "RetentionRecord": {
@@ -35778,7 +35809,7 @@
             "type": "string"
           },
           "exam": {
-            "$ref": "#/components/schemas/RetentionExam"
+            "$ref": "#/components/schemas/ExamRef"
           },
           "exam_id": {
             "$ref": "#/components/schemas/ID",
@@ -36027,13 +36058,14 @@
           },
           "granted_by": {
             "$ref": "#/components/schemas/PersonRef",
-            "description": "Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is the importer for an imported invitation. Omitted only for the grant made at installation."
+            "description": "Who granted the Role: the person who made a manual grant, or the inviter of an invitation, who is the importer for an imported invitation. For a direct CSV grant, this is the importer. Omitted only for the grant made at installation."
           },
           "granted_via": {
-            "description": "How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`), or at installation (`bootstrap`).",
+            "description": "How the grant was made: by a person directly (`manual`), by accepting an invitation (`invitation`), through a CSV import (`import`), or at installation (`bootstrap`).",
             "enum": [
               "manual",
               "invitation",
+              "import",
               "bootstrap"
             ],
             "type": "string"
@@ -36042,54 +36074,16 @@
             "$ref": "#/components/schemas/ID"
           },
           "role": {
-            "additionalProperties": false,
-            "description": "The Role granted, named.",
-            "properties": {
-              "display_name": {
-                "description": "The Role's display name, localized for the protected System Administrator role. Omitted for an archived Role.",
-                "maxLength": 512,
-                "type": "string"
-              },
-              "id": {
-                "$ref": "#/components/schemas/ID"
-              }
-            },
-            "required": [
-              "id"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/RoleRef",
+            "description": "The Role granted, with its display name."
           },
           "role_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Role granted."
           },
           "scope": {
-            "additionalProperties": false,
-            "description": "The scope the grant applies to, named.",
-            "properties": {
-              "id": {
-                "$ref": "#/components/schemas/ID"
-              },
-              "name": {
-                "description": "The Institution, Academic Unit or Class display name. Omitted when it is archived.",
-                "maxLength": 512,
-                "type": "string"
-              },
-              "type": {
-                "description": "Kind of scope.",
-                "enum": [
-                  "institution",
-                  "academic_unit",
-                  "class"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "id"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/ScopeRef",
+            "description": "Where the grant applies."
           },
           "scope_id": {
             "$ref": "#/components/schemas/ID",
@@ -36191,6 +36185,23 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "RoleRef": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "The Role's display name, localized for the protected System Administrator role.",
+            "maxLength": 512,
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -36340,6 +36351,32 @@
           "class_id",
           "scheduled_start_at",
           "scheduled_end_at"
+        ],
+        "type": "object"
+      },
+      "ScopeRef": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "The scope's display name, if available.",
+            "maxLength": 512,
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "type": {
+            "enum": [
+              "institution",
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id"
         ],
         "type": "object"
       },
@@ -37874,31 +37911,6 @@
         ],
         "type": "object"
       },
-      "SittingCandidateIdentityResponse": {
-        "additionalProperties": false,
-        "description": "The candidate User.",
-        "properties": {
-          "display_name": {
-            "description": "Display name of the candidate.",
-            "type": "string"
-          },
-          "user_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "ID of the candidate User."
-          },
-          "username": {
-            "description": "Username of the candidate.",
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "user_id",
-          "username",
-          "display_name"
-        ],
-        "type": "object"
-      },
       "SittingCandidatePresenceCounts": {
         "additionalProperties": false,
         "description": "Candidates in each presence state.",
@@ -37996,7 +38008,7 @@
             "description": "Candidates in each presence state. Every state is present."
           },
           "total": {
-            "description": "Every candidate of the Sitting.",
+            "description": "Exact number of candidates in the Sitting visible on this board, before filters.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -38043,7 +38055,7 @@
             ]
           },
           "candidate": {
-            "$ref": "#/components/schemas/SittingCandidateIdentityResponse",
+            "$ref": "#/components/schemas/PersonRef",
             "description": "The candidate User."
           },
           "changed_file_count": {
@@ -38363,7 +38375,7 @@
       },
       "SubmissionListCounts": {
         "additionalProperties": false,
-        "description": "The Sitting's Submissions, other than your own, whatever the filters.",
+        "description": "Exact counts within this Sitting, excluding your own Submission and independent of the filters.",
         "properties": {
           "flagged_submissions": {
             "description": "Submissions with at least one integrity Flag.",
@@ -38402,32 +38414,16 @@
         ],
         "type": "object"
       },
-      "SubmissionListExam": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/ID"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title"
-        ],
-        "type": "object"
-      },
       "SubmissionListItemResponse": {
         "additionalProperties": false,
         "description": "One sealed Submission. A Flag marks something for review; it is not a finding of guilt.",
         "properties": {
           "candidate": {
-            "$ref": "#/components/schemas/SittingCandidateIdentityResponse",
+            "$ref": "#/components/schemas/PersonRef",
             "description": "The candidate, as the Sitting's candidate board names them."
           },
           "exam": {
-            "$ref": "#/components/schemas/SubmissionListExam",
+            "$ref": "#/components/schemas/ExamRef",
             "description": "The Submission's Exam. Present on the list across Exams."
           },
           "exam_attempt_id": {
@@ -39703,10 +39699,18 @@
             "type": "string"
           },
           "method": {
-            "description": "The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later.",
-            "enum": [
-              "authenticator_app"
+            "anyOf": [
+              {
+                "enum": [
+                  "authenticator_app"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
             ],
+            "description": "The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later.",
             "type": "string"
           }
         },
@@ -39737,17 +39741,18 @@
       "UserMembershipName": {
         "additionalProperties": false,
         "properties": {
+          "display_name": {
+            "description": "The display name.",
+            "maxLength": 512,
+            "type": "string"
+          },
           "id": {
             "$ref": "#/components/schemas/ID"
-          },
-          "name": {
-            "description": "The display name.",
-            "type": "string"
           }
         },
         "required": [
           "id",
-          "name"
+          "display_name"
         ],
         "type": "object"
       },
@@ -39764,7 +39769,7 @@
             "description": "The Academic Unit. Present only for `academic_unit` entries."
           },
           "class": {
-            "$ref": "#/components/schemas/UserMembershipName",
+            "$ref": "#/components/schemas/ClassRef",
             "description": "The Class. Present only for `class` entries."
           },
           "end_at": {
@@ -40181,7 +40186,7 @@
   "paths": {
     "/api/v1/academic-administration-batches": {
       "post": {
-        "description": "Applies one operation to 1 to 200 existing Users in a single request. Each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. The response reports every item's outcome in request order.\nItem keys must be unique within the request; repeated keys fail those items with `request.invalid`. An item that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. Role Binding operations, `user.enable`, `user.disable` and `user_sessions.revoke` also need a strong, recent Session.",
+        "description": "Applies one operation to 1 to 200 existing Users in a single request. Each item runs on its own, with the same authorization, audit, mail and retry behavior as the matching single-item endpoint, so one failed item does not stop the others. The response reports every item's outcome in request order. A direct `user.disable` batch also records one audit entry with its overall outcome.\nItem keys must be unique within the request; repeated keys fail those items with `request.invalid`. An item that would make the same change as another item in the request fails with `onboarding_batch.duplicate`. Role Binding operations, `user.enable`, `user.disable` and `user_sessions.revoke` also need a strong, recent Session.",
         "operationId": "runAcademicAdministrationBatch",
         "parameters": [
           {
@@ -42648,7 +42653,7 @@
     },
     "/api/v1/administration/counts": {
       "get": {
-        "description": "Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. Each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.",
+        "description": "Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. The other counts apply the same permission and visibility checks as their resource lists, and record permission decisions the same way. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.",
         "operationId": "getAdministrationCounts",
         "responses": {
           "200": {
@@ -42665,9 +42670,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -42697,7 +42699,6 @@
           "authorization.denied",
           "authorization.request.invalid",
           "authorization.unavailable",
-          "desktop_compatibility_policy.revision_conflict",
           "desktop_compatibility_policy.unavailable",
           "invitation.unavailable",
           "job.query.invalid",
@@ -43360,7 +43361,7 @@
     },
     "/api/v1/audits/exports": {
       "post": {
-        "description": "Queues a CSV or JSON Lines file of the audit Events the audit listing would show you for the same filters. Your audit visibility is frozen when you ask: with Institution-wide `audit.view` the file has every matching Event, and an Academic Unit auditor's file has the same redacted Events their listing shows. Events written after the request aren't included. The file has the listing's fields under the listing's names, except `summary`, `actor` and `repeat`. It never has raw request parameters, earlier state or results. At most 100,000 Events fit in one export, and a larger selection is refused, so narrow the filters. The policy's export lifetime must be set to 1 to 7 days, and the expiry counts from the request. The request is audited. Watch `job_id` for `job.changed`, or poll the export, to see when it is ready.",
+        "description": "Queues a CSV or JSON Lines file of the audit Events the audit listing would show you for the same filters. Your audit visibility is frozen when you ask: with Institution-wide `audit.view` the file has every matching Event, and an Academic Unit auditor's file has the same redacted Events their listing shows. Events written after the request aren't included. The file has the listing's fields under the listing's names, except `summary`, `actor` and `repeat`. Both formats flatten `resource` into `resource_type` and `resource_id`. It never has raw request parameters, earlier state or results. At most 100,000 Events fit in one export, and a larger selection is refused, so narrow the filters. The policy's export lifetime must be set to 1 to 7 days, and the expiry counts from the request. The request is audited. Poll the export to see when it is ready. Job viewers can also observe `job.changed` for `job_id`.",
         "operationId": "createAuditExport",
         "parameters": [
           {
@@ -43444,7 +43445,7 @@
     },
     "/api/v1/audits/exports/{audit_export_id}": {
       "get": {
-        "description": "Only the User who asked for the export can read it, and only while they still hold the audit visibility it was made with. Another User's export is not found. The state is `queued`, `ready`, `failed` or `expired`. An expired export never returns its hash. The expiry shown is fixed, even if the policy changes later.",
+        "description": "Only the User who asked for the export can read it, and only while they still hold the audit visibility it was made with. Another User's export is not found. The state is `queued`, `ready`, `failed` or `expired`. An expired export never returns its hash. The expiry stays fixed even if the policy changes later. A change to the academic ownership hierarchy invalidates exports made with academic subtree visibility.",
         "operationId": "getAuditExport",
         "parameters": [
           {
@@ -47075,9 +47076,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
@@ -47105,7 +47103,6 @@
           "authorization.denied",
           "authorization.request.invalid",
           "authorization.unavailable",
-          "desktop_compatibility_policy.revision_conflict",
           "desktop_compatibility_policy.unavailable",
           "request.invalid",
           "resource.not_found",
@@ -52113,8 +52110,8 @@
                         "with_failed_checks": 1
                       },
                       "exam": {
-                        "id": "39kqk53i4cswfzbi7hbai1r8qg",
-                        "title": "Algorithms final"
+                        "display_name": "Algorithms final",
+                        "id": "39kqk53i4cswfzbi7hbai1r8qg"
                       },
                       "id": "889766ufjgio6kbpzjbufozksq",
                       "needs_attention_count": 3,
@@ -52149,9 +52146,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -56976,7 +56970,7 @@
             "required": false,
             "schema": {
               "default": 50,
-              "maximum": 100,
+              "maximum": 200,
               "minimum": 1,
               "type": "integer"
             }
@@ -57036,9 +57030,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -57126,7 +57117,7 @@
             "required": false,
             "schema": {
               "default": 50,
-              "maximum": 100,
+              "maximum": 200,
               "minimum": 1,
               "type": "integer"
             }
@@ -57189,9 +57180,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -57282,7 +57270,7 @@
             "required": false,
             "schema": {
               "default": 50,
-              "maximum": 100,
+              "maximum": 200,
               "minimum": 1,
               "type": "integer"
             }
@@ -57329,9 +57317,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -57487,7 +57472,7 @@
     },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips": {
       "get": {
-        "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to a caller who manages the Sitting, never to a reviewer.",
+        "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. A Sitting manager with submission view can read clips before or after submission and sees the private reason. A reviewer of a submitted Attempt can read the clips without the reason. The candidate cannot use this endpoint for their own Attempt.",
         "operationId": "listExamAttemptScreenClips",
         "parameters": [
           {
@@ -57710,7 +57695,7 @@
     },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content": {
       "get": {
-        "description": "Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed to review its Submission, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
+        "description": "Streams a ready clip to a Sitting manager with submission view or, once the Attempt is submitted, a reviewer of its Submission. The candidate cannot use this endpoint for their own Attempt. It supports a single byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
         "operationId": "playExamAttemptScreenClip",
         "parameters": [
           {
@@ -58218,7 +58203,7 @@
             "required": false,
             "schema": {
               "default": 50,
-              "maximum": 100,
+              "maximum": 200,
               "minimum": 1,
               "type": "integer"
             }
@@ -58282,9 +58267,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -58468,7 +58450,8 @@
                 "$ref": "#/components/schemas/SittingCandidatePresenceState"
               },
               "maxItems": 7,
-              "type": "array"
+              "type": "array",
+              "uniqueItems": true
             },
             "style": "form"
           },
@@ -58485,19 +58468,16 @@
             }
           },
           {
-            "description": "true keeps candidates with unresolved integrity attention.",
+            "description": "True keeps candidates with unresolved integrity attention. False leaves the list unfiltered.",
             "in": "query",
             "name": "attention",
             "required": false,
             "schema": {
-              "enum": [
-                "true"
-              ],
-              "type": "string"
+              "type": "boolean"
             }
           },
           {
-            "description": "Keep candidates whose display name or username contains this text, ignoring case.",
+            "description": "Keep candidates whose display name contains this text, ignoring case.",
             "in": "query",
             "name": "q",
             "required": false,
@@ -59572,7 +59552,7 @@
         }
       ],
       "post": {
-        "description": "Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key releases nothing twice: an item this batch released reports released again. A replayed all_finalized batch looks the set up again.",
+        "description": "Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key returns the original selection and outcomes. Reusing it with a different request conflicts. A request still being processed returns an in-progress conflict.",
         "operationId": "releaseExamSittingResults",
         "parameters": [
           {
@@ -59672,6 +59652,8 @@
           "exam.integrity_review.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
           "exam.sitting.invalid",
           "exam.sitting.unavailable",
           "authentication.required",
@@ -59799,7 +59781,8 @@
                 "type": "string"
               },
               "maxItems": 3,
-              "type": "array"
+              "type": "array",
+              "uniqueItems": true
             },
             "style": "form"
           },
@@ -59818,7 +59801,8 @@
                 "type": "string"
               },
               "maxItems": 2,
-              "type": "array"
+              "type": "array",
+              "uniqueItems": true
             },
             "style": "form"
           },
@@ -59828,15 +59812,11 @@
             "name": "has_flags",
             "required": false,
             "schema": {
-              "enum": [
-                "true",
-                "false"
-              ],
-              "type": "string"
+              "type": "boolean"
             }
           },
           {
-            "description": "submitted lists the earliest Submission first; name lists by the candidate's display name.",
+            "description": "submitted lists the earliest Submission first; name lists by display name, using the username as a sort key when the display name is empty.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -59853,7 +59833,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters.",
+            "description": "Send next_cursor from the previous page unchanged with the same sort and filters. Restart without a cursor if its anchor is unavailable.",
             "in": "query",
             "name": "cursor",
             "required": false,
@@ -59878,7 +59858,7 @@
                     {
                       "candidate": {
                         "display_name": "Ada Student",
-                        "user_id": "nybc6xhg593upqice3sdeyro5k",
+                        "id": "nybc6xhg593upqice3sdeyro5k",
                         "username": "student.ada"
                       },
                       "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
@@ -59928,9 +59908,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -64855,93 +64832,6 @@
         "x-proctor-idempotency": "required"
       }
     },
-    "/api/v1/retention/exam-summaries": {
-      "get": {
-        "description": "Lists the Exams that have retention records, by Exam ID, each with its title and its records counted by category and status the way a Retention Preview counts the Institution. The caller needs `retention_policy.view`. `limit` counts Exams.",
-        "operationId": "listRetentionExamSummaries",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/PageCursor"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RetentionExamSummariesResponse"
-                }
-              }
-            },
-            "description": "One page of Exam summaries",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/PrivateNoStore"
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Count retention records by Exam",
-        "tags": [
-          "Data retention"
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "authorization.denied",
-          "authorization.request.invalid",
-          "authorization.unavailable",
-          "request.invalid",
-          "retention.invalid",
-          "retention.unavailable",
-          "retention_policy.unavailable",
-          "resource.not_found",
-          "retention_policy.revision_conflict",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable"
-        ],
-        "x-proctor-idempotency": "none"
-      }
-    },
     "/api/v1/retention/holds": {
       "get": {
         "description": "Lists every Retention Hold of the Institution by ID, each with its Exam and who placed it. Released holds are left out unless `include_released=true`. The caller needs `retention_policy.view`. Private reasons stay on the Exam's own hold listing. A hold whose `until` has passed shows `due_for_review: true` and still protects its records.",
@@ -64957,6 +64847,7 @@
             }
           },
           {
+            "description": "Include released holds as well as holds that still protect records.",
             "in": "query",
             "name": "include_released",
             "required": false,
@@ -64966,6 +64857,7 @@
             }
           },
           {
+            "description": "Keep only holds placed for this reason.",
             "in": "query",
             "name": "reason_code",
             "required": false,
@@ -65003,8 +64895,8 @@
                       },
                       "due_for_review": true,
                       "exam": {
-                        "id": "xpq79ar61ncrjiouey6d9tgp91",
-                        "title": "Algorithms final"
+                        "display_name": "Algorithms final",
+                        "id": "xpq79ar61ncrjiouey6d9tgp91"
                       },
                       "exam_sitting_id": "4z3cy1rp9cucq7qo1g9mq94dj3",
                       "id": "yftfs48pasu5fd6czhcwz6b4x3",
@@ -65248,19 +65140,22 @@
     },
     "/api/v1/retention/records": {
       "get": {
-        "description": "Lists the retention status of each Submission's records. The caller needs `retention_policy.view`. File names, answers, evidence and remarks are never included. `limit` counts Submissions, and each Submission adds four items: work, integrity, Browser Activity and security operational. The cursor only works with this listing. A retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. They don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress.",
+        "description": "Lists the retention status of each Submission's records. The caller needs `retention_policy.view`. File names, answers, evidence and remarks are never included. By default, `limit` counts Submissions, and each Submission adds four items covering work, integrity, Browser Activity and security operational records. Set `group_by=exam` to count records by category for each Exam. In that mode, `limit` counts Exams and the response orders them by Exam ID. A cursor continues only the grouping that issued it. A retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. They don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress.",
         "operationId": "listRetentionRecords",
         "parameters": [
           {
-            "description": "Maximum number of Submissions to include. Each one adds a work, an integrity, a Browser Activity and a security operational item.",
+            "description": "Set to `exam` for per-Exam summaries. Omit it to list records by Submission.",
             "in": "query",
-            "name": "limit",
+            "name": "group_by",
             "schema": {
-              "default": 100,
-              "maximum": 200,
-              "minimum": 1,
-              "type": "integer"
+              "enum": [
+                "exam"
+              ],
+              "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
           },
           {
             "description": "The `next_cursor` value from the previous page. Treat it as an unreadable token and pass it unchanged.",
@@ -65337,7 +65232,7 @@
     },
     "/api/v1/retention/records/export": {
       "get": {
-        "description": "Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe.",
+        "description": "Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe. Each export is audited.",
         "operationId": "exportRetentionRecords",
         "responses": {
           "200": {
@@ -66802,7 +66697,7 @@
     },
     "/api/v1/submissions": {
       "get": {
-        "description": "Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none\u0026review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts.",
+        "description": "Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none\u0026review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts. Restart without a cursor if its anchor is unavailable.",
         "operationId": "listSubmissions",
         "parameters": [
           {
@@ -66821,7 +66716,8 @@
                 "type": "string"
               },
               "maxItems": 3,
-              "type": "array"
+              "type": "array",
+              "uniqueItems": true
             },
             "style": "form"
           },
@@ -66840,7 +66736,8 @@
                 "type": "string"
               },
               "maxItems": 2,
-              "type": "array"
+              "type": "array",
+              "uniqueItems": true
             },
             "style": "form"
           },
@@ -66850,15 +66747,11 @@
             "name": "has_flags",
             "required": false,
             "schema": {
-              "enum": [
-                "true",
-                "false"
-              ],
-              "type": "string"
+              "type": "boolean"
             }
           },
           {
-            "description": "submitted lists the earliest Submission first; name lists by the candidate's display name.",
+            "description": "submitted lists the earliest Submission first; name lists by display name, using the username as a sort key when the display name is empty.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -66875,7 +66768,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "description": "Cursor from next_cursor of the previous page. Send it back unchanged, with the same sort and filters.",
+            "description": "Send next_cursor from the previous page unchanged with the same sort and filters. Restart without a cursor if its anchor is unavailable.",
             "in": "query",
             "name": "cursor",
             "required": false,
@@ -66893,12 +66786,12 @@
                     {
                       "candidate": {
                         "display_name": "Ada Student",
-                        "user_id": "nybc6xhg593upqice3sdeyro5k",
+                        "id": "nybc6xhg593upqice3sdeyro5k",
                         "username": "student.ada"
                       },
                       "exam": {
-                        "id": "wj3drgzdpnf54rxf5d8qd3dqne",
-                        "title": "Algorithms final"
+                        "display_name": "Algorithms final",
+                        "id": "wj3drgzdpnf54rxf5d8qd3dqne"
                       },
                       "exam_attempt_id": "6xoche483hwrx5rpu8jzjoe7qg",
                       "exam_id": "wj3drgzdpnf54rxf5d8qd3dqne",
@@ -66939,9 +66832,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -68486,14 +68376,11 @@
             }
           },
           {
-            "description": "With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with `mfa=disabled` it lists exactly the role holders the access policy preflight counts in `role_holders_without_mfa_count`. Only Institution-wide user.view can use it; anyone else gets `request.invalid` on `role_holder`. The only accepted value is `true`.",
+            "description": "With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with `mfa=disabled` it lists exactly the role holders the access policy preflight counts in `role_holders_without_mfa_count`. Using `true` requires Institution-wide `user.view`. Omit the filter or send `false` to leave the list unfiltered.",
             "in": "query",
             "name": "role_holder",
             "required": false,
             "schema": {
-              "enum": [
-                true
-              ],
               "type": "boolean"
             }
           },

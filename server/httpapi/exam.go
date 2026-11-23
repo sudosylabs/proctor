@@ -777,8 +777,31 @@ func examIdentityResponseFromModel(record model.Exam) examIdentityResponse {
 	}
 }
 
+// examPolicyResponseFromModel presents a policy set the same way for a Draft
+// and for a Revision.
+func examPolicyResponseFromModel(policy model.ExamPolicySet) examPolicyResponse {
+	return examPolicyResponse{
+		Native:         policy.Native.Clone(),
+		Assistant:      policy.Assistant.Clone(),
+		ConnectionLoss: examConnectionPolicyResponse{Outcome: string(policy.ConnectionLoss.Outcome)},
+		FocusLoss: examFocusPolicyResponse{
+			Enabled:                     policy.FocusLoss.Enabled,
+			MinimumDurationMilliseconds: policy.FocusLoss.MinimumDuration.Milliseconds(),
+			IncidentCount:               policy.FocusLoss.IncidentCount,
+			WindowMilliseconds:          policy.FocusLoss.Window.Milliseconds(),
+			Outcome:                     string(policy.FocusLoss.Outcome),
+		},
+		Execution: examExecutionPolicyDocument{
+			Enabled:     policy.Execution.Enabled,
+			ProfileID:   policy.Execution.Profile.String(),
+			RecordInput: policy.Execution.RecordInput,
+			Terminals:   policy.Execution.Terminals,
+			Preview:     policy.Execution.Preview.Clone(),
+		},
+	}
+}
+
 func examResponseFromView(view exam.View) examResponse {
-	policy := view.Draft.Policy
 	identity := examIdentityResponseFromModel(view.Exam)
 	browserPolicy := view.Draft.BrowserPolicy
 	return examResponse{
@@ -787,33 +810,15 @@ func examResponseFromView(view exam.View) examResponse {
 			ExamID:               view.Draft.ExamID.String(),
 			Title:                view.Draft.Title,
 			InstructionsMarkdown: view.Draft.InstructionsMarkdown,
-			Policy: examPolicyResponse{
-				Native:         policy.Native.Clone(),
-				Assistant:      policy.Assistant.Clone(),
-				ConnectionLoss: examConnectionPolicyResponse{Outcome: string(policy.ConnectionLoss.Outcome)},
-				FocusLoss: examFocusPolicyResponse{
-					Enabled:                     policy.FocusLoss.Enabled,
-					MinimumDurationMilliseconds: policy.FocusLoss.MinimumDuration.Milliseconds(),
-					IncidentCount:               policy.FocusLoss.IncidentCount,
-					WindowMilliseconds:          policy.FocusLoss.Window.Milliseconds(),
-					Outcome:                     string(policy.FocusLoss.Outcome),
-				},
-				Execution: examExecutionPolicyDocument{
-					Enabled:     policy.Execution.Enabled,
-					ProfileID:   policy.Execution.Profile.String(),
-					RecordInput: policy.Execution.RecordInput,
-					Terminals:   policy.Execution.Terminals,
-					Preview:     policy.Execution.Preview.Clone(),
-				},
-			},
-			BrowserPolicy:       browserPolicyDocumentFromModel(browserPolicy),
-			Capacity:            examCapacityPolicyResponseFromModel(view.Capacity),
-			BaseRevisionID:      view.Draft.BaseRevisionID.String(),
-			UpdatedAt:           model.FormatRFC3339(view.Draft.UpdatedAt),
-			UpdatedByUserID:     view.Draft.UpdatedByUserID.String(),
-			Revision:            view.Draft.Revision,
-			ResourceCount:       view.ResourceCount,
-			HasStarterWorkspace: view.HasStarterWorkspace,
+			Policy:               examPolicyResponseFromModel(view.Draft.Policy),
+			BrowserPolicy:        browserPolicyDocumentFromModel(browserPolicy),
+			Capacity:             examCapacityPolicyResponseFromModel(view.Capacity),
+			BaseRevisionID:       view.Draft.BaseRevisionID.String(),
+			UpdatedAt:            model.FormatRFC3339(view.Draft.UpdatedAt),
+			UpdatedByUserID:      view.Draft.UpdatedByUserID.String(),
+			Revision:             view.Draft.Revision,
+			ResourceCount:        view.ResourceCount,
+			HasStarterWorkspace:  view.HasStarterWorkspace,
 		},
 		OwnerUserID:  view.OwnerUserID.String(),
 		ManagerCount: view.ManagerCount,

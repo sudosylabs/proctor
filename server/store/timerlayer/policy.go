@@ -212,6 +212,7 @@ const (
 	methodUpdateDraftBrowserPolicy                  methodName = "update_draft_browser_policy"
 	methodListCurrentForSitting                     methodName = "list_current_for_sitting"
 	methodGetSnapshot                               methodName = "get_snapshot"
+	methodCheckPublication                          methodName = "check_publication"
 	methodGetSummary                                methodName = "get_summary"
 	methodGetFile                                   methodName = "get_file"
 	methodGetAcademicUnitID                         methodName = "get_academic_unit_id"

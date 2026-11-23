@@ -33,6 +33,7 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 		Persistence:       revisions,
 		Access:            f.persistence,
 		Memberships:       f.memberships,
+		Content:           &revisionContentFake{},
 		Authorizer:        f.access.Authorizer,
 		Auditor:           f.access.Auditor,
 		Publisher:         publisher,
@@ -69,6 +70,7 @@ func TestPublicationUsesOverrideForNonManager(t *testing.T) {
 		Persistence:       revisions,
 		Access:            f.persistence,
 		Memberships:       f.memberships,
+		Content:           &revisionContentFake{},
 		Authorizer:        f.access.Authorizer,
 		Auditor:           f.access.Auditor,
 		Publisher:         &realtimetest.Publisher{},
@@ -93,6 +95,7 @@ func TestPublicationMapsCapacityConflict(t *testing.T) {
 		Persistence:       revisions,
 		Access:            f.persistence,
 		Memberships:       f.memberships,
+		Content:           &revisionContentFake{},
 		Authorizer:        f.access.Authorizer,
 		Auditor:           f.access.Auditor,
 		Publisher:         &realtimetest.Publisher{},
@@ -117,6 +120,12 @@ type revisionStoreFake struct {
 	replayed    bool
 	summary     store.ExamRevisionSummary
 	err         error
+	check       *store.ExamPublicationCheckResult
+	checkInput  *store.ExamPublicationCheck
+	// snapshot is the Revision GetSnapshot serves; snapshotRead records
+	// that it was asked.
+	snapshot     *model.ExamRevision
+	snapshotRead bool
 }
 
 func (f *revisionStoreFake) Publish(_ context.Context, input *store.ExamRevisionPublication, command *store.CommandIdempotency) (*store.ExamRevisionPublicationResult, error) {

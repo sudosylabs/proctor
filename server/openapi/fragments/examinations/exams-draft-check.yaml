@@ -1,0 +1,126 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exams/{exam_id}/draft/check:
+    parameters:
+      - $ref: "#/components/parameters/ExamID"
+    get:
+      operationId: checkExamDraft
+      summary: List every reason the current Draft can't be published
+      description: >-
+        Runs the checks publishing runs on the current Draft and lists every one it fails, instead of stopping at
+        the first. Nothing is published or changed. When publishable is true, publishing with expected_revision
+        set to draft_revision succeeds unless the Draft or the installation changes first. Needs the same
+        permission as publishing.
+      tags:
+        - Examinations
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.invalid
+        - exam.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: "#/components/responses/ExamDraftCheckOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  responses:
+    ExamDraftCheckOK:
+      description: Whether the current Draft can be published, and every reason it can't.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ExamDraftCheckResponse"
+          example:
+            publishable: false
+            draft_revision: 9
+            problems:
+              - code: exam.revision.capacity_exceeded
+                field: resources.size_bytes
+                resource_id: 3nqhk8zmy1rxwpecb5dtg7uoaf
+                message: This file for candidates is larger than this installation allows.
+              - code: exam.execution.disabled
+                field: policy.execution
+                message: The draft runs candidates' code, but this installation has code execution turned off.
+  schemas:
+    ExamDraftCheckResponse:
+      type: object
+      description: The result of running the publication checks on the current Draft.
+      additionalProperties: false
+      required:
+        - publishable
+        - draft_revision
+        - problems
+      properties:
+        publishable:
+          type: boolean
+          description: True when the Draft fails no check, so problems is empty.
+        draft_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The Draft revision that was checked. Send it as expected_revision when you publish.
+        problems:
+          type: array
+          description: Every check the Draft fails, in the order publishing checks them. Publishing fails with the first.
+          items:
+            $ref: "#/components/schemas/ExamDraftProblem"
+    ExamDraftProblem:
+      type: object
+      description: One reason the Draft can't be published.
+      additionalProperties: false
+      required:
+        - code
+        - field
+        - message
+      properties:
+        code:
+          type: string
+          description: >-
+            The error code publishing returns for this problem, such as exam.revision.capacity_exceeded or
+            exam.execution.disabled.
+        field:
+          type: string
+          description: >-
+            The part of the Draft at fault, such as policy.execution, resources.size_bytes or
+            starter_workspace.total_bytes.
+        resource_id:
+          $ref: "#/components/schemas/ID"
+          description: The Resource at fault. Present only when field is resources.size_bytes.
+        message:
+          type: string
+          description: A sentence explaining the problem to the author, in the request's language.

@@ -8,6 +8,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -45,12 +46,14 @@ type examFixture struct {
 	sittings    *examSittingRecords
 	submissions *examSubmissionRecords
 	revisions   *examRevisionRecords
-	ledger      *examRecordsLedger
-	exportLog   *examExportRecords
-	archives    *examExportArchives
-	mail        *examManagerMail
-	publisher   *realtimetest.Publisher
-	people      *people.Resolver
+	// revisionFiles holds the bytes a Revision froze, by rendition or object.
+	revisionFiles *revisionFiles
+	ledger        *examRecordsLedger
+	exportLog     *examExportRecords
+	archives      *examExportArchives
+	mail          *examManagerMail
+	publisher     *realtimetest.Publisher
+	people        *people.Resolver
 
 	authoring   *exam.Authoring
 	publication *exam.Publication
@@ -79,14 +82,15 @@ func newExamFixture(t *testing.T, caller model.Principal, actions ...model.Actio
 	at := model.NowUTC()
 	f := &examFixture{
 		caller: caller, unitID: model.NewAcademicUnitID(), examID: model.NewExamID(),
-		exams:       &examAuthoringRecords{byID: map[model.ExamID]*examAuthoringEntry{}},
-		members:     &examUnitMembers{units: map[model.UserID][]model.AcademicUnitID{}},
-		users:       &directoryUserStore{byID: map[model.UserID]*model.User{}},
-		submissions: &examSubmissionRecords{candidateID: model.NewUserID()},
-		revisions:   &examRevisionRecords{},
-		archives:    &examExportArchives{},
-		mail:        &examManagerMail{},
-		publisher:   &realtimetest.Publisher{},
+		exams:         &examAuthoringRecords{byID: map[model.ExamID]*examAuthoringEntry{}},
+		members:       &examUnitMembers{units: map[model.UserID][]model.AcademicUnitID{}},
+		users:         &directoryUserStore{byID: map[model.UserID]*model.User{}},
+		submissions:   &examSubmissionRecords{candidateID: model.NewUserID()},
+		revisions:     &examRevisionRecords{},
+		revisionFiles: &revisionFiles{bytes: map[string][]byte{}},
+		archives:      &examExportArchives{},
+		mail:          &examManagerMail{},
+		publisher:     &realtimetest.Publisher{},
 	}
 	f.sittings = &examSittingRecords{fixture: f}
 	f.submissions.fixture = f
@@ -119,7 +123,7 @@ func newExamFixture(t *testing.T, caller model.Principal, actions ...model.Actio
 	})
 	require.NoError(t, err)
 	f.publication, err = exam.NewPublication(exam.PublicationDependencies{
-		Persistence: f.revisions, Access: f.exams, Memberships: f.members,
+		Persistence: f.revisions, Access: f.exams, Memberships: f.members, Content: f.revisionFiles,
 		Authorizer: f.access.Authorizer, Auditor: f.access.Auditor, Publisher: f.publisher,
 		Now: time.Now, NewID: model.NewExamRevisionID, InstitutionOrigin: "https://institution.example",
 	})
@@ -452,6 +456,43 @@ type examRevisionRecords struct {
 	commands     []*store.CommandIdempotency
 	gets         []model.ExamRevisionID
 	lists        []store.ExamRevisionListOptions
+	check        store.ExamPublicationCheckResult
+	snapshot     *model.ExamRevision
+	checks       []*store.ExamPublicationCheck
+}
+
+func (s *examRevisionRecords) GetSnapshot(_ context.Context, examID model.ExamID, revisionID model.ExamRevisionID) (*model.ExamRevision, error) {
+	s.gets = append(s.gets, revisionID)
+	if s.snapshot == nil || s.snapshot.ID != revisionID || s.snapshot.ExamID != examID {
+		return nil, store.NewErrNotFound("exam_revision", revisionID.String())
+	}
+	snapshot := *s.snapshot
+	return &snapshot, nil
+}
+
+// revisionFiles serves frozen bytes keyed by rendition or object ID.
+type revisionFiles struct{ bytes map[string][]byte }
+
+func (f *revisionFiles) OpenExamResource(_ context.Context, _ model.FileRevisionID, renditionID model.FileRenditionID) (io.ReadCloser, error) {
+	return f.open(renditionID.String())
+}
+
+func (f *revisionFiles) OpenStarterWorkspaceObject(_ context.Context, objectID model.StarterWorkspaceObjectID) (io.ReadCloser, error) {
+	return f.open(objectID.String())
+}
+
+func (f *revisionFiles) open(key string) (io.ReadCloser, error) {
+	content, ok := f.bytes[key]
+	if !ok {
+		return nil, errors.New("no such frozen bytes")
+	}
+	return io.NopCloser(bytes.NewReader(content)), nil
+}
+
+func (s *examRevisionRecords) CheckPublication(_ context.Context, input *store.ExamPublicationCheck) (*store.ExamPublicationCheckResult, error) {
+	s.checks = append(s.checks, input)
+	check := s.check
+	return &check, nil
 }
 
 func (s *examRevisionRecords) Publish(_ context.Context, input *store.ExamRevisionPublication, command *store.CommandIdempotency) (*store.ExamRevisionPublicationResult, error) {

@@ -36,6 +36,71 @@ type ExamRevisionPublication struct {
 	AuditAt               time.Time
 }
 
+// ExamPublicationCheck asks which of publication's checks the exam's current
+// draft fails, without publishing. The installation fields come from
+// configuration exactly as for ExamRevisionPublication.
+type ExamPublicationCheck struct {
+	InstitutionOrigin  string
+	ExecutionEnabled   bool
+	AssistantEnabled   bool
+	AssistantProviders []string
+	ExamID             model.ExamID
+	ActorUserID        model.UserID
+	ManagerOverride    bool
+}
+
+// ExamPublicationProblemReason names one publication check a draft fails.
+type ExamPublicationProblemReason string
+
+// The reasons are listed in the order publication checks them; Publish fails
+// with the first one found.
+const (
+	ExamPublicationExamArchived                ExamPublicationProblemReason = "exam_archived"
+	ExamPublicationExecutionDisabled           ExamPublicationProblemReason = "execution_disabled"
+	ExamPublicationEnvironmentProfileUnusable  ExamPublicationProblemReason = "environment_profile_unusable"
+	ExamPublicationAssistantDisabled           ExamPublicationProblemReason = "assistant_disabled"
+	ExamPublicationAssistantProfileUnusable    ExamPublicationProblemReason = "assistant_profile_unusable"
+	ExamPublicationTooManyResources            ExamPublicationProblemReason = "too_many_resources"
+	ExamPublicationResourceTooLarge            ExamPublicationProblemReason = "resource_too_large"
+	ExamPublicationTooManyStarterEntries       ExamPublicationProblemReason = "too_many_starter_entries"
+	ExamPublicationStarterFileTooLarge         ExamPublicationProblemReason = "starter_file_too_large"
+	ExamPublicationStarterWorkspaceTooLarge    ExamPublicationProblemReason = "starter_workspace_too_large"
+	ExamPublicationBrowserPolicyOriginMismatch ExamPublicationProblemReason = "browser_policy_origin"
+	ExamPublicationNoChanges                   ExamPublicationProblemReason = "no_changes"
+)
+
+// ExamPublicationProblemReasons lists every reason in check order.
+func ExamPublicationProblemReasons() []ExamPublicationProblemReason {
+	return []ExamPublicationProblemReason{
+		ExamPublicationExamArchived,
+		ExamPublicationExecutionDisabled,
+		ExamPublicationEnvironmentProfileUnusable,
+		ExamPublicationAssistantDisabled,
+		ExamPublicationAssistantProfileUnusable,
+		ExamPublicationTooManyResources,
+		ExamPublicationResourceTooLarge,
+		ExamPublicationTooManyStarterEntries,
+		ExamPublicationStarterFileTooLarge,
+		ExamPublicationStarterWorkspaceTooLarge,
+		ExamPublicationBrowserPolicyOriginMismatch,
+		ExamPublicationNoChanges,
+	}
+}
+
+// ExamPublicationProblem is one failed check. ResourceID names the Resource a
+// resource_too_large problem is about and is empty otherwise.
+type ExamPublicationProblem struct {
+	Reason     ExamPublicationProblemReason
+	ResourceID model.ExamResourceID
+}
+
+// ExamPublicationCheckResult lists every failed check in check order, for the
+// draft at DraftRevision. An empty list means Publish would succeed now.
+type ExamPublicationCheckResult struct {
+	DraftRevision int64
+	Problems      []ExamPublicationProblem
+}
+
 type ExamRevisionPublicationResult struct {
 	Revision      *ExamRevisionSummary
 	ExamRevision  int64
@@ -92,6 +157,10 @@ type ExamRevisionListOptions struct {
 // content.
 type ExamRevisionStore interface {
 	Publish(context.Context, *ExamRevisionPublication, *CommandIdempotency) (*ExamRevisionPublicationResult, error)
+	// CheckPublication runs Publish's checks on the current draft without
+	// writing, and reports every one it fails rather than the first. It
+	// rechecks manager authority like Publish.
+	CheckPublication(context.Context, *ExamPublicationCheck) (*ExamPublicationCheckResult, error)
 	GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*ExamRevisionSummary, error)
 	List(context.Context, ExamRevisionListOptions) ([]ExamRevisionSummary, error)
 	GetSnapshot(context.Context, model.ExamID, model.ExamRevisionID) (*model.ExamRevision, error)

@@ -65,6 +65,7 @@ ExamAuthoringStore.Resolve                                 always
 ExamAuthoringStore.UpdateDraftNativePolicy                 command
 
 ExamRevisionStore.GetSummary                               always
+ExamRevisionStore.CheckPublication                         always
 ExamRevisionStore.List                                     always
 ExamRevisionStore.GetSnapshot                              always
 

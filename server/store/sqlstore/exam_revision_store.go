@@ -219,113 +219,22 @@ func publishExamRevision(
 		return examRevisionPublicationOutcomeRow{}, err
 	}
 
-	policy, err := model.CanonicalizeExamRevisionPolicy([]byte(draft.Policy))
-	if err != nil {
-		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "policy", err)
-	}
-	decodedPolicy, err := model.DecodeExamPolicySet(policy.Bytes)
-	if err != nil {
-		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "policy", err)
-	}
-	if decodedPolicy.Execution.Enabled && !input.ExecutionEnabled {
-		return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "execution_disabled", nil)
-	}
-	if err = requireUsableEnvironmentProfile(ctx, tx, decodedPolicy.Execution); err != nil {
-		return examRevisionPublicationOutcomeRow{}, err
-	}
-
-	if decodedPolicy.Assistant.Enabled {
-		if !input.AssistantEnabled {
-			return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "assistant_disabled", nil)
-		}
-		profile, profileErr := requireUsableAssistantProfile(ctx, tx, decodedPolicy.Assistant)
-		if profileErr != nil {
-			return examRevisionPublicationOutcomeRow{}, profileErr
-		}
-		if !slices.Contains(input.AssistantProviders, profile.Provider) {
-			return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "assistant_profile_unusable", nil)
-		}
-	}
-
-	browserPolicy, err := model.ParseBrowserPolicyDocument([]byte(draft.BrowserPolicy))
-	if err != nil {
-		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "browser_policy", err)
-	}
-
-	capacity, err := currentExamCapacityPolicy(ctx, tx)
+	revision, problems, err := checkExamPublication(ctx, tx, examPublicationRules{
+		InstitutionOrigin:  input.InstitutionOrigin,
+		ExecutionEnabled:   input.ExecutionEnabled,
+		AssistantEnabled:   input.AssistantEnabled,
+		AssistantProviders: input.AssistantProviders,
+		RevisionID:         input.RevisionID,
+		ExamID:             input.ExamID,
+		ActorUserID:        input.ActorUserID,
+		Kind:               input.Kind,
+		PublishedAt:        input.PublishedAt,
+	}, draft)
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
-
-	resourceSnapshots, err := publishedExamResourceSnapshots(ctx, tx, input.ExamID)
-	if err != nil {
-		return examRevisionPublicationOutcomeRow{}, err
-	}
-
-	workspaceSnapshots, err := publishedStarterWorkspaceSnapshots(ctx, tx, input.ExamID)
-	if err != nil {
-		return examRevisionPublicationOutcomeRow{}, err
-	}
-	if examRevisionCapacityExceeded(capacity, resourceSnapshots, workspaceSnapshots) {
-		return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "exam_revision_capacity", nil)
-	}
-
-	baseRevisionID, err := parseNullablePersistedID[model.ExamRevisionID](
-		"exam_draft",
-		"base_revision_id",
-		draft.BaseRevisionID,
-		model.ParseExamRevisionID,
-	)
-	if err != nil {
-		return examRevisionPublicationOutcomeRow{}, err
-	}
-
-	var number int64
-	if err = tx.Get(ctx, &number, `SELECT COALESCE(MAX(number), 0)+1
-		FROM exam_revisions
-		WHERE exam_id = ?`, input.ExamID.String()); err != nil {
-		return examRevisionPublicationOutcomeRow{}, err
-	}
-	if err = browserPolicy.ValidateInstitutionOrigin(input.InstitutionOrigin); err != nil {
-		return examRevisionPublicationOutcomeRow{}, store.NewErrInvalidInput("exam_revision", "browser_policy", nil).Wrap(err)
-	}
-
-	revision, err := model.NewExamRevision(model.ExamRevisionSpecification{
-		ID:                   input.RevisionID,
-		ExamID:               input.ExamID,
-		Number:               number,
-		SourceDraftRevision:  draft.DraftRevision,
-		Title:                draft.Title,
-		InstructionsMarkdown: draft.InstructionsMarkdown,
-		Policy:               policy,
-		BrowserPolicy:        browserPolicy,
-		Capacity:             capacity,
-		Resources:            resourceSnapshots,
-		StarterWorkspace:     workspaceSnapshots,
-		PublishedByUserID:    input.ActorUserID,
-		PublishedAt:          input.PublishedAt,
-		BaseRevisionID:       baseRevisionID,
-		Kind:                 input.Kind,
-	})
-	if err != nil {
-		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_revision", "snapshot", err)
-	}
-
-	if baseRevisionID.IsValid() {
-		var baseDigest string
-		if err = tx.Get(
-			ctx,
-			&baseDigest,
-			`SELECT content_digest FROM exam_revisions WHERE exam_id = ? AND id = ?`,
-			input.ExamID.String(),
-			baseRevisionID.String(),
-		); err != nil {
-			return examRevisionPublicationOutcomeRow{}, translateError("exam_revision", baseRevisionID.String(), err)
-		}
-
-		if baseDigest == revision.ContentDigest {
-			return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "exam_revision_no_changes", nil)
-		}
+	if len(problems) > 0 {
+		return examRevisionPublicationOutcomeRow{}, examPublicationProblemErr(problems[0])
 	}
 
 	if err = recordExamRevisionPublication(ctx, tx, revision, draft); err != nil {
@@ -360,6 +269,241 @@ func publishExamRevision(
 	}, nil
 }
 
+func (s SQLExamRevisionStore) CheckPublication(
+	ctx context.Context,
+	input *store.ExamPublicationCheck,
+) (*store.ExamPublicationCheckResult, error) {
+	if input == nil || !input.ExamID.IsValid() || !input.ActorUserID.IsValid() {
+		return nil, store.NewErrInvalidInput("exam_revision", "publication_check", nil)
+	}
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "check Exam publication", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamPublicationCheckResult, error) {
+		var draft examRevisionDraftRow
+		if err := tx.Get(ctx, &draft, examRevisionDraftSelect+` FOR SHARE OF e, d`,
+			input.ActorUserID.String(), input.ExamID.String()); err != nil {
+			return nil, translateError("exam", input.ExamID.String(), err)
+		}
+		if !draft.ActorIsManager && !input.ManagerOverride {
+			return nil, store.NewErrNotFound("exam_manager", input.ActorUserID.String())
+		}
+
+		result := &store.ExamPublicationCheckResult{DraftRevision: draft.DraftRevision, Problems: []store.ExamPublicationProblem{}}
+		if draft.ArchivedAt.Valid {
+			result.Problems = append(result.Problems, store.ExamPublicationProblem{Reason: store.ExamPublicationExamArchived})
+		}
+
+		// The identity and instant only shape the snapshot that decides
+		// whether anything changed; nothing is written.
+		_, problems, err := checkExamPublication(ctx, tx, examPublicationRules{
+			InstitutionOrigin:  input.InstitutionOrigin,
+			ExecutionEnabled:   input.ExecutionEnabled,
+			AssistantEnabled:   input.AssistantEnabled,
+			AssistantProviders: input.AssistantProviders,
+			RevisionID:         model.NewExamRevisionID(),
+			ExamID:             input.ExamID,
+			ActorUserID:        input.ActorUserID,
+			Kind:               model.ExamRevisionPublicationStandard,
+			PublishedAt:        model.NowUTC(),
+		}, draft)
+		if err != nil {
+			return nil, err
+		}
+
+		result.Problems = append(result.Problems, problems...)
+		return result, nil
+	})
+}
+
+// examPublicationRules is what checking a draft for publication needs beyond
+// the draft itself.
+type examPublicationRules struct {
+	InstitutionOrigin  string
+	ExecutionEnabled   bool
+	AssistantEnabled   bool
+	AssistantProviders []string
+	RevisionID         model.ExamRevisionID
+	ExamID             model.ExamID
+	ActorUserID        model.UserID
+	Kind               model.ExamRevisionPublicationKind
+	PublishedAt        time.Time
+}
+
+// checkExamPublication is the one place publication's checks live. It reports
+// every check the draft fails, in the order of store.ExamPublicationProblem
+// reasons, and the revision publishing would write when it fails none.
+// Publish stops at the first problem; CheckPublication reports them all. An
+// error is a fault, never a failed check.
+func checkExamPublication(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	rules examPublicationRules,
+	draft examRevisionDraftRow,
+) (*model.ExamRevision, []store.ExamPublicationProblem, error) {
+	problems := []store.ExamPublicationProblem{}
+	add := func(reason store.ExamPublicationProblemReason) {
+		problems = append(problems, store.ExamPublicationProblem{Reason: reason})
+	}
+
+	policy, err := model.CanonicalizeExamRevisionPolicy([]byte(draft.Policy))
+	if err != nil {
+		return nil, nil, invalidPersistedState("exam_draft", "policy", err)
+	}
+	decodedPolicy, err := model.DecodeExamPolicySet(policy.Bytes)
+	if err != nil {
+		return nil, nil, invalidPersistedState("exam_draft", "policy", err)
+	}
+	if decodedPolicy.Execution.Enabled && !rules.ExecutionEnabled {
+		add(store.ExamPublicationExecutionDisabled)
+	}
+	if err = requireUsableEnvironmentProfile(ctx, tx, decodedPolicy.Execution); err != nil {
+		if !store.IsConflict(err) {
+			return nil, nil, err
+		}
+		add(store.ExamPublicationEnvironmentProfileUnusable)
+	}
+
+	if decodedPolicy.Assistant.Enabled {
+		if !rules.AssistantEnabled {
+			add(store.ExamPublicationAssistantDisabled)
+		}
+		profile, profileErr := requireUsableAssistantProfile(ctx, tx, decodedPolicy.Assistant)
+		switch {
+		case profileErr != nil && !store.IsConflict(profileErr):
+			return nil, nil, profileErr
+		case profileErr != nil || !slices.Contains(rules.AssistantProviders, profile.Provider):
+			add(store.ExamPublicationAssistantProfileUnusable)
+		}
+	}
+
+	browserPolicy, err := model.ParseBrowserPolicyDocument([]byte(draft.BrowserPolicy))
+	if err != nil {
+		return nil, nil, invalidPersistedState("exam_draft", "browser_policy", err)
+	}
+
+	capacity, err := currentExamCapacityPolicy(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resourceSnapshots, err := publishedExamResourceSnapshots(ctx, tx, rules.ExamID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	workspaceSnapshots, err := publishedStarterWorkspaceSnapshots(ctx, tx, rules.ExamID)
+	if err != nil {
+		return nil, nil, err
+	}
+	problems = append(problems, examRevisionCapacityProblems(capacity, resourceSnapshots, workspaceSnapshots)...)
+
+	baseRevisionID, err := parseNullablePersistedID[model.ExamRevisionID](
+		"exam_draft",
+		"base_revision_id",
+		draft.BaseRevisionID,
+		model.ParseExamRevisionID,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var number int64
+	if err = tx.Get(ctx, &number, `SELECT COALESCE(MAX(number), 0)+1
+		FROM exam_revisions
+		WHERE exam_id = ?`, rules.ExamID.String()); err != nil {
+		return nil, nil, err
+	}
+	if browserPolicy.ValidateInstitutionOrigin(rules.InstitutionOrigin) != nil {
+		add(store.ExamPublicationBrowserPolicyOriginMismatch)
+	}
+
+	revision, err := model.NewExamRevision(model.ExamRevisionSpecification{
+		ID:                   rules.RevisionID,
+		ExamID:               rules.ExamID,
+		Number:               number,
+		SourceDraftRevision:  draft.DraftRevision,
+		Title:                draft.Title,
+		InstructionsMarkdown: draft.InstructionsMarkdown,
+		Policy:               policy,
+		BrowserPolicy:        browserPolicy,
+		Capacity:             capacity,
+		Resources:            resourceSnapshots,
+		StarterWorkspace:     workspaceSnapshots,
+		PublishedByUserID:    rules.ActorUserID,
+		PublishedAt:          rules.PublishedAt,
+		BaseRevisionID:       baseRevisionID,
+		Kind:                 rules.Kind,
+	})
+	if err != nil {
+		// A draft that already fails a check may not make a valid snapshot;
+		// only a draft that passes them all is a fault here.
+		if len(problems) > 0 {
+			return nil, problems, nil
+		}
+		return nil, nil, invalidPersistedState("exam_revision", "snapshot", err)
+	}
+
+	if baseRevisionID.IsValid() {
+		var baseDigest string
+		if err = tx.Get(
+			ctx,
+			&baseDigest,
+			`SELECT content_digest FROM exam_revisions WHERE exam_id = ? AND id = ?`,
+			rules.ExamID.String(),
+			baseRevisionID.String(),
+		); err != nil {
+			return nil, nil, translateError("exam_revision", baseRevisionID.String(), err)
+		}
+
+		if baseDigest == revision.ContentDigest {
+			add(store.ExamPublicationNoChanges)
+		}
+	}
+
+	if len(problems) > 0 {
+		return nil, problems, nil
+	}
+	return revision, problems, nil
+}
+
+// examPublicationProblemErr is the error Publish has always returned for a
+// failed check.
+func examPublicationProblemErr(problem store.ExamPublicationProblem) error {
+	switch problem.Reason {
+	case store.ExamPublicationExamArchived:
+		return store.NewErrConflict("exam", "exam_archived", nil)
+	case store.ExamPublicationExecutionDisabled:
+		return store.NewErrConflict("exam_revision", "execution_disabled", nil)
+	case store.ExamPublicationEnvironmentProfileUnusable:
+		return store.NewErrConflict("exam_draft", "environment_profile_unusable", nil)
+	case store.ExamPublicationAssistantDisabled:
+		return store.NewErrConflict("exam_revision", "assistant_disabled", nil)
+	case store.ExamPublicationAssistantProfileUnusable:
+		return store.NewErrConflict("exam_revision", "assistant_profile_unusable", nil)
+	case store.ExamPublicationTooManyResources,
+		store.ExamPublicationResourceTooLarge,
+		store.ExamPublicationTooManyStarterEntries,
+		store.ExamPublicationStarterFileTooLarge,
+		store.ExamPublicationStarterWorkspaceTooLarge:
+		return store.NewErrConflict("exam_revision", "exam_revision_capacity", nil)
+	case store.ExamPublicationBrowserPolicyOriginMismatch:
+		return store.NewErrInvalidInput("exam_revision", "browser_policy", nil)
+	case store.ExamPublicationNoChanges:
+		return store.NewErrConflict("exam_revision", "exam_revision_no_changes", nil)
+	default:
+		return invalidPersistedState("exam_revision", "publication_problem", errors.New("unknown publication problem"))
+	}
+}
+
+const examRevisionDraftSelect = `SELECT e.academic_unit_id, e.archived_at, e.revision AS exam_revision,
+			` + examManagerExistsSQL + ` AS actor_is_manager, d.title, d.instructions_markdown, d.policy, d.browser_policy,
+			d.base_revision_id, d.revision AS draft_revision
+		FROM exams e
+		JOIN exam_drafts d ON d.exam_id = e.id
+		WHERE e.id = ?`
+
 // lockExamRevisionDraft locks the exam and its draft and requires a manager
 // (or override), an unarchived exam and the expected draft revision.
 func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamRevisionPublication) (examRevisionDraftRow, error) {
@@ -367,13 +511,7 @@ func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.
 	if err := tx.Get(
 		ctx,
 		&draft,
-		`SELECT e.academic_unit_id, e.archived_at, e.revision AS exam_revision,
-			`+examManagerExistsSQL+` AS actor_is_manager, d.title, d.instructions_markdown, d.policy, d.browser_policy,
-			d.base_revision_id, d.revision AS draft_revision
-		FROM exams e
-		JOIN exam_drafts d ON d.exam_id = e.id
-		WHERE e.id = ?
-		FOR UPDATE OF e, d`,
+		examRevisionDraftSelect+` FOR UPDATE OF e, d`,
 		input.ActorUserID.String(),
 		input.ExamID.String(),
 	); err != nil {
@@ -534,31 +672,54 @@ func recordExamRevisionPublication(ctx context.Context, tx *sqlxTxWrapper, revis
 	return requireExamResourceAffected(draftResult, 1, "exam_draft_revision")
 }
 
+// examRevisionCapacityProblems reports each capacity limit the snapshot
+// exceeds: the counts, each Resource over the per-Resource limit, any Starter
+// Workspace file over the per-file limit, and the Starter Workspace total.
+func examRevisionCapacityProblems(
+	capacity model.ExamCapacityPolicy,
+	resources []model.ExamRevisionResource,
+	workspace []model.ExamRevisionStarterWorkspaceEntry,
+) []store.ExamPublicationProblem {
+	var problems []store.ExamPublicationProblem
+	if len(resources) > capacity.ResourceMaximumCount {
+		problems = append(problems, store.ExamPublicationProblem{Reason: store.ExamPublicationTooManyResources})
+	}
+	for _, resource := range resources {
+		if resource.SizeBytes > capacity.ResourceMaximumBytes {
+			problems = append(problems, store.ExamPublicationProblem{
+				Reason:     store.ExamPublicationResourceTooLarge,
+				ResourceID: resource.ResourceID,
+			})
+		}
+	}
+
+	if len(workspace) > capacity.WorkspaceMaximumEntries {
+		problems = append(problems, store.ExamPublicationProblem{Reason: store.ExamPublicationTooManyStarterEntries})
+	}
+	var workspaceBytes int64
+	fileTooLarge := false
+	for _, entry := range workspace {
+		fileTooLarge = fileTooLarge || entry.SizeBytes > capacity.WorkspaceMaximumFileBytes
+		workspaceBytes += entry.SizeBytes
+	}
+	if fileTooLarge {
+		problems = append(problems, store.ExamPublicationProblem{Reason: store.ExamPublicationStarterFileTooLarge})
+	}
+	if workspaceBytes > capacity.WorkspaceMaximumTotalBytes {
+		problems = append(problems, store.ExamPublicationProblem{Reason: store.ExamPublicationStarterWorkspaceTooLarge})
+	}
+
+	return problems
+}
+
+// examRevisionCapacityExceeded reports whether the snapshot exceeds any
+// capacity limit.
 func examRevisionCapacityExceeded(
 	capacity model.ExamCapacityPolicy,
 	resources []model.ExamRevisionResource,
 	workspace []model.ExamRevisionStarterWorkspaceEntry,
 ) bool {
-	if len(resources) > capacity.ResourceMaximumCount || len(workspace) > capacity.WorkspaceMaximumEntries {
-		return true
-	}
-
-	var workspaceBytes int64
-	for _, resource := range resources {
-		if resource.SizeBytes > capacity.ResourceMaximumBytes {
-			return true
-		}
-	}
-
-	for _, entry := range workspace {
-		if entry.SizeBytes > capacity.WorkspaceMaximumFileBytes {
-			return true
-		}
-
-		workspaceBytes += entry.SizeBytes
-	}
-
-	return workspaceBytes > capacity.WorkspaceMaximumTotalBytes
+	return len(examRevisionCapacityProblems(capacity, resources, workspace)) > 0
 }
 
 func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.ExamRevision) error {

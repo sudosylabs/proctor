@@ -2604,6 +2604,54 @@
     "translation": "Display Proctor build information"
   },
   {
+    "id": "exam.draft.check.assistant_disabled",
+    "translation": "The draft turns on the assistant, but this installation has the assistant turned off."
+  },
+  {
+    "id": "exam.draft.check.assistant_profile_unusable",
+    "translation": "The assistant profile the draft names has been retired, no longer exists or doesn't allow these settings."
+  },
+  {
+    "id": "exam.draft.check.browser_policy_origin",
+    "translation": "The browser rules don't match this installation's address. Save the browser rules again."
+  },
+  {
+    "id": "exam.draft.check.environment_profile_unusable",
+    "translation": "The execution profile the draft names has been retired, no longer exists or doesn't allow this many terminals."
+  },
+  {
+    "id": "exam.draft.check.exam_archived",
+    "translation": "This exam is archived. Archived exams can't be published."
+  },
+  {
+    "id": "exam.draft.check.execution_disabled",
+    "translation": "The draft runs candidates' code, but this installation has code execution turned off."
+  },
+  {
+    "id": "exam.draft.check.no_changes",
+    "translation": "Nothing has changed since the last version was published."
+  },
+  {
+    "id": "exam.draft.check.resource_too_large",
+    "translation": "This file for candidates is larger than this installation allows."
+  },
+  {
+    "id": "exam.draft.check.starter_file_too_large",
+    "translation": "A starter file is larger than this installation allows."
+  },
+  {
+    "id": "exam.draft.check.starter_workspace_too_large",
+    "translation": "The starter files together are larger than this installation allows."
+  },
+  {
+    "id": "exam.draft.check.too_many_resources",
+    "translation": "The draft has more files for candidates than this installation allows."
+  },
+  {
+    "id": "exam.draft.check.too_many_starter_entries",
+    "translation": "The starter files have more files and folders than this installation allows."
+  },
+  {
     "id": "mail.academic.academic_unit_assigned.at_label",
     "translation": "Added"
   },

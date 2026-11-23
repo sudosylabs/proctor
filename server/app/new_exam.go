@@ -151,6 +151,7 @@ func newExamPublication(
 		Persistence:        deps.Store.ExamRevision(),
 		Access:             deps.Store.ExamAuthoring(),
 		Memberships:        deps.Store.AcademicUnitMember(),
+		Content:            deps.FileContent,
 		Authorizer:         authorizer,
 		Auditor:            shared.audit,
 		Publisher:          shared.realtime,

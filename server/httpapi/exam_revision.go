@@ -47,6 +47,19 @@ type examRevisionResponse struct {
 	PublicationKind            string                     `json:"publication_kind"`
 }
 
+type examDraftCheckResponse struct {
+	Publishable   bool                    `json:"publishable"`
+	DraftRevision int64                   `json:"draft_revision"`
+	Problems      []examDraftProblemEntry `json:"problems"`
+}
+
+type examDraftProblemEntry struct {
+	Code       string `json:"code"`
+	Field      string `json:"field"`
+	ResourceID string `json:"resource_id,omitempty"`
+	Message    string `json:"message"`
+}
+
 type examRevisionListResponse struct {
 	Items      []examRevisionResponse `json:"items"`
 	NextCursor string                 `json:"next_cursor,omitempty"`
@@ -66,7 +79,7 @@ func examRevisionResource(app *exam.Publication, resolver *people.Resolver) rout
 	h := examRevisionHandlers{app: app, people: resolver}
 	collection := "/exams/{exam_id}/revisions"
 	member := "/exams/{exam_id}/revisions/{exam_revision_id}"
-	return route.NewResource(
+	resource := route.NewResource(
 		"exam-revisions",
 		route.Endpoint{
 			Method:      http.MethodPost,
@@ -99,6 +112,20 @@ func examRevisionResource(app *exam.Publication, resolver *people.Resolver) rout
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
+			Path:   "/exams/{exam_id}/draft/check",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.unavailable",
+			},
+			Handle: h.checkDraft,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
 			Path:   collection,
 			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
@@ -126,6 +153,8 @@ func examRevisionResource(app *exam.Publication, resolver *people.Resolver) rout
 			Handle: h.get,
 		},
 	)
+	resource.Endpoints = append(resource.Endpoints, h.contentEndpoints()...)
+	return resource
 }
 
 func (h examRevisionHandlers) publish(request route.Request) (route.Result, error) {
@@ -158,6 +187,39 @@ func (h examRevisionHandlers) publish(request route.Request) (route.Result, erro
 	response := examRevisionResponseFromSummary(summary)
 	response.PublishedBy = personRef(refs, summary.PublishedByUserID)
 	return route.JSON(http.StatusCreated, response), nil
+}
+
+func (h examRevisionHandlers) checkDraft(request route.Request) (route.Result, error) {
+	examID, err := examRevisionExamID(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	check, err := h.app.CheckExamDraft(request.Context, request.Invocation(), examID)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	response := examDraftCheckResponse{
+		Publishable:   check.Publishable(),
+		DraftRevision: check.DraftRevision,
+		Problems:      make([]examDraftProblemEntry, 0, len(check.Problems)),
+	}
+	for _, problem := range check.Problems {
+		response.Problems = append(response.Problems, examDraftProblemEntry{
+			Code:       string(problem.Code),
+			Field:      problem.Field,
+			ResourceID: problem.ResourceID.String(),
+			Message:    route.Translate(request.HTTP, examDraftProblemLocalizationID(problem.Reason), string(problem.Code)),
+		})
+	}
+	return route.JSON(http.StatusOK, response), nil
+}
+
+// examDraftProblemLocalizationID names the sentence that explains one
+// publication problem to the author.
+func examDraftProblemLocalizationID(reason store.ExamPublicationProblemReason) string {
+	return "exam.draft.check." + string(reason)
 }
 
 func (h examRevisionHandlers) get(request route.Request) (route.Result, error) {

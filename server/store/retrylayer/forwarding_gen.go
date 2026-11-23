@@ -1283,6 +1283,12 @@ func (s *examAuthoringStore) Resolve(ctx context.Context, arg1 model.ExamID) (*m
 	})
 }
 
+func (s *examRevisionStore) CheckPublication(ctx context.Context, arg1 *store.ExamPublicationCheck) (*store.ExamPublicationCheckResult, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamPublicationCheckResult, error) {
+		return s.ExamRevisionStore.CheckPublication(ctx, arg1)
+	})
+}
+
 func (s *examRevisionStore) GetSummary(ctx context.Context, arg1 model.ExamID, arg2 model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamRevisionSummary, error) {
 		return s.ExamRevisionStore.GetSummary(ctx, arg1, arg2)

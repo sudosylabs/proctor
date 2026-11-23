@@ -1424,6 +1424,12 @@ func (s *timedExamRevisionStore) Publish(arg0 context.Context, arg1 *store.ExamR
 	})
 }
 
+func (s *timedExamRevisionStore) CheckPublication(arg0 context.Context, arg1 *store.ExamPublicationCheck) (*store.ExamPublicationCheckResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamRevision, methodCheckPublication), func(callCtx context.Context) (*store.ExamPublicationCheckResult, error) {
+		return s.next.CheckPublication(callCtx, arg1)
+	})
+}
+
 func (s *timedExamRevisionStore) GetSummary(arg0 context.Context, arg1 model.ExamID, arg2 model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamRevision, methodGetSummary), func(callCtx context.Context) (*store.ExamRevisionSummary, error) {
 		return s.next.GetSummary(callCtx, arg1, arg2)

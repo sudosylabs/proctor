@@ -240,13 +240,16 @@ func composeConsumers(
 		servingLease:          servingLease,
 		transport:             rootTransport,
 		websocket:             webSocketHub,
-		plugins:               capabilities.plugins,
-		pluginReconciler:      reconciler,
-		metrics:               capabilities.metrics,
-		tracing:               capabilities.tracing,
-		readiness:             readiness,
-		listen:                net.Listen,
-		newHTTP:               newHTTPServer,
+		stopRealtimeHints: func(ctx context.Context) error {
+			return errors.Join(application.Attempts.CloseEvidenceHints(ctx), application.Realtime.Close(ctx))
+		},
+		plugins:          capabilities.plugins,
+		pluginReconciler: reconciler,
+		metrics:          capabilities.metrics,
+		tracing:          capabilities.tracing,
+		readiness:        readiness,
+		listen:           net.Listen,
+		newHTTP:          newHTTPServer,
 	}}
 	return &compositionResult{server: node, application: application, handler: rootTransport}, nil
 }

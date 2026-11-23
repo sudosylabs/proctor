@@ -12,17 +12,12 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
-
-// ClassUnits finds the academic unit that owns a Class, which class.changed
-// names; store.ClassStore satisfies it.
-type ClassUnits interface {
-	GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error)
-}
 
 // PublishClassesChanged publishes class.changed once for each distinct
 // Class. One failure never stops the rest; failures are returned joined.
-func PublishClassesChanged(ctx context.Context, publisher Publisher, units ClassUnits, classIDs ...model.ClassID) error {
+func PublishClassesChanged(ctx context.Context, publisher Publisher, units store.ClassStore, classIDs ...model.ClassID) error {
 	if publisher == nil || units == nil {
 		return errors.New("Class change publication dependencies are invalid")
 	}
@@ -69,10 +64,12 @@ func PublishUsersChanged(ctx context.Context, publisher Publisher, userIDs ...mo
 }
 
 // PublishRoleBindingChanged tells role_binding.view holders at the binding's
-// scope that it changed. A binding at a Class changes that Class's teachers,
-// so its viewers hear class.changed too; the holder's own clients hear
-// current_user.context.changed from the authorization invalidation.
-func PublishRoleBindingChanged(ctx context.Context, publisher Publisher, units ClassUnits, binding *model.RoleBinding) error {
+// scope that it changed. Scoped bindings can also change Class teachers or
+// Academic Unit administrators. The authorization invalidation tells the
+// holder's own clients.
+func PublishRoleBindingChanged(ctx context.Context, publisher Publisher, classes store.ClassStore,
+	units store.AcademicUnitStore, binding *model.RoleBinding,
+) error {
 	if publisher == nil {
 		return errors.New("Role Binding change publication dependencies are invalid")
 	}
@@ -81,8 +78,29 @@ func PublishRoleBindingChanged(ctx context.Context, publisher Publisher, units C
 		return err
 	}
 	errs := []error{publisher.Publish(ctx, event)}
-	if binding.ScopeType == model.RoleScopeClass {
-		errs = append(errs, PublishClassesChanged(ctx, publisher, units, model.ClassID(binding.ScopeID)))
+	switch binding.ScopeType {
+	case model.RoleScopeClass:
+		errs = append(errs, PublishClassesChanged(ctx, publisher, classes, model.ClassID(binding.ScopeID)))
+	case model.RoleScopeAcademicUnit:
+		errs = append(errs, publishBindingUnitChanged(ctx, publisher, units, model.AcademicUnitID(binding.ScopeID)))
 	}
 	return errors.Join(errs...)
+}
+
+func publishBindingUnitChanged(ctx context.Context, publisher Publisher, units store.AcademicUnitStore, id model.AcademicUnitID) error {
+	if units == nil {
+		return errors.New("academic unit change publication requires an academic unit store")
+	}
+	unit, err := units.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if unit == nil || unit.ID != id {
+		return errors.New("academic unit change publication requires the bound unit")
+	}
+	event, err := NewAcademicUnitUpdatedEvent(unit.ID, unit.ParentID)
+	if err != nil {
+		return err
+	}
+	return publisher.Publish(ctx, event)
 }

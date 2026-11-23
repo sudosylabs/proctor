@@ -29,12 +29,13 @@ import (
 
 // Dependencies are the collaborators New distributes to the Service.
 type Dependencies struct {
-	Store        store.Catalog
-	Authorizer   *access.Authorizer
-	Auditor      *access.Auditor
-	Capabilities *identity.DeploymentCapabilities
-	Mail         *mail.Composer
-	Publisher    realtime.Publisher
+	AcademicUnits store.AcademicUnitStore
+	Store         store.Catalog
+	Authorizer    *access.Authorizer
+	Auditor       *access.Auditor
+	Capabilities  *identity.DeploymentCapabilities
+	Mail          *mail.Composer
+	Publisher     realtime.Publisher
 	// CanonicalOrigin, SupportAddress and PasswordMinimumLength are published
 	// by access discovery unchanged.
 	CanonicalOrigin         string
@@ -64,6 +65,7 @@ type Service struct {
 	retention         store.RetentionStore
 	// classes names the unit of a Class whose teachers a binding changed.
 	classes        store.ClassStore
+	academicUnits  store.AcademicUnitStore
 	pluginSettings store.PluginSettingsStore
 	// environmentProfiles is nil without persistence, which makes profile
 	// administration unavailable.
@@ -144,6 +146,7 @@ func New(deps Dependencies) (*Service, error) {
 		auditExportContent:      deps.AuditExportContent,
 		retention:               catalog.Retention(),
 		classes:                 catalog.Class(),
+		academicUnits:           deps.AcademicUnits,
 		authorizer:              deps.Authorizer,
 		people:                  people.New(catalog, deps.Authorizer),
 		auditor:                 deps.Auditor.MutationAudit(),

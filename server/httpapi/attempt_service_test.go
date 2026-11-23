@@ -305,7 +305,7 @@ func (s *attemptLedger) ResolveCandidateAccess(_ context.Context, access store.C
 	if err := s.prove(access); err != nil {
 		return nil, err
 	}
-	return &store.CandidateAttemptAccessTarget{AttemptID: s.f.attempt.ID, SittingID: s.f.sitting.ID, ClassID: s.f.sitting.ClassID,
+	return &store.CandidateAttemptAccessTarget{ExamID: s.f.examID, AttemptID: s.f.attempt.ID, SittingID: s.f.sitting.ID, ClassID: s.f.sitting.ClassID,
 		CandidateUserID: s.f.candidate.UserID, ParticipationID: s.f.participation.ID, Generation: s.f.participation.Generation}, nil
 }
 
@@ -513,7 +513,7 @@ func (s *attemptLedger) ListAttemptScreenClips(context.Context, store.ExamAttemp
 }
 
 func (s *attemptLedger) ResolveAttemptSitting(_ context.Context, attemptID model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
-	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: s.f.examID, SittingID: s.f.sitting.ID}, nil
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: s.f.examID, SittingID: s.f.sitting.ID, CandidateUserID: s.f.attempt.CandidateUserID}, nil
 }
 
 func (s *attemptLedger) GetAttemptScreenClip(_ context.Context, clips store.ExamAttemptClips, id model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {

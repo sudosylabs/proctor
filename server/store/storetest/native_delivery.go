@@ -54,9 +54,11 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	require.Equal(t, int64(2), first.Acknowledgement.HighestContiguousBatchSequence)
 	require.Equal(t, int64(2), first.Acknowledgement.SettledThroughBatchSequence)
 	require.Empty(t, first.Flagged, "a compliant start raises nothing")
+	require.True(t, first.Accepted, "the repaired prefix may have added conditions")
 	replay, err := appendBatch(two, "native-two-repacked-key")
 	require.NoError(t, err)
 	require.Equal(t, pending.Acknowledgement.Receipt, replay.Acknowledgement.Receipt, "replay changed receipt or returned stale progress")
+	require.False(t, replay.Accepted, "a retained batch cannot announce again under a new key")
 	require.Equal(t, int64(2), replay.Acknowledgement.HighestContiguousBatchSequence, "replay changed receipt or returned stale progress")
 	changed := two
 	changed.PriorAcknowledgement = 2
@@ -68,9 +70,10 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	require.Len(t, third.Flagged, 1, "a second display opens an enforce occurrence")
 	require.Equal(t, model.IntegrityPolicyKind("native.display"), third.Flagged[0].Kind)
 	require.Equal(t, 1, third.Flagged[0].RetainedEvidence)
-	thirdReplay, err := appendBatch(batch(3, secondDisplay(3, at.Add(2*time.Second))), "native-three-replay")
+	thirdReplay, err := appendBatch(batch(3, secondDisplay(3, at.Add(2*time.Second))), "native-three")
 	require.NoError(t, err)
 	require.Empty(t, thirdReplay.Flagged, "a replay raises nothing")
+	require.False(t, thirdReplay.Accepted, "an idempotent replay must not announce again")
 	_, err = appendBatch(batch(4, nativeFact("process_application", 1, at.Add(3*time.Second), windowMounted, `{}`)), "native-unactivated")
 	require.Error(t, err, "a fact for a capability the policy does not activate was accepted")
 	desktop := model.NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.single_display", Status: model.NativeRuleNotMet, Contained: true, ObservedAt: at.Add(3 * time.Second)}
@@ -119,6 +122,18 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 		}
 	}
 	require.True(t, found, "candidate absent from board")
+	timeline, err := ss.ExamIntegrityReview().ListLiveTimeline(ctx, store.LiveTimelineListOptions{AttemptID: connected.Attempt.ID, Limit: 100})
+	require.NoError(t, err)
+	require.False(t, timeline.HasMore)
+	liveConditions := map[model.IntegrityEvidenceID]model.NativeConditionEvidence{}
+	for _, item := range timeline.Items {
+		if item.Kind == store.LiveTimelineNativeCondition {
+			require.NotNil(t, item.NativeCondition)
+			require.Equal(t, connected.Attempt.ID, item.NativeCondition.AttemptID)
+			liveConditions[item.NativeCondition.ID] = *item.NativeCondition
+		}
+	}
+	require.Len(t, liveConditions, 7, "the live timeline includes every native condition")
 	seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: store.ExamSubmissionSealAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: connected.Connection.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, ContinuityCredentialHash: access.Access.ContinuityCredentialHash, ExpectedCurrentRevisionID: fixture.revisionID, ExpectedWorkspaceCursor: connected.Workspace.Cursor}, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	attachSubmissionReceipt(t, ctx, ss, fixture.candidate, seal)
 	sealed, err := ss.ExamSubmission().Seal(ctx, seal, examCommand(fixture.candidate.ID, store.ExamSubmissionSealOperation, "native-review-submit", "native-review-submit"))
@@ -133,6 +148,7 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	positions := map[int64][]model.NativeRuleTransition{}
 	for _, v := range page.Items {
 		require.NoError(t, v.Validate())
+		require.Equal(t, v, liveConditions[v.ID], "the live timeline agrees with the submission's native conditions")
 		require.Equal(t, connected.Attempt.ID, v.AttemptID, "native review lost provenance")
 		require.Equal(t, connected.Security.Policy.Digest, v.PolicyDigest, "native review lost provenance")
 		require.Equal(t, access.StreamID, v.StreamID, "native review lost provenance")

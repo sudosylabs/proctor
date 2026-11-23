@@ -107,7 +107,7 @@ func (r *turnRun) startSession(arguments json.RawMessage, call model.AssistantCa
 	if input.Timeout != nil {
 		timeout = *input.Timeout
 	}
-	if _, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.SittingID, r.key.Editor, ""); err != nil {
+	if _, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.ExamID, r.target.SittingID, r.key.Editor, ""); err != nil {
 		return toolError("The assistant sessions cannot be checked now.")
 	}
 	slot, err := r.service.transcripts.ReserveSession(r.ctx,
@@ -121,7 +121,7 @@ func (r *turnRun) startSession(arguments json.RawMessage, call model.AssistantCa
 	session := model.AssistantSession{Tag: slot.Tag, CallID: call, ConversationID: r.conversation, TurnID: r.key.TurnID,
 		CandidateUserID: r.target.CandidateID, State: "running", StartedAt: slot.StartedAt, ReservedMilliseconds: slot.TimeoutSeconds * 1000}
 	if sessionExpired(session, r.service.now()) {
-		if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, environment.AssistantSessionStatus{Outcome: "timed_out"}); err != nil {
+		if _, err = r.service.endSession(r.ctx, r.target.ExamID, r.target.SittingID, r.key.Editor, session, environment.AssistantSessionStatus{Outcome: "timed_out"}); err != nil {
 			return taggedSessionError(slot.Tag, "The session cannot be settled now.")
 		}
 		return taggedSessionError(slot.Tag, "The session timed out before it started.")
@@ -133,7 +133,7 @@ func (r *turnRun) startSession(arguments json.RawMessage, call model.AssistantCa
 		// until the next check can inspect the process.
 		return taggedSessionError(slot.Tag, "The session could not start.")
 	}
-	event, eventErr := realtime.NewAssistantSessionStartedEvent(r.target.SittingID, r.attemptID(), r.target.CandidateID, slot.Tag, slot.StartedAt)
+	event, eventErr := realtime.NewAssistantSessionStartedEvent(r.target.ExamID, r.target.SittingID, r.attemptID(), r.target.CandidateID, slot.Tag, slot.StartedAt)
 	r.service.publish(r.ctx, "assistant_session_started", event, eventErr)
 	return r.readSession(session, sessionInputArgs{}, wait, false)
 }
@@ -159,7 +159,7 @@ func (r *turnRun) sendInput(arguments json.RawMessage) toolResult {
 }
 
 func (r *turnRun) activeSession(tag string) (model.AssistantSession, error) {
-	rows, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.SittingID, r.key.Editor, tag)
+	rows, err := r.service.reconcileSessions(r.ctx, r.inv, r.environmentAccess(), r.target.ExamID, r.target.SittingID, r.key.Editor, tag)
 	if err != nil {
 		return model.AssistantSession{}, err
 	}
@@ -199,7 +199,7 @@ func (r *turnRun) readSession(session model.AssistantSession, input sessionInput
 		output.Exit = status.Exit
 	}
 	if status.Outcome != "" {
-		if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, status); err != nil {
+		if _, err = r.service.endSession(r.ctx, r.target.ExamID, r.target.SittingID, r.key.Editor, session, status); err != nil {
 			return taggedSessionError(session.Tag, "The session could not be settled.")
 		}
 	}
@@ -226,7 +226,7 @@ func (r *turnRun) stopSession(arguments json.RawMessage) toolResult {
 		return taggedSessionError(session.Tag, "The session could not be stopped.")
 	}
 	status := environment.AssistantSessionStatus{Outcome: "stopped", Exit: output.Exit}
-	if _, err = r.service.endSession(r.ctx, r.target.SittingID, r.key.Editor, session, status); err != nil {
+	if _, err = r.service.endSession(r.ctx, r.target.ExamID, r.target.SittingID, r.key.Editor, session, status); err != nil {
 		return taggedSessionError(session.Tag, "The session could not be settled.")
 	}
 	return sessionResult(session, sessionInputArgs{}, output, "stopped")
@@ -237,7 +237,7 @@ func sessionExpired(session model.AssistantSession, now time.Time) bool {
 }
 
 func (s *Service) reconcileSessions(ctx context.Context, inv invocation.Invocation, access environment.CandidateAccess,
-	sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess, tag string) ([]model.AssistantSession, error) {
+	examID model.ExamID, sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess, tag string) ([]model.AssistantSession, error) {
 	rows, err := s.transcripts.ListSessions(ctx, store.AssistantSessionQuery{Tag: tag,
 		Owner: sessionOwner(editor)})
 	if err != nil {
@@ -258,7 +258,7 @@ func (s *Service) reconcileSessions(ctx context.Context, inv invocation.Invocati
 			continue
 		}
 		if status.Outcome != "" {
-			result, endErr := s.endSession(ctx, sittingID, editor, *session, status)
+			result, endErr := s.endSession(ctx, examID, sittingID, editor, *session, status)
 			if endErr != nil {
 				joined = errors.Join(joined, endErr)
 				continue
@@ -269,7 +269,7 @@ func (s *Service) reconcileSessions(ctx context.Context, inv invocation.Invocati
 	return rows, joined
 }
 
-func (s *Service) endSession(ctx context.Context, sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess,
+func (s *Service) endSession(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID, editor store.ExamAttemptWorkspaceEditorAccess,
 	session model.AssistantSession, status environment.AssistantSessionStatus) (*store.AssistantSessionEndResult, error) {
 	now := s.now()
 	endedAt := status.EndTime(session.StartedAt, now)
@@ -290,15 +290,15 @@ func (s *Service) endSession(ctx context.Context, sittingID model.ExamSittingID,
 		return nil, err
 	}
 	if result.Changed {
-		s.publishSessionEnded(ctx, sittingID, editor.AttemptID, editor.CandidateUserID, result)
+		s.publishSessionEnded(ctx, examID, sittingID, editor.AttemptID, editor.CandidateUserID, result)
 	}
 	return result, nil
 }
 
-func (s *Service) publishSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+func (s *Service) publishSessionEnded(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, result *store.AssistantSessionEndResult) {
 	call := result.Record.Call
-	event, err := realtime.NewAssistantSessionEndedEvent(sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
+	event, err := realtime.NewAssistantSessionEndedEvent(examID, sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
 	s.publish(ctx, "assistant_session_ended", event, err)
 }
 

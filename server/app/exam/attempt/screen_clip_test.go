@@ -91,6 +91,35 @@ func TestScreenClipListShowsTheReasonOnlyToTheSittingsManagers(t *testing.T) {
 	require.Error(t, err, "a caller who neither manages nor reviews sees no clips")
 }
 
+func TestScreenClipReadsRefuseTheCandidateEvenWithManagementOverride(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	useManagerCall(f)
+	useManagerOverride(f)
+	f.userID = f.managerID
+	clipID := model.NewScreenClipID()
+	f.persistence.attemptScreenClips = []store.ExamAttemptManagedScreenClip{{
+		PrivateReason: "manager-only reason",
+		ExamAttemptScreenClipView: store.ExamAttemptScreenClipView{
+			ID: clipID, AttemptID: f.attemptID, Source: model.ScreenClipSourceManager,
+		},
+	}}
+	f.persistence.attemptScreenClip = &store.ExamAttemptScreenClipView{
+		ID: clipID, AttemptID: f.attemptID, State: model.ScreenClipReady,
+		Upload: &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: 1},
+	}
+
+	clips, err := f.service.ListScreenClips(t.Context(), f.inv, f.sitting.ExamID, f.sitting.ID, f.attemptID)
+	require.True(t, apperror.Is(err, "resource.not_found"), "own clip list: %v", err)
+	require.Empty(t, clips)
+	_, err = f.service.PlayScreenClip(t.Context(), f.inv, ScreenClipQuery{
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, ClipID: clipID,
+	})
+	require.True(t, apperror.Is(err, "resource.not_found"), "own clip playback: %v", err)
+	decisions := f.control.Audits.Decisions()
+	require.Equal(t, model.AuditStatusFail, decisions[len(decisions)-1].Status, "the attempted read was refused and audited")
+}
+
 func TestScreenClipRequestRefusesAManagementOverride(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -190,14 +219,14 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "video/webm", clip.MediaType)
 	require.Equal(t, int64(100), clip.SizeBytes)
-	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting"}, f.order, "one authorization decides the playback")
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "grants", "decision:submission.view:success", "sitting"}, f.order, "both managing and viewing Submissions are checked before playback")
 	require.Empty(t, f.audit().operation, "nothing is played yet")
 
 	body, err := clip.Open(0, 100)
 	require.NoError(t, err)
 	require.NoError(t, body.Close())
 	require.Equal(t, ScreenClipPlaybackOperation, f.audit().operation, "starting a playback is audited")
-	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "audit-success"}, f.order,
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "grants", "decision:submission.view:success", "sitting", "audit-begin:exam.sitting.manage", "audit-success"}, f.order,
 		"opening the clip asks for no second authorization")
 	require.Equal(t, model.ActionExamSittingManage, f.audit().action)
 	require.Equal(t, model.RoleScopeClass, f.audit().scopeType)

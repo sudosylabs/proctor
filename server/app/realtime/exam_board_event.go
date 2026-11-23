@@ -17,6 +17,7 @@ import (
 )
 
 type sittingSubmissionsChangedData struct {
+	SchemaVersion int    `json:"schema_version"`
 	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 }
@@ -27,19 +28,20 @@ func NewSittingSubmissionsChangedEvent(examID model.ExamID, sittingID model.Exam
 	if !examID.IsValid() || !sittingID.IsValid() {
 		return Event{}, errors.New("Sitting submissions event requires valid Exam and Sitting identities")
 	}
-	data, err := json.Marshal(sittingSubmissionsChangedData{ExamID: examID.String(), ExamSittingID: sittingID.String()})
+	data, err := json.Marshal(sittingSubmissionsChangedData{SchemaVersion: 1, ExamID: examID.String(), ExamSittingID: sittingID.String()})
 	if err != nil {
 		return Event{}, fmt.Errorf("encode Sitting submissions event: %w", err)
 	}
 	return Event{
 		Name:     sittingSubmissionsChangedMessage.name,
-		Action:   model.ActionExamSittingView,
+		Action:   model.ActionSubmissionView,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
 	}, nil
 }
 
 type screenClipChangedData struct {
+	SchemaVersion int    `json:"schema_version"`
 	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
@@ -57,7 +59,7 @@ func NewScreenClipChangedEvent(
 	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || !clipID.IsValid() {
 		return Event{}, errors.New("screen clip event requires valid Exam, Sitting, Attempt and clip identities")
 	}
-	data, err := json.Marshal(screenClipChangedData{ExamID: examID.String(), ExamSittingID: sittingID.String(),
+	data, err := json.Marshal(screenClipChangedData{SchemaVersion: 1, ExamID: examID.String(), ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(), ScreenClipID: clipID.String()})
 	if err != nil {
 		return Event{}, fmt.Errorf("encode screen clip event: %w", err)
@@ -71,6 +73,7 @@ func NewScreenClipChangedEvent(
 }
 
 type attemptEvidenceChangedData struct {
+	SchemaVersion int    `json:"schema_version"`
 	ExamID        string `json:"exam_id"`
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
@@ -89,7 +92,7 @@ func NewAttemptEvidenceChangedEvent(
 	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || asOf.IsZero() {
 		return Event{}, errors.New("Attempt evidence event requires valid Exam, Sitting and Attempt identities and a time")
 	}
-	data, err := json.Marshal(attemptEvidenceChangedData{ExamID: examID.String(), ExamSittingID: sittingID.String(),
+	data, err := json.Marshal(attemptEvidenceChangedData{SchemaVersion: 1, ExamID: examID.String(), ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(), AsOf: model.FormatRFC3339(asOf)})
 	if err != nil {
 		return Event{}, fmt.Errorf("encode Attempt evidence event: %w", err)

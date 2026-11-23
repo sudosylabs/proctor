@@ -272,6 +272,12 @@ func buildApplicationJobDefinitions(
 
 	periodicTasks := []job.PeriodicTask{jobs.NewExamAttemptExpiryTask(exams.attempts)}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
+	if shared.realtime != nil && deps.Store.RoleBinding() != nil {
+		periodicTasks = append(periodicTasks, shared.realtime.NewRoleBindingExpiryTask(deps.Store.RoleBinding()))
+	}
+	if administrations != nil && deps.Store.Retention() != nil {
+		periodicTasks = append(periodicTasks, administrations.RetentionHoldReviewTask())
+	}
 	periodicTasks = append(periodicTasks, jobs.NewSittingMailReconciliationTask(deps.Store.ExamSitting(), exams.sittingMailPreparation))
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil {
 		periodicTasks = append(periodicTasks, job.PeriodicTask{

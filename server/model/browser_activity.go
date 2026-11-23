@@ -347,4 +347,7 @@ type BrowserActivityAcknowledgement struct {
 	ExamID                 ExamID
 	SittingID              ExamSittingID
 	GapAttentionChanged    bool
+	// InterpretationAdvanced is a transient post-commit signal, absent on
+	// retries once the same browser records have already been interpreted.
+	InterpretationAdvanced bool `json:"-"`
 }

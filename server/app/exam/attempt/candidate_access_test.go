@@ -25,6 +25,7 @@ func TestVerifyCandidateAttemptAccessReturnsOnlyWhatItProved(t *testing.T) {
 	credential := model.NewCredentialToken()
 	participationID := model.NewAttemptParticipationID()
 	f.persistence.accessTarget = &store.CandidateAttemptAccessTarget{
+		ExamID:    f.sitting.ExamID,
 		AttemptID: f.attemptID, SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 		CandidateUserID: f.userID, ParticipationID: participationID, Generation: 2,
 	}
@@ -33,6 +34,7 @@ func TestVerifyCandidateAttemptAccessReturnsOnlyWhatItProved(t *testing.T) {
 	verified, err := f.service.VerifyCandidateAttemptAccess(context.Background(), f.inv, access)
 	require.NoError(t, err)
 	require.Equal(t, VerifiedCandidateAccess{
+		ExamID:    f.sitting.ExamID,
 		AttemptID: f.attemptID, SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 		CandidateUserID: f.userID, ParticipationID: participationID, Generation: 2,
 	}, verified)

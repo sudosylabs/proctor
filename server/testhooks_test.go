@@ -29,6 +29,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/httpapi"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/retrylayer"
@@ -65,6 +66,10 @@ func (s *hookStore) Retention() store.RetentionStore { return hookRetentionStore
 
 type hookRetentionPolicyStore struct{ store.RetentionPolicyStore }
 type hookRetentionStore struct{ store.RetentionStore }
+
+func (hookRetentionStore) ClaimDueHoldNotifications(context.Context) ([]store.RetentionHoldDue, error) {
+	return nil, nil
+}
 
 func (s *hookStore) DesktopRegistration() store.DesktopRegistrationStore {
 	return hookDesktopRegistrationStore{}
@@ -108,6 +113,7 @@ func (s *hookStore) ExamCorrection() store.ExamCorrectionStore {
 }
 func (s *hookStore) ExamRecords() store.ExamRecordsStore { return hookExamRecordsStore{} }
 func (s *hookStore) ExamExport() store.ExamExportStore   { return hookExamExportStore{} }
+func (s *hookStore) AuditExport() store.AuditExportStore { return nil }
 func (s *hookStore) ExamResource() store.ExamResourceStore {
 	return hookExamResourceStore{}
 }
@@ -258,6 +264,10 @@ func (hookCommandOutcomeStore) Has(context.Context, *store.CommandIdempotency) (
 func (hookCommandOutcomeStore) DeleteExpired(context.Context, int) (int64, error) { return 0, nil }
 
 type hookRoleBindingStore struct{ store.RoleBindingStore }
+
+func (hookRoleBindingStore) ListExpiries(context.Context, store.RoleBindingExpiryCursor, int) (store.RoleBindingExpiryPage, error) {
+	return store.RoleBindingExpiryPage{CheckedAt: model.NowUTC()}, nil
+}
 
 type hookCache struct {
 	closed      atomic.Bool

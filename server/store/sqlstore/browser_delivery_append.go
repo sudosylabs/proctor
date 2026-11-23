@@ -853,6 +853,7 @@ func acknowledgeBrowserAppend(
 		MissingRanges:          []model.BrowserActivityMissingRange{},
 		MissingRangesTruncated: current.MissingRangesTruncated,
 		ServerTime:             current.ServerTime,
+		InterpretationAdvanced: current.InterpretationAdvanced,
 		ExamID:                 model.ExamID(source.Exam),
 		SittingID:              model.ExamSittingID(source.Sitting),
 	}

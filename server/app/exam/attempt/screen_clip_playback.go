@@ -174,6 +174,26 @@ func (s *Service) authorizeScreenClipView(
 	}
 	if viewer.ScopeType == model.RoleScopeClass {
 		viewer.ScopeID = sitting.Sitting.ClassID.String()
+		target, err := s.attempts.ResolveAttemptSitting(ctx, query.AttemptID)
+		if err != nil {
+			return ScreenClipViewAuthorization{}, storeError(storeErrors, err)
+		}
+		if target == nil || target.AttemptID != query.AttemptID || !target.CandidateUserID.IsValid() {
+			return ScreenClipViewAuthorization{}, apperror.New("exam.attempt.unavailable")
+		}
+		if target.ExamID != query.ExamID || target.SittingID != query.SittingID {
+			return ScreenClipViewAuthorization{}, apperror.New("exam.attempt.not_found")
+		}
+		if target.CandidateUserID == inv.Principal().UserID {
+			if s.managers.Audit == nil {
+				return ScreenClipViewAuthorization{}, apperror.New("authorization.unavailable")
+			}
+			if err := s.managers.Audit.RecordAuthorizationDecision(ctx, inv.Principal(), viewer.Action, viewer.Resource,
+				viewer.ScopeType, viewer.ScopeID, inv.RequestMetadata(), false); err != nil {
+				return ScreenClipViewAuthorization{}, err
+			}
+			return ScreenClipViewAuthorization{}, apperror.New("exam.attempt.not_found")
+		}
 	}
 	return viewer, nil
 }

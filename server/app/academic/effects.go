@@ -101,9 +101,9 @@ func (s *Service) publishUserChanged(ctx context.Context, userID model.UserID) {
 	}
 }
 
-// PublishClassMembershipChanged tells a candidate their exam activity and
-// current-user context changed, tells the candidate's viewers and each
-// class's viewers to refetch them, then tells the managers of every sitting
+// PublishClassMembershipChanged invalidates the candidate's socket permissions,
+// tells the candidate's viewers and each class's viewers to refetch them,
+// then tells the managers of every sitting
 // of each class to refresh their board. One failed publication never stops
 // the rest; failures are returned joined.
 //
@@ -114,7 +114,7 @@ func PublishClassMembershipChanged(
 	ctx context.Context,
 	publisher realtime.Publisher,
 	sittings store.ExamSittingStore,
-	classes realtime.ClassUnits,
+	classes store.ClassStore,
 	candidateID model.UserID,
 	classIDs []model.ClassID,
 ) error {
@@ -122,13 +122,12 @@ func PublishClassMembershipChanged(
 		return errors.New("Class Membership realtime dependencies are invalid")
 	}
 
-	candidateEvent, err := realtime.NewCandidateExamActivityChangedEvent(candidateID)
-	if err != nil {
-		return err
+	if !candidateID.IsValid() {
+		return errors.New("Class Membership realtime requires a valid user")
 	}
 
-	errs := []error{publisher.Publish(ctx, candidateEvent),
-		publisher.InvalidateCurrentUserContext(ctx, candidateID),
+	publisher.InvalidateAuthorization(ctx, candidateID)
+	errs := []error{
 		realtime.PublishUsersChanged(ctx, publisher, candidateID),
 		realtime.PublishClassesChanged(ctx, publisher, classes, classIDs...)}
 	seen := make(map[model.ClassID]struct{}, len(classIDs))
@@ -152,13 +151,7 @@ func PublishClassMembershipChanged(
 			}
 
 			for _, target := range targets {
-				event, eventErr := realtime.NewManagerSittingBoardChangedEvent(target.ExamID, target.SittingID)
-				if eventErr != nil {
-					errs = append(errs, eventErr)
-					continue
-				}
-
-				errs = append(errs, publisher.Publish(ctx, event))
+				errs = append(errs, realtime.PublishSittingBoardChanged(ctx, publisher, target.ExamID, target.SittingID))
 			}
 
 			if len(targets) < classMembershipSittingPage {

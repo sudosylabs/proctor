@@ -479,10 +479,12 @@ func (s *Service) AppendNativeDelivery(
 			s.publisher.Report(ctx, "exam_attempt_native_flagged", effectErr)
 		}
 	}
-	// Every append can add native condition records, which the live reads
-	// show, so each one hints them; the throttle keeps that to one per window.
-	s.publishEvidenceChanged(ctx, target.ExamID, target.SittingID, deliveryAccess.Access.AttemptID,
-		value.Acknowledgement.Receipt.ReceivedAt)
+	// A newly retained batch may add native conditions when a missing
+	// position is repaired. Retained receipts on replay announce nothing.
+	if value.Accepted {
+		s.publishEvidenceChanged(ctx, target.ExamID, target.SittingID, deliveryAccess.Access.AttemptID,
+			value.Acknowledgement.Receipt.ReceivedAt)
+	}
 	if slices.ContainsFunc(value.Flagged, func(f store.NativeIntegrityFlagged) bool { return f.ScreenClipRequested }) {
 		s.publishScreenClipsRequested(ctx, target.ExamID, target.SittingID, deliveryAccess.Access.AttemptID,
 			deliveryAccess.Access.CandidateUserID, value.Acknowledgement.Receipt.ReceivedAt)

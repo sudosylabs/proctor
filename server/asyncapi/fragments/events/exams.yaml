@@ -47,6 +47,7 @@ components:
               type: exam
               id: ia56br8kpous3h9nfemqtwz47y
             data:
+              schema_version: 1
               exam_id: ia56br8kpous3h9nfemqtwz47y
     exam_created:
       name: exam_created
@@ -84,6 +85,7 @@ components:
               type: exam
               id: ia56br8kpous3h9nfemqtwz47y
             data:
+              schema_version: 1
               exam_id: ia56br8kpous3h9nfemqtwz47y
               academic_unit_id: jcx1ia56br8kpous3h9nfemqtw
     exam_draft_updated:

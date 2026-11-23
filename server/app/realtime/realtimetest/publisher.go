@@ -85,6 +85,12 @@ func (p *Publisher) Publish(_ context.Context, event realtime.Event) error {
 	return p.record(Call{Method: Publish, Event: event})
 }
 
+// PublishExamChange records the event. The production throttle owns the
+// follow-up counts hint.
+func (p *Publisher) PublishExamChange(ctx context.Context, event realtime.Event, _ model.ExamID) error {
+	return p.Publish(ctx, event)
+}
+
 // UnbindExamAttemptConnection records the connection ID.
 func (p *Publisher) UnbindExamAttemptConnection(_ context.Context, connectionID model.AttemptConnectionID) error {
 	return p.record(Call{Method: UnbindExamAttemptConnection, ConnectionID: connectionID})

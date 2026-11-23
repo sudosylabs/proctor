@@ -362,6 +362,7 @@ components:
             sequence: 46
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               turn_id: ia56br8kpous3h9nfemqtwz47y
@@ -402,6 +403,7 @@ components:
             sequence: 46
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               turn_id: ia56br8kpous3h9nfemqtwz47y
@@ -440,6 +442,7 @@ components:
             sequence: 46
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               turn_id: ia56br8kpous3h9nfemqtwz47y
@@ -480,6 +483,7 @@ components:
             sequence: 47
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: 8kpous3h9nfemqtwz47ydgjcx1
               exam_attempt_id: h9nfemqtwz47ydgjcx1ia56br8
               tag: assistant:1
@@ -517,6 +521,7 @@ components:
             sequence: 47
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: 8kpous3h9nfemqtwz47ydgjcx1
               exam_attempt_id: h9nfemqtwz47ydgjcx1ia56br8
               tag: assistant:1
@@ -555,6 +560,7 @@ components:
             sequence: 46
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               turn_id: ia56br8kpous3h9nfemqtwz47y
@@ -596,6 +602,7 @@ components:
             sequence: 46
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               turn_id: ia56br8kpous3h9nfemqtwz47y
@@ -640,6 +647,7 @@ components:
             sequence: 46
             user_id: qtwz47ydgjcx1ia56br8kpous3
             data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
               turn_id: ia56br8kpous3h9nfemqtwz47y

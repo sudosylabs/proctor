@@ -29,7 +29,7 @@ func TestBoardChangesAreFollowedByOneThrottledExamCountsEvent(t *testing.T) {
 	}
 	submissions, err := NewSittingSubmissionsChangedEvent(examID, model.NewExamSittingID())
 	require.NoError(t, err)
-	require.NoError(t, service.Publish(context.Background(), submissions))
+	require.NoError(t, service.PublishExamChange(context.Background(), submissions, examID))
 
 	var counts []Event
 	for _, event := range sink.events {
@@ -40,7 +40,7 @@ func TestBoardChangesAreFollowedByOneThrottledExamCountsEvent(t *testing.T) {
 	require.Len(t, counts, 1, "within one window an exam's counts event is sent once now; the rest fold into one trailing event")
 	require.Equal(t, model.ActionExamView, counts[0].Action)
 	require.Equal(t, model.Resource{Type: model.ResourceExam, ID: examID.String()}, counts[0].Resource)
-	require.JSONEq(t, `{"exam_id":"`+examID.String()+`"}`, string(counts[0].Data))
+	require.JSONEq(t, `{"schema_version":1,"exam_id":"`+examID.String()+`"}`, string(counts[0].Data))
 }
 
 func TestOtherEventsCarryNoExamCounts(t *testing.T) {

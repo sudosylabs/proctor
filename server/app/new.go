@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
+	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -154,9 +155,14 @@ func New(deps Dependencies) (*App, error) {
 		Counts:               counts,
 		Realtime:             shared.realtime,
 		RealtimeAdmission: NewRealtimeAdmission(RealtimeAdmissionDependencies{
-			Principals:  identities,
-			Exams:       exams.authoring,
-			Sittings:    exams.sittings,
+			Principals: identities,
+			Exams:      exams.authoring,
+			Sittings:   exams.sittings,
+			Reviews: review.SittingManagerAuthorizer{
+				Reviews:  deps.Store.ExamIntegrityReview(),
+				Sittings: exams.sittings,
+				Audit:    shared.audit,
+			},
 			Authorizer:  authorizer,
 			Operational: deps.OperationalRecorder,
 		}),
@@ -326,6 +332,7 @@ func newAdministration(
 	capabilities *identity.DeploymentCapabilities,
 ) (*administration.Service, error) {
 	return administration.New(administration.Dependencies{
+		AcademicUnits:           deps.Store.AcademicUnit(),
 		Store:                   deps.Store,
 		Authorizer:              authorizer,
 		Auditor:                 shared.audit,

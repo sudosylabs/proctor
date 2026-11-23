@@ -245,7 +245,7 @@ func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, store.ExamAtt
 }
 
 func (f *attemptStoreFake) ResolveAttemptSitting(_ context.Context, attemptID model.ExamAttemptID) (*store.ExamAttemptSitting, error) {
-	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: f.f.sitting.ExamID, SittingID: f.f.sitting.ID}, nil
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: f.f.sitting.ExamID, SittingID: f.f.sitting.ID, CandidateUserID: f.f.userID}, nil
 }
 
 func (f *attemptStoreFake) GetAttemptScreenClip(

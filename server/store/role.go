@@ -197,7 +197,26 @@ type AcademicUnitAdministrators struct {
 	More           int
 }
 
+// RoleBindingExpiryCursor continues a node's scan of crossed binding deadlines.
+type RoleBindingExpiryCursor struct {
+	At time.Time
+	ID model.RoleBindingID
+}
+
+type RoleBindingExpiry struct {
+	Cursor RoleBindingExpiryCursor
+	UserID model.UserID
+}
+
+type RoleBindingExpiryPage struct {
+	CheckedAt time.Time
+	Items     []RoleBindingExpiry
+}
+
 type RoleBindingStore interface {
+	// ListExpiries reads crossed end_at deadlines in chronological order,
+	// using the database clock. The zero cursor starts at the recent past.
+	ListExpiries(context.Context, RoleBindingExpiryCursor, int) (RoleBindingExpiryPage, error)
 	Save(context.Context, *RoleBindingCreation) (*model.RoleBinding, error)
 	Get(context.Context, model.RoleBindingID) (*model.RoleBinding, error)
 	ListByUser(context.Context, model.UserID) ([]*model.RoleBinding, error)

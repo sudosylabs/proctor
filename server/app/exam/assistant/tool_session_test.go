@@ -136,7 +136,7 @@ func TestAssistantSessionRefusalsReachTheModel(t *testing.T) {
 		key:    store.AssistantRunAccess{TurnID: model.NewAssistantTurnID()},
 		recipe: store.AssistantRecipe{Execution: true, Policy: model.AssistantPolicy{Level: model.AssistantLevelPair, Approvals: model.AssistantApprovalAlwaysAsk}},
 	}
-	r.target = realtime.AssistantTarget{SittingID: model.NewExamSittingID(), AttemptID: model.NewExamAttemptID(),
+	r.target = realtime.AssistantTarget{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), AttemptID: model.NewExamAttemptID(),
 		CandidateID: model.NewUserID(), SessionID: model.NewSessionID(), TurnID: r.key.TurnID}
 	publisher.Observe = func(call realtimetest.Call) {
 		if call.Event.Name == "exam_attempt_assistant_approval_requested" {
@@ -240,7 +240,7 @@ func testSessionTool(t *testing.T, started time.Time, now func() time.Time) (*tu
 	editor := store.ExamAttemptWorkspaceEditorAccess{AttemptID: id, CandidateUserID: model.NewUserID()}
 	run := &turnRun{service: &Service{terminals: terminals, transcripts: transcript, publisher: publisher, now: now},
 		ctx: t.Context(), access: attempt.CandidateAccess{AttemptID: id}, key: store.AssistantRunAccess{Editor: editor},
-		target: realtime.AssistantTarget{SittingID: model.NewExamSittingID()}}
+		target: realtime.AssistantTarget{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID()}}
 	return run, transcript, machine, publisher
 }
 
@@ -256,7 +256,7 @@ func TestAssistantToolKillsExpiredSessionBeforeItWrites(t *testing.T) {
 	require.Equal(t, "timed_out", transcript.ends[0].Outcome)
 	require.Nil(t, transcript.ends[0].ExitCode)
 	// The second caller observes the first terminal record and has nothing to publish.
-	_, err := r.service.endSession(t.Context(), r.target.SittingID, r.key.Editor, transcript.sessions[0], environment.AssistantSessionStatus{Outcome: "stopped"})
+	_, err := r.service.endSession(t.Context(), r.target.ExamID, r.target.SittingID, r.key.Editor, transcript.sessions[0], environment.AssistantSessionStatus{Outcome: "stopped"})
 	require.NoError(t, err)
 	require.Len(t, publisher.Calls(), 1)
 	require.Equal(t, "exam_attempt_assistant_session_ended", publisher.Calls()[0].Event.Name)

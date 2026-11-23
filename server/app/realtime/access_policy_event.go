@@ -63,8 +63,8 @@ func NewPluginSettingsChangedEvent(institutionID model.InstitutionID, pluginID m
 }
 
 // NewDesktopCompatibilityPolicyChangedEvent tells the policy's managers to
-// refetch the Desktop compatibility policy and the release list. It carries
-// no data: the policy is institution-wide, so there is no ID to name.
+// refetch the policy, release list and open Sitting count. These reads are
+// Institution-wide, so the event carries no sitting details.
 func NewDesktopCompatibilityPolicyChangedEvent(institutionID model.InstitutionID) (Event, error) {
 	if !institutionID.IsValid() {
 		return Event{}, errors.New("Desktop compatibility policy change event requires the Institution")

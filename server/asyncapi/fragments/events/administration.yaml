@@ -223,7 +223,7 @@ components:
       title: Retention changed
       summary: Refetch retention; the policy, a hold or an Exam's records due changed.
       description: >-
-        Refetch retention: the policy was replaced, a hold was placed or released, or an Exam's records due for
+        Refetch retention: the policy was replaced, a hold was placed, released or became due for review, or an Exam's records due for
         removal changed when a Sitting's records were completed. kind says which. Delivered to connections that
         subscribe to retention_policy.view on the institution.
       tags:

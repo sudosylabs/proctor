@@ -44,7 +44,7 @@ func (s *Service) ListSessions(ctx context.Context, inv invocation.Invocation, a
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(access), candidate.SittingID, candidate.Editor, "")
+	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(access), candidate.ExamID, candidate.SittingID, candidate.Editor, "")
 	if err != nil {
 		return nil, storeFailure(err)
 	}
@@ -93,7 +93,7 @@ func (s *Service) StopSession(ctx context.Context, inv invocation.Invocation, co
 		return model.AssistantSession{}, s.failAudit(ctx, auditID, err)
 	}
 	if ended.Changed {
-		s.publishSessionEnded(ctx, candidate.SittingID, candidate.Editor.AttemptID, session.CandidateUserID, ended)
+		s.publishSessionEnded(ctx, candidate.ExamID, candidate.SittingID, candidate.Editor.AttemptID, session.CandidateUserID, ended)
 	}
 	rows, err := s.transcripts.ListSessions(ctx, store.AssistantSessionQuery{Tag: command.Tag, Owner: sessionOwner(candidate.Editor)})
 	if err != nil {
@@ -137,7 +137,7 @@ func (s *Service) candidateSession(ctx context.Context, inv invocation.Invocatio
 	if !model.ValidAssistantProcessTag(command.Tag) {
 		return candidate, model.AssistantSession{}, sessionNotFound()
 	}
-	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(command.Access), candidate.SittingID, candidate.Editor, command.Tag)
+	rows, err := s.reconcileSessions(ctx, inv, sessionEnvironmentAccess(command.Access), candidate.ExamID, candidate.SittingID, candidate.Editor, command.Tag)
 	if err != nil {
 		return candidate, model.AssistantSession{}, storeFailure(err)
 	}

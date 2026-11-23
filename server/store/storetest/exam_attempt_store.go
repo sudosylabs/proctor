@@ -210,6 +210,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.NoError(t, err)
 	require.True(t, resolved.ConsistentWith(access), "ResolveCandidateAccess returned a result inconsistent with its request")
 	require.Equal(t, store.CandidateAttemptAccessTarget{
+		ExamID:    fixture.examID,
 		AttemptID: input.AttemptID, SittingID: fixture.sitting.ID, ClassID: fixture.sitting.ClassID,
 		CandidateUserID: fixture.candidate.ID, ParticipationID: connected.Participation.ID,
 		Generation: connected.Participation.Generation,
@@ -1508,8 +1509,9 @@ func testSittingCandidateStatusFilters(t *testing.T, ctx context.Context, ss sto
 		PresenceStates: []store.SittingCandidatePresenceState{store.SittingCandidateSuspended},
 	}).Items)
 	require.Empty(t, list(store.SittingCandidateStatusFilter{FailingChecks: true}).Items)
-	require.Len(t, list(store.SittingCandidateStatusFilter{Query: strings.ToUpper(fixture.candidate.Username[:3])}).Items, 1,
+	require.Len(t, list(store.SittingCandidateStatusFilter{Query: strings.ToUpper(fixture.candidate.DisplayName)}).Items, 1,
 		"the name search ignores case")
+	require.Empty(t, list(store.SittingCandidateStatusFilter{Query: fixture.candidate.Username}).Items, "hidden usernames do not match")
 	require.Empty(t, list(store.SittingCandidateStatusFilter{Query: "%"}).Items, "the name search is literal")
 
 	across := func(visibility store.ExamListVisibility) *store.ExamSittingAcrossItem {

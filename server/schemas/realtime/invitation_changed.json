@@ -1,6 +1,6 @@
 {
   "title": "Invitation changed",
-  "description": "Names an Invitation the addressed User issued, the state it reached and the scope it grants at. The accepting User is never included.",
+  "description": "Names an Invitation visible in the addressed scope, the state it reached and the scope it grants at. The accepting User is never included.",
   "type": "object",
   "additionalProperties": false,
   "required": [

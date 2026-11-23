@@ -94,6 +94,7 @@ func NewExamRevisionPublishedEvent(
 }
 
 type examCreatedData struct {
+	SchemaVersion  int    `json:"schema_version"`
 	ExamID         string `json:"exam_id"`
 	AcademicUnitID string `json:"academic_unit_id"`
 }
@@ -104,7 +105,7 @@ func NewExamCreatedEvent(examID model.ExamID, unitID model.AcademicUnitID) (Even
 	if !examID.IsValid() || !unitID.IsValid() {
 		return Event{}, errors.New("exam created event requires a valid Exam and Academic Unit ID")
 	}
-	data, err := json.Marshal(examCreatedData{ExamID: examID.String(), AcademicUnitID: unitID.String()})
+	data, err := json.Marshal(examCreatedData{SchemaVersion: 1, ExamID: examID.String(), AcademicUnitID: unitID.String()})
 	if err != nil {
 		return Event{}, err
 	}

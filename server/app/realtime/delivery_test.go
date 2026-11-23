@@ -65,7 +65,7 @@ func TestExamAuthoringEventsHaveTypedSafePayloads(t *testing.T) {
 	require.Equal(t, "exam_created", created.Name)
 	require.Equal(t, model.ActionExamView, created.Action)
 	require.Equal(t, model.Resource{Type: model.ResourceExam, ID: examID.String()}, created.Resource)
-	require.JSONEq(t, `{"exam_id":"`+examID.String()+`","academic_unit_id":"`+unitID.String()+`"}`, string(created.Data),
+	require.JSONEq(t, `{"schema_version":1,"exam_id":"`+examID.String()+`","academic_unit_id":"`+unitID.String()+`"}`, string(created.Data),
 		"the event names the Exam and its owning unit, and nothing more")
 	updated, err := NewExamDraftUpdatedEvent(examID, 7)
 	require.NoError(t, err)

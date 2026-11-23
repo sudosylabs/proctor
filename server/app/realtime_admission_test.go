@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobs"
@@ -95,6 +96,56 @@ func TestAuthorizeWebSocketSittingManageSubscriptionUsesRelationshipGate(t *test
 		model.Resource{Type: model.ResourceExamSitting, ID: gate.sitting.ID.String()})
 	require.True(t, apperror.Is(err, "resource.not_found"), "a viewer who may not manage: error = %v", err)
 	gate.requireOnlyDecision(t, model.ActionExamSittingManage, model.ResourceExamSitting, gate.sitting.ID.String(), model.AuditStatusFail)
+}
+
+func TestAuthorizeWebSocketSittingSubscriptionsMatchTheReads(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		action  model.Action
+		grants  []model.Action
+		allowed bool
+	}{
+		{name: "sitting viewers cannot subscribe to submissions", action: model.ActionSubmissionView},
+		{name: "submission viewers can subscribe to submissions", action: model.ActionSubmissionView, grants: []model.Action{model.ActionSubmissionView}, allowed: true},
+		{name: "sitting managers cannot subscribe to evidence without submission visibility", action: model.ActionExamSittingManage, grants: []model.Action{model.ActionExamSittingManage}},
+		{name: "submission viewers cannot subscribe to evidence without sitting management", action: model.ActionExamSittingManage, grants: []model.Action{model.ActionSubmissionView}},
+		{name: "users with both permissions can subscribe to evidence", action: model.ActionExamSittingManage, grants: []model.Action{model.ActionExamSittingManage, model.ActionSubmissionView}, allowed: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			gate := newRealtimeGateFixture(t, test.grants...)
+			resource := model.Resource{Type: model.ResourceExamSitting, ID: gate.sitting.ID.String()}
+			err := gate.admission.AuthorizeWebSocketSubscription(t.Context(), invocation.New(gate.manager, model.RequestMetadata{}), test.action, resource)
+			if test.allowed {
+				require.NoError(t, err)
+				return
+			}
+			require.True(t, apperror.Is(err, "resource.not_found"), "denied subscription: %v", err)
+		})
+	}
+}
+
+func TestAuthorizeWebSocketSubmissionSubscriptionUsesReviewGate(t *testing.T) {
+	t.Parallel()
+	gate := newRealtimeGateFixture(t, model.ActionSubmissionView)
+	resource := model.Resource{Type: model.ResourceSubmission, ID: gate.submission.SubmissionID.String()}
+	inv := invocation.New(gate.manager, model.RequestMetadata{})
+	subscribe := func() error {
+		return gate.admission.AuthorizeWebSocketSubscription(t.Context(), inv, model.ActionSubmissionView, resource)
+	}
+
+	require.NoError(t, subscribe())
+
+	gate.examStore.manager = model.NewUserID()
+	err := subscribe()
+	require.True(t, apperror.Is(err, "resource.not_found"), "unrelated submission viewer: %v", err)
+
+	gate.examStore.manager = gate.manager.UserID
+	gate.submission.CandidateUserID = gate.manager.UserID
+	err = subscribe()
+	require.True(t, apperror.Is(err, "resource.not_found"), "manager viewing own submission: %v", err)
 }
 
 // subscriptionUsers holds one active User, related to one unit.
@@ -180,14 +231,16 @@ func TestAuthorizeWebSocketSubscriptionRefusesAResourceTheActionDoesNotAccept(t 
 // Unit has one Sitting; manager is its Exam Manager, a current member of
 // that unit, granted exam.view and exam_sitting.view there.
 type realtimeGateFixture struct {
-	access    *accesstest.Fixture
-	admission *RealtimeAdmission
-	manager   model.Principal
-	exam      *model.Exam
-	sitting   *model.ExamSitting
+	access     *accesstest.Fixture
+	admission  *RealtimeAdmission
+	manager    model.Principal
+	exam       *model.Exam
+	sitting    *model.ExamSitting
+	examStore  *realtimeExamStoreFake
+	submission *store.ExamIntegrityReviewAuthorization
 }
 
-func newRealtimeGateFixture(t *testing.T) realtimeGateFixture {
+func newRealtimeGateFixture(t *testing.T, extraActions ...model.Action) realtimeGateFixture {
 	t.Helper()
 	unitID := model.NewAcademicUnitID()
 	manager := testExamPrincipal(model.NewUserID())
@@ -195,13 +248,18 @@ func newRealtimeGateFixture(t *testing.T) realtimeGateFixture {
 	sittingRecord := &model.ExamSitting{ID: model.NewExamSittingID(), ExamID: examRecord.ID}
 	exams := &realtimeExamStoreFake{exam: examRecord, manager: manager.UserID}
 	sittings := &realtimeSittingStoreFake{snapshot: &store.ExamSittingSnapshot{Sitting: sittingRecord, AcademicUnitID: unitID}}
+	submission := &store.ExamIntegrityReviewAuthorization{
+		SubmissionID: model.NewSubmissionID(), ExamID: examRecord.ID,
+		SittingID: sittingRecord.ID, AttemptID: model.NewExamAttemptID(),
+		CandidateUserID: model.NewUserID(), AcademicUnitID: unitID,
+	}
 	memberships := realtimeMembershipStoreFake{unitID: unitID, userID: manager.UserID}
 	fixture := accesstest.New(t, accesstest.Options{
 		Grants: []accesstest.Grant{{
-			UserID: manager.UserID, Actions: []model.Action{model.ActionExamView, model.ActionExamSittingView},
+			UserID: manager.UserID, Actions: append([]model.Action{model.ActionExamView, model.ActionExamSittingView}, extraActions...),
 			ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
 		}},
-		Exams: exams, Sittings: sittings,
+		Exams: exams, Sittings: sittings, Submissions: realtimeSubmissionStoreFake{submission: submission},
 	})
 	publisher := &realtimetest.Publisher{}
 	authoring, err := exam.NewAuthoring(exam.AuthoringDependencies{
@@ -222,11 +280,18 @@ func newRealtimeGateFixture(t *testing.T) realtimeGateFixture {
 	})
 	require.NoError(t, err)
 	return realtimeGateFixture{
-		access:    fixture,
-		admission: &RealtimeAdmission{exams: authoring, sittings: sittingService, authorization: fixture.Authorizer},
-		manager:   manager,
-		exam:      examRecord,
-		sitting:   sittingRecord,
+		access: fixture,
+		admission: NewRealtimeAdmission(RealtimeAdmissionDependencies{
+			Exams: authoring, Sittings: sittingService, Authorizer: fixture.Authorizer,
+			Reviews: review.SittingManagerAuthorizer{
+				Reviews: realtimeReviewStoreFake{submission: submission}, Sittings: sittingService, Audit: fixture.Auditor,
+			},
+		}),
+		manager:    manager,
+		exam:       examRecord,
+		sitting:    sittingRecord,
+		examStore:  exams,
+		submission: submission,
 	}
 }
 
@@ -260,6 +325,31 @@ func (s *realtimeExamStoreFake) Access(_ context.Context, id model.ExamID, userI
 		return nil, store.NewErrNotFound("exam", id.String())
 	}
 	return &store.ExamAccessSnapshot{Exam: s.exam, ActorIsManager: userID == s.manager}, nil
+}
+
+type realtimeReviewStoreFake struct {
+	store.ExamIntegrityReviewStore
+	submission *store.ExamIntegrityReviewAuthorization
+}
+
+func (s realtimeReviewStoreFake) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamIntegrityReviewAuthorization, error) {
+	if id != s.submission.SubmissionID {
+		return nil, store.NewErrNotFound("submission", id.String())
+	}
+	return s.submission, nil
+}
+
+type realtimeSubmissionStoreFake struct {
+	store.ExamSubmissionStore
+	submission *store.ExamIntegrityReviewAuthorization
+}
+
+func (s realtimeSubmissionStoreFake) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamSubmissionAuthorization, error) {
+	if id != s.submission.SubmissionID {
+		return nil, store.NewErrNotFound("submission", id.String())
+	}
+	projection := store.ExamSubmissionAuthorization(*s.submission)
+	return &projection, nil
 }
 
 type realtimeSittingStoreFake struct {

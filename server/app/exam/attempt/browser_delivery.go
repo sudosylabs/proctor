@@ -129,6 +129,10 @@ func (s *Service) DeclareBrowserDeliveryGaps(
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
 	}
 
+	if value.Status.InterpretationAdvanced {
+		s.publishEvidenceChanged(ctx, value.Status.ExamID, value.Status.SittingID, deliveryAccess.Access.AttemptID, value.Status.ServerTime)
+	}
+
 	return value, nil
 }
 
@@ -189,6 +193,10 @@ func (s *Service) SealBrowserDelivery(
 
 	if value == nil || value.Validate() != nil || value.SourceSessionID != deliveryAccess.SourceSessionID {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
+	}
+
+	if value.InterpretationAdvanced {
+		s.publishEvidenceChanged(ctx, value.ExamID, value.SittingID, deliveryAccess.Access.AttemptID, value.ServerTime)
 	}
 
 	return value, nil
@@ -361,6 +369,10 @@ func (s *Service) AppendHistoricalBrowserDelivery(
 
 	if !validBrowserActivityAcknowledgement(value, b.SourceSessionID, b.Events) {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
+	}
+
+	if value.InterpretationAdvanced {
+		s.publishEvidenceChanged(ctx, value.ExamID, value.SittingID, deliveryAccess.Access.AttemptID, value.ServerTime)
 	}
 
 	return value, nil

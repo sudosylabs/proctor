@@ -331,6 +331,14 @@ type integrityEffects struct {
 // live evidence changed.
 const evidenceHintWindow = 5 * time.Second
 
+// CloseEvidenceHints stops trailing live evidence hints during node shutdown.
+func (s *Service) CloseEvidenceHints(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.evidenceHints.Close(ctx)
+}
+
 // publishEvidenceChanged tells the sitting's managers that the attempt's
 // live evidence changed, throttled per attempt. A lost hint only delays the
 // refresh, so a failure is reported and nothing more.
@@ -533,7 +541,7 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 
 	sessionErr := s.publishSealedAssistantSessions(ctx, result)
 	return errors.Join(sessionErr, s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent),
-		s.publisher.Publish(ctx, submissionsEvent)), nil
+		s.publisher.PublishExamChange(ctx, submissionsEvent, result.ExamID)), nil
 }
 
 // publishAttemptSealedForSittingClose unbinds the connection the seal closed
@@ -572,13 +580,17 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 // PublishAssistantSessionEnded delivers a session closure the environment owner committed.
 func (s *Service) PublishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, result *store.AssistantSessionEndResult) error {
+	snapshot, err := s.sittings.Resolve(ctx, sittingID)
+	if err != nil {
+		return err
+	}
 	call := result.Record.Call
-	return s.publishAssistantSessionEnded(ctx, sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
+	return s.publishAssistantSessionEnded(ctx, snapshot.Sitting.ExamID, sittingID, attemptID, candidate, call.ProcessTag, call.Outcome, result.EndedAt)
 }
 
-func (s *Service) publishAssistantSessionEnded(ctx context.Context, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
+func (s *Service) publishAssistantSessionEnded(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
 	candidate model.UserID, tag, outcome string, at time.Time) error {
-	event, err := realtime.NewAssistantSessionEndedEvent(sittingID, attemptID, candidate, tag, outcome, at)
+	event, err := realtime.NewAssistantSessionEndedEvent(examID, sittingID, attemptID, candidate, tag, outcome, at)
 	if err != nil {
 		return err
 	}
@@ -607,7 +619,7 @@ func (s *Service) publishSealedAssistantSessions(ctx context.Context, result Sub
 	}
 	for _, row := range rows {
 		if row.Outcome == "sealed" {
-			joined = errors.Join(joined, s.publishAssistantSessionEnded(ctx, result.SittingID, result.Receipt.AttemptID,
+			joined = errors.Join(joined, s.publishAssistantSessionEnded(ctx, result.ExamID, result.SittingID, result.Receipt.AttemptID,
 				result.CandidateUserID, row.Tag, row.Outcome, row.EndedAt))
 		}
 	}

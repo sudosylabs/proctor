@@ -4,12 +4,17 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "exam_id",
     "exam_sitting_id",
     "exam_attempt_id",
     "as_of"
   ],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
     "exam_id": {
       "$ref": "id.json"
     },

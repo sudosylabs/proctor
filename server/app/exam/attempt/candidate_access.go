@@ -52,6 +52,7 @@ func candidateSelector(inv invocation.Invocation, candidateAccess CandidateAcces
 // VerifiedCandidateAccess is what VerifyCandidateAttemptAccess proved. It
 // carries no credential.
 type VerifiedCandidateAccess struct {
+	ExamID          model.ExamID
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID
 	ClassID         model.ClassID
@@ -83,6 +84,7 @@ func (s *Service) VerifyCandidateAttemptAccess(
 	}
 
 	return VerifiedCandidateAccess{
+		ExamID:          target.ExamID,
 		AttemptID:       target.AttemptID,
 		SittingID:       target.SittingID,
 		ClassID:         target.ClassID,

@@ -21,7 +21,8 @@ import (
 const examCountsWindow = 5 * time.Second
 
 type examCountsChangedData struct {
-	ExamID string `json:"exam_id"`
+	SchemaVersion int    `json:"schema_version"`
+	ExamID        string `json:"exam_id"`
 }
 
 // NewExamCountsChangedEvent tells an exam's viewers to refetch its catalogue
@@ -30,7 +31,7 @@ func NewExamCountsChangedEvent(examID model.ExamID) (Event, error) {
 	if !examID.IsValid() {
 		return Event{}, errors.New("Exam counts event requires a valid Exam identity")
 	}
-	data, err := json.Marshal(examCountsChangedData{ExamID: examID.String()})
+	data, err := json.Marshal(examCountsChangedData{SchemaVersion: 1, ExamID: examID.String()})
 	if err != nil {
 		return Event{}, fmt.Errorf("encode Exam counts event: %w", err)
 	}
@@ -42,28 +43,10 @@ func NewExamCountsChangedEvent(examID model.ExamID) (Event, error) {
 	}, nil
 }
 
-// countsSource reports the exam whose catalogue counts an event can change.
-// The counts read a sitting's board and its submissions, so every change that
-// refreshes either one may change them.
-func countsSource(event Event) (model.ExamID, bool) {
-	if event.Name != managerSittingBoardChangedMessage.name && event.Name != sittingSubmissionsChangedMessage.name {
-		return "", false
-	}
-	var data struct {
-		ExamID string `json:"exam_id"`
-	}
-	if json.Unmarshal(event.Data, &data) != nil {
-		return "", false
-	}
-	examID, err := model.ParseExamID(data.ExamID)
-	return examID, err == nil
-}
-
 // noteExamCounts follows a delivered board or submissions event with the
 // exam's counts event, at most once per exam per window. It is best effort.
-func (s *Service) noteExamCounts(ctx context.Context, event Event) {
-	examID, ok := countsSource(event)
-	if !ok || s.examCounts == nil {
+func (s *Service) noteExamCounts(ctx context.Context, examID model.ExamID) {
+	if examID.IsZero() || s.examCounts == nil {
 		return
 	}
 	counts, err := NewExamCountsChangedEvent(examID)

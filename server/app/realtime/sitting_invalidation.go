@@ -34,7 +34,7 @@ func PublishSittingBoardChanged(
 		return err
 	}
 
-	return publisher.Publish(ctx, event)
+	return publisher.PublishExamChange(ctx, event, examID)
 }
 
 // PublishCandidateActivityChangedForSitting tells every candidate of a

@@ -34,7 +34,10 @@ func TestThrottledPublisherSendsTheFirstAndTheLastOfABurst(t *testing.T) {
 	var delays []time.Duration
 	sink := &throttleSink{}
 	throttle, err := NewThrottledPublisher(sink, 5*time.Second, func() time.Time { return now },
-		func(delay time.Duration, run func()) { delays, timers = append(delays, delay), append(timers, run) })
+		func(delay time.Duration, run func()) func() {
+			delays, timers = append(delays, delay), append(timers, run)
+			return func() {}
+		})
 	require.NoError(t, err)
 
 	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
@@ -67,4 +70,9 @@ func TestThrottledPublisherSendsTheFirstAndTheLastOfABurst(t *testing.T) {
 	now = now.Add(time.Second)
 	require.NoError(t, throttle.Publish(context.Background(), attempt.String(), "evidence", event(attempt, now)))
 	require.Len(t, sink.published, 3, "the trailing publication starts a new window")
+
+	require.NoError(t, throttle.Close(t.Context()))
+	timers[1]() // A timer callback already scheduled when Close ran.
+	require.NoError(t, throttle.Publish(context.Background(), other.String(), "evidence", event(other, now)))
+	require.Len(t, sink.published, 3, "a closed publisher sends neither pending nor new hints")
 }

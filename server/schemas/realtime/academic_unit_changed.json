@@ -4,9 +4,14 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "academic_unit_id"
   ],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
     "academic_unit_id": {
       "$ref": "id.json"
     },

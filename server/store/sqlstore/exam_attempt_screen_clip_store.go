@@ -832,7 +832,7 @@ func (s *SQLExamAttemptStore) GetAttemptScreenClip(
 	return &view, nil
 }
 
-// ResolveAttemptSitting returns the exam and sitting of an attempt.
+// ResolveAttemptSitting returns the exam, sitting and candidate of an attempt.
 func (s *SQLExamAttemptStore) ResolveAttemptSitting(
 	ctx context.Context,
 	attemptID model.ExamAttemptID,
@@ -841,10 +841,11 @@ func (s *SQLExamAttemptStore) ResolveAttemptSitting(
 		return nil, store.NewErrInvalidInput("exam_attempt", "id", nil)
 	}
 	var row struct {
-		ExamID    string `db:"exam_id"`
-		SittingID string `db:"exam_sitting_id"`
+		ExamID          string `db:"exam_id"`
+		SittingID       string `db:"exam_sitting_id"`
+		CandidateUserID string `db:"candidate_user_id"`
 	}
-	if err := s.GetMaster().Get(ctx, &row, `SELECT exam_id, exam_sitting_id FROM exam_attempts WHERE id = ?`,
+	if err := s.GetMaster().Get(ctx, &row, `SELECT exam_id, exam_sitting_id, candidate_user_id FROM exam_attempts WHERE id = ?`,
 		attemptID.String()); err != nil {
 		return nil, translateError("exam_attempt", attemptID.String(), err)
 	}
@@ -856,5 +857,9 @@ func (s *SQLExamAttemptStore) ResolveAttemptSitting(
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
 	}
-	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: examID, SittingID: sittingID}, nil
+	candidateID, err := model.ParseUserID(row.CandidateUserID)
+	if err != nil {
+		return nil, invalidPersistedState("exam_attempt", "candidate_user_id", err)
+	}
+	return &store.ExamAttemptSitting{AttemptID: attemptID, ExamID: examID, SittingID: sittingID, CandidateUserID: candidateID}, nil
 }

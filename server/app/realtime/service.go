@@ -57,6 +57,14 @@ func New(deps Dependencies) (*Service, error) {
 	return service, nil
 }
 
+// Close stops coalesced refetch hints before the realtime transports drain.
+func (s *Service) Close(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.examCounts.Close(ctx)
+}
+
 // AttachClusterFanout must be called once before the node becomes ready. Peer
 // handlers apply only local effects, so a broadcast never loops.
 func (s *Service) AttachClusterFanout(fanout cluster.Transport) error {
@@ -73,7 +81,6 @@ func (s *Service) AttachSink(sink Sink) error {
 func (s *Service) Publish(ctx context.Context, event Event) error {
 	err := s.deps.Delivery.Publish(ctx, event)
 	if err == nil {
-		s.noteExamCounts(ctx, event)
 		return nil
 	}
 	var invalid *InvalidPublicationError
@@ -81,6 +88,16 @@ func (s *Service) Publish(ctx context.Context, event Event) error {
 		return invalidRealtimeRequest(invalid.Error())
 	}
 	return internalRealtimeError(err)
+}
+
+// PublishExamChange follows a board or submissions hint with a coalesced
+// exam counts hint from its originating node.
+func (s *Service) PublishExamChange(ctx context.Context, event Event, examID model.ExamID) error {
+	if err := s.Publish(ctx, event); err != nil {
+		return err
+	}
+	s.noteExamCounts(ctx, examID)
+	return nil
 }
 
 // UnbindExamAttemptConnection unbinds one attempt connection locally and then
@@ -163,7 +180,7 @@ func (s *Service) SessionsRevoked(
 			publishErr = errors.Join(publishErr, s.Publish(ctx, candidateEvent))
 		}
 		if managerErr == nil {
-			publishErr = errors.Join(publishErr, s.Publish(ctx, managerEvent))
+			publishErr = errors.Join(publishErr, s.PublishExamChange(ctx, managerEvent, target.ExamID))
 		}
 
 		publishErr = errors.Join(publishErr, s.InvalidateCurrentUserContext(ctx, target.CandidateUserID))

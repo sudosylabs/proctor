@@ -78,26 +78,26 @@ func NewCreatorOnboardingImportChangedEvent(
 	return Event{Name: creatorOnboardingImportChangedMessage.name, UserID: creatorID, Data: data}, nil
 }
 
-// NewInvitationChangedEvent goes to the inviter alone, naming the scope the
-// Invitation grants at; the accepting user and their account never travel.
+// NewInvitationChangedEvent tells subscribers to refetch invitations visible
+// in audience. It names the grant's scope without disclosing the accepting
+// user or account.
 func NewInvitationChangedEvent(
-	inviterID model.UserID,
 	invitationID model.InvitationID,
 	state model.InvitationState,
 	scopeType model.RoleScopeType,
 	scopeID string,
+	audience model.Resource,
 ) (Event, error) {
-	if !inviterID.IsValid() || !invitationID.IsValid() || !state.IsValid() ||
+	if !invitationID.IsValid() || !state.IsValid() ||
 		!scopeType.IsValid() || !model.IsValidOpaqueID(scopeID) {
-		return Event{}, errors.New("Invitation change event requires a valid inviter, Invitation, state and scope")
+		return Event{}, errors.New("Invitation change event requires a valid Invitation, state and scope")
+	}
+	definition, _ := model.DefinitionForAction(model.ActionInvitationView)
+	if audience.Validate() != nil || !definition.AcceptsResource(audience.Type) {
+		return Event{}, errors.New("Invitation change event requires a valid audience")
 	}
 
-	data, err := json.Marshal(invitationChangedData{
+	return scopedEvent(invitationChangedMessage, model.ActionInvitationView, audience, invitationChangedData{
 		SchemaVersion: 1, InvitationID: invitationID.String(), State: state, ScopeType: scopeType, ScopeID: scopeID,
 	})
-	if err != nil {
-		return Event{}, fmt.Errorf("encode Invitation change event: %w", err)
-	}
-
-	return Event{Name: invitationChangedMessage.name, UserID: inviterID, Data: data}, nil
 }

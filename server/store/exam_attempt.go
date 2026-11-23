@@ -631,6 +631,7 @@ type CandidateAttemptAccess struct {
 // resolves to: the candidate's active attempt, its sitting and class, and the
 // active participation generation the open connection belongs to.
 type CandidateAttemptAccessTarget struct {
+	ExamID          model.ExamID
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID
 	ClassID         model.ClassID

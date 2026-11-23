@@ -73,7 +73,7 @@ func newTurnRun(s *Service, inv invocation.Invocation, access attempt.CandidateA
 }
 
 func targetOf(candidate attempt.AssistantCandidate, turn model.AssistantTurnID) realtime.AssistantTarget {
-	return realtime.AssistantTarget{SittingID: candidate.SittingID, AttemptID: candidate.Editor.AttemptID,
+	return realtime.AssistantTarget{ExamID: candidate.ExamID, SittingID: candidate.SittingID, AttemptID: candidate.Editor.AttemptID,
 		CandidateID: candidate.Editor.CandidateUserID, SessionID: candidate.Editor.SessionID, TurnID: turn}
 }
 

@@ -78,6 +78,12 @@ func (s *Server) runShutdown(plan stopPlan, endRun context.CancelFunc) error {
 		func(ctx context.Context) error { return s.components.assistant.Close(ctx) },
 		draining(s.components.jobs),
 		draining(s.components.environments),
+		func(ctx context.Context) error {
+			if s.components.stopRealtimeHints == nil {
+				return nil
+			}
+			return s.components.stopRealtimeHints(ctx)
+		},
 		draining(s.components.websocket),
 		closing(s.components.transport),
 		func(ctx context.Context) error {

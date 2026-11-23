@@ -275,6 +275,10 @@ func (recoveryRoleStore) Archive(context.Context, *store.RoleArchive) (*model.Ro
 
 type recoveryRoleBindingStore struct{ root *recoveryAuthorizationStore }
 
+func (recoveryRoleBindingStore) ListExpiries(context.Context, store.RoleBindingExpiryCursor, int) (store.RoleBindingExpiryPage, error) {
+	return store.RoleBindingExpiryPage{CheckedAt: model.NowUTC()}, nil
+}
+
 func (s recoveryRoleBindingStore) ListActiveByUser(_ context.Context, userID model.UserID, at time.Time) ([]*model.RoleBinding, error) {
 	out := make([]*model.RoleBinding, 0)
 	for _, binding := range s.root.bindings {

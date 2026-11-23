@@ -560,8 +560,12 @@ func (h *Hub) CloseSession(sessionID string, reason realtime.ConnectionCloseReas
 // CloseUser implements realtime.Sink.
 func (h *Hub) CloseUser(userID string, reason realtime.ConnectionCloseReason) {
 	code, text := closeCodeForReason(reason)
+	userView := Subscription{Action: model.ActionUserView, Resource: Resource{Type: model.ResourceUser, ID: userID}}
 	h.closeMatching(code, text, func(connection *connectionRuntime) bool {
-		return connection.belongsToUser(userID)
+		// A change to the subject's memberships can also remove a viewer's
+		// relationship to that User. Reconnect checks the subscription again.
+		return connection.belongsToUser(userID) ||
+			(reason == realtime.ConnectionCloseAuthorizationChanged && connection.hasSubscription(userView))
 	})
 }
 

@@ -485,7 +485,7 @@ func (s sealedAssistantSessions) ListSessions(_ context.Context, query store.Ass
 func TestSealedSessionEffectKillsOnlyTheSessionsTheSealEnded(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	result := SubmissionResult{SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(),
+	result := SubmissionResult{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(),
 		Receipt: store.ExamSubmissionReceipt{SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID()}}
 	publisher := &realtimetest.Publisher{}
 	unavailable := errors.New("guest could not be reached")

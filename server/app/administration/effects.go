@@ -34,7 +34,7 @@ func (s *Service) publishRoleChanged(ctx context.Context, institution model.Reso
 // publishRoleBindingChanged reports a failed publication without failing the
 // use case.
 func (s *Service) publishRoleBindingChanged(ctx context.Context, binding *model.RoleBinding) {
-	if err := realtime.PublishRoleBindingChanged(ctx, s.publisher, s.classes, binding); err != nil {
+	if err := realtime.PublishRoleBindingChanged(ctx, s.publisher, s.classes, s.academicUnits, binding); err != nil {
 		s.publisher.Report(ctx, "role_binding.changed", err)
 	}
 }

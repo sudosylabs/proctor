@@ -57,15 +57,15 @@ func conformanceConstructors() map[string]func() (Event, error) {
 	released := finalized
 	released.ReleaseState = model.SubmissionReviewReleased
 
-	assistantTarget := AssistantTarget{SittingID: sittingID, AttemptID: attemptID, CandidateID: candidateID,
+	assistantTarget := AssistantTarget{ExamID: examID, SittingID: sittingID, AttemptID: attemptID, CandidateID: candidateID,
 		SessionID: model.NewSessionID(), TurnID: model.NewAssistantTurnID()}
 
 	return map[string]func() (Event, error){
 		"exam_attempt_assistant_session_started": func() (Event, error) {
-			return NewAssistantSessionStartedEvent(sittingID, attemptID, candidateID, "assistant:1", at)
+			return NewAssistantSessionStartedEvent(examID, sittingID, attemptID, candidateID, "assistant:1", at)
 		},
 		"exam_attempt_assistant_session_ended": func() (Event, error) {
-			return NewAssistantSessionEndedEvent(sittingID, attemptID, candidateID, "assistant:1", "stopped", at)
+			return NewAssistantSessionEndedEvent(examID, sittingID, attemptID, candidateID, "assistant:1", "stopped", at)
 		},
 		"exam_attempt_assistant_turn_started": func() (Event, error) {
 			return NewAssistantTurnStartedEvent(assistantTarget, model.NewAssistantConversationID(), at)
@@ -124,8 +124,9 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"current_user.context.changed":  func() (Event, error) { return NewCurrentUserContextChangedEvent(candidateID) },
 		"current_user.sessions.changed": func() (Event, error) { return NewCurrentUserSessionsChangedEvent(candidateID) },
 		"invitation.changed": func() (Event, error) {
-			return NewInvitationChangedEvent(model.NewUserID(), model.NewInvitationID(), model.InvitationAccepted,
-				model.RoleScopeAcademicUnit, model.NewAcademicUnitID().String())
+			return NewInvitationChangedEvent(model.NewInvitationID(), model.InvitationAccepted,
+				model.RoleScopeClass, model.NewClassID().String(),
+				model.Resource{Type: model.ResourceInstitution, ID: model.NewInstitutionID().String()})
 		},
 		// The status-only form is checked by
 		// TestJobAndOnboardingImportEventsCoverEveryStatusAndScope.

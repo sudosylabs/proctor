@@ -18,6 +18,7 @@ import (
 // academicUnitChangedData names the unit and its parent, which a viewer of
 // the unit already reads; a root unit has no parent.
 type academicUnitChangedData struct {
+	SchemaVersion        int    `json:"schema_version"`
 	AcademicUnitID       string `json:"academic_unit_id"`
 	ParentAcademicUnitID string `json:"parent_academic_unit_id,omitempty"`
 }
@@ -43,7 +44,7 @@ func newAcademicUnitEvent(declared message, unitID, parentID model.AcademicUnitI
 	if !unitID.IsValid() || (!parentID.IsZero() && !parentID.IsValid()) || parentID == unitID {
 		return Event{}, errors.New("Academic Unit event requires a valid Academic Unit and parent identity")
 	}
-	data, err := json.Marshal(academicUnitChangedData{AcademicUnitID: unitID.String(), ParentAcademicUnitID: parentID.String()})
+	data, err := json.Marshal(academicUnitChangedData{SchemaVersion: 1, AcademicUnitID: unitID.String(), ParentAcademicUnitID: parentID.String()})
 	if err != nil {
 		return Event{}, fmt.Errorf("encode Academic Unit event: %w", err)
 	}

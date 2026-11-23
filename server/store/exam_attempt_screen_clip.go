@@ -129,11 +129,11 @@ type ExamAttemptScreenClipCompletion struct {
 	Signature     string
 }
 
-// ExamAttemptSitting names the exam and sitting an attempt belongs to, for
-// the realtime hints a candidate's clip transitions owe the sitting's
-// managers.
+// ExamAttemptSitting is the identity needed to scope clip access and
+// invalidations.
 type ExamAttemptSitting struct {
-	AttemptID model.ExamAttemptID
-	ExamID    model.ExamID
-	SittingID model.ExamSittingID
+	AttemptID       model.ExamAttemptID
+	ExamID          model.ExamID
+	SittingID       model.ExamSittingID
+	CandidateUserID model.UserID
 }

@@ -24925,7 +24925,10 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["RetentionRecordsResponse"] | components["schemas"]["RetentionExamSummariesResponse"];
+                "application/json": {
+                    items: Record<string, never>[];
+                    next_cursor?: components["schemas"]["NextCursor"];
+                } | components["schemas"]["RetentionRecordsResponse"] | components["schemas"]["RetentionExamSummariesResponse"];
             };
         };
         /** @description Role Binding created */

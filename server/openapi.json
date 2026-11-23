@@ -10323,7 +10323,23 @@
                 {
                   "$ref": "#/components/schemas/RetentionExamSummariesResponse"
                 }
-              ]
+              ],
+              "properties": {
+                "items": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "maxItems": 800,
+                  "type": "array"
+                },
+                "next_cursor": {
+                  "$ref": "#/components/schemas/NextCursor"
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "type": "object"
             }
           }
         },

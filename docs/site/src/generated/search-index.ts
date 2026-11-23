@@ -1452,11 +1452,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Academic structure",
     "title": "List or search Academic Periods visible through authorized owner scopes",
-    "description": "Lists the Academic Periods the caller can see through permissions on the Institution or on Academic Units, ordered by start time, then name, then identifier. An Academic Period is a span of academic time, such as a year or semester. Seeing one gives no access to its Classes or students.",
+    "description": "Lists the Academic Periods the caller can see through permissions on the Institution or on Academic Units, ordered by `sort` and `dir`: by default by start time, then name, then identifier, oldest first. An Academic Period is a span of academic time, such as a year or semester. Seeing one gives no access to its Classes or students. Each item carries `class_count`, the active Classes of the Period that you hold class.view on, counted up to 10,000, with `class_count_is_lower_bound`; both are omitted if you hold class.view nowhere.",
     "href": "/api/reference/list-academic-periods",
     "method": "GET",
     "path": "/api/v1/academic-periods",
-    "searchText": "listacademicperiods list or search academic periods visible through authorized owner scopes lists the academic periods the caller can see through permissions on the institution or on academic units, ordered by start time, then name, then identifier. an academic period is a span of academic time, such as a year or semester. seeing one gives no access to its classes or students. academic structure get /api/v1/academic-periods principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listacademicperiods list or search academic periods visible through authorized owner scopes lists the academic periods the caller can see through permissions on the institution or on academic units, ordered by `sort` and `dir`: by default by start time, then name, then identifier, oldest first. an academic period is a span of academic time, such as a year or semester. seeing one gives no access to its classes or students. each item carries `class_count`, the active classes of the period that you hold class.view on, counted up to 10,000, with `class_count_is_lower_bound`; both are omitted if you hold class.view nowhere. academic structure get /api/v1/academic-periods principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:createAcademicPeriod",
@@ -1705,11 +1705,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Administration",
     "title": "Summarise administration work waiting on the caller",
-    "description": "Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. Each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.",
+    "description": "Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the Institution's Sittings under way (open, paused or closing), for a holder of Institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. Each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. A count the caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is true. Only an interactive Session may read the counts.",
     "href": "/api/reference/get-administration-counts",
     "method": "GET",
     "path": "/api/v1/administration/counts",
-    "searchText": "getadministrationcounts summarise administration work waiting on the caller returns the counts shown as badges in administration navigation. `pending_invitations` counts pending invitations that have not expired. `failed_jobs` counts operator-visible jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. a count the caller may not list is left out, together with its `_is_lower_bound` flag. if a count can't be read, the request fails rather than reporting zero. counting stops at 1,000: the count is then 1,000 and its flag is true. only an interactive session may read the counts. administration get /api/v1/administration/counts session_required none administration.unavailable authorization.denied authorization.request.invalid authorization.unavailable invitation.unavailable job.query.invalid job.unavailable mail.unavailable onboarding_import.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "getadministrationcounts summarise administration work waiting on the caller returns the counts shown as badges in administration navigation. `pending_invitations` counts pending invitations that have not expired. `failed_jobs` counts operator-visible jobs that failed in the last seven days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. suppressed and canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding imports that are still uploading, parsing, waiting to be committed or running, not counting student progressions. `open_sittings` counts the institution's sittings under way (open, paused or closing), for a holder of institution-wide desktop_compatibility_policy.manage, so they can see what a maintenance window would interrupt. each count applies the same permission and visibility checks as its resource's own list, and records the permission decision the same way, so it counts only what the caller could list. a count the caller may not list is left out, together with its `_is_lower_bound` flag. if a count can't be read, the request fails rather than reporting zero. counting stops at 1,000: the count is then 1,000 and its flag is true. only an interactive session may read the counts. administration get /api/v1/administration/counts session_required none administration.unavailable authorization.denied authorization.request.invalid authorization.unavailable desktop_compatibility_policy.revision_conflict desktop_compatibility_policy.unavailable invitation.unavailable job.query.invalid job.unavailable mail.unavailable onboarding_import.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:endAffiliation",
@@ -2343,11 +2343,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Academic structure",
     "title": "Get a Class using exact Class scope authorization",
-    "description": "Returns one active Class. Proctor checks the caller's permission on this Class itself. Being able to list Classes elsewhere is not enough. The response names its Programme Level and Academic Period and does not include its students.",
+    "description": "Returns one active Class. Proctor checks the caller's permission on this Class itself. Being able to list Classes elsewhere is not enough. The response names its Programme Level and Academic Period and does not include its students. A caller who holds class.members.view on the Class also gets its first three teachers.",
     "href": "/api/reference/get-class",
     "method": "GET",
     "path": "/api/v1/classes/{class_id}",
-    "searchText": "getclass get a class using exact class scope authorization returns one active class. proctor checks the caller's permission on this class itself. being able to list classes elsewhere is not enough. the response names its programme level and academic period and does not include its students. academic structure get /api/v1/classes/{class_id} principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "getclass get a class using exact class scope authorization returns one active class. proctor checks the caller's permission on this class itself. being able to list classes elsewhere is not enough. the response names its programme level and academic period and does not include its students. a caller who holds class.members.view on the class also gets its first three teachers. academic structure get /api/v1/classes/{class_id} principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:updateClass",
@@ -2414,6 +2414,17 @@ export const searchEntries = [
     "method": "PUT",
     "path": "/api/v1/desktop-compatibility-policy",
     "searchText": "replacedesktopcompatibilitypolicy replace the institution desktop compatibility policy replaces the whole policy. send the `revision` you read as `expected_revision`. if the policy has changed since, the request fails and nothing changes. the request needs a recent, strongly authenticated interactive system administrator session and an idempotency-key, and it fails if the change can't be audited. revoked build ids and the administrator message are left out of ordinary audit records. access policy put /api/v1/desktop-compatibility-policy strong_recent_session_required required authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress request.invalid desktop_compatibility_policy.invalid desktop_compatibility_policy.revision_conflict desktop_compatibility_policy.unavailable resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid authentication.strong_required authentication.reauthentication_required"
+  },
+  {
+    "id": "operation:listDesktopReleases",
+    "kind": "endpoint",
+    "group": "Access policy",
+    "title": "List the Proctor Desktop builds this server verifies",
+    "description": "Lists the verified Proctor Desktop builds compiled into this server release, newest release first, with when each was released and which is the newest for its platform and architecture. The Desktop Compatibility Policy can only narrow this list. It needs access_policy.view on the Institution, as reading the policy does. It is empty until signed releases exist.",
+    "href": "/api/reference/list-desktop-releases",
+    "method": "GET",
+    "path": "/api/v1/desktop-releases",
+    "searchText": "listdesktopreleases list the proctor desktop builds this server verifies lists the verified proctor desktop builds compiled into this server release, newest release first, with when each was released and which is the newest for its platform and architecture. the desktop compatibility policy can only narrow this list. it needs access_policy.view on the institution, as reading the policy does. it is empty until signed releases exist. access policy get /api/v1/desktop-releases principal_required none authorization.denied authorization.request.invalid authorization.unavailable desktop_compatibility_policy.revision_conflict desktop_compatibility_policy.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getPublicAccessDiscovery",
@@ -2966,26 +2977,37 @@ export const searchEntries = [
     "searchText": "getcandidateexamworkspacecontent render a protected candidate workspace file inline streams one file from the active workspace. before it sends anything, the server checks the session, the attempt credential, the open connection, the current participation, and that the attempt can still be read. the response never reveals where the file is stored. responses are private and not cached (no-store), use nosniff, carry an etag, and return 304 when the content has not changed. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.sitting_not_open exam.attempt.state_conflict exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listExamSittingsAcrossExams",
+    "kind": "endpoint",
+    "group": "Sittings",
+    "title": "List Sittings across the Exams you can see",
+    "description": "Lists the Sittings of every Exam where you hold exam.sitting.view, earliest start first. An ordinary grant reaches the Exams you manage in a unit you belong to; an override grant reaches every Exam under it. Each row names its Exam and Class. An open or paused Sitting also carries its candidate board's counts, without you, and needs_attention_count: its candidates who are suspended, fail an enforced native check, or have unresolved integrity attention. Bounded and cursor-paged.",
+    "href": "/api/reference/list-exam-sittings-across-exams",
+    "method": "GET",
+    "path": "/api/v1/exam-sittings",
+    "searchText": "listexamsittingsacrossexams list sittings across the exams you can see lists the sittings of every exam where you hold exam.sitting.view, earliest start first. an ordinary grant reaches the exams you manage in a unit you belong to; an override grant reaches every exam under it. each row names its exam and class. an open or paused sitting also carries its candidate board's counts, without you, and needs_attention_count: its candidates who are suspended, fail an enforced native check, or have unresolved integrity attention. bounded and cursor-paged. sittings get /api/v1/exam-sittings principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:getSecurityPolicyOverview",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
     "title": "Read the policy for the readiness overview",
-    "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.",
+    "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview. It works on an open Sitting, and on a scheduled one from its join_opens_at until its scheduled start, so a candidate who joined early can prepare while the Attempt itself waits for the start.",
     "href": "/api/reference/get-security-policy-overview",
     "method": "GET",
     "path": "/api/v1/exam-sittings/{exam_sitting_id}/security-policy",
-    "searchText": "getsecuritypolicyoverview read the policy for the readiness overview resolves the sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's desktop shows before start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. it creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. at start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview. attempts and workspaces get /api/v1/exam-sittings/{exam_sitting_id}/security-policy session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.registered_desktop_required exam.attempt.desktop_incompatible exam.attempt.sitting_not_open exam.attempt.management_authority_conflict exam.attempt.unavailable exam.security.unsupported_capability exam.security.catalog_missing exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "getsecuritypolicyoverview read the policy for the readiness overview resolves the sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's desktop shows before start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. it creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. at start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview. it works on an open sitting, and on a scheduled one from its join_opens_at until its scheduled start, so a candidate who joined early can prepare while the attempt itself waits for the start. attempts and workspaces get /api/v1/exam-sittings/{exam_sitting_id}/security-policy session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.registered_desktop_required exam.attempt.desktop_incompatible exam.attempt.sitting_not_open exam.attempt.management_authority_conflict exam.attempt.unavailable exam.security.unsupported_capability exam.security.catalog_missing exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:prepareSecurityPreflight",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
     "title": "Prepare a secure Desktop admission challenge",
-    "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed.",
+    "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed. During a Sitting's early-join phase, from join_opens_at until its scheduled start, a candidate can prepare and report a preflight to check their machine; Connect stays closed until the Sitting opens, so prepare again then.",
     "href": "/api/reference/prepare-security-preflight",
     "method": "POST",
     "path": "/api/v1/exam-sittings/{exam_sitting_id}/security-preflights",
-    "searchText": "preparesecuritypreflight prepare a secure desktop admission challenge requires an eligible registered desktop session and an exact admitted build, capability registry and configuration manifest. stores one pending 120-second challenge per session and sitting; a successor supersedes it. does not create an attempt, workspace or participation. ready rejoin returns frozen configuration; active and suspended attempts cannot obtain a replacement preflight. unavailable institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed. attempts and workspaces post /api/v1/exam-sittings/{exam_sitting_id}/security-preflights session_required required audit.unavailable exam.delivery.control_rate_limited request.invalid resource.not_found exam.attempt.invalid exam.attempt.registered_desktop_required exam.attempt.desktop_incompatible exam.attempt.sitting_not_open exam.attempt.management_authority_conflict exam.attempt.configuration_unsupported exam.attempt.unavailable exam.security.preflight_expired exam.security.preflight_superseded exam.security.preflight_consumed exam.security.preflight_rate_limited exam.security.policy_changed exam.security.session_changed exam.security.configuration_unsupported exam.security.attempt_not_ready exam.security.catalog_missing exam.security.unsupported_capability idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+    "searchText": "preparesecuritypreflight prepare a secure desktop admission challenge requires an eligible registered desktop session and an exact admitted build, capability registry and configuration manifest. stores one pending 120-second challenge per session and sitting; a successor supersedes it. does not create an attempt, workspace or participation. ready rejoin returns frozen configuration; active and suspended attempts cannot obtain a replacement preflight. unavailable institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed. during a sitting's early-join phase, from join_opens_at until its scheduled start, a candidate can prepare and report a preflight to check their machine; connect stays closed until the sitting opens, so prepare again then. attempts and workspaces post /api/v1/exam-sittings/{exam_sitting_id}/security-preflights session_required required audit.unavailable exam.delivery.control_rate_limited request.invalid resource.not_found exam.attempt.invalid exam.attempt.registered_desktop_required exam.attempt.desktop_incompatible exam.attempt.sitting_not_open exam.attempt.management_authority_conflict exam.attempt.configuration_unsupported exam.attempt.unavailable exam.security.preflight_expired exam.security.preflight_superseded exam.security.preflight_consumed exam.security.preflight_rate_limited exam.security.policy_changed exam.security.session_changed exam.security.configuration_unsupported exam.security.attempt_not_ready exam.security.catalog_missing exam.security.unsupported_capability idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:listExams",
@@ -3032,6 +3054,17 @@ export const searchEntries = [
     "searchText": "archiveexam archive an active exam archives an active exam. the change is made only if expected_revision still matches the exam's current revision, so a manager working from an old copy can't hide newer work. archiving keeps the draft, published revisions, manager history, sittings, attempts and audit history. examinations post /api/v1/exams/{exam_id}/archive principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.archived exam.revision_conflict exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:copyExam",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "Create a new Exam from a copy of another Exam's current Draft",
+    "description": "Creates a new Exam in the given Academic Unit whose Draft copies the source's current Draft: its instructions, every integrity, execution and assistant rule, its browser rules, its Resources and its Starter Workspace. An archived Exam can be copied too. You become the new Exam's owner and only Manager. Revisions, Sittings, Submissions, other Managers and retention holds are never copied. You must be able to manage the source and be allowed to create Exams in the target Academic Unit. The copy is recorded in the audit history of both Exams. Send an Idempotency-Key: retrying with the same key and body returns the original copy.",
+    "href": "/api/reference/copy-exam",
+    "method": "POST",
+    "path": "/api/v1/exams/{exam_id}/copy",
+    "searchText": "copyexam create a new exam from a copy of another exam's current draft creates a new exam in the given academic unit whose draft copies the source's current draft: its instructions, every integrity, execution and assistant rule, its browser rules, its resources and its starter workspace. an archived exam can be copied too. you become the new exam's owner and only manager. revisions, sittings, submissions, other managers and retention holds are never copied. you must be able to manage the source and be allowed to create exams in the target academic unit. the copy is recorded in the audit history of both exams. send an idempotency-key: retrying with the same key and body returns the original copy. examinations post /api/v1/exams/{exam_id}/copy principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.conflict exam.revision.capacity_exceeded exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
     "id": "operation:editExamDraftText",
     "kind": "endpoint",
     "group": "Examinations",
@@ -3063,6 +3096,17 @@ export const searchEntries = [
     "method": "PUT",
     "path": "/api/v1/exams/{exam_id}/draft/browser-policy",
     "searchText": "configureexamdraftbrowserpolicy replace the browser policy on the active exam draft replaces the whole browser policy on the draft. the change is made only if expected_revision still matches the draft's current revision. a disabled policy has no rules. an enabled policy lists the sites candidates may open, and proctor matches pages against them by host and path in a fixed order. examinations put /api/v1/exams/{exam_id}/draft/browser-policy principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.archived exam.draft.revision_conflict exam.draft.no_changes exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:checkExamDraft",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "List every reason the current Draft can't be published",
+    "description": "Runs the checks publishing runs on the current Draft and lists every one it fails, instead of stopping at the first. Nothing is published or changed. When publishable is true, publishing with expected_revision set to draft_revision succeeds unless the Draft or the installation changes first. Needs the same permission as publishing.",
+    "href": "/api/reference/check-exam-draft",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/draft/check",
+    "searchText": "checkexamdraft list every reason the current draft can't be published runs the checks publishing runs on the current draft and lists every one it fails, instead of stopping at the first. nothing is published or changed. when publishable is true, publishing with expected_revision set to draft_revision succeeds unless the draft or the installation changes first. needs the same permission as publishing. examinations get /api/v1/exams/{exam_id}/draft/check principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.invalid exam.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:configureExamDraftExecution",
@@ -3362,6 +3406,61 @@ export const searchEntries = [
     "searchText": "getexamrevision get bounded immutable exam revision metadata returns one published revision. it checks that the revision belongs to this exam and that you can currently manage the exam. the response holds publication details and digests, not the current draft or any file content. examinations get /api/v1/exams/{exam_id}/revisions/{exam_revision_id} principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.invalid exam.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:getExamRevisionContent",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "Read the title, instructions and policies a Revision froze",
+    "description": "Returns the title, instructions, integrity rules and browser rules exactly as the Revision froze them, in the same shape as the Draft, so you can compare a Revision with the Draft or with another Revision. Read-only. Needs the same permission as reading the Draft.",
+    "href": "/api/reference/get-exam-revision-content",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/revisions/{exam_revision_id}/content",
+    "searchText": "getexamrevisioncontent read the title, instructions and policies a revision froze returns the title, instructions, integrity rules and browser rules exactly as the revision froze them, in the same shape as the draft, so you can compare a revision with the draft or with another revision. read-only. needs the same permission as reading the draft. examinations get /api/v1/exams/{exam_id}/revisions/{exam_revision_id}/content principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.invalid exam.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:listExamRevisionResources",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "List the Resources a Revision froze",
+    "description": "Returns every Resource the Revision froze, in order, with its name, description, content revision, media type, size and SHA-256 digest, like the Draft's Resource list. It does not return file content; read that through the Resource's content operation.",
+    "href": "/api/reference/list-exam-revision-resources",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/revisions/{exam_revision_id}/resources",
+    "searchText": "listexamrevisionresources list the resources a revision froze returns every resource the revision froze, in order, with its name, description, content revision, media type, size and sha-256 digest, like the draft's resource list. it does not return file content; read that through the resource's content operation. examinations get /api/v1/exams/{exam_id}/revisions/{exam_revision_id}/resources principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.invalid exam.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:getExamRevisionResourceContent",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "Render a Resource as a Revision froze it",
+    "description": "Returns the Resource's content as the Revision froze it, for display inside the application, after checking your access. It is not a public link and not a download or export.",
+    "href": "/api/reference/get-exam-revision-resource-content",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/revisions/{exam_revision_id}/resources/{exam_resource_id}/content",
+    "searchText": "getexamrevisionresourcecontent render a resource as a revision froze it returns the resource's content as the revision froze it, for display inside the application, after checking your access. it is not a public link and not a download or export. examinations get /api/v1/exams/{exam_id}/revisions/{exam_revision_id}/resources/{exam_resource_id}/content principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.invalid exam.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:listExamRevisionStarterWorkspace",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "List the Starter Workspace a Revision froze",
+    "description": "Returns every file and directory of the Starter Workspace the Revision froze, in path order, with each file's content version, media type, size and SHA-256 digest. It does not return file content.",
+    "href": "/api/reference/list-exam-revision-starter-workspace",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/revisions/{exam_revision_id}/starter-workspace",
+    "searchText": "listexamrevisionstarterworkspace list the starter workspace a revision froze returns every file and directory of the starter workspace the revision froze, in path order, with each file's content version, media type, size and sha-256 digest. it does not return file content. examinations get /api/v1/exams/{exam_id}/revisions/{exam_revision_id}/starter-workspace principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.invalid exam.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:getExamRevisionStarterWorkspaceFileContent",
+    "kind": "endpoint",
+    "group": "Examinations",
+    "title": "Read a Starter Workspace file as a Revision froze it",
+    "description": "Returns one Starter Workspace file's bytes as the Revision froze them, for display inside the application. A directory has no content and is not found.",
+    "href": "/api/reference/get-exam-revision-starter-workspace-file-content",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/revisions/{exam_revision_id}/starter-workspace/files/{starter_workspace_entry_id}/content",
+    "searchText": "getexamrevisionstarterworkspacefilecontent read a starter workspace file as a revision froze it returns one starter workspace file's bytes as the revision froze them, for display inside the application. a directory has no content and is not found. examinations get /api/v1/exams/{exam_id}/revisions/{exam_revision_id}/starter-workspace/files/{starter_workspace_entry_id}/content principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.invalid exam.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:listExamSittings",
     "kind": "endpoint",
     "group": "Sittings",
@@ -3461,6 +3560,39 @@ export const searchEntries = [
     "searchText": "replaceexamattemptenvironment replace a candidate's execution environment with a new machine an exam manager's repair for an execution environment that misbehaves. names the incarnation the manager saw on the candidate-status board; the environment's owner then replaces that machine with a new incarnation built from the attempt workspace and records the restart as an execution.gap. nothing the candidate saved is lost; processes, terminals and ignored files that only the old machine held are. repeating the request for the same incarnation changes nothing; a newer incarnation fails with exam.attempt.environment_changed and an ended environment with exam.attempt.environment_ended. like a kick, it is refused once the sitting is closing. attempts and workspaces post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/environment/replace principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.environment_changed exam.attempt.environment_ended exam.attempt.sitting_not_open exam.attempt.conflict exam.attempt.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:listLiveAttemptIntegrityFlags",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "List a running Attempt's integrity Flags",
+    "description": "Lists the Attempt's integrity Flags opened in the window, in the shape the Submission's Flag read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+    "href": "/api/reference/list-live-attempt-integrity-flags",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags",
+    "searchText": "listliveattemptintegrityflags list a running attempt's integrity flags lists the attempt's integrity flags opened in the window, in the shape the submission's flag read uses. read-only and scoped to one attempt of the sitting, while it runs or after. needs exam.sitting.manage and submission.view on the sitting, with the manager relationship; both decisions are recorded, as an evidence read is. you never read evidence about yourself. complete is true once the attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of. integrity review get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:listLiveAttemptIntegrityEvidence",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "List one Flag's evidence on a running Attempt",
+    "description": "Lists the evidence of one of the Attempt's Flags observed in the window, in the shape the Submission's evidence read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+    "href": "/api/reference/list-live-attempt-integrity-evidence",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags/{integrity_flag_id}/evidence",
+    "searchText": "listliveattemptintegrityevidence list one flag's evidence on a running attempt lists the evidence of one of the attempt's flags observed in the window, in the shape the submission's evidence read uses. read-only and scoped to one attempt of the sitting, while it runs or after. needs exam.sitting.manage and submission.view on the sitting, with the manager relationship; both decisions are recorded, as an evidence read is. you never read evidence about yourself. complete is true once the attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of. integrity review get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/integrity-flags/{integrity_flag_id}/evidence principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:listLiveAttemptNativeConditions",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "List a running Attempt's native condition records",
+    "description": "Lists the Attempt's native condition records whose rule changed in the window, in the shape the Submission's native condition read uses. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+    "href": "/api/reference/list-live-attempt-native-conditions",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/native-conditions",
+    "searchText": "listliveattemptnativeconditions list a running attempt's native condition records lists the attempt's native condition records whose rule changed in the window, in the shape the submission's native condition read uses. read-only and scoped to one attempt of the sitting, while it runs or after. needs exam.sitting.manage and submission.view on the sitting, with the manager relationship; both decisions are recorded, as an evidence read is. you never read evidence about yourself. complete is true once the attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of. integrity review get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/native-conditions principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:reallowExamAttempt",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
@@ -3476,11 +3608,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Attempts and workspaces",
     "title": "List an Attempt's screen clips",
-    "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never returned.",
+    "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. An incident clip names its integrity Flag and a manager clip names who asked for it. The manager's private reason is returned only to a caller who manages the Sitting, never to a reviewer.",
     "href": "/api/reference/list-exam-attempt-screen-clips",
     "method": "GET",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips",
-    "searchText": "listexamattemptscreenclips list an attempt's screen clips lists, newest first, every clip requested for the attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. managers' reasons are never returned. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listexamattemptscreenclips list an attempt's screen clips lists, newest first, every clip requested for the attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. an incident clip names its integrity flag and a manager clip names who asked for it. the manager's private reason is returned only to a caller who manages the sitting, never to a reviewer. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:requestExamAttemptScreenClip",
@@ -3547,6 +3679,17 @@ export const searchEntries = [
     "method": "POST",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend",
     "searchText": "suspendexamattempt suspend (kick) one exact active exam attempt lets an exam manager suspend an attempt at once. it ends the active participation generation as kicked, closes its open connection and opens one manual suspension, with no integrity flag. while suspended, the attempt refuses connections, workspace and exam material access, and submission until someone allowed to re-allows it. the candidate sees only the reason manager_suspended. the manager's private reason is kept only in the suspension record. database time decides the outcome. once the sitting's scheduled end has passed, the request fails with exam.attempt.sitting_not_open. if the participation lease had already run out, the server records that connection loss (integrity flag, evidence and policy suspension) and fails with exam.attempt.connection_lost instead. attempts and workspaces post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.revision_conflict exam.attempt.state_conflict exam.attempt.sitting_not_open exam.attempt.connection_lost exam.attempt.conflict exam.attempt.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:listLiveAttemptTimeline",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "List a running Attempt's Flags, evidence and native conditions in time order",
+    "description": "Merges the Attempt's Flags (by when they opened), evidence (by when it was observed) and native condition records (by when their rule changed) in time order; each entry holds the record its kind names. Read-only and scoped to one Attempt of the Sitting, while it runs or after. Needs exam.sitting.manage and submission.view on the Sitting, with the manager relationship; both decisions are recorded, as an evidence read is. You never read evidence about yourself. complete is true once the Attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of.",
+    "href": "/api/reference/list-live-attempt-timeline",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/timeline",
+    "searchText": "listliveattempttimeline list a running attempt's flags, evidence and native conditions in time order merges the attempt's flags (by when they opened), evidence (by when it was observed) and native condition records (by when their rule changed) in time order; each entry holds the record its kind names. read-only and scoped to one attempt of the sitting, while it runs or after. needs exam.sitting.manage and submission.view on the sitting, with the manager relationship; both decisions are recorded, as an evidence read is. you never read evidence about yourself. complete is true once the attempt is sealed or its integrity data is retired; as_of is the database time the page is current as of. integrity review get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/timeline principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:cancelExamSitting",
@@ -3692,6 +3835,17 @@ export const searchEntries = [
     "searchText": "completeexamsittingrecords complete sitting records needs a session and the separate `exam.records.complete` action, held through current exam manager status and membership of the exact academic unit, or through its scoped override. the sitting must be closed, and every remaining submission review must be finalized or marked unnecessary for the submission's current inventory. the revision and the integrity evidence revision you send must match the current ones. newly accepted evidence, or an edit to a waived review, makes the completion stale. you then acknowledge the change and complete again, which restarts the retention clock. an exact retry, or completing when the completion is already current, doesn't restart the clock. the completion, the fresh credential and permission checks, the audit record and the retry result are saved together. completing doesn't turn on cleanup or release retention holds. data retention post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion session_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.invalid exam.conflict exam.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:releaseExamSittingResults",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "Release many results of one Sitting",
+    "description": "Releases the results of the named Submissions, or of every finalized, withheld Submission of the Sitting with all_finalized (at most 200 at a time). Needs submission.release on the Sitting; then each Submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. Each item reports released, already_released, not_finalized, denied, or failed with an error code. Replaying the same Idempotency-Key releases nothing twice: an item this batch released reports released again. A replayed all_finalized batch looks the set up again.",
+    "href": "/api/reference/release-exam-sitting-results",
+    "method": "POST",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases",
+    "searchText": "releaseexamsittingresults release many results of one sitting releases the results of the named submissions, or of every finalized, withheld submission of the sitting with all_finalized (at most 200 at a time). needs submission.release on the sitting; then each submission goes through the same checks, audit, notice and events as a single release and commits on its own, and one more audit entry records the batch. each item reports released, already_released, not_finalized, denied, or failed with an error code. replaying the same idempotency-key releases nothing twice: an item this batch released reports released again. a replayed all_finalized batch looks the set up again. integrity review post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/result-releases principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable idempotency.key_required idempotency.key_invalid exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
     "id": "operation:resumeExamSitting",
     "kind": "endpoint",
     "group": "Sittings",
@@ -3701,6 +3855,17 @@ export const searchEntries = [
     "method": "POST",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/resume",
     "searchText": "resumeexamsitting resume a paused exam sitting with a private manager reason resumes a paused sitting. send the sitting's current revision; the request fails if it changed since you read it. the server checks the exam and the delivery window again first. resuming does not renew candidate participation credentials that expired during the pause. those candidates reconnect, or are re-allowed, as usual. sittings post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/resume principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.sitting.invalid exam.sitting.conflict exam.sitting.unavailable exam.archived exam.sitting.revision_conflict exam.sitting.state_conflict exam.sitting.deadline_reached idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:listExamSittingSubmissions",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "List a Sitting's Submissions with their flags and reviews",
+    "description": "Lists the Sitting's sealed Submissions, other than your own, with each candidate, the receipt code, the number of integrity Flags and the integrity standing. Needs submission.view on the Sitting. Each row's review appears only when you also hold submission.review there, and filtering by review_state or release_state without it is refused. The first page counts the whole Sitting, whatever the filters.",
+    "href": "/api/reference/list-exam-sitting-submissions",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/submissions",
+    "searchText": "listexamsittingsubmissions list a sitting's submissions with their flags and reviews lists the sitting's sealed submissions, other than your own, with each candidate, the receipt code, the number of integrity flags and the integrity standing. needs submission.view on the sitting. each row's review appears only when you also hold submission.review there, and filtering by review_state or release_state without it is refused. the first page counts the whole sitting, whatever the filters. integrity review get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/submissions principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:createSubmissionExport",
@@ -4154,6 +4319,17 @@ export const searchEntries = [
     "searchText": "downloadonboardingimportreport download the authorized formula-safe onboarding report downloads the preview or final row report of one import as csv. values a spreadsheet would run as formulas are neutralized, so they show as plain text. the report never contains credentials, one-time claims, email contents or internal worker diagnostics. invitations and onboarding get /api/v1/onboarding-imports/{onboarding_import_id}/report principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found onboarding_import.conflict onboarding_import.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listPermissions",
+    "kind": "endpoint",
+    "group": "Roles and access",
+    "title": "List the permissions a Role can hold",
+    "description": "Lists every permission a custom Role can hold, sorted by `name`, with its title and description in the request's language, the area it belongs to, and the scopes a Role Binding can grant it at. The list is the same for every Institution and changes only with the server version. An override permission names the permission it widens in `override_of`. Permissions kept for the protected System Administrator role, and capabilities that come only from a person's relationships, are not listed. Requires role.view.",
+    "href": "/api/reference/list-permissions",
+    "method": "GET",
+    "path": "/api/v1/permissions",
+    "searchText": "listpermissions list the permissions a role can hold lists every permission a custom role can hold, sorted by `name`, with its title and description in the request's language, the area it belongs to, and the scopes a role binding can grant it at. the list is the same for every institution and changes only with the server version. an override permission names the permission it widens in `override_of`. permissions kept for the protected system administrator role, and capabilities that come only from a person's relationships, are not listed. requires role.view. roles and access get /api/v1/permissions principal_required none authorization.denied authorization.request.invalid authorization.unavailable administration.unavailable resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:listPlugins",
     "kind": "endpoint",
     "group": "Administration",
@@ -4330,6 +4506,28 @@ export const searchEntries = [
     "searchText": "changeretentioncontrol enable or pause institution cleanup turns recurring cleanup on or pauses it. the caller needs `retention_cleanup.manage` and a strong, recent system-administrator sign-in. enabling ties the approval to a fresh retention preview of the exact policy revision, and the policy's grace period must be above zero. every change to the control cancels existing grace. eligible records get a new grace period when scheduling resumes. pausing can't undo retirement that already happened, and doesn't stop the removal of stored files for records already retired. an exact retry returns the recorded result after authorization is checked again. data retention put /api/v1/retention/control strong_recent_session_required required authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable authentication.csrf.invalid audit.unavailable request.invalid retention.invalid retention.conflict retention.unavailable retention_policy.unavailable retention_policy.revision_conflict resource.not_found idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress authentication.strong_required authentication.reauthentication_required authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listRetentionExamSummaries",
+    "kind": "endpoint",
+    "group": "Data retention",
+    "title": "Count retention records by Exam",
+    "description": "Lists the Exams that have retention records, by Exam ID, each with its title and its records counted by category and status the way a Retention Preview counts the Institution. The caller needs `retention_policy.view`. `limit` counts Exams.",
+    "href": "/api/reference/list-retention-exam-summaries",
+    "method": "GET",
+    "path": "/api/v1/retention/exam-summaries",
+    "searchText": "listretentionexamsummaries count retention records by exam lists the exams that have retention records, by exam id, each with its title and its records counted by category and status the way a retention preview counts the institution. the caller needs `retention_policy.view`. `limit` counts exams. data retention get /api/v1/retention/exam-summaries session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:listInstitutionRetentionHolds",
+    "kind": "endpoint",
+    "group": "Data retention",
+    "title": "List the Institution's Retention Holds",
+    "description": "Lists every Retention Hold of the Institution by ID, each with its Exam and who placed it. Released holds are left out unless `include_released=true`. The caller needs `retention_policy.view`. Private reasons stay on the Exam's own hold listing. A hold whose `until` has passed shows `due_for_review: true` and still protects its records.",
+    "href": "/api/reference/list-institution-retention-holds",
+    "method": "GET",
+    "path": "/api/v1/retention/holds",
+    "searchText": "listinstitutionretentionholds list the institution's retention holds lists every retention hold of the institution by id, each with its exam and who placed it. released holds are left out unless `include_released=true`. the caller needs `retention_policy.view`. private reasons stay on the exam's own hold listing. a hold whose `until` has passed shows `due_for_review: true` and still protects its records. data retention get /api/v1/retention/holds session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:createRetentionPreview",
     "kind": "endpoint",
     "group": "Data retention",
@@ -4361,6 +4559,17 @@ export const searchEntries = [
     "method": "GET",
     "path": "/api/v1/retention/records",
     "searchText": "listretentionrecords list retention eligibility and retirement status lists the retention status of each submission's records. the caller needs `retention_policy.view`. file names, answers, evidence and remarks are never included. `limit` counts submissions, and each submission adds four items: work, integrity, browser activity and security operational. the cursor only works with this listing. a retired category stays retired even after its detailed receipt expires. `purge_verified` counts come from a separate check that the stored objects are gone from current storage. they don't certify secure erasure of the storage media, or removal from backups, earlier object versions or downloads already in progress. data retention get /api/v1/retention/records session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:exportRetentionRecords",
+    "kind": "endpoint",
+    "group": "Data retention",
+    "title": "Download every retention record as CSV",
+    "description": "Returns every retention record of the Institution as CSV, one row per category of each Submission, with the Exam's title, the eligibility each page was read at (`as_of`) and the policy revision. It holds no content. The caller needs `retention_policy.view`. An Institution with more than 50,000 Submissions is refused with `retention.invalid`; page the records listing instead. Values a spreadsheet would read as a formula start with an apostrophe.",
+    "href": "/api/reference/export-retention-records",
+    "method": "GET",
+    "path": "/api/v1/retention/records/export",
+    "searchText": "exportretentionrecords download every retention record as csv returns every retention record of the institution as csv, one row per category of each submission, with the exam's title, the eligibility each page was read at (`as_of`) and the policy revision. it holds no content. the caller needs `retention_policy.view`. an institution with more than 50,000 submissions is refused with `retention.invalid`; page the records listing instead. values a spreadsheet would read as a formula start with an apostrophe. data retention get /api/v1/retention/records/export session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid retention.invalid retention.unavailable retention_policy.unavailable resource.not_found retention_policy.revision_conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:listRoleBindings",
@@ -4539,6 +4748,17 @@ export const searchEntries = [
     "searchText": "downloadstudentprogressionreport download the authorized formula-safe student progression report downloads the report for one progression preview or result as csv. values a spreadsheet would run as formulas are neutralized, so they show as plain text. the report holds the progression's rows and no internal job data, credentials or database selectors. membership and progression get /api/v1/student-progressions/{student_progression_id}/report principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found student_progression.unavailable student_progression.conflict authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listSubmissions",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "List Submissions across the Exams you can see",
+    "description": "Lists sealed Submissions, other than your own, across every Exam where you hold submission.view, each with its Exam. A row's review appears, and review_state and release_state match it, only where you also hold submission.review on its Exam; so review_state=none&review_state=draft lists what is waiting for your review. Bounded and cursor-paged; there are no counts.",
+    "href": "/api/reference/list-submissions",
+    "method": "GET",
+    "path": "/api/v1/submissions",
+    "searchText": "listsubmissions list submissions across the exams you can see lists sealed submissions, other than your own, across every exam where you hold submission.view, each with its exam. a row's review appears, and review_state and release_state match it, only where you also hold submission.review on its exam; so review_state=none&review_state=draft lists what is waiting for your review. bounded and cursor-paged; there are no counts. integrity review get /api/v1/submissions principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable exam.sitting.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:listSubmissionAssistantTranscript",
     "kind": "endpoint",
     "group": "Integrity review",
@@ -4680,6 +4900,17 @@ export const searchEntries = [
     "method": "POST",
     "path": "/api/v1/submissions/{submission_id}/review/release",
     "searchText": "releasestudentexamresult explicitly release the approved candidate result projection releases the result of a finalized review to the candidate. the candidate sees only the remarks you approved. manager notes, rationales, flags, evidence, discrepancies and other private review data stay hidden. integrity review post /api/v1/submissions/{submission_id}/review/release principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.revision_conflict exam.integrity_review.state_conflict exam.integrity_review.incomplete exam.integrity_review.too_large exam.integrity_review.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:reopenExamIntegrityReview",
+    "kind": "endpoint",
+    "group": "Integrity review",
+    "title": "Return a finalized Review to draft so its decisions can be revised",
+    "description": "Returns a finalized Review to draft, keeping every decision, so a manager can revise it and finalize it again. The reason is kept privately with the Review and is never shown to the candidate. A Review whose result is released can't be reopened, because release is final. Needs the same permission as reviewing.",
+    "href": "/api/reference/reopen-exam-integrity-review",
+    "method": "POST",
+    "path": "/api/v1/submissions/{submission_id}/review/reopen",
+    "searchText": "reopenexamintegrityreview return a finalized review to draft so its decisions can be revised returns a finalized review to draft, keeping every decision, so a manager can revise it and finalize it again. the reason is kept privately with the review and is never shown to the candidate. a review whose result is released can't be reopened, because release is final. needs the same permission as reviewing. integrity review post /api/v1/submissions/{submission_id}/review/reopen principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.revision_conflict exam.integrity_review.state_conflict exam.integrity_review.result_released exam.integrity_review.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:pingSystem",
@@ -5111,6 +5342,17 @@ export const searchEntries = [
     "searchText": "enableuser enable a user account without restoring revoked sessions enables a disabled user, after checking your permission. history is kept. it does not bring back ended sessions, verify the email address, add sign-in methods, restart ended memberships or recreate role bindings. users post /api/v1/users/{user_id}/enable principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.csrf.invalid authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found user.invalid user.conflict user.last_system_admin administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listUserMemberships",
+    "kind": "endpoint",
+    "group": "Users",
+    "title": "List what a User is a current member of",
+    "description": "Lists the User's current Academic Unit memberships, then their current Class enrolments, each oldest first. You need to see the User, as for reading their profile, and are refused as that read refuses. Each entry appears only if you can view that unit's members (academic_unit.members.view) or that Class's members (class.members.view). Entries you can't see are left out entirely, so a page never hints at them. Memberships of archived units, and enrolments in archived Classes, levels or programmes, are not listed.",
+    "href": "/api/reference/list-user-memberships",
+    "method": "GET",
+    "path": "/api/v1/users/{user_id}/memberships",
+    "searchText": "listusermemberships list what a user is a current member of lists the user's current academic unit memberships, then their current class enrolments, each oldest first. you need to see the user, as for reading their profile, and are refused as that read refuses. each entry appears only if you can view that unit's members (academic_unit.members.view) or that class's members (class.members.view). entries you can't see are left out entirely, so a page never hints at them. memberships of archived units, and enrolments in archived classes, levels or programmes, are not listed. users get /api/v1/users/{user_id}/memberships principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:resetUserMFA",
     "kind": "endpoint",
     "group": "Authentication",
@@ -5231,31 +5473,40 @@ export const searchEntries = [
     "searchText": "realtime protocol websocket /api/v1/websocket open it with the http upgrade described by the openapi operation connectwebsocket, which owns authentication, origin, and the connection_id and sequence_number resume parameters. every frame is one json text message. the server sends events, each with a sequence that increases by one; the client sends commands, each with a sequence it chooses, and the reply carries that sequence back. clients ignore an event name they do not know."
   },
   {
+    "id": "realtime:academic_period.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Academic Period changed",
+    "description": "Refetch the Academic Period; it was created, changed or archived.",
+    "href": "/api/reference/realtime-protocol/academic-period-changed",
+    "searchText": "academic_period.changed academic_period.changed academic period changed refetch the academic period: it was created, changed or archived. delivered to connections that subscribe to academic_period.view on the academic period, which its owner's viewers may do. event institution"
+  },
+  {
     "id": "realtime:academic_unit_archived",
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Academic Unit archived",
-    "description": "Refetch the Academic Unit. The event has no data.",
+    "description": "Refetch the Academic Unit. The event names it and its parent.",
     "href": "/api/reference/realtime-protocol/academic-unit-archived",
-    "searchText": "academic_unit_archived academic_unit_archived academic unit archived refetch the academic unit. the event has no data. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
+    "searchText": "academic_unit_archived academic_unit_archived academic unit archived refetch the academic unit. the event names it and its parent. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
   },
   {
     "id": "realtime:academic_unit_created",
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Academic Unit created",
-    "description": "Refetch the Academic Unit. The event has no data.",
+    "description": "Refetch the Academic Unit. The event names it and its parent.",
     "href": "/api/reference/realtime-protocol/academic-unit-created",
-    "searchText": "academic_unit_created academic_unit_created academic unit created refetch the academic unit. the event has no data. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
+    "searchText": "academic_unit_created academic_unit_created academic unit created refetch the academic unit. the event names it and its parent. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
   },
   {
     "id": "realtime:academic_unit_updated",
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Academic Unit updated",
-    "description": "Refetch the Academic Unit. The event has no data.",
+    "description": "Refetch the Academic Unit. The event names it and its parent.",
     "href": "/api/reference/realtime-protocol/academic-unit-updated",
-    "searchText": "academic_unit_updated academic_unit_updated academic unit updated refetch the academic unit. the event has no data. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
+    "searchText": "academic_unit_updated academic_unit_updated academic unit updated refetch the academic unit. the event names it and its parent. sent when the academic unit itself changes, and when a member joins or leaves it outside a batch, since its member counts moved; a change to who administers it arrives as role_binding.changed. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
   },
   {
     "id": "realtime:access_policy_changed",
@@ -5274,6 +5525,15 @@ export const searchEntries = [
     "description": "Refetch the candidate's Exam activity.",
     "href": "/api/reference/realtime-protocol/candidate-exam-activity-changed",
     "searchText": "candidate.exam_activity.changed candidate.exam_activity.changed candidate exam activity changed refetch the candidate's exam activity. delivered to the addressed user's connections. event sittings"
+  },
+  {
+    "id": "realtime:class.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Class changed",
+    "description": "Refetch the Class; it, its members or its teachers changed.",
+    "href": "/api/reference/realtime-protocol/class-changed",
+    "searchText": "class.changed class.changed class changed refetch the class: the class itself, its members or its teachers changed. a membership change also sends user.changed for the member. delivered to connections that subscribe to class.view on the class. event institution"
   },
   {
     "id": "realtime:command_error",
@@ -5303,6 +5563,24 @@ export const searchEntries = [
     "searchText": "current_user.sessions.changed current_user.sessions.changed current user sessions changed refetch the current user's sessions; one of them was revoked, ended or renamed. the connections of a revoked session close instead. delivered to the addressed user's connections. event users"
   },
   {
+    "id": "realtime:desktop_compatibility_policy.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Desktop Compatibility Policy changed",
+    "description": "Refetch the Desktop Compatibility Policy and the Desktop release list. The event has no data.",
+    "href": "/api/reference/realtime-protocol/desktop-compatibility-policy-changed",
+    "searchText": "desktop_compatibility_policy.changed desktop_compatibility_policy.changed desktop compatibility policy changed sent after a replacement changes the desktop compatibility policy, including its revoked builds. the policy is institution-wide, so the event names no id beyond its resource. delivered to connections that subscribe to desktop_compatibility_policy.manage on the institution, checked again when it is sent. event institution"
+  },
+  {
+    "id": "realtime:exam.counts.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Exam counts changed",
+    "description": "Refetch one Exam's catalogue counts.",
+    "href": "/api/reference/realtime-protocol/exam-counts-changed",
+    "searchText": "exam.counts.changed exam.counts.changed exam counts changed refetch one exam's needs_attention_count and pending_review_count, because a board or a submission list of one of its sittings changed. at most one per exam every 5 seconds; the last change in a window is always followed by one. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
     "id": "realtime:exam_archived",
     "kind": "realtime-message",
     "group": "Realtime",
@@ -5321,6 +5599,15 @@ export const searchEntries = [
     "searchText": "exam_attempt.connect exam_attempt.connect connect to the exam attempt sent by the registered desktop. first admission and ready rejoin consume a reported preflight (kind preflight); a same-generation reconnect resumes the current participation (kind resume). a connection holds at most one attempt binding. the reply starts the lease; renew it with exam_attempt.renew. command"
   },
   {
+    "id": "realtime:exam_attempt.evidence.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt evidence changed",
+    "description": "Refetch an Attempt's live evidence.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-evidence-changed",
+    "searchText": "exam_attempt.evidence.changed exam_attempt.evidence.changed attempt evidence changed refetch an attempt's live integrity flags, evidence, native conditions and timeline. sent at most once per attempt every 5 seconds; the last change in a burst is always sent. delivered to connections that subscribe to exam.sitting.manage on the exam sitting. event sittings"
+  },
+  {
     "id": "realtime:exam_attempt.focus_loss",
     "kind": "realtime-message",
     "group": "Realtime",
@@ -5337,6 +5624,15 @@ export const searchEntries = [
     "description": "Extends the Participation lease and carries Desktop's security control.",
     "href": "/api/reference/realtime-protocol/exam-attempt-renew",
     "searchText": "exam_attempt.renew exam_attempt.renew renew the exam attempt participation sent every renewal interval by the desktop holding the attempt connection. the reply carries the new lease and how the server processed the security control. a repeated renewal sequence is a duplicate and does not extend the lease again. command"
+  },
+  {
+    "id": "realtime:exam_attempt.screen_clip.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Screen clip changed",
+    "description": "Refetch an Attempt's screen clips.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-screen-clip-changed",
+    "searchText": "exam_attempt.screen_clip.changed exam_attempt.screen_clip.changed screen clip changed refetch an attempt's screen clips, because one was requested or changed state. delivered to connections that subscribe to exam.sitting.manage on the exam sitting. event sittings"
   },
   {
     "id": "realtime:exam_attempt.security.update",
@@ -5559,9 +5855,9 @@ export const searchEntries = [
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Exam created",
-    "description": "An Exam was created. The event has no data.",
+    "description": "An Exam was created. The event names it and its Academic Unit.",
     "href": "/api/reference/realtime-protocol/exam-created",
-    "searchText": "exam_created exam_created exam created an exam was created. the event has no data. delivered to connections that subscribe to exam.view on the exam. event exams"
+    "searchText": "exam_created exam_created exam created an exam was created. the event names it and the academic unit that owns it. delivered to connections that subscribe to exam.view on the exam. event exams"
   },
   {
     "id": "realtime:exam_draft_updated",
@@ -5625,6 +5921,15 @@ export const searchEntries = [
     "description": "A new Exam Revision was published.",
     "href": "/api/reference/realtime-protocol/exam-revision-published",
     "searchText": "exam_revision_published exam_revision_published exam revision published a new exam revision was published. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_sitting.submissions.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting submissions changed",
+    "description": "Refetch the submission list of one Sitting.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-submissions-changed",
+    "searchText": "exam_sitting.submissions.changed exam_sitting.submissions.changed sitting submissions changed refetch the submission list of one sitting, because a submission arrived or a review or result release changed. published once per batch. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
   },
   {
     "id": "realtime:exam_sitting_canceled",
@@ -5732,7 +6037,7 @@ export const searchEntries = [
     "title": "Invitation changed",
     "description": "Refetch an Invitation you issued; it reached a new state.",
     "href": "/api/reference/realtime-protocol/invitation-changed",
-    "searchText": "invitation.changed invitation.changed invitation changed refetch an invitation you issued; it reached a new state, today when it is accepted. delivered to the connections of the user who issued it. event onboarding"
+    "searchText": "invitation.changed invitation.changed invitation changed refetch an invitation you issued; it reached a new state, today when it is accepted. the event names the scope the invitation grants at. delivered to the connections of the user who issued it. event onboarding"
   },
   {
     "id": "realtime:job.changed",
@@ -5742,6 +6047,15 @@ export const searchEntries = [
     "description": "Refetch the Job; its status changed or its progress advanced.",
     "href": "/api/reference/realtime-protocol/job-changed",
     "searchText": "job.changed job.changed job changed refetch the job; its status changed or its progress advanced. sent when a node claims, completes, cancels or retries an operator-visible job, and on its checkpoints at most once every 2 seconds per job on each node. progress is present only for a job type that reports progress. delivered to connections that subscribe to job.view on the institution. event jobs"
+  },
+  {
+    "id": "realtime:mail_delivery.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Mail delivery changed",
+    "description": "Refetch the mail delivery; its state changed.",
+    "href": "/api/reference/realtime-protocol/mail-delivery-changed",
+    "searchText": "mail_delivery.changed mail_delivery.changed mail delivery changed refetch the mail delivery: it started sending, was accepted, queued for a retry, failed, expired or was suppressed. the recipient and the message are never included. delivered to connections that subscribe to mail.view on the institution. event institution"
   },
   {
     "id": "realtime:manager.sitting_board.changed",
@@ -5807,6 +6121,33 @@ export const searchEntries = [
     "searchText": "resync_required resync_required resynchronization required follows hello when a reconnecting client asked to resume but the node no longer holds the missed events. refetch authoritative state over http before applying further events. protocol"
   },
   {
+    "id": "realtime:retention.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Retention changed",
+    "description": "Refetch retention; the policy, a hold or an Exam's records due changed.",
+    "href": "/api/reference/realtime-protocol/retention-changed",
+    "searchText": "retention.changed retention.changed retention changed refetch retention: the policy was replaced, a hold was placed or released, or an exam's records due for removal changed when a sitting's records were completed. kind says which. delivered to connections that subscribe to retention_policy.view on the institution. event institution"
+  },
+  {
+    "id": "realtime:role.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Role changed",
+    "description": "Refetch the Role; it or its permissions changed.",
+    "href": "/api/reference/realtime-protocol/role-changed",
+    "searchText": "role.changed role.changed role changed refetch the role: it was created, changed or archived. delivered to connections that subscribe to role.view on the institution. event institution"
+  },
+  {
+    "id": "realtime:role_binding.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Role Binding changed",
+    "description": "Refetch the Role Binding; it was granted or ended.",
+    "href": "/api/reference/realtime-protocol/role-binding-changed",
+    "searchText": "role_binding.changed role_binding.changed role binding changed refetch the role binding: it was granted or ended. delivered to connections that subscribe to role_binding.view on the binding's own scope: the institution, an academic unit or a class. a binding at a class also sends class.changed, since it changes the class's teachers. the holder hears of it through current_user.context.changed. event institution"
+  },
+  {
     "id": "realtime:security_control_reply",
     "kind": "realtime-message",
     "group": "Realtime",
@@ -5841,6 +6182,15 @@ export const searchEntries = [
     "description": "Stops receiving the events of one subscription.",
     "href": "/api/reference/realtime-protocol/unsubscribe",
     "searchText": "unsubscribe unsubscribe unsubscribe succeeds whether or not the subscription was held. the sitting subscription an attempt connection holds is kept until the connection unbinds. command"
+  },
+  {
+    "id": "realtime:user.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "User changed",
+    "description": "Refetch the User; their profile, account state, affiliations, two-step state or memberships changed.",
+    "href": "/api/reference/realtime-protocol/user-changed",
+    "searchText": "user.changed user.changed user changed refetch the user: their profile, account state, affiliations, two-step state or memberships changed. the event names the user only. delivered to connections that subscribe to user.view on the user; a subscription is admitted for a user the caller can see in the directory. event users"
   },
   {
     "id": "realtime:user_profile_picture_changed",
@@ -7148,6 +7498,15 @@ export const searchEntries = [
     "searchText": "exam.attempt.invalid exam attempt invalid 400 an attempt field is invalid; `fields` names the rejected input when known."
   },
   {
+    "id": "problem:exam.attempt.join_closed",
+    "kind": "problem",
+    "group": "Error codes / Exam attempt",
+    "title": "exam.attempt.join_closed",
+    "description": "The Exam Sitting's join window has closed, so no new Attempt can start. Candidates who already started can still reconnect.",
+    "href": "/problems/exam.attempt.join_closed",
+    "searchText": "exam.attempt.join_closed exam attempt join closed 409 the exam sitting's join window has closed, so no new attempt can start. candidates who already started can still reconnect."
+  },
+  {
     "id": "problem:exam.attempt.management_authority_conflict",
     "kind": "problem",
     "group": "Error codes / Exam attempt",
@@ -7677,6 +8036,15 @@ export const searchEntries = [
     "description": "The Integrity Review does not exist or is not visible to the caller.",
     "href": "/problems/exam.integrity_review.not_found",
     "searchText": "exam.integrity_review.not_found exam integrity review not found 404 the integrity review does not exist or is not visible to the caller."
+  },
+  {
+    "id": "problem:exam.integrity_review.result_released",
+    "kind": "problem",
+    "group": "Error codes / Exam integrity review",
+    "title": "exam.integrity_review.result_released",
+    "description": "The Integrity Review's result is released, so the review can't be reopened.",
+    "href": "/problems/exam.integrity_review.result_released",
+    "searchText": "exam.integrity_review.result_released exam integrity review result released 409 the integrity review's result is released, so the review can't be reopened."
   },
   {
     "id": "problem:exam.integrity_review.revision_conflict",

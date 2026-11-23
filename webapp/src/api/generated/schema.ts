@@ -34460,6 +34460,7 @@ export interface operations {
             };
             cookie?: never;
         };
+        /** @description The explicit Submissions or the finalized results to release for the Sitting. */
         requestBody: {
             content: {
                 /**

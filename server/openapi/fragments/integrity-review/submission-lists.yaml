@@ -279,6 +279,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
+        description: The explicit Submissions or the finalized results to release for the Sitting.
         required: true
         content:
           application/json:

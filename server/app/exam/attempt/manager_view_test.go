@@ -37,7 +37,10 @@ func TestManagerListAuthorizesBeforeBoundedStoreRead(t *testing.T) {
 	require.True(t, page.HasMore, "page=%#v options=%#v order=%v", page, f.persistence.managerOptions, f.order)
 	require.Equal(t, 3, f.persistence.managerOptions.Limit, "page=%#v options=%#v order=%v", page, f.persistence.managerOptions, f.order)
 	// Contract: authorization precedes reading the managed Attempts.
-	require.Equal(t, []string{"grants", "decision:exam.sitting.view:success", "manager.list"}, f.order)
+	// The manage check decides whether who ended an attempt is shown; it
+	// too comes before the store read.
+	require.Equal(t, []string{"grants", "decision:exam.sitting.view:success", "grants",
+		"decision:exam.sitting.manage:success", "manager.list"}, f.order)
 }
 
 func TestManagerListValidatesAndDeepClonesActiveSuspension(t *testing.T) {

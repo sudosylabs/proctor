@@ -165,7 +165,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			query, args := examCatalogQuery(test.options)
+			query, args := examCatalogQuery(test.options, false)
 			var encoded []byte
 			require.NoError(t, persistence.GetMaster().Get(ctx, &encoded, `EXPLAIN (ANALYZE, FORMAT JSON) `+query, args...))
 			var documents []examCatalogPlanDocument
@@ -187,7 +187,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 			Query: "needle catalog 4900", ArchiveFilter: store.ExamArchiveAll, Limit: 20,
 			Visibility: store.ExamListVisibility{ActorUserID: actor.ID, OverrideInstitutionWide: true},
 		}
-		query, args := examCatalogQuery(options)
+		query, args := examCatalogQuery(options, false)
 		tx, err := persistence.GetMaster().DB().BeginTxx(ctx, nil)
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback() }()

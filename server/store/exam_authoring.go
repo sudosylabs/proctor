@@ -117,8 +117,11 @@ type ExamListOptions struct {
 	StartsBefore    time.Time
 	BeforeUpdatedAt time.Time
 	BeforeExamID    model.ExamID
-	Limit           int
-	Visibility      ExamListVisibility
+	// HasSittings keeps only exams that have, or with false have not, any
+	// Sitting. Nil keeps both.
+	HasSittings *bool
+	Limit       int
+	Visibility  ExamListVisibility
 }
 
 // ExamSummary is the catalog view of an exam; authored text, policy,
@@ -320,6 +323,9 @@ type ExamAuthoringStore interface {
 	// belong in the one bounded query, so no unrestricted set is ever read.
 	// Override scope is a separate branch that needs no relationship.
 	List(context.Context, ExamListOptions) ([]ExamSummary, error)
+	// Count counts what List pages through, ignoring the cursor and limit,
+	// stopping at maximum (1..MaximumListCount).
+	Count(context.Context, ExamListOptions, int) (int, error)
 	// Archive resolves a replay first. Otherwise it locks the exam, rechecks
 	// the manager relationship unless overridden, rejects archived or stale
 	// state, and records the archive time without deleting rows. Of concurrent

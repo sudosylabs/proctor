@@ -88,6 +88,10 @@ type searchExamRecords struct {
 	lists  []store.ExamListOptions
 }
 
+func (s *searchExamRecords) Count(_ context.Context, _ store.ExamListOptions, maximum int) (int, error) {
+	return min(len(s.listed), maximum), nil
+}
+
 func (s *searchExamRecords) List(_ context.Context, options store.ExamListOptions) ([]store.ExamSummary, error) {
 	s.lists = append(s.lists, options)
 	return slices.Clone(s.listed), nil

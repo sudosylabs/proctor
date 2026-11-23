@@ -333,6 +333,11 @@ func (s *examAuthoringRecords) List(_ context.Context, options store.ExamListOpt
 	return slices.Clone(s.listed), nil
 }
 
+// Count counts the listed summaries, as the first page's total.
+func (s *examAuthoringRecords) Count(_ context.Context, _ store.ExamListOptions, maximum int) (int, error) {
+	return min(len(s.listed), maximum), nil
+}
+
 func (s *examAuthoringRecords) Archive(_ context.Context, input *store.ExamArchive, command *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
 	s.archives, s.commands = append(s.archives, input), append(s.commands, command)
 	entry, err := s.entry(input.ExamID)

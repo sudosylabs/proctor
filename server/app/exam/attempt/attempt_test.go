@@ -327,6 +327,14 @@ func (f *desktopBuildResolverFake) ResolveAttemptDesktopBuild(context.Context, m
 	return DesktopBuildResolution{Build: f.f.desktopBuild, CompatibilityPolicyRevision: 1}, nil
 }
 
+func (f *desktopBuildResolverFake) AssessDesktopBuilds(_ context.Context, builds []model.DesktopBuildTuple) ([]bool, error) {
+	admitted := make([]bool, len(builds))
+	for index, build := range builds {
+		admitted[index] = build.DesktopBuildID == f.f.desktopBuild.DesktopBuildID
+	}
+	return admitted, nil
+}
+
 type sittingFake struct {
 	store.ExamSittingStore
 

@@ -82,6 +82,8 @@ type NativeDeliveryBuildIdentity struct {
 type DesktopBuildResolver interface {
 	ResolveNativeDeliveryBuild(context.Context, NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error)
 	ResolveAttemptDesktopBuild(context.Context, model.Principal) (DesktopBuildResolution, error)
+	// AssessDesktopBuilds reports whether each build would be admitted now.
+	AssessDesktopBuilds(context.Context, []model.DesktopBuildTuple) ([]bool, error)
 }
 
 // Dependencies are the collaborators New validates once.

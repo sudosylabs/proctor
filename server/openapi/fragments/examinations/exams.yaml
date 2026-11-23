@@ -74,6 +74,14 @@ paths:
               - all
             default: active
           description: Return active Exams, archived Exams, or all of them. Defaults to active.
+        - name: has_sittings
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: >-
+            true returns only Exams with at least one Sitting; false only Exams with none, such as those not
+            yet scheduled. Omit it for both.
         - name: sitting_state
           in: query
           required: false
@@ -451,6 +459,16 @@ components:
         next_cursor:
           type: string
           description: Send this back as cursor to get the next page. Omitted on the last page.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Number of Exams, across all pages, that match the filters and that you may see. Present only on the
+            first page. Counting stops at 10,000, and then total_is_lower_bound is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when counting stopped at its bound, so total is "at least". Present with total.
     ExamSummaryResponse:
       type: object
       description: >-

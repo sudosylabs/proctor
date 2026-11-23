@@ -241,6 +241,24 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.False(t, bytes.Contains(audit.Result, []byte("Room unavailable")))
 	require.False(t, bytes.Contains(audit.Parameters, []byte("Room unavailable")))
+	history, err := ss.ExamSitting().ListHistory(ctx, sitting.ID, store.ExamSittingHistoryMaximum)
+	require.NoError(t, err)
+	require.Len(t, history, 1, "the cancellation is the sitting's one manager action")
+	require.Equal(t, store.ExamSittingHistoryCanceled, history[0].Kind)
+	require.Equal(t, fixture.actor.ID, history[0].ActorUserID)
+	require.Equal(t, "Room unavailable", history[0].Reason)
+	counts, err := ss.ExamSitting().CountCandidates(ctx, []model.ExamSittingID{sitting.ID})
+	require.NoError(t, err)
+	require.Contains(t, counts, sitting.ID, "every asked sitting is counted")
+	require.GreaterOrEqual(t, counts[sitting.ID], 0)
+	corrections, err := ss.ExamSitting().ListCorrections(ctx, sitting.ID)
+	require.NoError(t, err)
+	require.Empty(t, corrections, "a sitting never corrected has no corrections")
+	targets, err := ss.ExamSitting().ListCandidateBoardTargets(ctx, fixture.actor.ID, "", 10)
+	require.NoError(t, err)
+	for _, target := range targets {
+		require.NotEqual(t, sitting.ID, target.SittingID, "a canceled sitting's board is not a target")
+	}
 
 	// The committed schedule result wins before the now-canceled state and
 	// stale relationship/revision fences.

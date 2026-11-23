@@ -70,8 +70,10 @@ type examCatalogSittingResponse struct {
 }
 
 type examListResponse struct {
-	Items      []examSummaryResponse `json:"items"`
-	NextCursor string                `json:"next_cursor,omitempty"`
+	Items             []examSummaryResponse `json:"items"`
+	NextCursor        string                `json:"next_cursor,omitempty"`
+	Total             *int                  `json:"total,omitempty"`
+	TotalIsLowerBound *bool                 `json:"total_is_lower_bound,omitempty"`
 }
 
 type examResponse struct {
@@ -479,6 +481,9 @@ func (h examHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 	response := examListResponse{Items: make([]examSummaryResponse, 0, len(page.Items))}
+	if response.Total, response.TotalIsLowerBound, err = route.PageTotal(page.Total, !query.BeforeExamID.IsZero()); err != nil {
+		return route.Result{}, err
+	}
 	for _, item := range page.Items {
 		summary := examSummaryResponseFromApplication(item)
 		summary.Creator, summary.Owner = personRef(refs, item.CreatorUserID), personRef(refs, item.OwnerUserID)
@@ -676,6 +681,15 @@ func examListQuery(request *http.Request) (exam.ListQuery, error) {
 		}
 
 		query.Limit = limit
+	}
+
+	switch raw := values["has_sittings"]; {
+	case len(raw) == 0:
+	case len(raw) == 1 && (raw[0] == "true" || raw[0] == "false"):
+		hasSittings := raw[0] == "true"
+		query.HasSittings = &hasSittings
+	default:
+		return query, errors.New("has_sittings must be true or false")
 	}
 
 	if raw := values.Get("cursor"); raw != "" {

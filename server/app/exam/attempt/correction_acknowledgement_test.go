@@ -84,7 +84,9 @@ func TestAcknowledgeCorrectionUsesExactParticipationFenceAndSemanticIdempotency(
 	require.Equal(t, wantIdempotency, f.persistence.idempotency)
 	// Contract (guardrail 8): the authorization decision is recorded before
 	// the durable acknowledgement, which inserts the audit prepared for it.
-	require.Equal(t, []string{"correction.acknowledgement.resolve", "decision:exam.sitting.participate:success", "correction.acknowledgement.commit"}, f.order)
+	// A new acknowledgement then tells the sitting's board, after commit.
+	require.Equal(t, []string{"correction.acknowledgement.resolve", "decision:exam.sitting.participate:success",
+		"correction.acknowledgement.commit", "effects"}, f.order)
 	prepared := decodeAuditRecord(t, input.AuditEvent)
 	require.Equal(t, model.ActionExamSittingParticipate, prepared.action)
 	require.Equal(t, store.ExamAttemptCorrectionAcknowledgementOperation, prepared.operation)

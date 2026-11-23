@@ -1100,6 +1100,15 @@ func (d attemptDesktopBuilds) ResolveAttemptDesktopBuild(context.Context, model.
 	return attempt.DesktopBuildResolution{Build: d.f.build, CompatibilityPolicyRevision: 1}, nil
 }
 
+// AssessDesktopBuilds admits the fixture's build and nothing else.
+func (d attemptDesktopBuilds) AssessDesktopBuilds(_ context.Context, builds []model.DesktopBuildTuple) ([]bool, error) {
+	admitted := make([]bool, len(builds))
+	for index, build := range builds {
+		admitted[index] = build.DesktopBuildID == d.f.build.DesktopBuildID
+	}
+	return admitted, nil
+}
+
 func (d attemptDesktopBuilds) ResolveNativeDeliveryBuild(context.Context, attempt.NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {
 	return d.f.build, nil
 }

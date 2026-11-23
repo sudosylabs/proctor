@@ -7154,10 +7154,22 @@
             "example": {
               "items": [
                 {
-                  "candidate_user_id": "sjebyge5cpbop1xwo4eds74ejb"
+                  "candidate": {
+                    "display_name": "Asha Rao",
+                    "user_id": "sjebyge5cpbop1xwo4eds74ejb",
+                    "username": "arao"
+                  },
+                  "candidate_user_id": "sjebyge5cpbop1xwo4eds74ejb",
+                  "class_member_since": "2026-09-04T08:00:00Z"
                 },
                 {
-                  "candidate_user_id": "hmyjmj68dw6gdxctnghbrhwcth"
+                  "candidate": {
+                    "display_name": "Tomas Kim",
+                    "user_id": "hmyjmj68dw6gdxctnghbrhwcth",
+                    "username": "tkim"
+                  },
+                  "candidate_user_id": "hmyjmj68dw6gdxctnghbrhwcth",
+                  "class_member_since": "2026-09-04T08:00:00Z"
                 }
               ],
               "next_cursor": "eyJjYW5kaWRhdGVfdXNlcl9pZCI6ImhteWptajY4ZHc2Z2R4Y3RuZ2hicmh3Y3RoIn0"
@@ -22157,6 +22169,18 @@
             "$ref": "#/components/schemas/ExamAttemptConnectionResponse",
             "description": "The open Connection. Omitted when no Connection is open."
           },
+          "end_reason_text": {
+            "description": "The manager's private reason for ending the Attempt. Present with ended_by_user_id.",
+            "type": "string"
+          },
+          "ended_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The manager who ended the Attempt, named. Present with ended_by_user_id."
+          },
+          "ended_by_user_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The manager who ended the Attempt. Present only when a manager ended it, and only for callers who may manage the Sitting."
+          },
           "exam_id": {
             "$ref": "#/components/schemas/ID",
             "description": "ID of the Exam."
@@ -23433,6 +23457,16 @@
           "next_cursor": {
             "description": "Send this back as cursor to get the next page. Omitted on the last page.",
             "type": "string"
+          },
+          "total": {
+            "description": "Number of Exams, across all pages, that match the filters and that you may see. Present only on the first page. Counting stops at 10,000, and then total_is_lower_bound is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when counting stopped at its bound, so total is \"at least\". Present with total.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -24483,6 +24517,91 @@
         ],
         "type": "object"
       },
+      "ExamSittingCorrectionSummary": {
+        "additionalProperties": false,
+        "description": "One live correction and how many of the candidates it applies to have acknowledged it.",
+        "properties": {
+          "acknowledged_count": {
+            "description": "How many candidates have acknowledged it.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "acknowledgement_required": {
+            "description": "Whether candidates must acknowledge the correction.",
+            "type": "boolean"
+          },
+          "effective_at": {
+            "description": "When the correction took effect.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "number": {
+            "description": "The correction Revision's number.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "required_count": {
+            "description": "How many candidates must acknowledge it: those admitted before it who had not submitted when it took effect. Zero when no acknowledgement is required.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The correction's Revision."
+          }
+        },
+        "required": [
+          "revision_id",
+          "number",
+          "effective_at",
+          "acknowledgement_required",
+          "acknowledged_count",
+          "required_count"
+        ],
+        "type": "object"
+      },
+      "ExamSittingHistoryEntry": {
+        "additionalProperties": false,
+        "description": "One manager action on a Sitting and the manager's private reason.",
+        "properties": {
+          "at": {
+            "description": "When.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The manager who acted, named."
+          },
+          "by_user_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The manager who acted."
+          },
+          "kind": {
+            "description": "What the manager did.",
+            "enum": [
+              "canceled",
+              "paused",
+              "resumed",
+              "extended",
+              "closed"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "description": "The manager's private reason, in their words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "by_user_id",
+          "reason"
+        ],
+        "type": "object"
+      },
       "ExamSittingListResponse": {
         "additionalProperties": false,
         "description": "One page of Sittings, latest scheduled start first.",
@@ -24554,13 +24673,24 @@
         "additionalProperties": false,
         "description": "A candidate who was in the Class when the Sitting opened and never started an Attempt.",
         "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/SittingCandidateIdentityResponse",
+            "description": "The candidate, in the same shape the candidate statuses use."
+          },
           "candidate_user_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The candidate's user ID."
+          },
+          "class_member_since": {
+            "description": "When the class membership the candidate held as the Sitting opened began.",
+            "format": "date-time",
+            "type": "string"
           }
         },
         "required": [
-          "candidate_user_id"
+          "candidate_user_id",
+          "candidate",
+          "class_member_since"
         ],
         "type": "object"
       },
@@ -24577,12 +24707,22 @@
       },
       "ExamSittingResponse": {
         "additionalProperties": false,
-        "description": "One Sitting as a manager sees it. It never includes candidate credentials, private manager reasons, answers or integrity evidence.",
+        "description": "One Sitting as a manager sees it. It never includes candidate credentials, answers or integrity evidence. Managers' private reasons appear only in history, only to those who may manage the Sitting.",
         "properties": {
           "canceled_at": {
             "description": "When the Sitting was canceled. Omitted unless it was canceled.",
             "format": "date-time",
             "type": "string"
+          },
+          "candidate_count": {
+            "description": "How many candidates the Sitting's board lists: everyone with an Attempt and the Class members it admits. Present on reads, not on the result of a change. Counting stops at 10,000.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "candidate_count_is_lower_bound": {
+            "description": "True when counting stopped at its bound, so candidate_count is \"at least\". Present with candidate_count.",
+            "type": "boolean"
           },
           "class_id": {
             "$ref": "#/components/schemas/ID",
@@ -24598,6 +24738,14 @@
             "format": "date-time",
             "type": "string"
           },
+          "corrections": {
+            "description": "The Sitting's live corrections, oldest first, with how many candidates have acknowledged each. Present when reading one Sitting.",
+            "items": {
+              "$ref": "#/components/schemas/ExamSittingCorrectionSummary"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
           "created_at": {
             "description": "When the Sitting was scheduled.",
             "format": "date-time",
@@ -24610,6 +24758,14 @@
           "exam_revision_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Exam Revision candidates receive. A live correction replaces it with the corrected Revision."
+          },
+          "history": {
+            "description": "Manager actions on the Sitting with the manager's private reason, newest first. Present only when reading one Sitting as someone who may manage it; never shown to candidates.",
+            "items": {
+              "$ref": "#/components/schemas/ExamSittingHistoryEntry"
+            },
+            "maxItems": 20,
+            "type": "array"
           },
           "id": {
             "$ref": "#/components/schemas/ID",
@@ -35597,6 +35753,38 @@
         ],
         "type": "object"
       },
+      "SittingCandidateDesktopSetupResponse": {
+        "additionalProperties": false,
+        "description": "A candidate's Desktop readiness before the Sitting opens, from their newest Desktop registration. It never names the device or the build.",
+        "properties": {
+          "platform": {
+            "description": "The registration's platform. Omitted when not set up.",
+            "enum": [
+              "darwin",
+              "win32",
+              "linux"
+            ],
+            "type": "string"
+          },
+          "release": {
+            "description": "The registration's Desktop release. Omitted when not set up.",
+            "type": "string"
+          },
+          "state": {
+            "description": "ready: the registered release would be admitted. not_set_up: the candidate has no Desktop registration. blocked_release: the registered release would be refused, so they must update.",
+            "enum": [
+              "ready",
+              "not_set_up",
+              "blocked_release"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
       "SittingCandidateEnvironmentResponse": {
         "additionalProperties": false,
         "description": "The candidate's execution environment, present once the Attempt has one. Incarnation counts the machines it has had; a manager names it to replace the current one.",
@@ -35691,6 +35879,11 @@
         "additionalProperties": false,
         "description": "One candidate's row on the status board.",
         "properties": {
+          "acknowledged_at": {
+            "description": "When the candidate acknowledged the Sitting's current live correction. Omitted when the current Revision is not a correction or they have not acknowledged it.",
+            "format": "date-time",
+            "type": "string"
+          },
           "attempt": {
             "description": "The candidate's Attempt. Null when the candidate has not started.",
             "oneOf": [
@@ -35706,12 +35899,32 @@
             "$ref": "#/components/schemas/SittingCandidateIdentityResponse",
             "description": "The candidate User."
           },
+          "changed_file_count": {
+            "description": "How many workspace files the candidate added, changed or removed against the Starter Workspace. Only for callers who may manage the Sitting.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "current_class_membership": {
             "description": "Whether the candidate is still a member of the Sitting's Class.",
             "type": "boolean"
           },
+          "desktop_setup": {
+            "$ref": "#/components/schemas/SittingCandidateDesktopSetupResponse",
+            "description": "Whether the candidate's Desktop is ready. Present only before the Sitting opens."
+          },
+          "device_name": {
+            "description": "The name the candidate gave the Desktop they last joined from. Only for callers who may manage the Sitting; omitted when it has none.",
+            "type": "string"
+          },
           "environment": {
             "$ref": "#/components/schemas/SittingCandidateEnvironmentResponse"
+          },
+          "focus_loss_count": {
+            "description": "How many times Desktop reported the candidate leaving the exam, across every participation. Only for callers who may manage the Sitting.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
           },
           "integrity_attention_count": {
             "description": "Number of integrity issues on the Attempt that still need attention, such as discrepancies not covered by a finalized Submission Review or gaps in the delivered integrity data. Zero when there is no Attempt.",
@@ -49067,6 +49280,15 @@
                 "all"
               ],
               "type": "string"
+            }
+          },
+          {
+            "description": "true returns only Exams with at least one Sitting; false only Exams with none, such as those not yet scheduled. Omit it for both.",
+            "in": "query",
+            "name": "has_sittings",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           },
           {

@@ -410,7 +410,7 @@ func TestExamOpenAPIDocument(t *testing.T) {
 	document := readOpenAPIDocument(t)
 	var listOperation openAPIOperation
 	require.NoError(t, json.Unmarshal(document.Paths[model.APIURLSuffix+"/exams"]["get"], &listOperation))
-	require.Equal(t, []string{"academic_unit_id", "archive_state", "cursor", "ends_after", "limit", "q", "sitting_state", "starts_before"}, academicStructureQueryParameterNames(listOperation.Parameters))
+	require.Equal(t, []string{"academic_unit_id", "archive_state", "cursor", "ends_after", "has_sittings", "limit", "q", "sitting_state", "starts_before"}, academicStructureQueryParameterNames(listOperation.Parameters))
 }
 
 func TestEditExamDraftTextOpenAPISchemaRequiresANonNullAuthoredValue(t *testing.T) {

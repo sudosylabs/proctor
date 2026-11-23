@@ -309,6 +309,34 @@ components:
           $ref: '#/components/schemas/NativeSecuritySummary'
         environment:
           $ref: '#/components/schemas/SittingCandidateEnvironmentResponse'
+        desktop_setup:
+          description: Whether the candidate's Desktop is ready. Present only before the Sitting opens.
+          $ref: '#/components/schemas/SittingCandidateDesktopSetupResponse'
+        acknowledged_at:
+          type: string
+          format: date-time
+          description: >-
+            When the candidate acknowledged the Sitting's current live correction. Omitted when the current
+            Revision is not a correction or they have not acknowledged it.
+        device_name:
+          type: string
+          description: >-
+            The name the candidate gave the Desktop they last joined from. Only for callers who may manage the
+            Sitting; omitted when it has none.
+        changed_file_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            How many workspace files the candidate added, changed or removed against the Starter Workspace.
+            Only for callers who may manage the Sitting.
+        focus_loss_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            How many times Desktop reported the candidate leaving the exam, across every participation. Only
+            for callers who may manage the Sitting.
     SittingCandidateEnvironmentResponse:
       type: object
       additionalProperties: false
@@ -477,3 +505,31 @@ components:
         live_coverage_available:
           type: boolean
           description: Whether the live Participation's native delivery is open, so rule statuses are current.
+    SittingCandidateDesktopSetupResponse:
+      description: >-
+        A candidate's Desktop readiness before the Sitting opens, from their newest Desktop registration. It
+        never names the device or the build.
+      type: object
+      additionalProperties: false
+      required:
+        - state
+      properties:
+        state:
+          type: string
+          enum:
+            - ready
+            - not_set_up
+            - blocked_release
+          description: >-
+            ready: the registered release would be admitted. not_set_up: the candidate has no Desktop
+            registration. blocked_release: the registered release would be refused, so they must update.
+        platform:
+          type: string
+          enum:
+            - darwin
+            - win32
+            - linux
+          description: The registration's platform. Omitted when not set up.
+        release:
+          type: string
+          description: The registration's Desktop release. Omitted when not set up.

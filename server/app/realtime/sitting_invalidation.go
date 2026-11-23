@@ -76,3 +76,34 @@ func PublishCandidateActivityChangedForSitting(
 		after = candidateIDs[len(candidateIDs)-1]
 	}
 }
+
+// PublishCandidateSittingBoardsChanged tells the managers of every sitting
+// whose board lists the user that it changed, as when the user's Desktop
+// registration changes. Failures are returned joined; a failed read ends the
+// loop and its error comes last.
+func PublishCandidateSittingBoardsChanged(
+	ctx context.Context,
+	publisher Publisher,
+	sittings store.ExamSittingStore,
+	userID model.UserID,
+) error {
+	if sittings == nil || publisher == nil {
+		return errors.New("Exam collection invalidation dependencies are invalid")
+	}
+
+	var after model.ExamSittingID
+	var errs []error
+	for {
+		targets, err := sittings.ListCandidateBoardTargets(ctx, userID, after, sittingCandidatePage)
+		if err != nil {
+			return errors.Join(append(errs, err)...)
+		}
+		for _, target := range targets {
+			errs = append(errs, PublishSittingBoardChanged(ctx, publisher, target.ExamID, target.SittingID))
+		}
+		if len(targets) < sittingCandidatePage {
+			return errors.Join(errs...)
+		}
+		after = targets[len(targets)-1].SittingID
+	}
+}

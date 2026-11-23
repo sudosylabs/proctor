@@ -1370,6 +1370,12 @@ func (s *timedExamAuthoringStore) List(arg0 context.Context, arg1 store.ExamList
 	})
 }
 
+func (s *timedExamAuthoringStore) Count(arg0 context.Context, arg1 store.ExamListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodCount), func(callCtx context.Context) (int, error) {
+		return s.next.Count(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamAuthoringStore) Archive(arg0 context.Context, arg1 *store.ExamArchive, arg2 *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodArchive), func(callCtx context.Context) (*store.ExamArchiveCommandResult, error) {
 		return s.next.Archive(callCtx, arg1, arg2)
@@ -1547,6 +1553,30 @@ func (s *timedExamSittingStore) FinishSealing(arg0 context.Context, arg1 *store.
 func (s *timedExamSittingStore) ListNoShows(arg0 context.Context, arg1 store.ExamSittingNoShowListOptions) ([]store.ExamSittingNoShow, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodListNoShows), func(callCtx context.Context) ([]store.ExamSittingNoShow, error) {
 		return s.next.ListNoShows(callCtx, arg1)
+	})
+}
+
+func (s *timedExamSittingStore) ListCandidateBoardTargets(arg0 context.Context, arg1 model.UserID, arg2 model.ExamSittingID, arg3 int) ([]store.ExamSittingInvalidationTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodListCandidateBoardTargets), func(callCtx context.Context) ([]store.ExamSittingInvalidationTarget, error) {
+		return s.next.ListCandidateBoardTargets(callCtx, arg1, arg2, arg3)
+	})
+}
+
+func (s *timedExamSittingStore) CountCandidates(arg0 context.Context, arg1 []model.ExamSittingID) (map[model.ExamSittingID]int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodCountCandidates), func(callCtx context.Context) (map[model.ExamSittingID]int, error) {
+		return s.next.CountCandidates(callCtx, arg1)
+	})
+}
+
+func (s *timedExamSittingStore) ListHistory(arg0 context.Context, arg1 model.ExamSittingID, arg2 int) ([]store.ExamSittingHistoryEntry, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodListHistory), func(callCtx context.Context) ([]store.ExamSittingHistoryEntry, error) {
+		return s.next.ListHistory(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamSittingStore) ListCorrections(arg0 context.Context, arg1 model.ExamSittingID) ([]store.ExamSittingCorrectionSummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodListCorrections), func(callCtx context.Context) ([]store.ExamSittingCorrectionSummary, error) {
+		return s.next.ListCorrections(callCtx, arg1)
 	})
 }
 
@@ -1733,6 +1763,18 @@ func (s *timedExamAttemptStore) List(arg0 context.Context, arg1 store.ExamAttemp
 func (s *timedExamAttemptStore) ListSittingCandidateStatuses(arg0 context.Context, arg1 store.SittingCandidateStatusListOptions) (*store.SittingCandidateStatusPage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListSittingCandidateStatuses), func(callCtx context.Context) (*store.SittingCandidateStatusPage, error) {
 		return s.next.ListSittingCandidateStatuses(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) ListSittingCandidateDetails(arg0 context.Context, arg1 store.SittingCandidateDetailOptions) ([]store.SittingCandidateDetail, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListSittingCandidateDetails), func(callCtx context.Context) ([]store.SittingCandidateDetail, error) {
+		return s.next.ListSittingCandidateDetails(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) ListManagerEnds(arg0 context.Context, arg1 model.ExamSittingID, arg2 []model.ExamAttemptID) ([]store.ExamAttemptManagerEnd, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListManagerEnds), func(callCtx context.Context) ([]store.ExamAttemptManagerEnd, error) {
+		return s.next.ListManagerEnds(callCtx, arg1, arg2)
 	})
 }
 

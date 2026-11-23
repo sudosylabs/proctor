@@ -165,6 +165,9 @@ type filePurgeExpiredContentHandler struct {
 // without a tight chain of jobs.
 const filePurgeContinuationDelay = time.Second
 
+// lapsedExamCopyBatch bounds the lapsed exam copies one purge run deletes.
+const lapsedExamCopyBatch = 100
+
 func (h filePurgeExpiredContentHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	if !execution.Job.ID.IsValid() ||
 		h.files == nil ||
@@ -197,6 +200,11 @@ func (h filePurgeExpiredContentHandler) Run(ctx context.Context, execution job.E
 		checkpoint, failure = h.purgeStarterWorkspaceObjects(ctx, execution, command, allowances.starter, checkpoint)
 		if failure != nil {
 			return *failure
+		}
+		// An exam copy whose reservation lapsed goes once its staged objects
+		// have; deleting a few rows needs no work budget.
+		if _, err = h.starterWorkspace.DeleteLapsedExamCopies(ctx, lapsedExamCopyBatch); err != nil {
+			return job.RetryableFailure("database.unavailable", err)
 		}
 	}
 

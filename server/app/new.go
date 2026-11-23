@@ -139,6 +139,7 @@ func New(deps Dependencies) (*App, error) {
 		Administration:       administrations,
 		Academic:             academics,
 		ExamAuthoring:        exams.authoring,
+		ExamCopies:           exams.copies,
 		ExamPublication:      exams.publication,
 		Sittings:             exams.sittings,
 		Attempts:             exams.attempts,

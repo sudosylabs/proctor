@@ -83,7 +83,8 @@ func (s SQLExamAuthoringStore) CountExamActions(
 				) pending
 			) END AS pending_review_count
 		FROM exams e
-		WHERE e.id = ANY(?)`, args...); err != nil {
+		WHERE e.id = ANY(?)
+			AND e.copying_until IS NULL`, args...); err != nil {
 		return nil, fmt.Errorf("count Exam review backlog: %w", err)
 	}
 

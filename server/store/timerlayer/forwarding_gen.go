@@ -1340,6 +1340,18 @@ func (s *timedExamAuthoringStore) Create(arg0 context.Context, arg1 *store.ExamA
 	})
 }
 
+func (s *timedExamAuthoringStore) ReserveCopy(arg0 context.Context, arg1 *store.ExamCopyReservation) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodReserveCopy), func(callCtx context.Context) error {
+		return s.next.ReserveCopy(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAuthoringStore) CommitCopy(arg0 context.Context, arg1 *store.ExamCopyCommit, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodCommitCopy), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
+		return s.next.CommitCopy(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamAuthoringStore) UpdateDraftText(arg0 context.Context, arg1 *store.ExamDraftTextUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftText), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
 		return s.next.UpdateDraftText(callCtx, arg1, arg2)
@@ -2537,6 +2549,12 @@ func (s *timedExamStarterWorkspaceStore) CompleteObjectCleanup(arg0 context.Cont
 func (s *timedExamStarterWorkspaceStore) ReleaseObjectCleanup(arg0 context.Context, arg1 *store.StarterWorkspaceCleanupRelease) error {
 	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamStarterWorkspace, methodReleaseObjectCleanup), func(callCtx context.Context) error {
 		return s.next.ReleaseObjectCleanup(callCtx, arg1)
+	})
+}
+
+func (s *timedExamStarterWorkspaceStore) DeleteLapsedExamCopies(arg0 context.Context, arg1 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamStarterWorkspace, methodDeleteLapsedExamCopies), func(callCtx context.Context) (int, error) {
+		return s.next.DeleteLapsedExamCopies(callCtx, arg1)
 	})
 }
 

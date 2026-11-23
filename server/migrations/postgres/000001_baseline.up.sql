@@ -1027,11 +1027,18 @@ CREATE TABLE exams (
     updated_at timestamptz NOT NULL,
     archived_at timestamptz,
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
+    -- Set while a copy is reserved and its bytes are written; every read
+    -- treats such an exam as absent, and the purge job deletes one whose
+    -- reservation lapsed.
+    copying_until timestamptz,
     CONSTRAINT exams_lifecycle_check CHECK (
         updated_at >= created_at AND
         (archived_at IS NULL OR archived_at >= created_at)
-    )
+    ),
+    CONSTRAINT exams_copying_check CHECK (copying_until IS NULL OR copying_until > created_at)
 );
+
+CREATE INDEX exams_copying_until_idx ON exams (copying_until) WHERE copying_until IS NOT NULL;
 
 CREATE INDEX exams_academic_unit_id_updated_at_id_idx
     ON exams (academic_unit_id, updated_at DESC, id DESC);

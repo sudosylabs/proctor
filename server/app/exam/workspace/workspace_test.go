@@ -80,6 +80,8 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		examID: examID, persistence: persistence, access: control, publisher: publisher, content: content}
 }
 
+func (f *fakeWorkspaceStore) DeleteLapsedExamCopies(context.Context, int) (int, error) { return 0, nil }
+
 type fakeWorkspaceStore struct {
 	access        *store.ExamAccessSnapshot
 	reservation   *store.ExamStarterWorkspaceReservation

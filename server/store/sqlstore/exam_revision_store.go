@@ -502,7 +502,8 @@ const examRevisionDraftSelect = `SELECT e.academic_unit_id, e.archived_at, e.rev
 			d.base_revision_id, d.revision AS draft_revision
 		FROM exams e
 		JOIN exam_drafts d ON d.exam_id = e.id
-		WHERE e.id = ?`
+		WHERE e.id = ?
+			AND e.copying_until IS NULL`
 
 // lockExamRevisionDraft locks the exam and its draft and requires a manager
 // (or override), an unarchived exam and the expected draft revision.

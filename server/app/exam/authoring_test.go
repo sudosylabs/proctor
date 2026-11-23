@@ -290,6 +290,9 @@ type authoringStoreFake struct {
 	countOptions       *store.ExamListOptions
 	actionOptions      *store.ExamActionCountOptions
 	actionCounts       map[model.ExamID]store.ExamActionCounts
+	copyReservation    *store.ExamCopyReservation
+	copyCommit         *store.ExamCopyCommit
+	copyReplayed       bool
 	summaries          []store.ExamSummary
 	managerSummaries   []store.ExamManagerSummary
 	managerListOptions store.ExamManagerListOptions

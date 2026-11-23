@@ -109,17 +109,24 @@ func (f *purgeContentFake) remove(revisionID model.FileRevisionID) error {
 	return nil
 }
 
+// DeleteLapsedExamCopies records each sweep of lapsed exam copies.
+func (f *starterWorkspaceCleanupStoreFake) DeleteLapsedExamCopies(_ context.Context, limit int) (int, error) {
+	f.lapsedCopySweeps = append(f.lapsedCopySweeps, limit)
+	return 0, nil
+}
+
 type starterWorkspaceCleanupStoreFake struct {
 	store.ExamStarterWorkspaceStore
-	objects     []model.StarterWorkspaceObject
-	claimLimits []int
-	claimTokens []string
-	completed   []model.StarterWorkspaceObjectID
-	released    []model.StarterWorkspaceObjectID
-	completeErr error
-	releaseErr  error
-	order       *[]string
-	drain       bool
+	lapsedCopySweeps []int
+	objects          []model.StarterWorkspaceObject
+	claimLimits      []int
+	claimTokens      []string
+	completed        []model.StarterWorkspaceObjectID
+	released         []model.StarterWorkspaceObjectID
+	completeErr      error
+	releaseErr       error
+	order            *[]string
+	drain            bool
 }
 
 func (f *starterWorkspaceCleanupStoreFake) ClaimObjectsForCleanup(_ context.Context, input *store.StarterWorkspaceCleanupClaim) ([]model.StarterWorkspaceObject, error) {

@@ -50,6 +50,9 @@ type examAuthoringRow struct {
 	examCapacityPolicyRow
 	ResourceCount       int  `db:"resource_count"`
 	HasStarterWorkspace bool `db:"has_starter_workspace"`
+	// CopyingUntil is written on insert only; reads never select a copying
+	// exam.
+	CopyingUntil sql.NullTime `db:"copying_until"`
 }
 
 // examAuthoringOutcome is the persisted outcome of an idempotent exam
@@ -371,7 +374,7 @@ func (s SQLExamAuthoringStore) Get(ctx context.Context, examID model.ExamID, act
 		return nil, store.NewErrInvalidInput("exam", "identity", nil)
 	}
 	var row examAuthoringRow
-	if err := s.GetMaster().Get(ctx, &row, examAuthoringSelect+` WHERE e.id = ?`, actorID.String(), examID.String()); err != nil {
+	if err := s.GetMaster().Get(ctx, &row, examAuthoringSelect+` AND e.id = ?`, actorID.String(), examID.String()); err != nil {
 		return nil, translateError("exam", examID.String(), err)
 	}
 	return row.model()
@@ -411,7 +414,8 @@ const examAccessSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id, e.
 		e.default_revision_id, e.created_at, e.updated_at, e.archived_at, e.revision,
 		` + actorExamManagerExistsSQL + ` AS actor_is_manager
 	FROM exams e
-	WHERE e.id = ?`
+	WHERE e.id = ?
+		AND e.copying_until IS NULL`
 
 const examAuthoringSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id, e.owner_user_id,
 		e.default_revision_id, e.created_at, e.updated_at, e.archived_at,
@@ -447,7 +451,8 @@ const examAuthoringSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id,
 	FROM exams e
 	JOIN exam_drafts d ON d.exam_id = e.id
 	JOIN institutions i ON i.singleton = TRUE
-		AND i.archived_at IS NULL`
+		AND i.archived_at IS NULL
+	WHERE e.copying_until IS NULL`
 
 func prepareExamAuthoringCreation(input *store.ExamAuthoringCreation) (*store.ExamAuthoringCreation, json.RawMessage, error) {
 	if input == nil ||
@@ -556,7 +561,7 @@ func prepareExamDraftBrowserPolicyUpdate(input *store.ExamDraftBrowserPolicyUpda
 
 func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamDraftTextUpdate) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
-	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
+	query := examAuthoringSelect + ` AND e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}
@@ -633,7 +638,7 @@ func updateExamDraftFocusLoss(
 	input *store.ExamDraftFocusLossUpdate,
 ) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
-	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
+	query := examAuthoringSelect + ` AND e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}
@@ -710,7 +715,7 @@ func updateExamDraftBrowserPolicy(
 	input *store.ExamDraftBrowserPolicyUpdate,
 ) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
-	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
+	query := examAuthoringSelect + ` AND e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}
@@ -802,14 +807,42 @@ func createExamAuthoring(
 	input *store.ExamAuthoringCreation,
 	auditData json.RawMessage,
 ) (*store.ExamAuthoringSnapshot, error) {
-	policy, err := model.EncodeExamPolicySet(input.Draft.Policy)
+	row, err := insertExamAggregate(ctx, tx, input.Exam, input.Draft, input.Manager, sql.NullTime{})
 	if err != nil {
 		return nil, err
 	}
 
+	if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
+		return nil, fmt.Errorf("complete exam creation audit: %w", err)
+	}
+
+	return row.model()
+}
+
+// insertExamAggregate inserts an exam, its draft and its owner as manager. A
+// valid copyingUntil marks a copy still being reserved, which every exam read
+// treats as absent.
+func insertExamAggregate(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	exam *model.Exam,
+	draft *model.ExamDraft,
+	manager *model.ExamManager,
+	copyingUntil sql.NullTime,
+) (examAuthoringRow, error) {
+	input := struct {
+		Exam    *model.Exam
+		Draft   *model.ExamDraft
+		Manager *model.ExamManager
+	}{exam, draft, manager}
+	policy, err := model.EncodeExamPolicySet(input.Draft.Policy)
+	if err != nil {
+		return examAuthoringRow{}, err
+	}
+
 	capacity, err := currentExamCapacityPolicy(ctx, tx)
 	if err != nil {
-		return nil, err
+		return examAuthoringRow{}, err
 	}
 
 	row, err := newExamAuthoringRow(&store.ExamAuthoringSnapshot{
@@ -821,26 +854,27 @@ func createExamAuthoring(
 		Capacity:       capacity,
 	}, true)
 	if err != nil {
-		return nil, err
+		return examAuthoringRow{}, err
 	}
 
 	row.Policy = jsonValue(policy)
 	browserPolicy := input.Draft.BrowserPolicy
 	browserPolicyBytes, err := model.EncodeBrowserPolicy(browserPolicy)
 	if err != nil {
-		return nil, err
+		return examAuthoringRow{}, err
 	}
 
 	row.BrowserPolicy = jsonValue(browserPolicyBytes)
+	row.CopyingUntil = copyingUntil
 	if _, err := tx.NamedExec(ctx, `INSERT INTO exams (
 			id, academic_unit_id, creator_user_id, owner_user_id, default_revision_id, created_at,
-				updated_at, archived_at, revision
+				updated_at, archived_at, revision, copying_until
 		)
 		VALUES (
 			:id, :academic_unit_id, :creator_user_id, :owner_user_id, :default_revision_id,
-				:created_at, :updated_at, :archived_at, :exam_revision
+				:created_at, :updated_at, :archived_at, :exam_revision, :copying_until
 		)`, &row); err != nil {
-		return nil, fmt.Errorf("create exam: %w", translateError("exam", input.Exam.ID.String(), err))
+		return examAuthoringRow{}, fmt.Errorf("create exam: %w", translateError("exam", input.Exam.ID.String(), err))
 	}
 
 	if _, err := tx.NamedExec(ctx, `INSERT INTO exam_drafts (
@@ -851,7 +885,7 @@ func createExamAuthoring(
 			:id, :draft_title, :instructions_markdown, :policy, :browser_policy,
 				:base_revision_id, :draft_updated_at, :draft_updated_by_user_id, :draft_revision
 		)`, &row); err != nil {
-		return nil, fmt.Errorf("create exam draft: %w", translateError("exam_draft", input.Exam.ID.String(), err))
+		return examAuthoringRow{}, fmt.Errorf("create exam draft: %w", translateError("exam_draft", input.Exam.ID.String(), err))
 	}
 
 	if _, err := tx.Exec(
@@ -863,14 +897,10 @@ func createExamAuthoring(
 		input.Manager.GrantedByUserID.String(),
 		input.Manager.GrantedAt,
 	); err != nil {
-		return nil, fmt.Errorf("create exam manager: %w", translateError("exam_manager", input.Manager.UserID.String(), err))
+		return examAuthoringRow{}, fmt.Errorf("create exam manager: %w", translateError("exam_manager", input.Manager.UserID.String(), err))
 	}
 
-	if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
-		return nil, fmt.Errorf("complete exam creation audit: %w", err)
-	}
-
-	return row.model()
+	return row, nil
 }
 
 func newExamAuthoringRow(snapshot *store.ExamAuthoringSnapshot, actorIsManager bool) (examAuthoringRow, error) {
@@ -1137,7 +1167,7 @@ func updateExamDraftNativePolicy(
 	input *store.ExamDraftNativePolicyUpdate,
 ) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
-	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
+	query := examAuthoringSelect + ` AND e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}

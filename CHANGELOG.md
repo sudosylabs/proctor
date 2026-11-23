@@ -10,6 +10,58 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: what the Desktop Administration, Exams and Activity boards need.
+  - **People named beside IDs.** Records that hold a person's ID now also name them as a `PersonRef`. This covers:
+    - who granted a Role, who last changed one, and who acted in Audits and in Access Policy history;
+    - who sent an invitation, and who created an import or progression;
+    - an Exam's creator and owner, its managers, a revision's publisher, and a draft's last editor;
+    - who started, finalized or released a review, decisions and waivers, and retention holds;
+    - who ended an Attempt, and who requested a clip.
+    
+    Everyone who can read the record gets the display name. The username and profile picture follow the reader's own directory visibility.
+  - **Administration:**
+    - `GET /permissions`, the role editor's catalogue;
+    - two-step status and the `mfa` and `role_holder` user filters;
+    - a person's memberships;
+    - a reason for bulk disable;
+    - invitation search, sort and delivery filters;
+    - unit kinds, member counts and administrators;
+    - programme and period counts and filters;
+    - names and search on class members, and class teachers;
+    - Desktop releases, and reasons on revoked builds;
+    - open sittings, audit repeat counts, and the dates mail keys were created.
+  - **Retention:**
+    - the Institution-wide holds list;
+    - review dates on holds;
+    - exam titles on records, and per-exam summaries;
+    - a CSV export;
+    - previews of a proposed policy.
+  - **Exams for staff:**
+    - exam totals, and the needs-attention and to-review counts;
+    - copying an exam;
+    - "every problem before publishing";
+    - reading older versions;
+    - a join window on sittings: join early, start on time;
+    - sitting history, candidate counts and Desktop setup;
+    - board counts and filters, and the candidate panel;
+    - correction acknowledgements and no-show details;
+    - submission lists and bulk result release;
+    - views across exams;
+    - reasons on clips, live evidence reads for managers, and flag summaries;
+    - reopening a review.
+  - **Candidates:**
+    - their receipt code;
+    - when they were stopped and let back in;
+    - their focus-loss rule and allowed browser sites before Start;
+    - when their work was last saved.
+  - **Realtime:**
+    - **New events:** `user.changed`, `class.changed`, `academic_period.changed`, `role.changed`, `role_binding.changed`, `retention.changed`, `mail_delivery.changed`, `desktop_compatibility_policy.changed`, `exam.counts.changed`, `exam_sitting.submissions.changed`, `exam_attempt.screen_clip.changed` and `exam_attempt.evidence.changed`.
+    - **Existing events** now also carry their entity's ID and its direct container's ID.
+  - **Breaking changes:**
+    - The desktop compatibility policy's `revoked_desktop_build_ids` becomes `revoked_desktop_builds`, a list of objects with a reason, and the PUT takes `{build_id, reason}`.
+    - Class member list items use a new `ClassMemberListItemResponse` with the person embedded.
+    - `GET /classes/{id}` returns `ClassDetailResponse`.
+
 - Server: web and Desktop sign-in can use a Proctor authenticator or recovery code as the second factor after sign-in through an external provider. Desktop reauthentication can also raise the strength of an existing Session.
 
 - Server: native capabilities decided on the server. The release's capability

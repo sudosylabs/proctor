@@ -534,6 +534,9 @@ func (row candidateExamActivityRow) item() (store.CandidateExamActivityItem, err
 	case state == model.ExamSittingScheduled:
 		item.ActivityState = store.CandidateExamActivityUpcoming
 		item.AccessState = store.CandidateExamAccessNotOpen
+		if joinWindow.Waiting(state, item.ScheduledStartAt, row.ServerTime) {
+			item.AccessState = store.CandidateExamAccessWaiting
+		}
 	case !row.ExamArchivedAt.Valid && (state == model.ExamSittingOpen || state == model.ExamSittingPaused) && row.CurrentMembership:
 		item.ActivityState = store.CandidateExamActivityAvailable
 		if row.ManagementAuthority {

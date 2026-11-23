@@ -77,12 +77,14 @@ type ExamSitting struct {
 	Revision         int64
 }
 
-// ExamSittingJoinWindow narrows when a candidate may start a new Attempt.
-// OpensAt, at or before the scheduled start, opens the sitting early; ClosesAt,
-// after the start and at or before the end, refuses first entry from then on
-// while candidates who already started carry on until the end. Either may be
-// absent, and an empty window changes nothing. It is part of the pre-open
-// schedule, so it is frozen once the sitting opens.
+// ExamSittingJoinWindow is when candidates may join. From OpensAt, at or
+// before the scheduled start, a candidate may prepare while the sitting is
+// still scheduled; the sitting itself, and every Attempt, still starts at the
+// scheduled start. ClosesAt, after the start and at or before the end,
+// refuses first entry from then on while candidates who already started
+// carry on until the end. Either may be absent, and an empty window changes
+// nothing. It is part of the pre-open schedule, so it is frozen once the
+// sitting opens.
 type ExamSittingJoinWindow struct {
 	OpensAt  OptionalTime
 	ClosesAt OptionalTime
@@ -124,19 +126,12 @@ func (w ExamSittingJoinWindow) Canonical() ExamSittingJoinWindow {
 	return w
 }
 
-// OpensAtOr is when a sitting starting at scheduledStartAt opens under this
-// window: the window's opening when it has one, otherwise the start.
-func (w ExamSittingJoinWindow) OpensAtOr(scheduledStartAt time.Time) time.Time {
-	if w.OpensAt.Valid {
-		return w.OpensAt.Time
-	}
-	return scheduledStartAt
-}
-
-// OpensAt is when the lifecycle opens the sitting. It is the only boundary
-// the join window moves; ScheduledEndAt stays the one deadline.
-func (s *ExamSitting) OpensAt() time.Time {
-	return s.JoinWindow.OpensAtOr(s.ScheduledStartAt)
+// Waiting reports whether at is in the early-join phase of a sitting still
+// in state and due to start at scheduledStartAt: from OpensAt until the
+// start. A waiting candidate may prepare (the readiness overview and
+// preflight) but holds no Attempt, so nobody gains working time.
+func (w ExamSittingJoinWindow) Waiting(state ExamSittingState, scheduledStartAt, at time.Time) bool {
+	return state == ExamSittingScheduled && w.OpensAt.Valid && !at.Before(w.OpensAt.Time) && at.Before(scheduledStartAt)
 }
 
 // ExamSittingReasonCode is a bounded, candidate-safe lifecycle reason. A

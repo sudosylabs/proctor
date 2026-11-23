@@ -66,7 +66,7 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 		fixture.publisher.Calls())
 }
 
-func TestScheduleOpensAtAnEarlyJoinWindow(t *testing.T) {
+func TestScheduleWithAnEarlyJoinWindowStillOpensAtTheStart(t *testing.T) {
 	t.Parallel()
 	fixture := newFixture(t)
 	start, end := testNow.Add(time.Hour), testNow.Add(3*time.Hour)
@@ -82,7 +82,7 @@ func TestScheduleOpensAtAnEarlyJoinWindow(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, got.Sitting.JoinWindow.Equal(window), "the window reaches the store")
 	require.True(t, fixture.persistence.schedule.Sitting.JoinWindow.Equal(window), "the window reaches the store")
-	require.True(t, fixture.jobs.boundaryStart.Equal(start.Add(-10*time.Minute)), "the open Job runs when the window opens")
+	require.True(t, fixture.jobs.boundaryStart.Equal(start), "the open Job runs at the scheduled start, not when joining opens")
 	require.True(t, fixture.jobs.boundaryEnd.Equal(end), "the deadline does not move")
 }
 
@@ -136,7 +136,7 @@ func TestUpdateScheduleKeepsChecksAndClearsTheJoinWindow(t *testing.T) {
 	require.NotNil(t, fixture.persistence.update)
 	require.True(t, fixture.persistence.update.JoinWindow.Equal(model.ExamSittingJoinWindow{ClosesAt: closesAt}),
 		"the new window replaces the old one, dropping its opening")
-	require.True(t, fixture.jobs.boundaryStart.Equal(start), "without an early opening the sitting opens at the start")
+	require.True(t, fixture.jobs.boundaryStart.Equal(start), "the sitting opens at the start")
 }
 
 func TestScheduleUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testing.T) {

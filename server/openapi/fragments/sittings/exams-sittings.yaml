@@ -401,18 +401,18 @@ components:
           $ref: '#/components/schemas/ExamSittingJoinWindow'
     ExamSittingJoinWindow:
       description: >-
-        When candidates may start a new Attempt. Leave a bound out for none. opens_at, at or before the start, opens
-        the Sitting at that time instead, so it must be in the future and inside the Class's Academic Period; the
-        deadline does not move. closes_at, after the start and at or before the deadline, refuses first entry from
-        then on with exam.attempt.join_closed, while candidates who already started carry on. The window is frozen
-        once the Sitting opens.
+        When candidates may join. Leave a bound out for none. From opens_at, at or before the start, candidates can
+        run the readiness checks and read the instructions; Attempts still start when the Sitting opens at the
+        scheduled start. closes_at, after the start and at or before the deadline, refuses first entry from then on
+        with exam.attempt.join_closed, while candidates who already started carry on. The window is frozen once the
+        Sitting opens.
       type: object
       additionalProperties: false
       properties:
         opens_at:
           type: string
           format: date-time
-          description: When candidates can start joining.
+          description: When candidates can join early to prepare.
         closes_at:
           type: string
           format: date-time

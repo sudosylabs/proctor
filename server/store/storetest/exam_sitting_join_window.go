@@ -20,21 +20,22 @@ import (
 )
 
 // TestExamSittingJoinWindow schedules a Sitting whose join window opens
-// early and closes before the end. It opens at the window, admits a first
-// entry inside it, refuses one after it, and still lets a started candidate
-// reconnect.
+// before its start and closes before its end. In the early-join phase the
+// candidate can read the readiness overview but cannot connect, so no Attempt
+// or workspace exists; the Sitting still opens at its scheduled start, admits
+// a first entry inside the window, refuses one after it, and lets a started
+// candidate reconnect.
 func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	fixture := newExamAttemptFixture(t, ctx, ss)
 
 	var sitting *model.ExamSitting
 	for scheduleAttempt := 1; ; scheduleAttempt++ {
-		opensAt := model.NowUTC().Add(time.Second)
-		start, end := opensAt.Add(time.Second), opensAt.Add(time.Hour)
+		opensAt := model.NowUTC().Add(2 * time.Second)
+		start, end := opensAt.Add(3*time.Second), opensAt.Add(time.Hour)
 		window := model.ExamSittingJoinWindow{OpensAt: model.OptionalTimeFrom(opensAt), ClosesAt: model.OptionalTimeFrom(start.Add(2 * time.Second))}
 		candidate, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, start, end, window, model.NowUTC())
 		require.NoError(t, err)
-		require.Equal(t, opensAt, candidate.OpensAt())
 
 		schedule := func(openAt time.Time, key string) error {
 			openJob, deadlineJob := newExamSittingLifecycleJobs(t, candidate.ID, 1, openAt, end)
@@ -46,9 +47,9 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 			return scheduleErr
 		}
 		var invalid *store.ErrInvalidInput
-		require.ErrorAs(t, schedule(start, "join-window-start-job"), &invalid, "the open Job must be due when the window opens")
+		require.ErrorAs(t, schedule(opensAt, "join-window-early-job"), &invalid, "the sitting still opens at its scheduled start")
 
-		err = schedule(opensAt, "join-window-"+string(rune('0'+scheduleAttempt)))
+		err = schedule(start, "join-window-"+string(rune('0'+scheduleAttempt)))
 		var conflict *store.ErrConflict
 		if scheduleAttempt < 5 && errors.As(err, &conflict) && conflict.Constraint == "exam_sitting_not_future" {
 			continue
@@ -62,22 +63,18 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.True(t, stored.Sitting.JoinWindow.Equal(sitting.JoinWindow), "the join window was not stored")
 
-	late := saveUser(t, ctx, ss)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: late.ID, Kind: model.AffiliationStudent, StartsAt: model.NowUTC().Add(-time.Hour)})
-	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: late.ID, StartsAt: model.NowUTC().Add(-time.Minute)})
-	require.NoError(t, err)
-	lateSession := saveRegisteredDesktopSession(t, ctx, ss, late.ID, fixture.institutionID)
-
-	time.Sleep(time.Until(sitting.OpensAt()) + 100*time.Millisecond)
-	opened, err := ss.ExamSitting().AdvanceDue(ctx, &store.ExamSittingDueAdvance{SittingID: sitting.ID,
-		AuditEventID: saveExamSittingSystemAudit(t, ctx, ss, sitting.ID, fixture.unitID).ID, AuditAt: model.NowUTC()})
-	require.NoError(t, err)
-	require.Equal(t, model.ExamSittingOpen, opened.Value.Sitting.State, "the sitting opens when its join window opens")
-	require.True(t, opened.Value.Sitting.OpenedAt.Time.Before(sitting.ScheduledStartAt), "the sitting opened before its scheduled start")
 	joined := fixture
-	joined.sitting = opened.Value.Sitting
-
+	joined.sitting = sitting
+	overview := func() error {
+		connection := &store.ExamAttemptConnect{CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID}
+		prepareExamAttemptConnect(t, ctx, ss, connection)
+		build := connection.DesktopBuild
+		build.NativeAgreement = syntheticNativeAgreement(t, build)
+		_, readErr := ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, store.SecurityPreflightAccess{SittingID: sitting.ID,
+			CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID,
+			DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, DesktopBuild: build, DesktopCompatibilityPolicyRevision: connection.DesktopCompatibilityPolicyRevision})
+		return readErr
+	}
 	connect := func(fixture examAttemptFixture, key string) (*store.ExamAttemptConnect, *store.ExamAttemptConnectResult, error) {
 		input := &store.ExamAttemptConnect{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID,
 			SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID,
@@ -89,9 +86,56 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 		result, connectErr := ss.ExamAttempt().Connect(ctx, input, examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, key, key))
 		return input, result, connectErr
 	}
+	activityItem := func(candidate *model.User, session *model.Session) store.CandidateExamActivityItem {
+		activity, listErr := ss.ExamAttempt().ListCandidateActivity(ctx, store.CandidateExamActivityListOptions{
+			CandidateUserID: candidate.ID, DesktopSessionID: session.ID, DesktopRegistrationID: session.DesktopRegistrationID,
+			DPoPKeyThumbprint: session.DPoPKeyThumbprint, Limit: 50,
+		})
+		require.NoError(t, listErr)
+		for _, item := range activity.Items {
+			if item.SittingID == sitting.ID {
+				return item
+			}
+		}
+		require.FailNow(t, "the activity does not list the sitting")
+		return store.CandidateExamActivityItem{}
+	}
+
+	requireConflictConstraint(t, overview(), "exam_sitting_state")
+	require.Equal(t, store.CandidateExamAccessNotOpen, activityItem(fixture.candidate, fixture.session).AccessState, "before the window the sitting is not open")
+
+	late := saveUser(t, ctx, ss)
+	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: late.ID, Kind: model.AffiliationStudent, StartsAt: model.NowUTC().Add(-time.Hour)})
+	require.NoError(t, err)
+	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: late.ID, StartsAt: model.NowUTC().Add(-time.Minute)})
+	require.NoError(t, err)
+	lateSession := saveRegisteredDesktopSession(t, ctx, ss, late.ID, fixture.institutionID)
+
+	time.Sleep(time.Until(sitting.JoinWindow.OpensAt.Time) + 100*time.Millisecond)
+	require.NoError(t, overview(), "a candidate who joined early can run the readiness checks")
+	waiting := activityItem(fixture.candidate, fixture.session)
+	require.Equal(t, store.CandidateExamAccessWaiting, waiting.AccessState, "the candidate is told they are waiting for the start")
+	require.Empty(t, waiting.AllowedActions, "nobody can enter before the start")
+	earlyInput, _, err := connect(joined, "join-window-early")
+	requireConflictConstraint(t, err, "exam_sitting_state")
+	_, err = ss.ExamAttempt().Get(ctx, fixture.examID, earlyInput.AttemptID)
+	require.True(t, store.IsNotFound(err), "an early join created an Attempt, and so a workspace")
+	stillScheduled, err := ss.ExamSitting().Get(ctx, fixture.examID, sitting.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.ExamSittingScheduled, stillScheduled.Sitting.State, "the sitting does not open early")
+
+	time.Sleep(time.Until(sitting.ScheduledStartAt) + 100*time.Millisecond)
+	opened, err := ss.ExamSitting().AdvanceDue(ctx, &store.ExamSittingDueAdvance{SittingID: sitting.ID,
+		AuditEventID: saveExamSittingSystemAudit(t, ctx, ss, sitting.ID, fixture.unitID).ID, AuditAt: model.NowUTC()})
+	require.NoError(t, err)
+	require.Equal(t, model.ExamSittingOpen, opened.Value.Sitting.State, "the sitting opens at its scheduled start")
+	require.False(t, opened.Value.Sitting.OpenedAt.Time.Before(sitting.ScheduledStartAt), "the sitting opened before its scheduled start")
+	joined.sitting = opened.Value.Sitting
+
 	firstInput, first, err := connect(joined, "join-window-first")
-	require.NoError(t, err, "a first entry inside the window is admitted")
+	require.NoError(t, err, "a first entry inside the window is admitted at the start")
 	require.True(t, first.FirstAdmission)
+	require.False(t, first.Attempt.CreatedAt.Before(sitting.ScheduledStartAt), "the Attempt starts no earlier than the scheduled start")
 
 	time.Sleep(time.Until(sitting.JoinWindow.ClosesAt.Time) + 100*time.Millisecond)
 	lateFixture := joined
@@ -111,21 +155,10 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 	require.NoError(t, err, "a started candidate reconnects after the window closes")
 	require.Equal(t, first.Attempt.ID, resumed.Attempt.ID)
 
-	activity, err := ss.ExamAttempt().ListCandidateActivity(ctx, store.CandidateExamActivityListOptions{
-		CandidateUserID: late.ID, DesktopSessionID: lateSession.ID, DesktopRegistrationID: lateSession.DesktopRegistrationID,
-		DPoPKeyThumbprint: lateSession.DPoPKeyThumbprint, Limit: 50,
-	})
-	require.NoError(t, err)
-	var item *store.CandidateExamActivityItem
-	for index := range activity.Items {
-		if activity.Items[index].SittingID == sitting.ID {
-			item = &activity.Items[index]
-		}
-	}
-	require.NotNil(t, item, "the late candidate's activity lists the sitting")
-	require.True(t, item.JoinWindow.Equal(sitting.JoinWindow), "the candidate sees the join window")
-	require.Equal(t, store.CandidateExamAccessJoinClosed, item.AccessState)
-	require.Empty(t, item.AllowedActions, "a closed join window offers no entry")
+	closed := activityItem(late, lateSession)
+	require.True(t, closed.JoinWindow.Equal(sitting.JoinWindow), "the candidate sees the join window")
+	require.Equal(t, store.CandidateExamAccessJoinClosed, closed.AccessState)
+	require.Empty(t, closed.AllowedActions, "a closed join window offers no entry")
 }
 
 // TestExamSittingJoinWindowUpdate sets, keeps and clears the join window of a
@@ -145,7 +178,7 @@ func TestExamSittingJoinWindowUpdate(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 
 	update := func(revision int64, window model.ExamSittingJoinWindow, key string) (*store.ExamSittingCommandResult, error) {
-		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, revision+1, window.OpensAtOr(start), end)
+		openJob, deadlineJob := newExamSittingLifecycleJobs(t, sitting.ID, revision+1, start, end)
 		return ss.ExamSitting().UpdateSchedule(ctx, &store.ExamSittingScheduleUpdate{
 			ExamID: fixture.examID, SittingID: sitting.ID, ActorUserID: fixture.actor.ID, ExpectedRevision: revision,
 			ExamRevisionID: fixture.revisionID, ClassID: fixture.class.ID, ScheduledStartAt: start, ScheduledEndAt: end,

@@ -105,7 +105,7 @@ func (s *Service) ScheduleExamSitting(
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "schedule").Wrap(err)
 	}
 
-	openJob, deadlineJob, err := s.jobs.BoundaryJobs(sittingID, sitting.Revision, sitting.OpensAt(), sitting.ScheduledEndAt)
+	openJob, deadlineJob, err := s.jobs.BoundaryJobs(sittingID, sitting.Revision, sitting.ScheduledStartAt, sitting.ScheduledEndAt)
 	if err != nil || openJob == nil || deadlineJob == nil {
 		return store.ExamSittingSnapshot{}, jobFactoryUnavailable("construct Exam Sitting boundary Jobs", err)
 	}
@@ -275,8 +275,7 @@ func (s *Service) UpdateExamSittingSchedule(
 		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.no_changes")
 	}
 
-	opensAt := joinWindow.OpensAtOr(startAt)
-	openJob, deadlineJob, err := s.jobs.BoundaryJobs(command.SittingID, command.ExpectedRevision+1, opensAt, endAt)
+	openJob, deadlineJob, err := s.jobs.BoundaryJobs(command.SittingID, command.ExpectedRevision+1, startAt, endAt)
 	if err != nil || openJob == nil || deadlineJob == nil {
 		return store.ExamSittingSnapshot{}, jobFactoryUnavailable("construct Exam Sitting boundary Jobs", err)
 	}

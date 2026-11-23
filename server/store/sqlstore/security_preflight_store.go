@@ -61,7 +61,7 @@ func (s *SQLSecurityPreflightStore) lockPreflightEligibility(
 	if err := requireDesktopCompatibilityPolicyRevision(ctx, tx, access.DesktopCompatibilityPolicyRevision); err != nil {
 		return examAttemptAdmissionGuard{}, err
 	}
-	return lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), false)
+	return lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), admitPreparation)
 }
 
 // PrepareSecurityPreflight issues a security preflight challenge for the
@@ -788,6 +788,7 @@ func (s *SQLSecurityPreflightStore) ReadSecurityPolicyOverview(
 			ServerTime: now, Resolved: resolved,
 			BrowserActivityDisclosure: disclosure, ScreenRecordingDisclosure: recording,
 			FocusLoss: selections.FocusLoss, BrowserPolicy: revision.BrowserPolicy.Clone(),
+			InstructionsMarkdown: revision.InstructionsMarkdown,
 		}, nil
 	})
 }

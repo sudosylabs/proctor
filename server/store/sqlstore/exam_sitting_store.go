@@ -389,10 +389,10 @@ func (s SQLExamSittingStore) ListLifecycleDue(
 
 func examSittingLifecycleDueQuery(options store.ExamSittingLifecycleDueOptions) (string, []any) {
 	scheduled := `(
-		SELECT ` + examSittingColumns + `, COALESCE(join_opens_at, scheduled_start_at) AS due_at
+		SELECT ` + examSittingColumns + `, scheduled_start_at AS due_at
 		FROM exam_sittings
 		WHERE state = 'scheduled'
-			AND COALESCE(join_opens_at, scheduled_start_at) <= statement_timestamp()`
+			AND scheduled_start_at <= statement_timestamp()`
 	deadline := `(
 		SELECT ` + examSittingColumns + `, scheduled_end_at AS due_at
 		FROM exam_sittings
@@ -405,13 +405,13 @@ func examSittingLifecycleDueQuery(options store.ExamSittingLifecycleDueOptions) 
 			AND closing_at <= statement_timestamp()`
 	args := []any{}
 	if !options.AfterDueAt.IsZero() {
-		scheduled += ` AND (COALESCE(join_opens_at, scheduled_start_at), id) > (?, ?)`
+		scheduled += ` AND (scheduled_start_at, id) > (?, ?)`
 		deadline += ` AND (scheduled_end_at, id) > (?, ?)`
 		closing += ` AND (closing_at, id) > (?, ?)`
 		args = append(args, model.TimeUTC(options.AfterDueAt), options.AfterSittingID.String())
 	}
 
-	scheduled += ` ORDER BY COALESCE(join_opens_at, scheduled_start_at), id LIMIT ?)`
+	scheduled += ` ORDER BY scheduled_start_at, id LIMIT ?)`
 	args = append(args, options.Limit)
 	if !options.AfterDueAt.IsZero() {
 		args = append(args, model.TimeUTC(options.AfterDueAt), options.AfterSittingID.String())
@@ -503,7 +503,7 @@ func prepareExamSittingSchedule(input *store.ExamSittingSchedule) error {
 		input.Sitting.ID,
 		model.ExamSittingLifecycleJobOpen,
 		1,
-		input.Sitting.OpensAt(),
+		input.Sitting.ScheduledStartAt,
 	); err != nil {
 		return err
 	}
@@ -564,14 +564,13 @@ func prepareExamSittingUpdate(input *store.ExamSittingScheduleUpdate) error {
 		return store.NewErrInvalidInput("exam_sitting", "schedule_update", nil)
 	}
 
-	opensAt := input.JoinWindow.OpensAtOr(input.ScheduledStartAt)
 	resultingRevision := input.ExpectedRevision + 1
 	if err := validateExamSittingLifecycleJob(
 		input.OpenJob,
 		input.SittingID,
 		model.ExamSittingLifecycleJobOpen,
 		resultingRevision,
-		opensAt,
+		input.ScheduledStartAt,
 	); err != nil {
 		return err
 	}
@@ -688,7 +687,7 @@ func scheduleExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 		input.ManagerOverride,
 		candidate.ExamRevisionID,
 		candidate.ClassID,
-		candidate.OpensAt(),
+		candidate.ScheduledStartAt,
 		candidate.ScheduledEndAt,
 	); selectionErr != nil {
 		return nil, selectionErr
@@ -757,16 +756,13 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 	}
 
 	priorClassID := current.ClassID
-	// The delivery runs from when the sitting opens, so an early join window
-	// must itself be in the future and inside the Academic Period.
-	opensAt := input.JoinWindow.OpensAtOr(input.ScheduledStartAt)
 	if lineageErr := guardExamSittingLineage(
 		ctx,
 		tx,
 		input.ExamID,
 		input.ExamRevisionID,
 		input.ClassID,
-		opensAt,
+		input.ScheduledStartAt,
 		input.ScheduledEndAt,
 	); lineageErr != nil {
 		return nil, lineageErr

@@ -163,11 +163,13 @@ components:
         continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is
         suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another
         unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example
-        because they left the Class or manage the Exam. `join_closed` means the Sitting's join window has closed
-        before they started. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and
-        Submission.
+        because they left the Class or manage the Exam. `waiting` means the Sitting's join window is open but the
+        Sitting has not started: the candidate can run the readiness checks and read the instructions, and the
+        Attempt starts at the scheduled start. `join_closed` means the join window has closed before they started.
+        `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.
       enum:
         - not_open
+        - waiting
         - joinable
         - join_closed
         - resumable
@@ -318,8 +320,8 @@ components:
           type: string
           format: date-time
           description: >-
-            When the candidate can start joining, if the Sitting opens before its scheduled start. Absent when the
-            Sitting opens at the start.
+            When the candidate can join to prepare: run the readiness checks and read the instructions. The Attempt
+            still starts at scheduled_start_at. Absent when there is no early join.
         join_closes_at:
           type: string
           format: date-time

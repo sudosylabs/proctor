@@ -28,7 +28,7 @@ components:
             state: paused
             created_at: '2026-11-20T14:12:05Z'
             updated_at: '2026-12-14T09:41:17Z'
-            opened_at: '2026-12-14T08:50:02Z'
+            opened_at: '2026-12-14T09:00:02Z'
             paused_at: '2026-12-14T09:41:17Z'
             revision: 3
   schemas:
@@ -114,7 +114,7 @@ components:
         scheduled_start_at:
           type: string
           format: date-time
-          description: When the Sitting is scheduled to start. It opens then unless join_opens_at is earlier.
+          description: When the Sitting opens and every Attempt can start, whether or not candidates joined early.
         scheduled_end_at:
           type: string
           format: date-time
@@ -123,9 +123,10 @@ components:
           type: string
           format: date-time
           description: >-
-            When candidates can start joining, at or before the scheduled start. The Sitting opens at this time
-            instead of the scheduled start; the deadline does not move. Present only when set. It is frozen once the
-            Sitting opens.
+            When candidates can join early, at or before the scheduled start. From then until the start they can run
+            the readiness checks and read the instructions; nobody can start an Attempt or touch a workspace before
+            the start, so working time is the same for everyone. Present only when set. It is frozen once the Sitting
+            opens.
         join_closes_at:
           type: string
           format: date-time

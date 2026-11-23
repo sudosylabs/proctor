@@ -18,7 +18,9 @@ paths:
         successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns
         frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable
         Institution catalogs, or a family enforced where the release does not certify enforcement on the
-        candidate's platform, fail closed.
+        candidate's platform, fail closed. During a Sitting's early-join phase, from join_opens_at until its scheduled
+        start, a candidate can prepare and report a preflight to check their machine; Connect stays closed until the
+        Sitting opens, so prepare again then.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -99,7 +101,9 @@ paths:
         for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it
         checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing,
         so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the
-        prepared preflight returns; if they differ, refresh the overview.
+        prepared preflight returns; if they differ, refresh the overview. It works on an open Sitting, and on a
+        scheduled one from its join_opens_at until its scheduled start, so a candidate who joined early can prepare
+        while the Attempt itself waits for the start.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -1287,6 +1291,7 @@ components:
         - screen_recording_disclosure
         - focus_loss
         - browser_sites
+        - instructions_markdown
       properties:
         server_time:
           type: string
@@ -1295,6 +1300,12 @@ components:
           $ref: '#/components/schemas/EffectiveExamSecurityPolicy'
         focus_loss:
           $ref: '#/components/schemas/CandidateFocusLossRule'
+        instructions_markdown:
+          type: string
+          maxLength: 65536
+          description: >-
+            The Exam's instructions from the Revision the Sitting delivers, in Markdown cleaned of unsafe content, so
+            a candidate who joined early can read them while they wait. Can be empty.
         browser_sites:
           type: array
           maxItems: 128

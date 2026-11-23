@@ -6947,7 +6947,7 @@
               "id": "14j8umgczgrdp95w77zuxmxfu9",
               "join_closes_at": "2026-12-14T09:30:00Z",
               "join_opens_at": "2026-12-14T08:50:00Z",
-              "opened_at": "2026-12-14T08:50:02Z",
+              "opened_at": "2026-12-14T09:00:02Z",
               "paused_at": "2026-12-14T09:41:17Z",
               "revision": 3,
               "scheduled_end_at": "2026-12-14T11:00:00Z",
@@ -16533,9 +16533,10 @@
         "type": "object"
       },
       "CandidateExamAccessState": {
-        "description": "Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `join_closed` means the Sitting's join window has closed before they started. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.",
+        "description": "Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `waiting` means the Sitting's join window is open but the Sitting has not started: the candidate can run the readiness checks and read the instructions, and the Attempt starts at the scheduled start. `join_closed` means the join window has closed before they started. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.",
         "enum": [
           "not_open",
+          "waiting",
           "joinable",
           "join_closed",
           "resumable",
@@ -16655,7 +16656,7 @@
             "type": "string"
           },
           "join_opens_at": {
-            "description": "When the candidate can start joining, if the Sitting opens before its scheduled start. Absent when the Sitting opens at the start.",
+            "description": "When the candidate can join to prepare: run the readiness checks and read the instructions. The Attempt still starts at scheduled_start_at. Absent when there is no early join.",
             "format": "date-time",
             "type": "string"
           },
@@ -24111,7 +24112,7 @@
       },
       "ExamSittingJoinWindow": {
         "additionalProperties": false,
-        "description": "When candidates may start a new Attempt. Leave a bound out for none. opens_at, at or before the start, opens the Sitting at that time instead, so it must be in the future and inside the Class's Academic Period; the deadline does not move. closes_at, after the start and at or before the deadline, refuses first entry from then on with exam.attempt.join_closed, while candidates who already started carry on. The window is frozen once the Sitting opens.",
+        "description": "When candidates may join. Leave a bound out for none. From opens_at, at or before the start, candidates can run the readiness checks and read the instructions; Attempts still start when the Sitting opens at the scheduled start. closes_at, after the start and at or before the deadline, refuses first entry from then on with exam.attempt.join_closed, while candidates who already started carry on. The window is frozen once the Sitting opens.",
         "properties": {
           "closes_at": {
             "description": "When candidates who have not started can no longer join.",
@@ -24119,7 +24120,7 @@
             "type": "string"
           },
           "opens_at": {
-            "description": "When candidates can start joining.",
+            "description": "When candidates can join early to prepare.",
             "format": "date-time",
             "type": "string"
           }
@@ -24264,7 +24265,7 @@
             "type": "string"
           },
           "join_opens_at": {
-            "description": "When candidates can start joining, at or before the scheduled start. The Sitting opens at this time instead of the scheduled start; the deadline does not move. Present only when set. It is frozen once the Sitting opens.",
+            "description": "When candidates can join early, at or before the scheduled start. From then until the start they can run the readiness checks and read the instructions; nobody can start an Attempt or touch a workspace before the start, so working time is the same for everyone. Present only when set. It is frozen once the Sitting opens.",
             "format": "date-time",
             "type": "string"
           },
@@ -24294,7 +24295,7 @@
             "type": "string"
           },
           "scheduled_start_at": {
-            "description": "When the Sitting is scheduled to start. It opens then unless join_opens_at is earlier.",
+            "description": "When the Sitting opens and every Attempt can start, whether or not candidates joined early.",
             "format": "date-time",
             "type": "string"
           },
@@ -34223,6 +34224,11 @@
           "focus_loss": {
             "$ref": "#/components/schemas/CandidateFocusLossRule"
           },
+          "instructions_markdown": {
+            "description": "The Exam's instructions from the Revision the Sitting delivers, in Markdown cleaned of unsafe content, so a candidate who joined early can read them while they wait. Can be empty.",
+            "maxLength": 65536,
+            "type": "string"
+          },
           "policy": {
             "$ref": "#/components/schemas/EffectiveExamSecurityPolicy"
           },
@@ -34254,7 +34260,8 @@
           "browser_activity_disclosure",
           "screen_recording_disclosure",
           "focus_loss",
-          "browser_sites"
+          "browser_sites",
+          "instructions_markdown"
         ],
         "type": "object"
       },
@@ -48498,7 +48505,7 @@
     },
     "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
       "get": {
-        "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.",
+        "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview. It works on an open Sitting, and on a scheduled one from its join_opens_at until its scheduled start, so a candidate who joined early can prepare while the Attempt itself waits for the start.",
         "operationId": "getSecurityPolicyOverview",
         "responses": {
           "200": {
@@ -48589,7 +48596,7 @@
         }
       ],
       "post": {
-        "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed.",
+        "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed. During a Sitting's early-join phase, from join_opens_at until its scheduled start, a candidate can prepare and report a preflight to check their machine; Connect stays closed until the Sitting opens, so prepare again then.",
         "operationId": "prepareSecurityPreflight",
         "parameters": [
           {

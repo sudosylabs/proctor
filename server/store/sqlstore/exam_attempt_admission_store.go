@@ -27,7 +27,9 @@ type examAttemptAdmissionGuard struct {
 	ClassID        string       `db:"class_id"`
 	PeriodID       string       `db:"academic_period_id"`
 	State          string       `db:"state"`
+	ScheduledStart time.Time    `db:"scheduled_start_at"`
 	ScheduledEnd   time.Time    `db:"scheduled_end_at"`
+	SittingReadAt  time.Time    `db:"sitting_read_at"`
 	JoinOpensAt    sql.NullTime `db:"join_opens_at"`
 	JoinClosesAt   sql.NullTime `db:"join_closes_at"`
 	DatabaseNow    time.Time    `db:"database_now"`
@@ -52,15 +54,30 @@ type examAttemptStarterRow struct {
 	SHA256         sql.NullString `db:"sha256"`
 }
 
+// examAttemptAdmissionMode says which sitting states an eligibility check
+// admits besides Open.
+type examAttemptAdmissionMode int
+
+const (
+	// admitOpen is every fresh connection: the sitting must be open.
+	admitOpen examAttemptAdmissionMode = iota
+	// admitReplay is exact replay recovery, which also admits a paused
+	// sitting.
+	admitReplay
+	// admitPreparation is the readiness overview and the preflight, which
+	// create no Attempt and so also admit the early-join phase of a
+	// scheduled sitting.
+	admitPreparation
+)
+
 // lockExamAttemptEligibility serializes every admission for one candidate and
 // locks the candidate user, then current membership, before the exam/Sitting
-// lineage. allowPaused is reserved for exact replay recovery; every fresh
-// connection still requires Open.
+// lineage. Only mode widens the states admitted beyond Open.
 func lockExamAttemptEligibility(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.ExamAttemptConnect,
-	allowPaused bool,
+	mode examAttemptAdmissionMode,
 ) (examAttemptAdmissionGuard, error) {
 	var zero examAttemptAdmissionGuard
 	initial, err := lockExamAttemptAdmissionLineage(ctx, tx, input)
@@ -70,7 +87,8 @@ func lockExamAttemptEligibility(
 
 	var guard examAttemptAdmissionGuard
 	if err = tx.Get(ctx, &guard, `SELECT s.exam_id, e.academic_unit_id, s.exam_revision_id,
-			s.class_id, c.academic_period_id, s.state, s.scheduled_end_at, s.join_opens_at, s.join_closes_at
+			s.class_id, c.academic_period_id, s.state, s.scheduled_start_at, s.scheduled_end_at,
+			statement_timestamp() AS sitting_read_at, s.join_opens_at, s.join_closes_at
 		FROM exam_sittings s
 		JOIN exams e ON e.id = s.exam_id
 		JOIN classes c ON c.id = s.class_id
@@ -85,7 +103,9 @@ func lockExamAttemptEligibility(
 	if err = model.CheckAttemptAdmissionSitting(model.AttemptAdmissionSitting{
 		PeriodMatches: guard.PeriodID == initial.PeriodID,
 		State:         model.ExamSittingState(guard.State),
-		AllowPaused:   allowPaused,
+		AllowPaused:   mode == admitReplay,
+		AllowWaiting:  mode == admitPreparation,
+		Waiting:       guard.joinWindow().Waiting(model.ExamSittingState(guard.State), guard.ScheduledStart, guard.SittingReadAt),
 	}); err != nil {
 		return zero, examAttemptAdmissionConflict(err)
 	}

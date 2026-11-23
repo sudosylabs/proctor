@@ -188,6 +188,7 @@ type securityPolicyOverviewResponse struct {
 	ScreenRecordingDisclosure *model.ScreenRecordingDisclosure  `json:"screen_recording_disclosure"`
 	FocusLoss                 candidateFocusLossRuleResponse    `json:"focus_loss"`
 	BrowserSites              []candidateBrowserSiteResponse    `json:"browser_sites"`
+	InstructionsMarkdown      string                            `json:"instructions_markdown"`
 }
 
 type candidateFocusLossRuleResponse struct {
@@ -242,9 +243,11 @@ func (h examAttemptHandlers) securityPolicyOverview(request route.Request) (rout
 		ScreenRecordingDisclosure: overview.ScreenRecordingDisclosure,
 		FocusLoss:                 candidateFocusLossRuleFrom(overview.FocusLoss.CandidateRule(overview.Resolved.Policy.FocusLossMode)),
 		BrowserSites:              candidateBrowserSitesFrom(overview.BrowserPolicy.CandidateSites()),
+		InstructionsMarkdown:      overview.InstructionsMarkdown,
 	}
 	encoded, err := json.Marshal(result)
-	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
+	// The instructions have their own bound, on top of the policy's.
+	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes+2*model.ExamInstructionsMarkdownMaxBytes {
 		return route.Result{}, route.ErrUnpresentable
 	}
 	return route.JSON(http.StatusOK, result).WithHeaders(privateNoStoreHeaders()), nil

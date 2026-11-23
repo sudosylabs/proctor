@@ -76,10 +76,12 @@ func TestExamSittingJoinWindow(t *testing.T) {
 
 	sitting, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), startAt, endAt, window, at)
 	require.NoError(t, err)
-	require.Equal(t, startAt.Add(-10*time.Minute), sitting.OpensAt(), "an early join window opens the sitting early")
-	plain, err := NewExamSitting(NewExamSittingID(), NewExamID(), NewExamRevisionID(), NewClassID(), startAt, endAt, ExamSittingJoinWindow{}, at)
-	require.NoError(t, err)
-	require.Equal(t, startAt, plain.OpensAt(), "without a window the sitting opens at the start")
+	require.False(t, window.Waiting(ExamSittingScheduled, startAt, startAt.Add(-11*time.Minute)), "before the window nobody waits")
+	require.True(t, window.Waiting(ExamSittingScheduled, startAt, startAt.Add(-10*time.Minute)), "the early-join phase opens inclusively")
+	require.True(t, window.Waiting(ExamSittingScheduled, startAt, startAt.Add(-time.Microsecond)))
+	require.False(t, window.Waiting(ExamSittingScheduled, startAt, startAt), "waiting ends at the scheduled start")
+	require.False(t, window.Waiting(ExamSittingOpen, startAt, startAt.Add(-time.Minute)), "an open sitting has no waiting phase")
+	require.False(t, ExamSittingJoinWindow{}.Waiting(ExamSittingScheduled, startAt, startAt.Add(-time.Minute)), "without an opening nobody waits")
 
 	for name, invalid := range map[string]ExamSittingJoinWindow{
 		"opens after the start":   {OpensAt: OptionalTimeFrom(startAt.Add(time.Second))},
@@ -121,10 +123,19 @@ func TestCheckAttemptFirstEntry(t *testing.T) {
 	}
 
 	require.NoError(t, CheckAttemptFirstEntry(ExamSittingJoinWindow{}, startAt.Add(100*time.Hour)), "no window admits as before")
-	require.NoError(t, CheckAttemptFirstEntry(window, startAt.Add(-10*time.Minute)), "the window opens inclusively")
+	require.NoError(t, CheckAttemptFirstEntry(window, startAt))
 	require.NoError(t, CheckAttemptFirstEntry(window, startAt.Add(30*time.Minute-time.Microsecond)))
 	require.ErrorIs(t, CheckAttemptFirstEntry(window, startAt.Add(30*time.Minute)), ErrAttemptAdmissionJoinClosed, "the window closes at its bound")
-	require.ErrorIs(t, CheckAttemptFirstEntry(window, startAt.Add(-11*time.Minute)), ErrAttemptAdmissionSittingState)
+}
+
+func TestCheckAttemptAdmissionSittingAdmitsWaitingOnlyForPreparation(t *testing.T) {
+	t.Parallel()
+	waiting := AttemptAdmissionSitting{PeriodMatches: true, State: ExamSittingScheduled, Waiting: true}
+	require.ErrorIs(t, CheckAttemptAdmissionSitting(waiting), ErrAttemptAdmissionSittingState, "Connect never admits a waiting sitting")
+	waiting.AllowWaiting = true
+	require.NoError(t, CheckAttemptAdmissionSitting(waiting), "preparation admits the early-join phase")
+	waiting.Waiting = false
+	require.ErrorIs(t, CheckAttemptAdmissionSitting(waiting), ErrAttemptAdmissionSittingState, "outside the phase a scheduled sitting is closed")
 }
 
 func TestExamSittingCancelRetainsOnlySafeReasonAndIsTerminal(t *testing.T) {

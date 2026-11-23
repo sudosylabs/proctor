@@ -1411,8 +1411,9 @@ CREATE TABLE exam_sittings (
     class_id varchar(26) NOT NULL REFERENCES classes(id),
     scheduled_start_at timestamptz NOT NULL,
     scheduled_end_at timestamptz NOT NULL,
-    -- The optional join window: when the sitting opens, if earlier than the
-    -- start, and when first entry closes. Both freeze when the sitting opens.
+    -- The optional join window: when candidates may join early to prepare,
+    -- and when first entry closes. The sitting still opens at its scheduled
+    -- start. Both freeze when the sitting opens.
     join_opens_at timestamptz,
     join_closes_at timestamptz,
     state varchar(16) NOT NULL CHECK (state IN ('scheduled', 'open', 'paused', 'closing', 'closed', 'canceled')),
@@ -1499,11 +1500,8 @@ CREATE INDEX exam_sittings_exam_class_schedule_idx
     ON exam_sittings (exam_id, class_id, scheduled_start_at DESC, id DESC);
 CREATE INDEX exam_sittings_exam_state_schedule_idx
     ON exam_sittings (exam_id, state, scheduled_start_at DESC, id DESC);
-CREATE INDEX exam_sittings_scheduled_start_idx
-    ON exam_sittings (scheduled_start_at, id) WHERE state = 'scheduled';
--- A join window that opens early opens the sitting early.
 CREATE INDEX exam_sittings_lifecycle_open_due_idx
-    ON exam_sittings ((COALESCE(join_opens_at, scheduled_start_at)), id) WHERE state = 'scheduled';
+    ON exam_sittings (scheduled_start_at, id) WHERE state = 'scheduled';
 CREATE INDEX exam_sittings_lifecycle_deadline_due_idx
     ON exam_sittings (scheduled_end_at, id) WHERE state IN ('open', 'paused');
 CREATE INDEX exam_sittings_lifecycle_closing_due_idx

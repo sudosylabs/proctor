@@ -85,7 +85,7 @@ func (s *SQLExamAttemptStore) Connect(
 				return err
 			}
 
-			guard, lockErr := lockExamAttemptEligibility(ctx, tx, input, true)
+			guard, lockErr := lockExamAttemptEligibility(ctx, tx, input, admitReplay)
 			if lockErr != nil {
 				return lockErr
 			}
@@ -195,7 +195,7 @@ func (s *SQLExamAttemptStore) connect(
 		return zero, err
 	}
 
-	guard, err := lockExamAttemptEligibility(ctx, tx, input, false)
+	guard, err := lockExamAttemptEligibility(ctx, tx, input, admitOpen)
 	if err != nil {
 		return zero, err
 	}

@@ -1077,9 +1077,13 @@ const (
 type CandidateExamAccessState string
 
 const (
-	CandidateExamAccessNotOpen               CandidateExamAccessState = "not_open"
-	CandidateExamAccessJoinable              CandidateExamAccessState = "joinable"
-	CandidateExamAccessJoinClosed            CandidateExamAccessState = "join_closed"
+	CandidateExamAccessNotOpen    CandidateExamAccessState = "not_open"
+	CandidateExamAccessJoinable   CandidateExamAccessState = "joinable"
+	CandidateExamAccessJoinClosed CandidateExamAccessState = "join_closed"
+	// CandidateExamAccessWaiting is the early-join phase: the candidate may
+	// run the readiness checks and read the instructions, and the Attempt
+	// starts when the sitting opens at its scheduled start.
+	CandidateExamAccessWaiting               CandidateExamAccessState = "waiting"
 	CandidateExamAccessResumable             CandidateExamAccessState = "resumable"
 	CandidateExamAccessSittingPaused         CandidateExamAccessState = "sitting_paused"
 	CandidateExamAccessAwaitReallow          CandidateExamAccessState = "await_reallow"

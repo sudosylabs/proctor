@@ -122,7 +122,9 @@ func New(deps Dependencies) (*App, error) {
 	}
 
 	return &App{
-		People:            people.New(deps.Store, authorizer),
+		ExamPeople:        people.New(deps.Store, authorizer).Reporting("exam.unavailable"),
+		ReviewPeople:      people.New(deps.Store, authorizer).Reporting("exam.integrity_review.unavailable"),
+		InvitationPeople:  people.New(deps.Store, authorizer).Reporting("invitation.unavailable"),
 		Terminals:         terminals,
 		Previews:          environment.NewPreviews(terminals),
 		Assistant:         assistants,

@@ -1656,6 +1656,11 @@ CREATE TABLE roles (
     CONSTRAINT roles_lifecycle_check CHECK (updated_at >= created_at)
 );
 
+-- Removing a User checks the roles they last changed.
+CREATE INDEX roles_updated_by_user_id_idx
+    ON roles (updated_by_user_id)
+    WHERE updated_by_user_id IS NOT NULL;
+
 CREATE UNIQUE INDEX roles_name_key ON roles (name) WHERE archived_at IS NULL;
 
 ALTER TABLE invitations
@@ -1702,6 +1707,11 @@ CREATE UNIQUE INDEX role_bindings_user_id_role_id_scope_type_scope_id_key
 CREATE INDEX role_bindings_user_id_scope_type_scope_id_idx
     ON role_bindings (user_id, scope_type, scope_id)
     WHERE archived_at IS NULL AND end_at IS NULL;
+
+-- Removing a User checks the bindings they granted.
+CREATE INDEX role_bindings_granted_by_user_id_idx
+    ON role_bindings (granted_by_user_id)
+    WHERE granted_by_user_id IS NOT NULL;
 
 CREATE INDEX role_bindings_user_id_start_at_end_at_idx
     ON role_bindings (user_id, start_at, end_at)

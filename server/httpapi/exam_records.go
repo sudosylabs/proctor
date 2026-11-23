@@ -351,7 +351,7 @@ func (h examRecordsHandlers) getWaiver(request route.Request) (route.Result, err
 		return route.Result{}, err
 	}
 
-	refs, err := namePeople(request, h.people, "exam.unavailable", value.ActorUserID)
+	refs, err := namePeople(request, h.people, value.ActorUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -416,7 +416,7 @@ func (h examRecordsHandlers) waive(request route.Request) (route.Result, error) 
 		return route.Result{}, route.ErrUnpresentable
 	}
 
-	refs, err := namePeople(request, h.people, "exam.unavailable", value.ActorUserID)
+	refs, err := namePeople(request, h.people, value.ActorUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -459,7 +459,7 @@ func (h examRecordsHandlers) createHold(request route.Request) (route.Result, er
 		return route.Result{}, route.ErrUnpresentable
 	}
 
-	refs, err := namePeople(request, h.people, "exam.unavailable", value.CreatedByUserID, value.ReleasedByUserID)
+	refs, err := namePeople(request, h.people, value.CreatedByUserID, value.ReleasedByUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -509,7 +509,7 @@ func (h examRecordsHandlers) releaseHold(request route.Request) (route.Result, e
 		return route.Result{}, route.ErrUnpresentable
 	}
 
-	refs, err := namePeople(request, h.people, "exam.unavailable", value.CreatedByUserID, value.ReleasedByUserID)
+	refs, err := namePeople(request, h.people, value.CreatedByUserID, value.ReleasedByUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -580,7 +580,7 @@ func (h examRecordsHandlers) listHolds(request route.Request) (route.Result, err
 	for _, hold := range page.Holds {
 		ids = append(ids, hold.CreatedByUserID, hold.ReleasedByUserID)
 	}
-	refs, err := namePeople(request, h.people, "exam.unavailable", ids...)
+	refs, err := namePeople(request, h.people, ids...)
 	if err != nil {
 		return route.Result{}, err
 	}

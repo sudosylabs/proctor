@@ -1089,17 +1089,17 @@ func nameInvitations(
 	}
 	refs, err := resolver.Resolve(request.Context, request.Invocation().Principal(), inviters)
 	if err != nil {
-		return invitationNames{}, apperror.New("invitation.unavailable").Wrap(err)
+		return invitationNames{}, err
 	}
 	names, err := resolver.NameRecords(request.Context, records)
 	if err != nil {
-		return invitationNames{}, apperror.New("invitation.unavailable").Wrap(err)
+		return invitationNames{}, err
 	}
 	result := invitationNames{people: refs, records: names}
 	for _, view := range views {
 		if view.ScopeType == model.RoleScopeInstitution {
 			if result.institution, err = resolver.InstitutionName(request.Context); err != nil {
-				return invitationNames{}, apperror.New("invitation.unavailable").Wrap(err)
+				return invitationNames{}, err
 			}
 			break
 		}

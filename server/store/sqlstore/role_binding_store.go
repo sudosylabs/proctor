@@ -655,6 +655,74 @@ func (s SQLRoleBindingStore) ListByScope(
 		OrderBy("role_bindings.start_at", "role_bindings.id"), "list role bindings by scope")
 }
 
+// ListTeachersByClasses names, for each listed class with any, the first
+// Limit distinct current holders of a role bound at that class, and counts
+// the rest, in one statement for the whole page.
+func (s SQLRoleBindingStore) ListTeachersByClasses(
+	ctx context.Context,
+	options store.ClassTeacherOptions,
+) ([]store.ClassTeachers, error) {
+	if len(options.ClassIDs) > store.MaximumClassTeacherClasses ||
+		!validVisibilityIDs(options.ClassIDs) ||
+		options.Limit < 1 ||
+		options.Limit > 10 ||
+		options.ActiveAt.IsZero() {
+		return nil, store.NewErrInvalidInput("role_binding", "class_teacher_options", nil)
+	}
+	if len(options.ClassIDs) == 0 {
+		return []store.ClassTeachers{}, nil
+	}
+
+	activeAt := model.TimeUTC(options.ActiveAt)
+	type teacherRow struct {
+		ClassID string `db:"class_id"`
+		UserID  string `db:"user_id"`
+		Total   int    `db:"total"`
+	}
+	rows := []teacherRow{}
+	// One person holding two roles at a class is one teacher, so holders are
+	// made distinct before they are ranked and counted.
+	if err := s.GetMaster().Select(ctx, &rows, `
+	WITH holders AS (
+		SELECT DISTINCT role_bindings.scope_id AS class_id, role_bindings.user_id, users.sort_name
+		FROM role_bindings
+		JOIN roles ON roles.id = role_bindings.role_id AND roles.archived_at IS NULL
+		JOIN users ON users.id = role_bindings.user_id AND users.archived_at IS NULL
+		WHERE role_bindings.scope_type = 'class'
+			AND role_bindings.scope_id = ANY(?)
+			AND role_bindings.archived_at IS NULL
+			AND role_bindings.start_at <= ?
+			AND (role_bindings.end_at IS NULL OR role_bindings.end_at > ?)
+	), ranked AS (
+		SELECT class_id, user_id,
+			row_number() OVER (PARTITION BY class_id ORDER BY sort_name, user_id) AS position,
+			count(*) OVER (PARTITION BY class_id) AS total
+		FROM holders
+	)
+	SELECT class_id, user_id, total FROM ranked WHERE position <= ? ORDER BY class_id, position`,
+		pq.Array(idStrings(options.ClassIDs)), activeAt, activeAt, options.Limit); err != nil {
+		return nil, fmt.Errorf("list class teachers: %w", err)
+	}
+
+	result := []store.ClassTeachers{}
+	for _, row := range rows {
+		classID, err := model.ParseClassID(row.ClassID)
+		if err != nil {
+			return nil, invalidPersistedState("role_binding", "scope_id", err)
+		}
+		userID, err := model.ParseUserID(row.UserID)
+		if err != nil {
+			return nil, invalidPersistedState("role_binding", "user_id", err)
+		}
+		if len(result) == 0 || result[len(result)-1].ClassID != classID {
+			result = append(result, store.ClassTeachers{ClassID: classID, More: max(row.Total-options.Limit, 0)})
+		}
+		last := &result[len(result)-1]
+		last.UserIDs = append(last.UserIDs, userID)
+	}
+	return result, nil
+}
+
 // maximumHolderCountRoles bounds the roles one CountHoldersByRoles reads: one
 // page of the role collection.
 const maximumHolderCountRoles = 200

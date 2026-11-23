@@ -46,7 +46,7 @@ func TestScreenClipRequestAuthorizesFirstAndKeepsItsReasonPrivate(t *testing.T) 
 	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "screen_clip", "effects"}, f.order,
 		"authorization precedes the audit, which precedes the request; the candidate is told after it")
 	require.Equal(t, []realtimetest.Call{published(t)(realtime.NewCandidateScreenClipsRequestedEvent(
-		f.sitting.ID, f.attemptID, f.userID, input.Clip.RequestedAt))}, f.publisher.Calls(),
+		f.sitting.ExamID, f.sitting.ID, f.attemptID, f.userID, input.Clip.RequestedAt))}, f.publisher.Calls(),
 		"the candidate's Desktop is told to read its requests, and nothing more")
 }
 

@@ -146,7 +146,7 @@ func (s *Service) CreateAcademicUnit(
 	// Publication is best effort after commit, so callers never retry work
 	// that already committed.
 	if !saved.Replayed {
-		if err := s.publishAcademicUnitCreated(ctx, saved.Value.ID); err != nil {
+		if err := s.publishAcademicUnitCreated(ctx, saved.Value); err != nil {
 			s.publisher.Report(ctx, "academic_unit_created", err)
 		}
 	}
@@ -252,7 +252,7 @@ func (s *Service) UpdateAcademicUnit(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publishAcademicUnitUpdated(ctx, updated.ID); err != nil {
+	if err := s.publishAcademicUnitUpdated(ctx, updated); err != nil {
 		s.publisher.Report(ctx, "academic_unit_updated", err)
 	}
 
@@ -313,7 +313,7 @@ func (s *Service) ArchiveAcademicUnit(
 	if err != nil {
 		return err
 	}
-	if err := s.publishAcademicUnitArchived(ctx, archived.ID); err != nil {
+	if err := s.publishAcademicUnitArchived(ctx, archived); err != nil {
 		s.publisher.Report(ctx, "academic_unit_archived", err)
 	}
 

@@ -142,7 +142,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
 				value := f.storedImport(model.OnboardingImportInstitution, model.OnboardingImportPreviewReady, model.RoleScopeInstitution, f.access.Institution.ID.String())
 				request := authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports/"+value.ID.String())
-				return onboardingImportResource(f.service), request, func(t *testing.T, _ *httptest.ResponseRecorder) {
+				return onboardingImportResource(f.service, f.people), request, func(t *testing.T, _ *httptest.ResponseRecorder) {
 					require.Equal(t, []model.OnboardingImportID{value.ID}, f.imports.reads, "the import read reached the Store")
 				}
 			},
@@ -152,7 +152,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
 				value := f.storedProgression(f.addClass("Year 1 Blue"), f.addClass("Year 2 Blue"))
 				request := authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions/"+value.ID.String())
-				return studentProgressionResource(f.service), request, func(t *testing.T, _ *httptest.ResponseRecorder) {
+				return studentProgressionResource(f.service, f.people), request, func(t *testing.T, _ *httptest.ResponseRecorder) {
 					require.Equal(t, []model.OnboardingImportID{value.ID}, f.imports.reads, "the progression read reached the Store")
 				}
 			},

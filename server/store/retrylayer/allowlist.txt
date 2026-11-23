@@ -148,6 +148,8 @@ UserStore.List                                             always
 UserStore.Count                                            always
 UserStore.ListDirectorySummaries                           always
 UserStore.ListIdentities                                   always
+UserStore.ListMFAStates                                    always
+UserStore.ListMemberships                                  always
 UserStore.MatchVisibility                                  always
 UserStore.ListDisplayNames                                 always
 UserStore.ListVisibleDisplayNames                          always
@@ -199,6 +201,7 @@ RoleBindingStore.ListByUser                                always
 RoleBindingStore.ListVisibleByUser                         always
 RoleBindingStore.ListVisibleSummariesByUsers               always
 RoleBindingStore.ListByScope                               always
+RoleBindingStore.ListTeachersByClasses                     always
 RoleBindingStore.ListCurrentByRoles                        always
 RoleBindingStore.CountCurrentByRoles                       always
 RoleBindingStore.CountHoldersByRoles                       always

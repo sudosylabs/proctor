@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -28,24 +29,52 @@ import (
 )
 
 type userProfileResponse struct {
-	ID                      string  `json:"id"`
-	CreatedAt               string  `json:"created_at"`
-	UpdatedAt               string  `json:"updated_at"`
-	ArchivedAt              string  `json:"archived_at,omitempty"`
-	Username                string  `json:"username"`
-	Email                   *string `json:"email,omitempty"`
-	EmailVerified           *bool   `json:"email_verified,omitempty"`
-	DisplayName             string  `json:"display_name"`
-	FirstName               string  `json:"first_name"`
-	LastName                string  `json:"last_name"`
-	Locale                  *string `json:"locale,omitempty"`
-	Timezone                *string `json:"timezone,omitempty"`
-	LastLoginAt             string  `json:"last_login_at,omitempty"`
-	LastActivityAt          string  `json:"last_activity_at,omitempty"`
-	DisabledAt              string  `json:"disabled_at,omitempty"`
-	ProfilePictureURL       string  `json:"profile_picture_url"`
-	ProfilePictureChangedAt string  `json:"profile_picture_changed_at,omitempty"`
-	ProfilePictureKind      string  `json:"profile_picture_kind"`
+	ID             string  `json:"id"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+	ArchivedAt     string  `json:"archived_at,omitempty"`
+	Username       string  `json:"username"`
+	Email          *string `json:"email,omitempty"`
+	EmailVerified  *bool   `json:"email_verified,omitempty"`
+	DisplayName    string  `json:"display_name"`
+	FirstName      string  `json:"first_name"`
+	LastName       string  `json:"last_name"`
+	Locale         *string `json:"locale,omitempty"`
+	Timezone       *string `json:"timezone,omitempty"`
+	LastLoginAt    string  `json:"last_login_at,omitempty"`
+	LastActivityAt string  `json:"last_activity_at,omitempty"`
+	DisabledAt     string  `json:"disabled_at,omitempty"`
+	// DisabledBy and DisabledReason describe the disable in force. Only a
+	// profile read and the directory present them, and only to readers of
+	// the full profile.
+	DisabledBy              *personRefResponse `json:"disabled_by,omitempty"`
+	DisabledReason          string             `json:"disabled_reason,omitempty"`
+	ProfilePictureURL       string             `json:"profile_picture_url"`
+	ProfilePictureChangedAt string             `json:"profile_picture_changed_at,omitempty"`
+	ProfilePictureKind      string             `json:"profile_picture_kind"`
+	// MFA is present only for a caller who may see two-step verification.
+	MFA *userMFAResponse `json:"mfa,omitempty"`
+}
+
+// userMFAResponse is an account's two-step verification state; Method and
+// EnabledAt are present while it is on.
+type userMFAResponse struct {
+	Enabled   bool   `json:"enabled"`
+	Method    string `json:"method,omitempty"`
+	EnabledAt string `json:"enabled_at,omitempty"`
+}
+
+func userMFAResponseFromApplication(mfa *user.UserMFA) *userMFAResponse {
+	if mfa == nil {
+		return nil
+	}
+	return &userMFAResponse{Enabled: mfa.Enabled, Method: mfa.Method, EnabledAt: mfa.EnabledAt.FormatRFC3339()}
+}
+
+func userProfileResponseFromApplication(profile *user.UserProfile) userProfileResponse {
+	response := userProfileResponseFromModel(profile.User)
+	response.MFA = userMFAResponseFromApplication(profile.MFA)
+	return response
 }
 
 // userDirectoryEntryResponse is one user directory item: the profile the
@@ -198,10 +227,11 @@ type userProfileHandlers struct {
 	users    *user.Service
 	attempts *attempt.Service
 	emails   *identity.Service
+	people   *people.Resolver
 }
 
-func userProfileResource(users *user.Service, attempts *attempt.Service, emails *identity.Service) route.Resource {
-	h := userProfileHandlers{users: users, attempts: attempts, emails: emails}
+func userProfileResource(users *user.Service, attempts *attempt.Service, emails *identity.Service, resolver *people.Resolver) route.Resource {
+	h := userProfileHandlers{users: users, attempts: attempts, emails: emails, people: resolver}
 	userPath := "/users/{user_id}"
 	picture := "/users/{user_id}/profile-picture"
 	email := "/users/{user_id}/email"
@@ -731,10 +761,26 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
+	// A scoped page carries no disable record, so only an institution-wide
+	// reader's disabled rows are named, in one read for the page.
+	disablers := make([]model.UserID, 0, len(page.Items))
+	for _, entry := range page.Items {
+		disablers = append(disablers, entry.User.DisabledByUserID)
+	}
+	refs, err := namePeople(request, h.people, disablers...)
+	if err != nil {
+		return route.Result{}, err
+	}
+
 	envelope, err := route.NewList(
 		page.Items,
 		page.HasMore,
-		userDirectoryEntryResponseFromApplication,
+		func(entry user.UserDirectoryEntry) userDirectoryEntryResponse {
+			response := userDirectoryEntryResponseFromApplication(entry)
+			response.DisabledBy = personRef(refs, entry.User.DisabledByUserID)
+			response.DisabledReason = entry.User.DisabledReason
+			return response
+		},
 		func(last user.UserDirectoryEntry) (string, error) {
 			return route.EncodeCursor(newUserDirectoryCursor(order, last.User), userDirectoryCursorSpec())
 		},
@@ -788,7 +834,9 @@ func userDirectoryEntryResponseFromApplication(entry user.UserDirectoryEntry) us
 		}
 	}
 
-	return userDirectoryEntryResponse{userProfileResponse: userProfileResponseFromModel(entry.User), Summary: summary}
+	profile := userProfileResponseFromModel(entry.User)
+	profile.MFA = userMFAResponseFromApplication(entry.MFA)
+	return userDirectoryEntryResponse{userProfileResponse: profile, Summary: summary}
 }
 
 // userDirectoryFilters reads the repeatable affiliation filter and the single
@@ -817,8 +865,8 @@ func userDirectoryFilters(values url.Values) ([]model.AffiliationKind, model.Aca
 }
 
 // userDirectoryAccountFilters reads the repeatable role_id filter and the
-// single state, never_signed_in, last_active_after and last_active_before
-// filters. The application decides which of them the caller may apply.
+// single state, mfa, role_holder, never_signed_in, last_active_after and
+// last_active_before filters. The application decides which of them the caller may apply.
 func userDirectoryAccountFilters(values url.Values, query *user.SearchUsersQuery) error {
 	for _, raw := range values["role_id"] {
 		id, err := model.ParseRoleID(raw)
@@ -844,6 +892,26 @@ func userDirectoryAccountFilters(values url.Values, query *user.SearchUsersQuery
 	query.State = user.AccountState(state)
 	if state != "" && !query.State.IsValid() {
 		return apperror.Invalid("request.invalid", "state")
+	}
+	mfa, err := single("mfa")
+	if err != nil {
+		return err
+	}
+	query.MFA = store.UserMFAFilter(mfa)
+	if mfa != "" && !query.MFA.IsValid() {
+		return apperror.Invalid("request.invalid", "mfa")
+	}
+	// role_holder has only the value true: false would name everyone else,
+	// a set no board asks for.
+	roleHolder, err := single("role_holder")
+	if err != nil {
+		return err
+	}
+	if roleHolder != "" {
+		if roleHolder != "true" {
+			return apperror.Invalid("request.invalid", "role_holder")
+		}
+		query.RoleHolder = true
 	}
 	never, err := single("never_signed_in")
 	if err != nil {
@@ -963,7 +1031,7 @@ func (h userProfileHandlers) current(request route.Request) (route.Result, error
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, userProfileResponseFromModel(account)), nil
+	return route.JSON(http.StatusOK, userProfileResponseFromApplication(account)), nil
 }
 
 func (h userProfileHandlers) get(request route.Request) (route.Result, error) {
@@ -975,7 +1043,14 @@ func (h userProfileHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, userProfileResponseFromModel(account)), nil
+	refs, err := namePeople(request, h.people, account.User.DisabledByUserID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response := userProfileResponseFromApplication(account)
+	response.DisabledBy = personRef(refs, account.User.DisabledByUserID)
+	response.DisabledReason = account.User.DisabledReason
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func (h userProfileHandlers) update(request route.Request) (route.Result, error) {

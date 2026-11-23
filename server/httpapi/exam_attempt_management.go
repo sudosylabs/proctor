@@ -714,7 +714,7 @@ func (h examAttemptHandlers) getManaged(request route.Request) (route.Result, er
 		return route.Result{}, err
 	}
 	if view.ManagerEnd != nil {
-		refs, nameErr := namePeople(request, h.people, "exam.attempt.unavailable", view.ManagerEnd.ActorUserID)
+		refs, nameErr := namePeople(request, h.people, view.ManagerEnd.ActorUserID)
 		if nameErr != nil {
 			return route.Result{}, nameErr
 		}
@@ -774,7 +774,7 @@ func (h examAttemptHandlers) listManaged(request route.Request) (route.Result, e
 	for _, end := range page.ManagerEnds {
 		enders = append(enders, end.ActorUserID)
 	}
-	refs, err := namePeople(request, h.people, "exam.attempt.unavailable", enders...)
+	refs, err := namePeople(request, h.people, enders...)
 	if err != nil {
 		return route.Result{}, err
 	}

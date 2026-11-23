@@ -633,7 +633,7 @@ func (h examSittingHandlers) get(request route.Request) (route.Result, error) {
 		for _, entry := range read.History {
 			actors = append(actors, entry.ActorUserID)
 		}
-		refs, nameErr := namePeople(request, h.people, "exam.sitting.unavailable", actors...)
+		refs, nameErr := namePeople(request, h.people, actors...)
 		if nameErr != nil {
 			return route.Result{}, nameErr
 		}

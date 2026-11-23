@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -90,12 +91,33 @@ func academicUnitPublisherIn(events *[]string) *realtimetest.Publisher {
 
 // academicUnitEventCall is the publication of one Academic Unit event: a
 // payload-free event for everyone who may view the unit.
-func academicUnitEventCall(name string, unitID model.AcademicUnitID) realtimetest.Call {
+func academicUnitEventCall(name string, unit *model.AcademicUnit) realtimetest.Call {
+	data := `{"academic_unit_id":"` + unit.ID.String() + `"`
+	if !unit.ParentID.IsZero() {
+		data += `,"parent_academic_unit_id":"` + unit.ParentID.String() + `"`
+	}
 	return realtimetest.Call{Method: realtimetest.Publish, Event: realtime.Event{
 		Name:     name,
 		Action:   model.ActionAcademicUnitView,
-		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
+		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unit.ID.String()},
+		Data:     json.RawMessage(data + `}`),
 	}}
+}
+
+// userChangedCall is the user.changed publication for userID.
+func userChangedCall(t *testing.T, userID model.UserID) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewUserChangedEvent(userID)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
+}
+
+// classChangedCall is the class.changed publication for classID in unitID.
+func classChangedCall(t *testing.T, classID model.ClassID, unitID model.AcademicUnitID) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewClassChangedEvent(classID, unitID)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
 }
 
 // knownProgrammes resolves the Programmes it holds and no other.

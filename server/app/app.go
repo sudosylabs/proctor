@@ -56,10 +56,21 @@ type App struct {
 	Users             *user.Service
 	Search            *search.Service
 	Counts            *administration.Counts
-	// People names the people an authorized record refers to.
-	People            *people.Resolver
-	Realtime          *realtime.Service
-	RealtimeAdmission *RealtimeAdmission
+	// The People resolvers name the people and records an authorized record
+	// refers to. Each reports a failed read with the unavailable code its
+	// area's endpoints declare.
+	ExamPeople       *people.Resolver
+	ReviewPeople     *people.Resolver
+	SittingPeople    *people.Resolver
+	AttemptPeople    *people.Resolver
+	InvitationPeople *people.Resolver
+	// AdministrationPeople names people for the directory and the academic
+	// structure, whose endpoints report administration.unavailable.
+	AdministrationPeople *people.Resolver
+	OnboardingPeople     *people.Resolver
+	ProgressionPeople    *people.Resolver
+	Realtime             *realtime.Service
+	RealtimeAdmission    *RealtimeAdmission
 	// Jobs is nil when the graph has no job store.
 	Jobs *job.Operations
 	// Mail is nil when the graph has no job or mail store.

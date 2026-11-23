@@ -180,7 +180,7 @@ func (h examRevisionHandlers) publish(request route.Request) (route.Result, erro
 		return route.Result{}, err
 	}
 
-	refs, err := namePeople(request, h.people, "exam.unavailable", summary.PublishedByUserID)
+	refs, err := namePeople(request, h.people, summary.PublishedByUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -233,7 +233,7 @@ func (h examRevisionHandlers) get(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	refs, err := namePeople(request, h.people, "exam.unavailable", summary.PublishedByUserID)
+	refs, err := namePeople(request, h.people, summary.PublishedByUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -276,7 +276,7 @@ func (h examRevisionHandlers) list(request route.Request) (route.Result, error) 
 	for _, item := range page.Items {
 		publishers = append(publishers, item.PublishedByUserID)
 	}
-	refs, err := namePeople(request, h.people, "exam.unavailable", publishers...)
+	refs, err := namePeople(request, h.people, publishers...)
 	if err != nil {
 		return route.Result{}, err
 	}

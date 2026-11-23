@@ -156,7 +156,12 @@ func TestAcademicAdministrationPreviewFilterAdmitsOnlyTheOperationsOwnFields(t *
 		"long search term": {func(command *CreateAcademicAdministrationPreviewCommand) {
 			command.Filter.Query = strings.Repeat("a", academicAdministrationFilterQueryMaximumRunes+1)
 		}, "q"},
-		"unknown state": {func(command *CreateAcademicAdministrationPreviewCommand) { command.Filter.State = "archived" }, "state"},
+		"unknown state":          {func(command *CreateAcademicAdministrationPreviewCommand) { command.Filter.State = "archived" }, "state"},
+		"unknown two-step state": {func(command *CreateAcademicAdministrationPreviewCommand) { command.Filter.MFA = "off" }, "mfa"},
+		"reason on an enrollment": {func(command *CreateAcademicAdministrationPreviewCommand) {
+			reason := "Left"
+			command.Reason = &reason
+		}, "reason"},
 		"never signed in with a bound": {func(command *CreateAcademicAdministrationPreviewCommand) {
 			command.Filter.NeverSignedIn, command.Filter.LastActiveAfter = true, at
 		}, "never_signed_in"},
@@ -177,6 +182,33 @@ func TestAcademicAdministrationPreviewFilterAdmitsOnlyTheOperationsOwnFields(t *
 			require.Equal(t, test.field, failure.Fields()["field"])
 		})
 	}
+}
+
+// TestAcademicAdministrationDisablePreviewKeepsItsReasonAndTwoStepFilter pins
+// that a user.disable preview keeps its one trimmed reason, which reaches its
+// audit value, and that its mfa filter reaches the directory query it is
+// resolved through.
+func TestAcademicAdministrationDisablePreviewKeepsItsReasonAndTwoStepFilter(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	reason := "  Left before the start of term "
+	institutionID := model.NewInstitutionID().String()
+	filter, err := academicAdministrationPreviewFilter(CreateAcademicAdministrationPreviewCommand{
+		Operation: AcademicAdministrationUserDisable, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID,
+		Filter: AcademicAdministrationUserFilter{MFA: store.UserMFADisabled}, Reason: &reason,
+	}, at)
+	require.NoError(t, err)
+	require.Equal(t, "Left before the start of term", filter.Reason)
+	require.Equal(t, store.UserMFADisabled, academicAdministrationDirectoryQuery(filter, 1).MFA)
+	value := academicAdministrationPreviewAuditValue("", filter, model.RoleScopeInstitution, institutionID)
+	require.Equal(t, "Left before the start of term", value["reason"])
+	require.Equal(t, store.UserMFADisabled, value["filter"].(map[string]any)["mfa"])
+
+	tooLong := strings.Repeat("a", 501)
+	_, err = academicAdministrationPreviewFilter(CreateAcademicAdministrationPreviewCommand{
+		Operation: AcademicAdministrationUserDisable, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID, Reason: &tooLong,
+	}, at)
+	require.True(t, apperror.Is(err, "request.invalid"), "error = %v", err)
 }
 
 func TestAcademicAdministrationPreviewRefusesMoreUsersThanOnePreviewHolds(t *testing.T) {

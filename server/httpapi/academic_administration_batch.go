@@ -29,6 +29,7 @@ type academicAdministrationBatchRequest struct {
 	Operation string                                   `json:"operation"`
 	ScopeType string                                   `json:"scope_type"`
 	ScopeID   string                                   `json:"scope_id"`
+	Reason    string                                   `json:"reason,omitempty"`
 	Items     []academicAdministrationBatchItemRequest `json:"items"`
 }
 
@@ -115,6 +116,7 @@ func (h academicAdministrationBatchHandlers) run(request route.Request) (route.R
 			ScopeType:      model.RoleScopeType(body.ScopeType),
 			ScopeID:        body.ScopeID,
 			IdempotencyKey: request.IdempotencyKey,
+			Reason:         optionalReason(body.Reason),
 			Items:          items,
 		},
 	)
@@ -139,4 +141,13 @@ func (h academicAdministrationBatchHandlers) run(request route.Request) (route.R
 	}
 
 	return route.JSON(http.StatusOK, response), nil
+}
+
+// optionalReason reads an omitted or empty reason as none, as the single
+// disable does.
+func optionalReason(reason string) *string {
+	if reason == "" {
+		return nil
+	}
+	return &reason
 }

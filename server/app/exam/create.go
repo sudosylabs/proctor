@@ -118,7 +118,7 @@ func (a *Authoring) CreateExam(ctx context.Context, inv invocation.Invocation, c
 	}
 
 	if !result.Replayed {
-		if effectErr := a.publishExamCreated(ctx, result.Value.Exam.ID); effectErr != nil {
+		if effectErr := a.publishExamCreated(ctx, result.Value.Exam.ID, result.Value.Exam.AcademicUnitID); effectErr != nil {
 			a.publisher.Report(ctx, "exam_created", effectErr)
 		}
 	}

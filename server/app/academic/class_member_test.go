@@ -144,11 +144,14 @@ func TestClassMemberEnrollUsesDestinationPeriodAndAtomicStore(t *testing.T) {
 	boardEvent, err := realtime.NewManagerSittingBoardChangedEvent(sitting.ExamID, sitting.SittingID)
 	require.NoError(t, err)
 	// Contract: the enrolled candidate is told first that their Exam activity
-	// and current-user context changed, then the managers of each Sitting of
+	// and current-user context changed, then the candidate's and the Class's
+	// viewers are told to refetch them, then the managers of each Sitting of
 	// the Class are told to refresh their board; nothing is reported.
 	require.Equal(t, []realtimetest.Call{
 		{Method: realtimetest.Publish, Event: candidateEvent},
 		{Method: realtimetest.InvalidateCurrentUserContext, UserID: model.UserID(userID)},
+		userChangedCall(t, model.UserID(userID)),
+		classChangedCall(t, model.ClassID(classID), world.unitID),
 		{Method: realtimetest.Publish, Event: boardEvent},
 	}, publisher.Calls())
 	require.Equal(t, []model.ClassID{model.ClassID(classID)}, sittings.listed)

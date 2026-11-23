@@ -22,7 +22,7 @@ func TestIntegrityReviewEventsExposeOnlySafeLifecycleFacts(t *testing.T) {
 	candidateID, reviewID := model.NewUserID(), model.NewSubmissionReviewID()
 	at := time.Date(2026, 8, 15, 18, 0, 0, 0, time.UTC)
 
-	fact := ExamIntegrityReviewEventFact{SubmissionID: submissionID, AttemptID: attemptID, CandidateID: candidateID,
+	fact := ExamIntegrityReviewEventFact{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: submissionID, AttemptID: attemptID, CandidateID: candidateID,
 		ReviewID: reviewID, State: model.SubmissionReviewDraft, Revision: 2,
 		ReleaseState: model.SubmissionReviewWithheld, ChangedAt: at}
 	changed, err := NewExamIntegrityReviewChangedEvent(fact)

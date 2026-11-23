@@ -86,6 +86,7 @@ func (s *Service) applyWorkspaceBatch(
 
 	result := WorkspaceBatchResult{
 		AttemptID:       batch.Access.WorkspaceAttemptID(),
+		ExamID:          target.ExamID,
 		SittingID:       stored.SittingID,
 		CandidateUserID: stored.CandidateUserID,
 		WorkspaceID:     stored.WorkspaceID,

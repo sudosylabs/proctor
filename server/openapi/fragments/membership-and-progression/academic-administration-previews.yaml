@@ -379,6 +379,7 @@ components:
               affiliation:
                 - student
               never_signed_in: true
+            reason: Left the institution before the start of term.
     CommitAcademicAdministrationPreview:
       description: The revision and digest of the preview you reviewed.
       required: true
@@ -553,6 +554,14 @@ components:
             - disabled
           description: >-
             Keep only `active` or only `disabled` accounts. Only Institution-wide user.view can see disabled Users.
+        mfa:
+          type: string
+          enum:
+            - enabled
+            - disabled
+          description: >-
+            Keep Users whose account has two-step verification on (`enabled`) or off (`disabled`), as the User
+            directory's `mfa` filter does. Needs Institution-wide user.view or user.mfa.reset.
         never_signed_in:
           type: boolean
           description: >-
@@ -626,6 +635,14 @@ components:
             is refused with `request.invalid` on `end_at`.
           type: string
           format: date-time
+        reason:
+          type: string
+          maxLength: 500
+          description: >-
+            Why the accounts are disabled, given once for the whole preview. Only `user.disable` takes it; any other
+            operation is refused with `request.invalid` on `reason`. It has the limits of a single disable: leading
+            and trailing spaces are removed, up to 500 characters, no control characters, and not only spaces. An
+            empty string means no reason. It is written to every disabled User's audit record and to the batch's.
     AcademicAdministrationPreviewCommitRequest:
       description: >-
         The revision and SHA-256 digest of the preview you reviewed. The commit is refused if the preview has
@@ -766,6 +783,10 @@ components:
           type: string
           format: date-time
           description: The end requested for a creating operation. Omitted when none was given.
+        reason:
+          type: string
+          maxLength: 500
+          description: The reason a `user.disable` preview was given. Omitted when none was.
         preview_digest:
           type: string
           pattern: ^[0-9a-f]{64}$

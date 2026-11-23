@@ -49,7 +49,10 @@ type AuthenticationCache interface {
 // Dependencies are the collaborators New hands to the Service; MFARekeyWake is
 // required only when the store catalog has jobs.
 type Dependencies struct {
-	Store        store.Catalog
+	Store store.Catalog
+	// Sittings finds the boards a Desktop registration change shows on.
+	// Without it no board hears of one.
+	Sittings     store.ExamSittingStore
 	Cache        AuthenticationCache
 	Registry     ExternalProviderSource
 	Authorizer   *access.Authorizer
@@ -236,7 +239,7 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	s.users, s.passwords = deps.Store.User(), deps.Store.PasswordCredential()
 	s.sessions, s.sessionCredentials = deps.Store.Session(), deps.Store.SessionCredential()
 	s.desktopRegistrations, s.personalAccessTokens = deps.Store.DesktopRegistration(), deps.Store.PersonalAccessToken()
-	s.sittings = deps.Store.ExamSitting()
+	s.sittings = deps.Sittings
 	s.mfaCredentials, s.mfa = deps.Store.MFA(), mfa
 	s.accessPolicy, s.dpop, s.cache, s.attempts = authenticationAccess, dpop, deps.Cache, deps.Attempts
 	s.hasher = deps.Hasher

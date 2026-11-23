@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Returns one active Class. Proctor checks the caller's permission on this Class itself. Being able to list Classes elsewhere is not enough. The response names its Programme Level and Academic Period and does not include its students.
+        Returns one active Class. Proctor checks the caller's permission on this Class itself. Being able to list Classes elsewhere is not enough. The response names its Programme Level and Academic Period and does not include its students. A caller who holds class.members.view on the Class also gets its first three teachers.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -38,7 +38,7 @@ paths:
         - sessionCookie: []
       responses:
         "200":
-          $ref: '#/components/responses/ClassOK'
+          $ref: '#/components/responses/ClassDetailOK'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -188,6 +188,28 @@ components:
             name: cs-level-100-a
             display_name: Computer Science Level 100 — B
             description: First-year Class A.
+    ClassDetailOK:
+      description: Class
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ClassDetailResponse'
+          example:
+            revision: 2
+            id: 6xoche483hwrx5rpu8jzjoe7qg
+            created_at: '2026-08-05T08:30:00Z'
+            updated_at: '2026-08-18T12:00:00Z'
+            programme_level_id: iqcx3qc9sbbt6ocshszfqgq6ci
+            academic_period_id: sjebyge5cpbop1xwo4eds74ejb
+            name: cs-level-100-a
+            display_name: Computer Science Level 100 — B
+            description: First-year Class A.
+            teachers:
+              - id: 3n9ki8z1o5xkw7yq4m6rtbh5ce
+                display_name: Priya Raman
+                username: praman
+                profile_picture_url: /api/v1/users/3n9ki8z1o5xkw7yq4m6rtbh5ce/profile-picture
+            teachers_more: 0
     ClassArchived:
       description: Class archived
       headers:

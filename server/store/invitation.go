@@ -235,21 +235,52 @@ type InvitationBatchDuplicate struct {
 	AuditAt              time.Time
 }
 
+// InvitationListOptions filters and pages the invitations inside Visibility.
+// Query is a case-insensitive prefix of the invited address or the suggested
+// display name (at most MaximumInvitationQueryRunes). DeliveryStates keeps
+// invitations whose newest delivery is in one of the states. The created and
+// expires bounds are each inclusive after and exclusive before.
+//
+// Order (the zero value is InvitationOrderCreated) sorts by the creation or
+// expiry instant, then ID, ascending unless Descending. A continuation sets
+// AfterAt, the previous page's last key in that order, and AfterID together.
 type InvitationListOptions struct {
-	Visibility    InvitationVisibilityScope
-	Purpose       model.InvitationPurpose
-	State         model.InvitationState
-	TargetEmail   string
-	TargetID      string
-	CreatedAfter  time.Time
-	CreatedBefore time.Time
+	Visibility     InvitationVisibilityScope
+	Purpose        model.InvitationPurpose
+	State          model.InvitationState
+	TargetEmail    string
+	TargetID       string
+	Query          string
+	DeliveryStates []model.MailDeliveryState
+	CreatedAfter   time.Time
+	CreatedBefore  time.Time
+	ExpiresAfter   time.Time
+	ExpiresBefore  time.Time
 	// Unexpired compares expires_at with the database clock, so a pending
 	// invitation maintenance has not expired yet is not shown as open.
-	Unexpired       bool
-	BeforeCreatedAt time.Time
-	BeforeID        model.InvitationID
-	Limit           int
+	Unexpired  bool
+	Order      InvitationOrder
+	Descending bool
+	AfterAt    time.Time
+	AfterID    model.InvitationID
+	Limit      int
 }
+
+// InvitationOrder is the key an invitation listing sorts by.
+type InvitationOrder string
+
+const (
+	InvitationOrderCreated InvitationOrder = "created"
+	InvitationOrderExpires InvitationOrder = "expires"
+)
+
+// IsValid reports whether o is a known order; the zero value is not one.
+func (o InvitationOrder) IsValid() bool {
+	return o == InvitationOrderCreated || o == InvitationOrderExpires
+}
+
+// MaximumInvitationQueryRunes bounds InvitationListOptions.Query.
+const MaximumInvitationQueryRunes = 254
 
 type InvitationPage struct {
 	Items []*InvitationAdministrationRecord

@@ -340,6 +340,7 @@ func newExamRecords(deps Dependencies, shared sharedMechanics, authorizer *acces
 		RecentTTL:   deps.RecentAuthenticationTTL,
 		Now:         time.Now,
 		NewHoldID:   model.NewRetentionHoldID,
+		Publisher:   shared.realtime,
 	})
 }
 

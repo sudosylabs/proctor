@@ -1,0 +1,17 @@
+{
+  "title": "Academic Unit changed",
+  "description": "Names the Academic Unit and, unless it is a root unit, its parent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "academic_unit_id"
+  ],
+  "properties": {
+    "academic_unit_id": {
+      "$ref": "id.json"
+    },
+    "parent_academic_unit_id": {
+      "$ref": "id.json"
+    }
+  }
+}

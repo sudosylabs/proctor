@@ -118,3 +118,12 @@ func (s *Service) publishSessionsChanged(ctx context.Context, userID model.UserI
 		s.publisher.Report(ctx, operation, err)
 	}
 }
+
+// publishUserChanged tells the User's viewers to refetch them after their
+// account state or two-step state committed; a failure is reported, never
+// returned.
+func (s *Service) publishUserChanged(ctx context.Context, userID model.UserID) {
+	if err := realtime.PublishUsersChanged(ctx, s.publisher, userID); err != nil {
+		s.publisher.Report(ctx, "user.changed", err)
+	}
+}

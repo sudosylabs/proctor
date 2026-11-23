@@ -24,7 +24,14 @@ import (
 // production passes mail.DeliveryIsRelevant.
 type MailDeliveryRelevance func(context.Context, *model.MailDelivery) (bool, error)
 
+// MailDeliveryChanges hears of each committed delivery state change, so
+// mail viewers can refetch. It must not block.
+type MailDeliveryChanges interface {
+	MailDeliveryChanged(context.Context, model.MailDeliveryID)
+}
+
 type mailDeliveryHandler struct {
+	changes    MailDeliveryChanges
 	deliveries store.MailStore
 	sender     mail.Sender
 	sealer     *secretseal.Sealer
@@ -101,6 +108,9 @@ func (h mailDeliveryHandler) Run(ctx context.Context, execution job.Execution) j
 	sending, err := h.deliveries.StartDelivery(ctx, &store.MailDeliveryStart{ID: delivery.ID, ExpectedRevision: delivery.Revision, At: now})
 	if err != nil {
 		return mailDeliveryDependencyOutcome(err)
+	}
+	if sending.State != delivery.State {
+		h.changed(ctx, sending)
 	}
 
 	if sending.State == model.MailDeliverySuppressed ||
@@ -297,6 +307,15 @@ func (h mailDeliveryHandler) suppress(ctx context.Context, delivery *model.MailD
 	return mailDeliverySucceeded(suppressed)
 }
 
+// changed announces a committed state change of delivery.
+func (h mailDeliveryHandler) changed(ctx context.Context, delivery *model.MailDelivery) {
+	if h.changes != nil && delivery != nil {
+		h.changes.MailDeliveryChanged(ctx, delivery.ID)
+	}
+}
+
+// record follows every committed completion: it announces the change, then
+// records the metric.
 func (h mailDeliveryHandler) record(
 	ctx context.Context,
 	delivery *model.MailDelivery,
@@ -304,6 +323,7 @@ func (h mailDeliveryHandler) record(
 	code string,
 	at time.Time,
 ) {
+	h.changed(ctx, delivery)
 	if h.recorder == nil || delivery == nil {
 		return
 	}
@@ -406,6 +426,8 @@ func newMailDeliveryDescriptor(jobType model.JobType, concurrency int, handler j
 // MailDeliveryDependencies are shared by the ordinary and credential
 // delivery pools.
 type MailDeliveryDependencies struct {
+	// Changes is optional; without it no change is announced.
+	Changes    MailDeliveryChanges
 	Deliveries store.MailStore
 	Sender     mail.Sender
 	Sealer     *secretseal.Sealer
@@ -417,6 +439,7 @@ type MailDeliveryDependencies struct {
 
 func (d MailDeliveryDependencies) handler() mailDeliveryHandler {
 	return mailDeliveryHandler{
+		changes:    d.Changes,
 		deliveries: d.Deliveries,
 		sender:     d.Sender,
 		sealer:     d.Sealer,

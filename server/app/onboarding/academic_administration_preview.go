@@ -56,11 +56,15 @@ type AcademicAdministrationUserFilter struct {
 	AcademicUnitID   model.AcademicUnitID
 	RoleIDs          []model.RoleID
 	State            user.AccountState
+	MFA              store.UserMFAFilter
 	NeverSignedIn    bool
 	LastActiveAfter  time.Time
 	LastActiveBefore time.Time
 }
 
+// CreateAcademicAdministrationPreviewCommand describes a filter preview.
+// Reason is accepted only for user.disable, with the single disable's limits,
+// and reaches every disabled person's audit entry and the batch's.
 type CreateAcademicAdministrationPreviewCommand struct {
 	Operation       AcademicAdministrationBatchOperation
 	ScopeType       model.RoleScopeType
@@ -70,6 +74,7 @@ type CreateAcademicAdministrationPreviewCommand struct {
 	AffiliationKind model.AffiliationKind
 	StartAt         model.OptionalTime
 	EndAt           model.OptionalTime
+	Reason          *string
 }
 
 type CommitAcademicAdministrationPreviewCommand struct {
@@ -571,10 +576,17 @@ func academicAdministrationPreviewFilter(
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	case users.State != "" && !users.State.IsValid():
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "state")
+	case users.MFA != "" && !users.MFA.IsValid():
+		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "mfa")
 	case users.NeverSignedIn && (!users.LastActiveAfter.IsZero() || !users.LastActiveBefore.IsZero()):
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "never_signed_in")
 	case !users.LastActiveAfter.IsZero() && !users.LastActiveBefore.IsZero() && !users.LastActiveAfter.Before(users.LastActiveBefore):
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "last_active_before")
+	}
+
+	reason, err := academicAdministrationBatchReason(operation, command.Reason)
+	if err != nil {
+		return store.AcademicAdministrationFilter{}, err
 	}
 
 	filter := store.AcademicAdministrationFilter{
@@ -582,7 +594,9 @@ func academicAdministrationPreviewFilter(
 		Query:            users.Query,
 		AcademicUnitID:   users.AcademicUnitID,
 		State:            string(users.State),
+		MFA:              users.MFA,
 		NeverSignedIn:    users.NeverSignedIn,
+		Reason:           reason,
 		LastActiveAfter:  model.TimeUTC(users.LastActiveAfter),
 		LastActiveBefore: model.TimeUTC(users.LastActiveBefore),
 		RoleID:           command.RoleID,
@@ -620,6 +634,7 @@ func academicAdministrationDirectoryQuery(filter store.AcademicAdministrationFil
 		Order:            store.UserOrderUsername,
 		Limit:            limit,
 		State:            user.AccountState(filter.State),
+		MFA:              filter.MFA,
 		Affiliations:     slices.Clone(filter.Affiliations),
 		AcademicUnitID:   filter.AcademicUnitID,
 		RoleIDs:          slices.Clone(filter.RoleIDs),
@@ -650,6 +665,9 @@ func academicAdministrationPreviewAuditValue(
 	if filter.State != "" {
 		users["state"] = filter.State
 	}
+	if filter.MFA != "" {
+		users["mfa"] = filter.MFA
+	}
 	if filter.NeverSignedIn {
 		users["never_signed_in"] = true
 	}
@@ -674,6 +692,9 @@ func academicAdministrationPreviewAuditValue(
 	}
 	if filter.AffiliationKind != "" {
 		value["affiliation_kind"] = filter.AffiliationKind
+	}
+	if filter.Reason != "" {
+		value["reason"] = filter.Reason
 	}
 	return value
 }

@@ -49,9 +49,6 @@ type MFAActivation struct {
 	RecoveryCodes []string
 }
 
-// MFAMethodAuthenticatorApp is the only second factor: a TOTP authenticator app.
-const MFAMethodAuthenticatorApp = "authenticator_app"
-
 // MFAStatus is the caller's enrollment status and session assurance.
 type MFAStatus struct {
 	ServiceEnabled           bool
@@ -65,7 +62,7 @@ type MFAStatus struct {
 	Pending                  bool
 	PendingExpiresAt         model.OptionalTime
 	RecoveryCodesRemaining   int
-	// Method is MFAMethodAuthenticatorApp while MFA is enabled or pending and
+	// Method is model.MFAMethodAuthenticatorApp while MFA is enabled or pending and
 	// empty otherwise.
 	Method string
 	// EnabledAt is when the credential was activated; unset unless enabled.
@@ -164,7 +161,7 @@ func (s *Service) GetMFAStatus(
 	status.Pending = credential.IsPendingAt(model.TimeUTC(now))
 	status.PendingExpiresAt = credential.PendingExpiresAt
 	if status.Enabled || status.Pending {
-		status.Method = MFAMethodAuthenticatorApp
+		status.Method = model.MFAMethodAuthenticatorApp
 	}
 
 	if status.Enabled {
@@ -345,6 +342,7 @@ func (s *Service) ActivateMFA(
 		[]model.SessionID{principal.SessionID},
 		activated.AccessTokenHashes,
 	)
+	s.publishUserChanged(ctx, principal.UserID)
 	return &MFAActivation{RecoveryCodes: rawCodes}, nil
 }
 
@@ -410,6 +408,7 @@ func (s *Service) DisableMFA(
 	s.publisher.SessionsRevoked(
 		ctx, principal.UserID, nil, result.AccessTokenHashes,
 	)
+	s.publishUserChanged(ctx, principal.UserID)
 	return nil
 }
 

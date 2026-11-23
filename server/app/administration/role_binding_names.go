@@ -87,3 +87,13 @@ func (s *Service) NamePeople(ctx context.Context, inv invocation.Invocation, ids
 	}
 	return refs, nil
 }
+
+// NameAccessPolicyActors names who changed the Access Policy, reported as the
+// policy's own failure so its endpoints keep their declared codes.
+func (s *Service) NameAccessPolicyActors(ctx context.Context, inv invocation.Invocation, ids []model.UserID) (people.Refs, error) {
+	refs, err := s.people.Resolve(ctx, inv.Principal(), ids)
+	if err != nil {
+		return nil, apperror.New("access_policy.unavailable").Wrap(err)
+	}
+	return refs, nil
+}

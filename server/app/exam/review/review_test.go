@@ -325,6 +325,8 @@ func (f *reviewFixture) auditedValue(t *testing.T) map[string]any {
 // reviewFact is the bounded fact a Review event carries for result.
 func reviewFact(result Result) realtime.ExamIntegrityReviewEventFact {
 	return realtime.ExamIntegrityReviewEventFact{
+		ExamID:       result.Authorization.ExamID,
+		SittingID:    result.Authorization.SittingID,
 		SubmissionID: result.Authorization.SubmissionID,
 		AttemptID:    result.Authorization.AttemptID,
 		CandidateID:  result.Authorization.CandidateUserID,

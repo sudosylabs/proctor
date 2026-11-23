@@ -213,7 +213,7 @@ func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, com
 		return nil, err
 	}
 
-	return access.RunAudited(
+	saved, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -233,6 +233,12 @@ func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, com
 		},
 		roleStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishRoleChanged(ctx, resource, saved.ID)
+	return saved, nil
 }
 
 // UpdateRole refuses a built-in role. Added permissions must be delegable by
@@ -310,6 +316,7 @@ func (s *Service) UpdateRole(ctx context.Context, inv invocation.Invocation, com
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, "")
+	s.publishRoleChanged(ctx, resource, updated.ID)
 	return updated, nil
 }
 
@@ -375,6 +382,7 @@ func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, id
 	}
 
 	s.publisher.InvalidateAuthorization(ctx, "")
+	s.publishRoleChanged(ctx, resource, id)
 	return nil
 }
 

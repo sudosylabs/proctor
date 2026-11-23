@@ -25,7 +25,8 @@ import (
 )
 
 // SetUserEnabledCommand enables or disables a user. Reason is accepted only
-// when disabling and is stored only in the audit event.
+// when disabling; it is stored on the User with who disabled it, and in the
+// audit event.
 type SetUserEnabledCommand struct {
 	ID             model.UserID
 	Enabled        bool
@@ -36,16 +37,25 @@ type SetUserEnabledCommand struct {
 }
 
 // MaximumAccountDisableReasonRunes is the longest disable reason, in runes.
-const MaximumAccountDisableReasonRunes = 500
+const MaximumAccountDisableReasonRunes = model.UserDisableReasonMaxRunes
 
 func accountDisableReason(command SetUserEnabledCommand) (string, error) {
 	if command.Reason == nil {
 		return "", nil
 	}
+	if command.Enabled {
+		return "", apperror.Invalid("request.invalid", "reason")
+	}
+	return AccountDisableReason(*command.Reason)
+}
 
-	reason := strings.TrimSpace(*command.Reason)
-	if command.Enabled ||
-		reason == "" ||
+// AccountDisableReason trims a disable reason and refuses it, as
+// request.invalid on reason, when it is empty, longer than
+// MaximumAccountDisableReasonRunes, or holds a control character. A batch
+// checks its one reason with it before any row runs.
+func AccountDisableReason(raw string) (string, error) {
+	reason := strings.TrimSpace(raw)
+	if reason == "" ||
 		utf8.RuneCountInString(reason) > MaximumAccountDisableReasonRunes ||
 		!utf8.ValidString(reason) ||
 		strings.ContainsFunc(reason, unicode.IsControl) {
@@ -175,6 +185,8 @@ func (s *Service) setUserEnabledFromCurrent(
 				ID:               userID,
 				ExpectedRevision: current.Revision,
 				Disabled:         disabled,
+				DisabledBy:       inv.Principal().UserID,
+				DisabledReason:   reason,
 				Capabilities:     AccessDeploymentCapabilities(s.capabilities.Snapshot()),
 				Occurrence:       prepared.Occurrence,
 				Delivery:         prepared.Delivery,
@@ -202,6 +214,7 @@ func (s *Service) setUserEnabledFromCurrent(
 	if disabled && result != nil && len(result.RevokedSessions) > 0 {
 		s.publisher.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 	}
+	s.publishUserChanged(ctx, userID)
 
 	return result.User, false, nil
 }

@@ -139,6 +139,7 @@ func (s *Service) CreateAcademicUnitMember(
 	if err == nil && changed {
 		s.publisher.InvalidateAuthorization(ctx, userID)
 		s.publishMemberCountChanged(ctx, command.Batch, command.AcademicUnitID)
+		s.publishUserChanged(ctx, userID)
 	}
 
 	return result, err
@@ -246,6 +247,7 @@ func (s *Service) EndAcademicUnitMember(
 	if err == nil && changed {
 		s.publisher.InvalidateAuthorization(ctx, current.UserID)
 		s.publishMemberCountChanged(ctx, command.Batch, current.AcademicUnitID)
+		s.publishUserChanged(ctx, current.UserID)
 	}
 
 	return result, err
@@ -258,7 +260,11 @@ func (s *Service) publishMemberCountChanged(ctx context.Context, batch batchitem
 	if batch.Fields() != (batchitem.Fields{}) {
 		return
 	}
-	if err := s.publishAcademicUnitUpdated(ctx, unitID); err != nil {
+	unit, err := s.academicUnits.Get(ctx, unitID)
+	if err == nil {
+		err = s.publishAcademicUnitUpdated(ctx, unit)
+	}
+	if err != nil {
 		s.publisher.Report(ctx, "academic_unit_updated", err)
 	}
 }

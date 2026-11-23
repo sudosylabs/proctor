@@ -32,7 +32,7 @@ import (
 func userResource(fixture *userFixture) route.Resource {
 	// The email routes run the identity area and the exam activity route the
 	// attempt area; tests of them build their own.
-	return userProfileResource(fixture.service, nil, nil)
+	return userProfileResource(fixture.service, nil, nil, testPeople(fixture.users, fixture.access))
 }
 
 // directoryCaller is a signed-in CLI caller of the User directory.
@@ -226,7 +226,7 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionUserManage)},
 	})
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
-		userProfileResource(newUserFixture(t).service, nil, identityFixture.service))
+		userProfileResource(newUserFixture(t).service, nil, identityFixture.service, nil))
 
 	for _, test := range []struct {
 		name, method, path, body, operation string
@@ -389,6 +389,73 @@ func TestUserSearchTransportPresentsEachUsersSummary(t *testing.T) {
 	require.JSONEq(t, `{"affiliations": [], "affiliations_more": 0}`, string(summaries[1]),
 		"a caller without role_binding.view reads no roles member")
 	require.NotContains(t, string(summaries[0]), `"roles"`, "a caller without role_binding.view reads no roles member")
+}
+
+// TestUserDirectoryNamesWhoDisabledTheAccount pins that an institution-wide
+// reader of the directory sees who disabled an account and why, and that a
+// unit-scoped reader sees neither, even when the row reaches the page.
+// GET /users/{id} answers only for an active account, so the directory is
+// where a disabled account is read.
+func TestUserDirectoryNamesWhoDisabledTheAccount(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		grant func(model.UserID) accesstest.Grant
+		query string
+		want  map[string]any
+	}{
+		"institution-wide": {
+			grant: func(caller model.UserID) accesstest.Grant { return institutionWide(caller, model.ActionUserView) },
+			query: "?include_disabled=true",
+			want: map[string]any{
+				"disabled_reason": "Left the school",
+				"disabled_by":     map[string]any{"display_name": "Registrar", "username": "registrar"},
+			},
+		},
+		"unit-scoped": {
+			grant: func(caller model.UserID) accesstest.Grant {
+				return inAcademicUnit(caller, model.NewAcademicUnitID(), model.ActionUserView)
+			},
+			want: map[string]any{},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			logger, _ := routetest.NewLogger(t)
+			caller := directoryCaller()
+			fixture := newUserFixture(t, test.grant(caller.UserID))
+			at := time.Now().Add(-time.Hour)
+			registrar := &model.User{Username: "registrar", DisplayName: "Registrar", Email: "registrar@example.edu", Locale: "en", Timezone: "UTC"}
+			registrar.PrepareCreate(model.NewUserID(), at)
+			subject := &model.User{Username: "student", DisplayName: "Student", Email: "student@example.edu", Locale: "en", Timezone: "UTC"}
+			subject.PrepareCreate(model.NewUserID(), at)
+			subject.DisabledAt = model.OptionalTimeFrom(at.Add(time.Minute))
+			subject.DisabledByUserID, subject.DisabledReason = registrar.ID, "Left the school"
+			fixture.users.add(registrar, subject)
+			fixture.users.listed = []*model.User{subject}
+			fixture.users.total = 1
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: caller}, userResource(fixture))
+
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+test.query, nil)
+			request.Header.Set("Authorization", "Bearer credential")
+			response := httptest.NewRecorder()
+			httpAPI.ServeHTTP(response, request)
+			require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+			var body struct {
+				Items []map[string]any `json:"items"`
+			}
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			require.Len(t, body.Items, 1)
+			got := map[string]any{}
+			if reason, ok := body.Items[0]["disabled_reason"]; ok {
+				got["disabled_reason"] = reason
+			}
+			if by, ok := body.Items[0]["disabled_by"].(map[string]any); ok {
+				require.Equal(t, registrar.ID.String(), by["id"])
+				got["disabled_by"] = map[string]any{"display_name": by["display_name"], "username": by["username"]}
+			}
+			require.Equal(t, test.want, got)
+		})
+	}
 }
 
 func TestScopedUserProfileOmitsAccountAndSecurityFields(t *testing.T) {
@@ -864,4 +931,105 @@ func TestUserSearchTransportReadsTheAccountFilters(t *testing.T) {
 	} {
 		assertHTTPProblem(t, serve(query), http.StatusBadRequest, "request.invalid")
 	}
+}
+
+// TestUserTwoStepStateIsShownOnlyToWhoMayResetOrSeeTheInstitution pins U1:
+// Institution-wide user.view or user.mfa.reset sees every listed account's
+// state, on and off; a scoped viewer sees no mfa member at all, and cannot
+// filter on it or on role holders.
+func TestUserTwoStepStateIsShownOnlyToWhoMayResetOrSeeTheInstitution(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	unitID := model.NewAcademicUnitID()
+	secured := &model.User{ID: model.NewUserID(), Username: "secured", DisplayName: "Secured"}
+	plain := &model.User{ID: model.NewUserID(), Username: "plain", DisplayName: "Plain"}
+	enabledAt := time.Date(2026, 3, 14, 10, 22, 0, 0, time.UTC)
+	serve := func(t *testing.T, path string, grants ...accesstest.Grant) (*httptest.ResponseRecorder, *userFixture) {
+		t.Helper()
+		principal := directoryCaller()
+		for index := range grants {
+			grants[index].UserID = principal.UserID
+		}
+		fixture := newUserFixture(t, grants...)
+		fixture.users.add(secured, plain)
+		fixture.users.listed = []*model.User{secured, plain}
+		fixture.users.mfaEnabledAt = map[model.UserID]time.Time{secured.ID: enabledAt}
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userResource(fixture))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response, fixture
+	}
+	type item struct {
+		Username string          `json:"username"`
+		MFA      json.RawMessage `json:"mfa"`
+	}
+	list := func(t *testing.T, response *httptest.ResponseRecorder) []item {
+		t.Helper()
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var body struct {
+			Items []item `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		require.Len(t, body.Items, 2)
+		return body.Items
+	}
+	on := `{"enabled": true, "method": "authenticator_app", "enabled_at": "2026-03-14T10:22:00Z"}`
+
+	for name, grants := range map[string][]accesstest.Grant{
+		"Institution-wide user.view": {institutionWide("", model.ActionUserView)},
+		"scoped user.view with user.mfa.reset": {
+			inAcademicUnit("", unitID, model.ActionUserView), institutionWide("", model.ActionUserMFAReset),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			response, _ := serve(t, "/api/v1/users", grants...)
+			items := list(t, response)
+			require.JSONEq(t, on, string(items[0].MFA))
+			require.JSONEq(t, `{"enabled": false}`, string(items[1].MFA), "off is reported only to who may see it")
+
+			response, fixture := serve(t, "/api/v1/users?mfa=disabled", grants...)
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			require.Equal(t, store.UserMFADisabled, fixture.users.lastList(t).MFA)
+		})
+	}
+
+	t.Run("scoped user.view", func(t *testing.T) {
+		t.Parallel()
+		scoped := inAcademicUnit("", unitID, model.ActionUserView)
+		response, _ := serve(t, "/api/v1/users", scoped)
+		for _, listed := range list(t, response) {
+			require.Nil(t, listed.MFA, "a scoped viewer never reads two-step verification, not even as off")
+		}
+		for _, query := range []string{"?mfa=enabled", "?mfa=disabled", "?role_holder=true"} {
+			response, fixture := serve(t, "/api/v1/users"+query, scoped)
+			assertHTTPProblem(t, response, http.StatusBadRequest, "request.invalid")
+			require.Empty(t, fixture.users.listOptions, "a refused filter lists nothing")
+		}
+	})
+
+	t.Run("profile", func(t *testing.T) {
+		t.Parallel()
+		response, _ := serve(t, "/api/v1/users/"+secured.ID.String(), institutionWide("", model.ActionUserView))
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var profile item
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &profile))
+		require.JSONEq(t, on, string(profile.MFA))
+	})
+
+	t.Run("role holders", func(t *testing.T) {
+		t.Parallel()
+		response, fixture := serve(t, "/api/v1/users?role_holder=true&mfa=disabled", institutionWide("", model.ActionUserView))
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		options := fixture.users.lastList(t)
+		require.True(t, options.RoleHolder)
+		require.Equal(t, store.UserMFADisabled, options.MFA)
+		require.False(t, options.Visibility.ActiveAt.IsZero(), "role holders are read at the visibility's instant")
+		for _, query := range []string{"?role_holder=false", "?role_holder=", "?mfa=off", "?mfa=enabled&mfa=disabled"} {
+			response, _ := serve(t, "/api/v1/users"+query, institutionWide("", model.ActionUserView))
+			assertHTTPProblem(t, response, http.StatusBadRequest, "request.invalid")
+		}
+	})
 }

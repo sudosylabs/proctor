@@ -1,0 +1,23 @@
+{
+  "title": "Class changed",
+  "description": "Names the Class to refetch and the Academic Unit that owns it through its Programme.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "class_id",
+    "academic_unit_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "class_id": {
+      "$ref": "id.json"
+    },
+    "academic_unit_id": {
+      "$ref": "id.json"
+    }
+  }
+}

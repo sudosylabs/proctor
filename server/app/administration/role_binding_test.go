@@ -127,7 +127,8 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	userID := model.NewID()
 	// The Role grants class.view, so the delegation check reads the caller's
 	// grants between loading the Role and the audit.
-	created := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: model.UserID(userID), RoleID: model.NewRoleID()}
+	created := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: model.UserID(userID), RoleID: model.NewRoleID(),
+		ScopeType: model.RoleScopeInstitution, ScopeID: model.NewID()}
 	role := &model.Role{ID: created.RoleID, Name: "teacher", Permissions: []string{string(model.ActionClassView)}}
 	caller, inv := newCaller()
 	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleBindingManage, model.ActionClassView))
@@ -147,8 +148,10 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
-	// Contract: the one realtime effect drops the bound User's cached authorization.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)}}, publisher.Calls())
+	// Contract: the realtime effects drop the bound User's cached authorization,
+	// then tell the binding's scope it was granted.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)},
+		roleBindingChangedCall(t, created)}, publisher.Calls())
 	require.Equal(t, model.UserID(userID), onlyAttempt(t, fixture).SubjectUserID, "the grant names the bound User as its subject")
 }
 
@@ -191,8 +194,10 @@ func TestRoleBindingRetainedCreateUsesArchivedRoleForCurrentDelegation(t *testin
 	// The grants read after the archived Role is the delegation check of its
 	// class.members.manage.
 	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role-including-archived", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
-	// Contract: the one realtime effect drops the bound User's cached authorization.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: userID}}, publisher.Calls())
+	// Contract: the realtime effects drop the bound User's cached authorization,
+	// then tell the binding's scope it was granted.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: userID},
+		roleBindingChangedCall(t, created)}, publisher.Calls())
 }
 
 func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
@@ -264,27 +269,4 @@ func TestRoleBindingListByUserPassesAcademicScopeToPersistence(t *testing.T) {
 		action: model.ActionRoleBindingView, resource: model.Resource{Type: model.ResourceAcademicUnit, ID: rootID},
 		scopeType: model.RoleScopeAcademicUnit, scopeID: rootID, allowed: true,
 	}}, recordedDecisions(fixture))
-}
-
-func TestRoleBindingCreateAtAUnitTellsTheUnitsViewers(t *testing.T) {
-	t.Parallel()
-	events := []string{}
-	userID, unitID := model.NewUserID(), model.NewAcademicUnitID()
-	created := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: userID, RoleID: model.NewRoleID(),
-		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}
-	role := &model.Role{ID: created.RoleID, Name: "unit-manager", Permissions: []string{string(model.ActionAcademicUnitManage)}}
-	caller, inv := newCaller()
-	fixture := grantedAccess(t, &events, unitGrant(caller.UserID, unitID, model.ActionRoleBindingManage, model.ActionAcademicUnitManage))
-	mail, _ := newMail(t)
-	publisher := publisherIn(&events)
-	service := &Service{roleBindings: &roleBindingStoreFake{events: &events, createResult: created}, roles: &roleBindingRoleStoreFake{events: &events, role: role}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: noCapabilities(), auditor: fixture.Auditor.MutationAudit(), mail: mail, publisher: publisher, now: func() time.Time { return time.UnixMilli(500) }}
-	_, err := service.CreateRoleBinding(context.Background(), inv, CreateRoleBindingCommand{
-		UserID: userID, RoleID: created.RoleID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(), StartAt: 100,
-	})
-	require.NoError(t, err)
-	calls := publisher.Calls()
-	require.Len(t, calls, 2)
-	require.Equal(t, realtimetest.Publish, calls[1].Method)
-	require.Equal(t, "academic_unit_updated", calls[1].Event.Name)
-	require.Equal(t, model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}, calls[1].Event.Resource)
 }

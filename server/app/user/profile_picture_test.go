@@ -250,7 +250,7 @@ func TestUploadProfilePictureNormalizesPrivateRenditionsBeforePublishing(t *test
 	require.Len(t, persistence.publication.Renditions, 3, "upload result: user=%#v publication=%#v normalized", updated, persistence.publication)
 	require.True(t, content.normalized, "upload result: user=%#v publication=%#v normalized", updated, persistence.publication)
 	require.True(t, updated.ProfilePictureChangedAt.Time.Equal(at.Add(time.Minute)))
-	wantEvents := []string{"decision:user.profile_picture.manage:success", "create-upload", "normalize", "audit-begin:user.profile_picture.manage", "publish", "effect"}
+	wantEvents := []string{"decision:user.profile_picture.manage:success", "create-upload", "normalize", "audit-begin:user.profile_picture.manage", "publish", "effect", "effect"}
 	require.Equal(t, fmt.Sprint(wantEvents), fmt.Sprint(events), "events")
 	for _, rendition := range persistence.publication.Renditions {
 		require.Equal(t, 20, rendition.Width, "%s dimensions = %dx%d; small images must not be upscaled", rendition.Name, rendition.Width, rendition.Height)
@@ -274,11 +274,13 @@ func TestReplaceProfilePictureKeepsTheActiveFileEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, user.CustomProfilePictureFileID, updated.CustomProfilePictureFileID, "replacement changed file entry: user")
 	require.Equal(t, user.CustomProfilePictureFileID, persistence.publication.EntryID, "replacement changed file entry: user")
-	wantEvents := []string{"decision:user.profile_picture.manage:success", "create-revision-upload", "normalize", "audit-begin:user.profile_picture.manage", "publish", "effect"}
+	wantEvents := []string{"decision:user.profile_picture.manage:success", "create-revision-upload", "normalize", "audit-begin:user.profile_picture.manage", "publish", "effect", "effect"}
 	require.Equal(t, fmt.Sprint(wantEvents), fmt.Sprint(events), "replacement events/change = %v / %#v", events, publisher.Calls())
 	// Contract: a replacement publishes one change for the User, naming the
-	// File Entry it kept, and reports no failure.
-	require.Equal(t, []realtimetest.Call{profilePictureChangedCall(updated, user.ID, user.CustomProfilePictureFileID)}, publisher.Calls())
+	// File Entry it kept, tells the User's viewers to refetch them, and
+	// reports no failure.
+	require.Equal(t, []realtimetest.Call{profilePictureChangedCall(updated, user.ID, user.CustomProfilePictureFileID),
+		userChangedCall(t, user.ID)}, publisher.Calls())
 	attempt := pictureAttempt(t, authorization)
 	auditData := string(attempt.Parameters) + string(attempt.PriorState)
 	require.Equal(t, string(model.ActionUserProfilePictureManage), attempt.Action, "unsafe or incorrect audit projection: %#v", attempt)
@@ -383,9 +385,11 @@ func TestRemoveProfilePictureArchivesCustomAndPublishesDefaultAfterCommit(t *tes
 	require.Equal(t, user.DefaultProfilePictureFileID, updated.DefaultProfilePictureFileID, "removal result/input/effect = %#v / %#v / %#v", updated, persistence.removal, publisher.Calls())
 	require.Equal(t, user.CustomProfilePictureFileID, persistence.removal.EntryID, "removal result/input/effect = %#v / %#v / %#v", updated, persistence.removal, publisher.Calls())
 	// Contract: a removal publishes one change naming the default File Entry
-	// that is active again, and reports no failure.
-	require.Equal(t, []realtimetest.Call{profilePictureChangedCall(updated, user.ID, user.DefaultProfilePictureFileID)}, publisher.Calls())
-	want := []string{"decision:user.profile_picture.manage:success", "audit-begin:user.profile_picture.manage", "remove-with-audit", "effect"}
+	// that is active again, tells the User's viewers to refetch them, and
+	// reports no failure.
+	require.Equal(t, []realtimetest.Call{profilePictureChangedCall(updated, user.ID, user.DefaultProfilePictureFileID),
+		userChangedCall(t, user.ID)}, publisher.Calls())
+	want := []string{"decision:user.profile_picture.manage:success", "audit-begin:user.profile_picture.manage", "remove-with-audit", "effect", "effect"}
 	require.Equal(t, fmt.Sprint(want), fmt.Sprint(events), "events")
 }
 
@@ -619,6 +623,14 @@ func (u pictureUsers) Get(ctx context.Context, id model.UserID) (*model.User, er
 // profilePictureChangedCall is the publication of a committed profile-picture
 // change: the event addressed to the User, carrying the active File Entry and
 // the revision and change instant of the committed User.
+// userChangedCall is the user.changed publication for userID.
+func userChangedCall(t *testing.T, userID model.UserID) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewUserChangedEvent(userID)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
+}
+
 func profilePictureChangedCall(committed *model.User, userID model.UserID, active model.FileEntryID) realtimetest.Call {
 	return realtimetest.Call{Method: realtimetest.Publish, Event: realtime.Event{
 		Name:   "user_profile_picture_changed",

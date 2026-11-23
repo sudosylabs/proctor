@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lib/pq"
 	"github.com/sudosylabs/proctor/server/model"
@@ -108,7 +109,12 @@ func validateInvitationListOptions(options store.InvitationListOptions) error {
 			(!model.IsValidEmail(options.TargetEmail) || options.TargetEmail != strings.ToLower(strings.TrimSpace(options.TargetEmail)))) ||
 		(options.TargetID != "" && !model.IsValidOpaqueID(options.TargetID)) ||
 		(!options.CreatedAfter.IsZero() && !options.CreatedBefore.IsZero() && !options.CreatedBefore.After(options.CreatedAfter)) ||
-		(options.BeforeID.IsValid() != !options.BeforeCreatedAt.IsZero()) {
+		(!options.ExpiresAfter.IsZero() && !options.ExpiresBefore.IsZero() && !options.ExpiresBefore.After(options.ExpiresAfter)) ||
+		(options.Order != "" && !options.Order.IsValid()) ||
+		!utf8.ValidString(options.Query) || utf8.RuneCountInString(options.Query) > store.MaximumInvitationQueryRunes ||
+		len(options.DeliveryStates) > 6 || !validMailDeliveryStates(options.DeliveryStates) ||
+		(options.AfterID.IsValid() != !options.AfterAt.IsZero()) ||
+		(options.AfterID != "" && !options.AfterID.IsValid()) {
 		return store.NewErrInvalidInput("invitation", "list_options", nil)
 	}
 	return nil
@@ -117,7 +123,7 @@ func validateInvitationListOptions(options store.InvitationListOptions) error {
 // Count counts through the same filter as List, without its keyset, order,
 // or limit, reading at most one row past maximum.
 func (s SQLInvitationStore) Count(ctx context.Context, options store.InvitationListOptions, maximum int) (int, error) {
-	options.BeforeCreatedAt, options.BeforeID, options.Limit = time.Time{}, "", 1
+	options.AfterAt, options.AfterID, options.Limit = time.Time{}, "", 1
 	if err := validateInvitationListOptions(options); err != nil {
 		return 0, err
 	}
@@ -136,12 +142,19 @@ func (s SQLInvitationStore) listAdministrationRows(
 	exactID model.InvitationID,
 ) ([]invitationRow, error) {
 	conditions, args := invitationListConditions(options, exactID)
-	if !options.BeforeCreatedAt.IsZero() {
-		conditions += " AND (created_at < ? OR (created_at = ? AND id < ?))"
-		before := model.TimeUTC(options.BeforeCreatedAt)
-		args = append(args, before, before, options.BeforeID.String())
+	key, direction, keyset := "created_at", "ASC", ">"
+	if options.Order == store.InvitationOrderExpires {
+		key = "expires_at"
 	}
-	query := `SELECT ` + invitationColumns + ` FROM invitations WHERE ` + conditions + " ORDER BY created_at DESC, id DESC LIMIT ?"
+	if options.Descending {
+		direction, keyset = "DESC", "<"
+	}
+	if !options.AfterAt.IsZero() {
+		conditions += " AND (" + key + ", id) " + keyset + " (?, ?)"
+		args = append(args, model.TimeUTC(options.AfterAt), options.AfterID.String())
+	}
+	query := `SELECT ` + invitationColumns + ` FROM invitations WHERE ` + conditions +
+		" ORDER BY " + key + " " + direction + ", id " + direction + " LIMIT ?"
 	args = append(args, options.Limit+1)
 	rows := []invitationRow{}
 	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
@@ -151,7 +164,8 @@ func (s SQLInvitationStore) listAdministrationRows(
 }
 
 // invitationListConditions is every List filter but the keyset: visibility,
-// the exact ID, purpose, state, target, creation range, and expiry. List and
+// the exact ID, purpose, state, target, search prefix, delivery state,
+// creation and expiry ranges, and expiry. List and
 // Count share it so a total always counts the listed rows.
 func invitationListConditions(options store.InvitationListOptions, exactID model.InvitationID) (string, []any) {
 	args := []any{}
@@ -244,6 +258,36 @@ func invitationListConditions(options store.InvitationListOptions, exactID model
 		args = append(args, model.TimeUTC(options.CreatedBefore))
 	}
 
+	if term := strings.TrimSpace(options.Query); term != "" {
+		pattern := invitationPrefixPattern(term)
+		conditions = append(conditions, "(lower(target_email) LIKE ? ESCAPE '!' OR lower(suggested_display_name) LIKE ? ESCAPE '!')")
+		args = append(args, pattern, pattern)
+	}
+
+	if len(options.DeliveryStates) > 0 {
+		states := make([]string, 0, len(options.DeliveryStates))
+		for _, state := range options.DeliveryStates {
+			states = append(states, string(state))
+		}
+		conditions = append(conditions, `(
+			SELECT md.state FROM mail_deliveries md
+			WHERE md.target_invitation_id = invitations.id
+			ORDER BY md.created_at DESC, md.id DESC
+			LIMIT 1
+		) = ANY(?)`)
+		args = append(args, pq.Array(states))
+	}
+
+	if !options.ExpiresAfter.IsZero() {
+		conditions = append(conditions, "expires_at >= ?")
+		args = append(args, model.TimeUTC(options.ExpiresAfter))
+	}
+
+	if !options.ExpiresBefore.IsZero() {
+		conditions = append(conditions, "expires_at < ?")
+		args = append(args, model.TimeUTC(options.ExpiresBefore))
+	}
+
 	if options.Unexpired {
 		conditions = append(conditions, "expires_at>statement_timestamp()")
 	}
@@ -252,6 +296,21 @@ func invitationListConditions(options store.InvitationListOptions, exactID model
 	}
 
 	return strings.Join(conditions, " AND "), args
+}
+
+// invitationPrefixPattern is a lowercase LIKE prefix pattern of term, with
+// the pattern characters escaped by !.
+func invitationPrefixPattern(term string) string {
+	return strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(strings.ToLower(term)) + "%"
+}
+
+func validMailDeliveryStates(states []model.MailDeliveryState) bool {
+	for _, state := range states {
+		if !state.IsValid() {
+			return false
+		}
+	}
+	return true
 }
 
 func (s SQLInvitationStore) administrationRecord(ctx context.Context, row invitationRow) (*store.InvitationAdministrationRecord, error) {

@@ -444,6 +444,7 @@ func (s *Service) AppendNativeDelivery(
 
 	for _, flagged := range value.Flagged {
 		effects := integrityEffects{
+			ExamID:          target.ExamID,
 			SittingID:       target.SittingID,
 			AttemptID:       deliveryAccess.Access.AttemptID,
 			CandidateUserID: deliveryAccess.Access.CandidateUserID,
@@ -479,7 +480,7 @@ func (s *Service) AppendNativeDelivery(
 		}
 	}
 	if slices.ContainsFunc(value.Flagged, func(f store.NativeIntegrityFlagged) bool { return f.ScreenClipRequested }) {
-		s.publishScreenClipsRequested(ctx, target.SittingID, deliveryAccess.Access.AttemptID,
+		s.publishScreenClipsRequested(ctx, target.ExamID, target.SittingID, deliveryAccess.Access.AttemptID,
 			deliveryAccess.Access.CandidateUserID, value.Acknowledgement.Receipt.ReceivedAt)
 	}
 

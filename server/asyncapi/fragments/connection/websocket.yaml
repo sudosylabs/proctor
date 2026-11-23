@@ -39,6 +39,20 @@ channels:
         $ref: '#/components/messages/onboarding_import.changed_for_creator'
       invitation.changed:
         $ref: '#/components/messages/invitation.changed'
+      user.changed:
+        $ref: '#/components/messages/user.changed'
+      class.changed:
+        $ref: '#/components/messages/class.changed'
+      academic_period.changed:
+        $ref: '#/components/messages/academic_period.changed'
+      role.changed:
+        $ref: '#/components/messages/role.changed'
+      role_binding.changed:
+        $ref: '#/components/messages/role_binding.changed'
+      retention.changed:
+        $ref: '#/components/messages/retention.changed'
+      mail_delivery.changed:
+        $ref: '#/components/messages/mail_delivery.changed'
       academic_unit_created:
         $ref: '#/components/messages/academic_unit_created'
       academic_unit_updated:
@@ -201,6 +215,13 @@ operations:
       - $ref: '#/channels/websocket/messages/onboarding_import.changed'
       - $ref: '#/channels/websocket/messages/onboarding_import.changed_for_creator'
       - $ref: '#/channels/websocket/messages/invitation.changed'
+      - $ref: '#/channels/websocket/messages/user.changed'
+      - $ref: '#/channels/websocket/messages/class.changed'
+      - $ref: '#/channels/websocket/messages/academic_period.changed'
+      - $ref: '#/channels/websocket/messages/role.changed'
+      - $ref: '#/channels/websocket/messages/role_binding.changed'
+      - $ref: '#/channels/websocket/messages/retention.changed'
+      - $ref: '#/channels/websocket/messages/mail_delivery.changed'
       - $ref: '#/channels/websocket/messages/academic_unit_created'
       - $ref: '#/channels/websocket/messages/academic_unit_updated'
       - $ref: '#/channels/websocket/messages/academic_unit_archived'

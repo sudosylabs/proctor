@@ -93,15 +93,26 @@ func NewExamRevisionPublishedEvent(
 	}, nil
 }
 
-// NewExamCreatedEvent carries only the exam's identifier.
-func NewExamCreatedEvent(examID model.ExamID) (Event, error) {
-	if !examID.IsValid() {
-		return Event{}, errors.New("exam created event requires a valid Exam ID")
+type examCreatedData struct {
+	ExamID         string `json:"exam_id"`
+	AcademicUnitID string `json:"academic_unit_id"`
+}
+
+// NewExamCreatedEvent carries only the exam's identifier and its owning
+// academic unit.
+func NewExamCreatedEvent(examID model.ExamID, unitID model.AcademicUnitID) (Event, error) {
+	if !examID.IsValid() || !unitID.IsValid() {
+		return Event{}, errors.New("exam created event requires a valid Exam and Academic Unit ID")
+	}
+	data, err := json.Marshal(examCreatedData{ExamID: examID.String(), AcademicUnitID: unitID.String()})
+	if err != nil {
+		return Event{}, err
 	}
 	return Event{
 		Name:     examCreatedMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+		Data:     data,
 	}, nil
 }
 

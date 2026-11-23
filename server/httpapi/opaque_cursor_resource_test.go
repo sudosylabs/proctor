@@ -101,10 +101,10 @@ func TestResourceCursorContracts(t *testing.T) {
 		},
 		{
 			name: "Invitation", encode: func() (string, error) {
-				return encodeInvitationCursor(invitationCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: invitationID})
+				return encodeInvitationCursor(invitationCursor{Sort: "expires", Dir: "asc", At: at.Format(time.RFC3339Nano), ID: invitationID})
 			}, decode: func(raw string) (any, error) { return decodeInvitationCursor(raw) },
-			want: invitationCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: invitationID}, plainKeyset: invitationID,
-			malformed: fmt.Sprintf(`{"created_at":"invalid","id":%q}`, invitationID),
+			want: invitationCursor{Sort: "expires", Dir: "asc", At: at.Format(time.RFC3339Nano), ID: invitationID}, plainKeyset: invitationID,
+			malformed: fmt.Sprintf(`{"sort":"expires","dir":"asc","at":"invalid","id":%q}`, invitationID),
 		},
 		{
 			name: "Exam Revision", encode: func() (string, error) {

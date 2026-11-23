@@ -70,4 +70,24 @@ func (p *JobChangePublisher) institution(ctx context.Context) (model.Institution
 	return institution.ID, nil
 }
 
+// MailDeliveryChanged publishes mail_delivery.changed for one delivery,
+// best effort. The delivery Job holds no Publisher, so it reports through
+// here; before bootstrap nothing is published.
+func (p *JobChangePublisher) MailDeliveryChanged(ctx context.Context, deliveryID model.MailDeliveryID) {
+	institutionID, err := p.institution(ctx)
+	if store.IsNotFound(err) {
+		return
+	}
+	var event Event
+	if err == nil {
+		event, err = NewMailDeliveryChangedEvent(institutionID, deliveryID)
+	}
+	if err == nil {
+		err = p.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		p.publisher.Report(ctx, "mail_delivery.changed", err)
+	}
+}
+
 var _ job.ChangeListener = (*JobChangePublisher)(nil)

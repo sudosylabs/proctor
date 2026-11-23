@@ -124,8 +124,8 @@ components:
     academic_unit_created:
       name: academic_unit_created
       title: Academic Unit created
-      summary: Refetch the Academic Unit. The event has no data.
-      description: Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.
+      summary: Refetch the Academic Unit. The event names it and its parent.
+      description: Refetch the Academic Unit. The event names it and its parent. Delivered to connections that subscribe to academic_unit.view on the academic unit.
       tags:
         - name: event
         - name: Institution
@@ -136,6 +136,7 @@ components:
             required:
               - event
               - action
+              - data
             properties:
               event:
                 type: string
@@ -143,9 +144,8 @@ components:
               action:
                 type: string
                 const: academic_unit.view
-            not:
-              required:
-                - data
+              data:
+                $ref: '../../../schemas/realtime/academic_unit_changed.json'
       examples:
         - name: example
           payload:
@@ -156,15 +156,18 @@ components:
             resource:
               type: academic_unit
               id: jcx1ia56br8kpous3h9nfemqtw
+            data:
+              academic_unit_id: jcx1ia56br8kpous3h9nfemqtw
+              parent_academic_unit_id: 4br8kpous3h9nfemqtwz47ydgj
     academic_unit_updated:
       name: academic_unit_updated
       title: Academic Unit updated
-      summary: Refetch the Academic Unit. The event has no data.
+      summary: Refetch the Academic Unit. The event names it and its parent.
       description: >-
-        Refetch the Academic Unit. The event has no data. Sent when the Academic Unit itself changes, when a member
-        joins or leaves it outside a batch, and when a Role Binding scoped to it is granted or ended outside a batch,
-        since its member counts and administrators may have moved. Delivered to connections that subscribe to
-        academic_unit.view on the academic unit.
+        Refetch the Academic Unit. The event names it and its parent. Sent when the Academic Unit itself changes, and
+        when a member joins or leaves it outside a batch, since its member counts moved; a change to who administers
+        it arrives as role_binding.changed. Delivered to connections that subscribe to academic_unit.view on the
+        academic unit.
       tags:
         - name: event
         - name: Institution
@@ -175,6 +178,7 @@ components:
             required:
               - event
               - action
+              - data
             properties:
               event:
                 type: string
@@ -182,9 +186,8 @@ components:
               action:
                 type: string
                 const: academic_unit.view
-            not:
-              required:
-                - data
+              data:
+                $ref: '../../../schemas/realtime/academic_unit_changed.json'
       examples:
         - name: example
           payload:
@@ -195,11 +198,14 @@ components:
             resource:
               type: academic_unit
               id: jcx1ia56br8kpous3h9nfemqtw
+            data:
+              academic_unit_id: jcx1ia56br8kpous3h9nfemqtw
+              parent_academic_unit_id: 4br8kpous3h9nfemqtwz47ydgj
     academic_unit_archived:
       name: academic_unit_archived
       title: Academic Unit archived
-      summary: Refetch the Academic Unit. The event has no data.
-      description: Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.
+      summary: Refetch the Academic Unit. The event names it and its parent.
+      description: Refetch the Academic Unit. The event names it and its parent. Delivered to connections that subscribe to academic_unit.view on the academic unit.
       tags:
         - name: event
         - name: Institution
@@ -210,6 +216,7 @@ components:
             required:
               - event
               - action
+              - data
             properties:
               event:
                 type: string
@@ -217,9 +224,8 @@ components:
               action:
                 type: string
                 const: academic_unit.view
-            not:
-              required:
-                - data
+              data:
+                $ref: '../../../schemas/realtime/academic_unit_changed.json'
       examples:
         - name: example
           payload:
@@ -230,3 +236,6 @@ components:
             resource:
               type: academic_unit
               id: jcx1ia56br8kpous3h9nfemqtw
+            data:
+              academic_unit_id: jcx1ia56br8kpous3h9nfemqtw
+              parent_academic_unit_id: 4br8kpous3h9nfemqtwz47ydgj

@@ -64,36 +64,85 @@ type ArchiveClassCommand struct {
 	ID               model.ClassID
 }
 
+// ClassTeacherLimit is how many teachers a class read names; the rest are
+// counted.
+const ClassTeacherLimit = 3
+
+// ClassDetail is one class and, when the caller holds class.members.view on
+// it, its teachers. Teachers are the people holding a current Role Binding at
+// the class itself: membership is for students only, so a binding at the
+// class is the domain's only class-level relationship for staff.
+type ClassDetail struct {
+	Class *model.Class
+	// Teachers is nil when the caller may not see the class's people, and
+	// holds no IDs when the class has no teacher.
+	Teachers *store.ClassTeachers
+}
+
 // GetClass needs class.view.
-func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id model.ClassID) (*model.Class, error) {
+func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id model.ClassID) (ClassDetail, error) {
 	if !id.IsValid() {
-		return nil, apperror.New("request.invalid").WithField("field", "class_id")
+		return ClassDetail{}, apperror.New("request.invalid").WithField("field", "class_id")
 	}
 
-	if err := s.authorizer.Authorize(
-		ctx,
-		inv,
-		model.ActionClassView,
-		model.Resource{Type: model.ResourceClass, ID: id.String()},
-	); err != nil {
-		return nil, err
+	resource := model.Resource{Type: model.ResourceClass, ID: id.String()}
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionClassView, resource); err != nil {
+		return ClassDetail{}, err
 	}
 
 	class, err := s.classes.Get(ctx, id)
 	if err != nil {
-		return nil, classStoreErrors.Translate(err)
+		return ClassDetail{}, classStoreErrors.Translate(err)
 	}
 
-	return class, nil
+	// Teachers are people of the class, so they follow the same grant as its
+	// members; the check records no second decision.
+	visible, err := s.authorizer.CanViewClassMembers(ctx, inv, resource)
+	if err != nil {
+		return ClassDetail{}, err
+	}
+	detail := ClassDetail{Class: class}
+	if !visible {
+		return detail, nil
+	}
+	teachers, err := s.classTeachers(ctx, []model.ClassID{id}, model.TimeUTC(s.now()))
+	if err != nil {
+		return ClassDetail{}, err
+	}
+	detail.Teachers = teachers[id]
+	return detail, nil
+}
+
+// classTeachers reads the teachers of classIDs in one grouped read; every
+// listed class gets an entry, empty when it has none.
+func (s *Service) classTeachers(ctx context.Context, classIDs []model.ClassID, at time.Time) (map[model.ClassID]*store.ClassTeachers, error) {
+	read, err := s.roleBindings.ListTeachersByClasses(ctx, store.ClassTeacherOptions{
+		ClassIDs: classIDs, ActiveAt: at, Limit: ClassTeacherLimit,
+	})
+	if err != nil {
+		return nil, classStoreErrors.Translate(err)
+	}
+	result := make(map[model.ClassID]*store.ClassTeachers, len(classIDs))
+	for _, id := range classIDs {
+		result[id] = &store.ClassTeachers{ClassID: id, UserIDs: []model.UserID{}}
+	}
+	for index := range read {
+		if _, listed := result[read[index].ClassID]; listed {
+			result[read[index].ClassID] = &read[index]
+		}
+	}
+	return result, nil
 }
 
 // ClassPage is one page of classes; only the first page is counted.
 // StudentCounts holds the current member count, capped at
-// store.MaximumListCount, of each listed class the caller holds
-// class.members.view on; a class outside that grant has no entry.
+// store.MaximumListCount, and Teachers the teachers, of each listed class
+// the caller holds class.members.view on; a class outside that grant has no
+// entry in either.
 type ClassPage struct {
 	paging.Counted[*model.Class]
 	StudentCounts map[model.ClassID]int
+	Teachers      map[model.ClassID]*store.ClassTeachers
 }
 
 // ListClasses lists a programme level's classes by name; it needs
@@ -183,8 +232,8 @@ func (s *Service) SearchClasses(
 	})
 }
 
-// classPage counts students only in the listed classes the caller holds
-// class.members.view on. The grant is read once for the page and records no
+// classPage counts students and names teachers only in the listed classes
+// the caller holds class.members.view on. The grant is read once for the page and records no
 // decision, since the listing's class.view decision is already recorded.
 // owningUnit reports the academic unit of a listed class; every class on one
 // page shares it.
@@ -247,6 +296,11 @@ func (s *Service) classPage(
 		if _, visible := result.StudentCounts[counted.ClassID]; visible {
 			result.StudentCounts[counted.ClassID] = counted.Count
 		}
+	}
+
+	result.Teachers, err = s.classTeachers(ctx, classIDs, at)
+	if err != nil {
+		return ClassPage{}, err
 	}
 
 	return result, nil
@@ -312,7 +366,7 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
 
-	return access.RunAudited(
+	created, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -334,6 +388,12 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 		},
 		classStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publishClassesChanged(ctx, created.ID)
+	return created, nil
 }
 
 // UpdateClass needs class.manage.
@@ -407,7 +467,7 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
 
-	return access.RunAudited(
+	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -430,6 +490,13 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 		},
 		classStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// A move to another Programme Level can change the owning unit.
+	s.publishClassesChanged(ctx, updated.ID)
+	return updated, nil
 }
 
 // ArchiveClass needs class.manage.
@@ -485,7 +552,12 @@ func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, c
 		},
 		classStoreErrors.Translate,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	s.publishClassChanged(ctx, id, unitID)
+	return nil
 }
 
 var classStoreErrors = apperror.AdministrationStoreTable("class", "class.conflict", "class.invalid", nil)

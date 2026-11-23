@@ -11,6 +11,9 @@
       },
       "description": "Open it with the HTTP upgrade described by the OpenAPI operation connectWebSocket, which owns authentication, Origin, and the connection_id and sequence_number resume parameters. Every frame is one JSON text message. The server sends events, each with a sequence that increases by one; the client sends commands, each with a sequence it chooses, and the reply carries that sequence back. Clients ignore an event name they do not know.",
       "messages": {
+        "academic_period.changed": {
+          "$ref": "#/components/messages/academic_period.changed"
+        },
         "academic_unit_archived": {
           "$ref": "#/components/messages/academic_unit_archived"
         },
@@ -25,6 +28,9 @@
         },
         "candidate.exam_activity.changed": {
           "$ref": "#/components/messages/candidate.exam_activity.changed"
+        },
+        "class.changed": {
+          "$ref": "#/components/messages/class.changed"
         },
         "command_error": {
           "$ref": "#/components/messages/command_error"
@@ -185,6 +191,9 @@
         "job.changed": {
           "$ref": "#/components/messages/job.changed"
         },
+        "mail_delivery.changed": {
+          "$ref": "#/components/messages/mail_delivery.changed"
+        },
         "manager.sitting_board.changed": {
           "$ref": "#/components/messages/manager.sitting_board.changed"
         },
@@ -206,6 +215,15 @@
         "resync_required": {
           "$ref": "#/components/messages/resync_required"
         },
+        "retention.changed": {
+          "$ref": "#/components/messages/retention.changed"
+        },
+        "role.changed": {
+          "$ref": "#/components/messages/role.changed"
+        },
+        "role_binding.changed": {
+          "$ref": "#/components/messages/role_binding.changed"
+        },
         "security_control_reply": {
           "$ref": "#/components/messages/security_control_reply"
         },
@@ -217,6 +235,9 @@
         },
         "unsubscribe": {
           "$ref": "#/components/messages/unsubscribe"
+        },
+        "user.changed": {
+          "$ref": "#/components/messages/user.changed"
         },
         "user_profile_picture_changed": {
           "$ref": "#/components/messages/user_profile_picture_changed"
@@ -264,13 +285,79 @@
   },
   "components": {
     "messages": {
+      "academic_period.changed": {
+        "description": "Refetch the Academic Period: it was created, changed or archived. Delivered to connections that subscribe to academic_period.view on the academic period, which its owner's viewers may do.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "academic_period.view",
+              "data": {
+                "academic_period_id": "8kpous3h9nfemqtwz47ydgjcx5",
+                "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
+                "schema_version": 1
+              },
+              "event": "academic_period.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "8kpous3h9nfemqtwz47ydgjcx5",
+                "type": "academic_period"
+              },
+              "sequence": 62
+            }
+          }
+        ],
+        "name": "academic_period.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "academic_period.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/academic_period_changed"
+                },
+                "event": {
+                  "const": "academic_period.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Academic Period; it was created, changed or archived.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Academic Period changed"
+      },
       "academic_unit_archived": {
-        "description": "Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "description": "Refetch the Academic Unit. The event names it and its parent. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
         "examples": [
           {
             "name": "example",
             "payload": {
               "action": "academic_unit.view",
+              "data": {
+                "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
+                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj"
+              },
               "event": "academic_unit_archived",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
               "resource": {
@@ -288,15 +375,13 @@
               "$ref": "#/components/schemas/event_frame"
             },
             {
-              "not": {
-                "required": [
-                  "data"
-                ]
-              },
               "properties": {
                 "action": {
                   "const": "academic_unit.view",
                   "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/academic_unit_changed"
                 },
                 "event": {
                   "const": "academic_unit_archived",
@@ -305,13 +390,14 @@
               },
               "required": [
                 "event",
-                "action"
+                "action",
+                "data"
               ],
               "type": "object"
             }
           ]
         },
-        "summary": "Refetch the Academic Unit. The event has no data.",
+        "summary": "Refetch the Academic Unit. The event names it and its parent.",
         "tags": [
           {
             "name": "event"
@@ -323,12 +409,16 @@
         "title": "Academic Unit archived"
       },
       "academic_unit_created": {
-        "description": "Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "description": "Refetch the Academic Unit. The event names it and its parent. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
         "examples": [
           {
             "name": "example",
             "payload": {
               "action": "academic_unit.view",
+              "data": {
+                "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
+                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj"
+              },
               "event": "academic_unit_created",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
               "resource": {
@@ -346,15 +436,13 @@
               "$ref": "#/components/schemas/event_frame"
             },
             {
-              "not": {
-                "required": [
-                  "data"
-                ]
-              },
               "properties": {
                 "action": {
                   "const": "academic_unit.view",
                   "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/academic_unit_changed"
                 },
                 "event": {
                   "const": "academic_unit_created",
@@ -363,13 +451,14 @@
               },
               "required": [
                 "event",
-                "action"
+                "action",
+                "data"
               ],
               "type": "object"
             }
           ]
         },
-        "summary": "Refetch the Academic Unit. The event has no data.",
+        "summary": "Refetch the Academic Unit. The event names it and its parent.",
         "tags": [
           {
             "name": "event"
@@ -381,12 +470,16 @@
         "title": "Academic Unit created"
       },
       "academic_unit_updated": {
-        "description": "Refetch the Academic Unit. The event has no data. Sent when the Academic Unit itself changes, when a member joins or leaves it outside a batch, and when a Role Binding scoped to it is granted or ended outside a batch, since its member counts and administrators may have moved. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "description": "Refetch the Academic Unit. The event names it and its parent. Sent when the Academic Unit itself changes, and when a member joins or leaves it outside a batch, since its member counts moved; a change to who administers it arrives as role_binding.changed. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
         "examples": [
           {
             "name": "example",
             "payload": {
               "action": "academic_unit.view",
+              "data": {
+                "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
+                "parent_academic_unit_id": "4br8kpous3h9nfemqtwz47ydgj"
+              },
               "event": "academic_unit_updated",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
               "resource": {
@@ -404,15 +497,13 @@
               "$ref": "#/components/schemas/event_frame"
             },
             {
-              "not": {
-                "required": [
-                  "data"
-                ]
-              },
               "properties": {
                 "action": {
                   "const": "academic_unit.view",
                   "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/academic_unit_changed"
                 },
                 "event": {
                   "const": "academic_unit_updated",
@@ -421,13 +512,14 @@
               },
               "required": [
                 "event",
-                "action"
+                "action",
+                "data"
               ],
               "type": "object"
             }
           ]
         },
-        "summary": "Refetch the Academic Unit. The event has no data.",
+        "summary": "Refetch the Academic Unit. The event names it and its parent.",
         "tags": [
           {
             "name": "event"
@@ -558,6 +650,68 @@
           }
         ],
         "title": "Candidate Exam activity changed"
+      },
+      "class.changed": {
+        "description": "Refetch the Class: the Class itself, its members or its teachers changed. A membership change also sends user.changed for the member. Delivered to connections that subscribe to class.view on the class.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "class.view",
+              "data": {
+                "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
+                "class_id": "z47ydgjcx1ia56br8kpous3h9n",
+                "schema_version": 1
+              },
+              "event": "class.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "z47ydgjcx1ia56br8kpous3h9n",
+                "type": "class"
+              },
+              "sequence": 61
+            }
+          }
+        ],
+        "name": "class.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "class.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/class_changed"
+                },
+                "event": {
+                  "const": "class.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Class; it, its members or its teachers changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Class changed"
       },
       "command_error": {
         "description": "The connection stays open. A rate-limited command carries retry_after_seconds; 64 consecutive refusals close the connection with code 4005.",
@@ -1078,6 +1232,7 @@
               "data": {
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "state": "active"
               },
@@ -1143,6 +1298,7 @@
               "data": {
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "reason_code": "manager_suspended",
                 "state": "suspended"
@@ -1758,6 +1914,7 @@
                 "changed_at": "2026-08-01T09:30:00Z",
                 "close_reason": "lease_expired",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "state": "closed"
               },
@@ -1823,6 +1980,7 @@
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "state": "open"
               },
@@ -1934,6 +2092,7 @@
               "data": {
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "warning_code": "focus_loss_policy_warning"
               },
@@ -2002,6 +2161,7 @@
                 "evidence_available": true,
                 "evidence_overflow_count": 0,
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "integrity_flag_id": "twz47ydgjcx1ia56br8kpous3h",
                 "outcome": "flag_and_warn",
@@ -2070,6 +2230,7 @@
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "suspension_id": "a56br8kpous3h9nfemqtwz47yd"
               },
@@ -2183,6 +2344,7 @@
               "data": {
                 "changed_at": "2026-08-01T09:31:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8"
               },
               "event": "exam_attempt_screen_clips_requested",
@@ -2248,6 +2410,7 @@
                 "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "manifest_digest": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
                 "provenance": "candidate_submitted",
@@ -2316,6 +2479,7 @@
               "data": {
                 "assistant_transcript_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "manifest_digest": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
                 "provenance": "candidate_submitted",
@@ -2389,6 +2553,7 @@
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "integrity_flag_id": "twz47ydgjcx1ia56br8kpous3h",
                 "suspension_id": "a56br8kpous3h9nfemqtwz47yd"
@@ -2453,6 +2618,7 @@
               "data": {
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "first_workspace_cursor": 7,
                 "workspace_cursor": 9
@@ -2510,12 +2676,16 @@
         "title": "Attempt Workspace changed"
       },
       "exam_created": {
-        "description": "An Exam was created. The event has no data. Delivered to connections that subscribe to exam.view on the exam.",
+        "description": "An Exam was created. The event names it and the Academic Unit that owns it. Delivered to connections that subscribe to exam.view on the exam.",
         "examples": [
           {
             "name": "example",
             "payload": {
               "action": "exam.view",
+              "data": {
+                "academic_unit_id": "jcx1ia56br8kpous3h9nfemqtw",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
               "event": "exam_created",
               "id": "8kpous3h9nfemqtwz47ydgjcx1",
               "resource": {
@@ -2533,15 +2703,13 @@
               "$ref": "#/components/schemas/event_frame"
             },
             {
-              "not": {
-                "required": [
-                  "data"
-                ]
-              },
               "properties": {
                 "action": {
                   "const": "exam.view",
                   "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_created"
                 },
                 "event": {
                   "const": "exam_created",
@@ -2550,13 +2718,14 @@
               },
               "required": [
                 "event",
-                "action"
+                "action",
+                "data"
               ],
               "type": "object"
             }
           ]
         },
-        "summary": "An Exam was created. The event has no data.",
+        "summary": "An Exam was created. The event names it and its Academic Unit.",
         "tags": [
           {
             "name": "event"
@@ -2704,6 +2873,8 @@
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "release_state": "withheld",
                 "review_revision": 2,
                 "review_state": "draft",
@@ -2771,6 +2942,8 @@
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "release_state": "withheld",
                 "review_revision": 3,
                 "review_state": "finalized",
@@ -3548,6 +3721,8 @@
                 "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "release_state": "released",
                 "review_revision": 4,
                 "review_state": "finalized",
@@ -3613,6 +3788,8 @@
               "data": {
                 "changed_at": "2026-08-01T09:30:00Z",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
                 "release_state": "released",
                 "review_revision": 4,
                 "review_state": "finalized",
@@ -3732,7 +3909,7 @@
         "title": "Hello"
       },
       "invitation.changed": {
-        "description": "Refetch an Invitation you issued; it reached a new state, today when it is accepted. Delivered to the connections of the User who issued it.",
+        "description": "Refetch an Invitation you issued; it reached a new state, today when it is accepted. The event names the scope the Invitation grants at. Delivered to the connections of the User who issued it.",
         "examples": [
           {
             "name": "example",
@@ -3740,6 +3917,8 @@
               "data": {
                 "invitation_id": "6br8kpous3h9nfemqtwz47ydgj",
                 "schema_version": 1,
+                "scope_id": "z47ydgjcx1ia56br8kpous3h9n",
+                "scope_type": "class",
                 "state": "accepted"
               },
               "event": "invitation.changed",
@@ -3861,6 +4040,67 @@
           }
         ],
         "title": "Job changed"
+      },
+      "mail_delivery.changed": {
+        "description": "Refetch the mail delivery: it started sending, was accepted, queued for a retry, failed, expired or was suppressed. The recipient and the message are never included. Delivered to connections that subscribe to mail.view on the institution.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "mail.view",
+              "data": {
+                "mail_delivery_id": "x1ia56br8kpous3h9nfemqtwz4",
+                "schema_version": 1
+              },
+              "event": "mail_delivery.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ous3h9nfemqtwz47ydgjcx1ia5",
+                "type": "institution"
+              },
+              "sequence": 66
+            }
+          }
+        ],
+        "name": "mail_delivery.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "mail.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/mail_delivery_changed"
+                },
+                "event": {
+                  "const": "mail_delivery.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the mail delivery; its state changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Mail delivery changed"
       },
       "manager.sitting_board.changed": {
         "description": "Refetch the manager board of one Sitting. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
@@ -4249,6 +4489,195 @@
         ],
         "title": "Resynchronization required"
       },
+      "retention.changed": {
+        "description": "Refetch retention: the policy was replaced, a hold was placed or released, or an Exam's records due for removal changed when a Sitting's records were completed. kind says which. Delivered to connections that subscribe to retention_policy.view on the institution.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "retention_policy.view",
+              "data": {
+                "exam_id": "6br8h9nfemqtwz47ydgjcx1ia5",
+                "kind": "hold",
+                "retention_hold_id": "5br8kpous3h9nfemqtwz47ydgj",
+                "schema_version": 1
+              },
+              "event": "retention.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ous3h9nfemqtwz47ydgjcx1ia5",
+                "type": "institution"
+              },
+              "sequence": 65
+            }
+          }
+        ],
+        "name": "retention.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "retention_policy.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/retention_changed"
+                },
+                "event": {
+                  "const": "retention.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch retention; the policy, a hold or an Exam's records due changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Retention changed"
+      },
+      "role.changed": {
+        "description": "Refetch the Role: it was created, changed or archived. Delivered to connections that subscribe to role.view on the institution.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "role.view",
+              "data": {
+                "role_id": "ia56br8kpous3h9nfemqtwz47y",
+                "schema_version": 1
+              },
+              "event": "role.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ous3h9nfemqtwz47ydgjcx1ia5",
+                "type": "institution"
+              },
+              "sequence": 63
+            }
+          }
+        ],
+        "name": "role.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "role.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/role_changed"
+                },
+                "event": {
+                  "const": "role.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Role; it or its permissions changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Role changed"
+      },
+      "role_binding.changed": {
+        "description": "Refetch the Role Binding: it was granted or ended. Delivered to connections that subscribe to role_binding.view on the binding's own scope: the institution, an academic unit or a class. A binding at a Class also sends class.changed, since it changes the Class's teachers. The holder hears of it through current_user.context.changed.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "role_binding.view",
+              "data": {
+                "role_binding_id": "mqtwz47ydgjcx1ia56br8kpous",
+                "role_id": "ia56br8kpous3h9nfemqtwz47y",
+                "schema_version": 1,
+                "scope_id": "jcx1ia56br8kpous3h9nfemqtw",
+                "scope_type": "academic_unit",
+                "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+              },
+              "event": "role_binding.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "jcx1ia56br8kpous3h9nfemqtw",
+                "type": "academic_unit"
+              },
+              "sequence": 64
+            }
+          }
+        ],
+        "name": "role_binding.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "role_binding.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/role_binding_changed"
+                },
+                "event": {
+                  "const": "role_binding.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Role Binding; it was granted or ended.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Role Binding changed"
+      },
       "security_control_reply": {
         "examples": [
           {
@@ -4426,6 +4855,67 @@
         ],
         "title": "Unsubscribe"
       },
+      "user.changed": {
+        "description": "Refetch the User: their profile, account state, Affiliations, two-step state or memberships changed. The event names the User only. Delivered to connections that subscribe to user.view on the user; a subscription is admitted for a User the caller can see in the directory.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "user.view",
+              "data": {
+                "schema_version": 1,
+                "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+              },
+              "event": "user.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "qtwz47ydgjcx1ia56br8kpous3",
+                "type": "user"
+              },
+              "sequence": 60
+            }
+          }
+        ],
+        "name": "user.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "user.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/user_changed"
+                },
+                "event": {
+                  "const": "user.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the User; their profile, account state, affiliations, two-step state or memberships changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Users"
+          }
+        ],
+        "title": "User changed"
+      },
       "user_profile_picture_changed": {
         "description": "The User's profile picture is now another File Entry. Delivered to the addressed User's connections.",
         "examples": [
@@ -4554,6 +5044,45 @@
       }
     },
     "schemas": {
+      "academic_period_changed": {
+        "additionalProperties": false,
+        "description": "Names the Academic Period to refetch and, for a period an Academic Unit owns, that unit.",
+        "properties": {
+          "academic_period_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "academic_period_id"
+        ],
+        "title": "Academic Period changed",
+        "type": "object"
+      },
+      "academic_unit_changed": {
+        "additionalProperties": false,
+        "description": "Names the Academic Unit and, unless it is a root unit, its parent.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "parent_academic_unit_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "academic_unit_id"
+        ],
+        "title": "Academic Unit changed",
+        "type": "object"
+      },
       "access_policy_changed": {
         "additionalProperties": false,
         "description": "The Access Policy revision after a committed change. No policy fields are included.",
@@ -4567,6 +5096,29 @@
           "revision"
         ],
         "title": "Access Policy changed",
+        "type": "object"
+      },
+      "class_changed": {
+        "additionalProperties": false,
+        "description": "Names the Class to refetch and the Academic Unit that owns it through its Programme.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "class_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "class_id",
+          "academic_unit_id"
+        ],
+        "title": "Class changed",
         "type": "object"
       },
       "collection_invalidation": {
@@ -4786,6 +5338,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -4807,6 +5362,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "state",
@@ -5291,6 +5847,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5303,6 +5862,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "candidate_user_id",
@@ -5425,6 +5985,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5434,6 +5997,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "warning_code",
@@ -5463,6 +6027,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5488,6 +6055,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "candidate_user_id",
@@ -5519,6 +6087,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5527,6 +6098,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "candidate_user_id",
@@ -5620,11 +6192,15 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "changed_at"
@@ -5673,6 +6249,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5703,6 +6282,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "candidate_user_id",
@@ -5728,6 +6308,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5758,6 +6341,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "submission_id",
@@ -5791,6 +6375,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5802,6 +6389,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "candidate_user_id",
@@ -5822,6 +6410,9 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
@@ -5835,6 +6426,7 @@
           }
         },
         "required": [
+          "exam_id",
           "exam_sitting_id",
           "exam_attempt_id",
           "first_workspace_cursor",
@@ -5842,6 +6434,24 @@
           "changed_at"
         ],
         "title": "Attempt Workspace changed",
+        "type": "object"
+      },
+      "exam_created": {
+        "additionalProperties": false,
+        "description": "Names the new Exam and the Academic Unit that owns it.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "academic_unit_id"
+        ],
+        "title": "Exam created",
         "type": "object"
       },
       "exam_draft_updated": {
@@ -5910,6 +6520,12 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "release_state": {
             "enum": [
               "withheld",
@@ -5936,6 +6552,8 @@
           }
         },
         "required": [
+          "exam_id",
+          "exam_sitting_id",
           "submission_id",
           "exam_attempt_id",
           "candidate_user_id",
@@ -6228,6 +6846,12 @@
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
           },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
           "release_state": {
             "const": "released",
             "type": "string"
@@ -6248,6 +6872,8 @@
           }
         },
         "required": [
+          "exam_id",
+          "exam_sitting_id",
           "submission_id",
           "exam_attempt_id",
           "submission_review_id",
@@ -6298,7 +6924,7 @@
       },
       "invitation_changed": {
         "additionalProperties": false,
-        "description": "Names an Invitation the addressed User issued and the state it reached. The accepting User is never included.",
+        "description": "Names an Invitation the addressed User issued, the state it reached and the scope it grants at. The accepting User is never included.",
         "properties": {
           "invitation_id": {
             "$ref": "#/components/schemas/id"
@@ -6306,6 +6932,17 @@
           "schema_version": {
             "const": 1,
             "type": "integer"
+          },
+          "scope_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "scope_type": {
+            "enum": [
+              "institution",
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
           },
           "state": {
             "enum": [
@@ -6321,7 +6958,9 @@
         "required": [
           "schema_version",
           "invitation_id",
-          "state"
+          "state",
+          "scope_type",
+          "scope_id"
         ],
         "title": "Invitation changed",
         "type": "object"
@@ -6389,6 +7028,25 @@
           "stage"
         ],
         "title": "Job progress",
+        "type": "object"
+      },
+      "mail_delivery_changed": {
+        "additionalProperties": false,
+        "description": "Names the mail delivery whose state changed. The recipient and the message are never included.",
+        "properties": {
+          "mail_delivery_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "mail_delivery_id"
+        ],
+        "title": "Mail delivery changed",
         "type": "object"
       },
       "onboarding_import_changed": {
@@ -6498,6 +7156,95 @@
           "id"
         ],
         "title": "Authorization resource",
+        "type": "object"
+      },
+      "retention_changed": {
+        "additionalProperties": false,
+        "description": "Says which retention read to refetch: the policy, a hold (with the hold and its Exam), or an Exam's records due for removal.",
+        "properties": {
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "kind": {
+            "enum": [
+              "policy",
+              "hold",
+              "records"
+            ],
+            "type": "string"
+          },
+          "retention_hold_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "kind"
+        ],
+        "title": "Retention changed",
+        "type": "object"
+      },
+      "role_binding_changed": {
+        "additionalProperties": false,
+        "description": "Names the Role Binding to refetch, its holder, its Role and the scope it is bound at.",
+        "properties": {
+          "role_binding_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "role_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          },
+          "scope_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "scope_type": {
+            "enum": [
+              "institution",
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "schema_version",
+          "role_binding_id",
+          "user_id",
+          "role_id",
+          "scope_type",
+          "scope_id"
+        ],
+        "title": "Role Binding changed",
+        "type": "object"
+      },
+      "role_changed": {
+        "additionalProperties": false,
+        "description": "Names the Role to refetch.",
+        "properties": {
+          "role_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "role_id"
+        ],
+        "title": "Role changed",
         "type": "object"
       },
       "security_control": {
@@ -6688,6 +7435,25 @@
           "resource"
         ],
         "title": "Subscription",
+        "type": "object"
+      },
+      "user_changed": {
+        "additionalProperties": false,
+        "description": "Names the User to refetch. What changed is never included.",
+        "properties": {
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "schema_version",
+          "user_id"
+        ],
+        "title": "User changed",
         "type": "object"
       },
       "user_profile_picture_changed": {
@@ -7049,6 +7815,27 @@
         },
         {
           "$ref": "#/channels/websocket/messages/invitation.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/user.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/class.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/academic_period.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/role.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/role_binding.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/retention.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/mail_delivery.changed"
         },
         {
           "$ref": "#/channels/websocket/messages/academic_unit_created"

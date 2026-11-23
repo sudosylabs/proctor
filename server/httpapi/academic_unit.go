@@ -238,7 +238,7 @@ func (h academicUnitHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	refs, err := namePeople(request, h.people, "administration.unavailable", administratorIDs(view.AcademicUnitSummaries)...)
+	refs, err := namePeople(request, h.people, administratorIDs(view.AcademicUnitSummaries)...)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -246,7 +246,7 @@ func (h academicUnitHandlers) get(request route.Request) (route.Result, error) {
 }
 
 func (h academicUnitHandlers) unitListResult(request route.Request, page academic.AcademicUnitPage) (route.Result, error) {
-	refs, err := namePeople(request, h.people, "administration.unavailable", administratorIDs(page.AcademicUnitSummaries)...)
+	refs, err := namePeople(request, h.people, administratorIDs(page.AcademicUnitSummaries)...)
 	if err != nil {
 		return route.Result{}, err
 	}

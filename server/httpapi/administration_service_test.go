@@ -138,6 +138,7 @@ func (c administrationCatalog) RetentionPolicy() store.RetentionPolicyStore {
 }
 func (c administrationCatalog) Retention() store.RetentionStore                   { return c.fixture.retention }
 func (c administrationCatalog) PluginSettings() store.PluginSettingsStore         { return nil }
+func (c administrationCatalog) Class() store.ClassStore                           { return nil }
 func (c administrationCatalog) EnvironmentProfile() store.EnvironmentProfileStore { return nil }
 
 // administrationRoleStore holds the Roles a test lists and records the

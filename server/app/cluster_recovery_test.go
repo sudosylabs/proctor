@@ -302,6 +302,9 @@ func (recoveryRoleBindingStore) Get(context.Context, model.RoleBindingID) (*mode
 func (recoveryRoleBindingStore) ListByUser(context.Context, model.UserID) ([]*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }
+func (recoveryRoleBindingStore) ListTeachersByClasses(context.Context, store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	return nil, errors.New("unused")
+}
 func (recoveryRoleBindingStore) ListVisibleByUser(context.Context, model.UserID, store.UserVisibilityScope) ([]*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }

@@ -190,6 +190,14 @@ components:
         scope_id:
           $ref: '#/components/schemas/ID'
           description: The Institution, Academic Unit or Class the batch runs in.
+        reason:
+          type: string
+          maxLength: 500
+          description: >-
+            Why the accounts are disabled, given once for the whole batch. Only `user.disable` takes it; any other
+            operation is refused with `request.invalid` on `reason`. It has the limits of a single disable: leading
+            and trailing spaces are removed, up to 500 characters, no control characters, and not only spaces. An
+            empty string means no reason. It is written to every disabled User's audit record.
         items:
           type: array
           minItems: 1

@@ -1281,7 +1281,7 @@ func lockTokenUser(
 		`
 		SELECT id, created_at, updated_at, archived_at, revision, username, email,
 		       email_verified, display_name, first_name, last_name, locale,
-		       timezone, last_login_at, last_activity_at, disabled_at
+		       timezone, last_login_at, last_activity_at, disabled_at, disabled_by_user_id, disabled_reason
 		       , default_profile_picture_seed, default_profile_picture_file_id,
 		       custom_profile_picture_file_id, profile_picture_changed_at
 		  FROM users

@@ -95,10 +95,23 @@ func (s *classStudentCountStoreFake) CountCurrentByClasses(_ context.Context, cl
 	return s.counts, nil
 }
 
+type classTeacherStoreFake struct {
+	store.RoleBindingStore
+	events  *[]string
+	options store.ClassTeacherOptions
+	read    []store.ClassTeachers
+}
+
+func (s *classTeacherStoreFake) ListTeachersByClasses(_ context.Context, options store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	*s.events = append(*s.events, "list-teachers")
+	s.options = options
+	return s.read, nil
+}
+
 // TestSearchClassesCountsStudentsOnlyForClassMemberViewers pins that a Class
 // listing's direction and first-page total reach the Store, and that student
-// counts are read only for the listed Classes inside the caller's
-// class.members.view grant, without recording a second decision.
+// counts and teachers are read only for the listed Classes inside the
+// caller's class.members.view grant, without recording a second decision.
 func TestSearchClassesCountsStudentsOnlyForClassMemberViewers(t *testing.T) {
 	t.Parallel()
 	world := newClassWorld(1)
@@ -115,14 +128,14 @@ func TestSearchClassesCountsStudentsOnlyForClassMemberViewers(t *testing.T) {
 				return []accesstest.Grant{institutionGrant(user, model.ActionClassView, model.ActionClassMembersView)}
 			},
 			counts: map[model.ClassID]int{first.ID: 12, second.ID: 0},
-			reads:  []string{"grants", "count-students"},
+			reads:  []string{"grants", "count-students", "list-teachers"},
 		},
 		"unit subtree": {
 			grants: func(user model.UserID) []accesstest.Grant {
 				return []accesstest.Grant{unitGrant(user, parentID, model.ActionClassView, model.ActionClassMembersView)}
 			},
 			counts: map[model.ClassID]int{first.ID: 12, second.ID: 0},
-			reads:  []string{"grants", "ancestors", "count-students"},
+			reads:  []string{"grants", "ancestors", "count-students", "list-teachers"},
 		},
 		"one class": {
 			grants: func(user model.UserID) []accesstest.Grant {
@@ -132,7 +145,7 @@ func TestSearchClassesCountsStudentsOnlyForClassMemberViewers(t *testing.T) {
 				}
 			},
 			counts: map[model.ClassID]int{second.ID: 0},
-			reads:  []string{"grants", "count-students"},
+			reads:  []string{"grants", "count-students", "list-teachers"},
 		},
 		"no grant": {
 			grants: func(user model.UserID) []accesstest.Grant {
@@ -161,8 +174,13 @@ func TestSearchClassesCountsStudentsOnlyForClassMemberViewers(t *testing.T) {
 			})
 			units := &classPageUnitStoreFake{events: &events, units: []*model.AcademicUnit{parent, unit}}
 			members := &classStudentCountStoreFake{events: &events, counts: []store.ClassStudentCount{{ClassID: first.ID, Count: 12}}}
+			teacherID := model.NewUserID()
+			// A teacher of a Class outside the grant is never presented.
+			teachers := &classTeacherStoreFake{events: &events, read: []store.ClassTeachers{
+				{ClassID: first.ID, UserIDs: []model.UserID{teacherID}, More: 1},
+			}}
 			service := mustNew(Dependencies{
-				Store:      &catalogFake{academicUnit: units, class: classes, classMember: members},
+				Store:      &catalogFake{academicUnit: units, class: classes, classMember: members, roleBinding: teachers},
 				Authorizer: access.Authorizer,
 				Auditor:    access.Auditor,
 				Now:        func() time.Time { return now },
@@ -188,6 +206,17 @@ func TestSearchClassesCountsStudentsOnlyForClassMemberViewers(t *testing.T) {
 			}
 			require.True(t, now.Equal(members.at), "students are counted at the page's instant")
 			require.Equal(t, store.MaximumListCount, members.maximum)
+			require.ElementsMatch(t, members.classIDs, teachers.options.ClassIDs, "teachers are read for the counted Classes alone")
+			require.True(t, now.Equal(teachers.options.ActiveAt), "teachers are read at the page's instant")
+			require.Equal(t, ClassTeacherLimit, teachers.options.Limit)
+			require.Len(t, page.Teachers, len(test.counts))
+			for id := range test.counts {
+				want := &store.ClassTeachers{ClassID: id, UserIDs: []model.UserID{}}
+				if id == first.ID {
+					want = &store.ClassTeachers{ClassID: id, UserIDs: []model.UserID{teacherID}, More: 1}
+				}
+				require.Equal(t, want, page.Teachers[id])
+			}
 		})
 	}
 }

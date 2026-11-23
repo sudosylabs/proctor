@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/mailtest"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -50,12 +51,17 @@ func (s *accountStateStoreFake) SetDisabled(_ context.Context, input *store.User
 	return s.result, s.err
 }
 
-// accountStatePublisher returns a recording Publisher that also places each
-// revocation in the shared log as "publish-revocation". Account state changes
-// publish nothing else, so any other call fails the test.
+// accountStatePublisher returns a recording Publisher that places each
+// revocation in the shared log as "publish-revocation" and each user.changed
+// as "publish-user-changed". Account state changes publish nothing else, so
+// any other call fails the test.
 func accountStatePublisher(t *testing.T, events *[]string) *realtimetest.Publisher {
 	t.Helper()
 	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		if call.Method == realtimetest.Publish && call.Event.Name == "user.changed" {
+			*events = append(*events, "publish-user-changed")
+			return
+		}
 		assert.Equal(t, realtimetest.SessionsRevoked, call.Method, "account state published another effect")
 		*events = append(*events, "publish-revocation")
 	}}
@@ -161,13 +167,16 @@ func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
 	require.Equal(t, attempts[0].ID, persistence.input.AuditEventID)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "publish-revocation"}, events)
+	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "publish-revocation", "publish-user-changed"}, events)
 	// Contract: one revocation, published for the disabled User, naming each
-	// revoked Session and carrying the revoked access-token hashes.
+	// revoked Session and carrying the revoked access-token hashes; then the
+	// User's viewers are told to refetch them.
+	userChanged, err := realtime.NewUserChangedEvent(user.ID)
+	require.NoError(t, err)
 	require.Equal(t, []realtimetest.Call{{
 		Method: realtimetest.SessionsRevoked, UserID: user.ID,
 		SessionIDs: []model.SessionID{revoked.ID}, AccessTokenHashes: []string{"hash"},
-	}}, effects.Calls())
+	}, {Method: realtimetest.Publish, Event: userChanged}}, effects.Calls())
 }
 
 // staleReadAccountStateStore moves the User's revision after each read for the
@@ -234,7 +243,10 @@ func TestAccountDisableStartsAgainFromAFreshReadWhenTheUserChanged(t *testing.T)
 	}
 }
 
-func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T) {
+// TestAccountDisableRecordsTheTrimmedReasonAndItsActor pins that the
+// trimmed reason reaches the audit parameters and, with who disabled the
+// account, the User.
+func TestAccountDisableRecordsTheTrimmedReasonAndItsActor(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {
 		reason *string
@@ -265,6 +277,9 @@ func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T
 			}
 			require.Equal(t, true, value["disabled"])
 			require.Equal(t, user.ID.String(), value["user_id"])
+			want, _ := test.want.(string)
+			require.Equal(t, want, persistence.input.DisabledReason, "the User records the trimmed reason")
+			require.Equal(t, fixture.inv.Principal().UserID, persistence.input.DisabledBy, "the User records who disabled it")
 		})
 	}
 }
@@ -326,7 +341,7 @@ func TestAccountEnablePublishesNoRevocation(t *testing.T) {
 	require.Equal(t, model.MailTemplateIdentityAccountEnabled, persistence.input.Delivery.TemplateKey)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
-	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled"}, events)
+	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "publish-user-changed"}, events)
 }
 
 func TestAccountSelfDisableIsRejectedAfterAuthorization(t *testing.T) {

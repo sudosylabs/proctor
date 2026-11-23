@@ -203,7 +203,7 @@ func (h desktopCompatibilityPolicyHandlers) present(
 	for _, revocation := range view.Policy.RevokedDesktopBuilds {
 		ids = append(ids, revocation.RevokedByUserID)
 	}
-	refs, err := namePeople(request, h.people, "desktop_compatibility_policy.unavailable", ids...)
+	refs, err := namePeople(request, h.people, ids...)
 	if err != nil {
 		return route.Result{}, err
 	}

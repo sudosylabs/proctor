@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -38,12 +37,8 @@ func personRef(refs people.Refs, id model.UserID) *personRefResponse {
 	return response
 }
 
-// namePeople names the people an authorized record refers to. A failure is
-// reported as unavailable, the code the endpoint already declares.
-func namePeople(request route.Request, resolver *people.Resolver, unavailable apperror.Code, ids ...model.UserID) (people.Refs, error) {
-	refs, err := resolver.Resolve(request.Context, request.Invocation().Principal(), ids)
-	if err != nil {
-		return nil, apperror.New(unavailable).Wrap(err)
-	}
-	return refs, nil
+// namePeople names the people an authorized record refers to. The resolver
+// reports a failed read with its area's unavailable code.
+func namePeople(request route.Request, resolver *people.Resolver, ids ...model.UserID) (people.Refs, error) {
+	return resolver.Resolve(request.Context, request.Invocation().Principal(), ids)
 }

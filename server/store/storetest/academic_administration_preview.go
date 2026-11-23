@@ -48,6 +48,7 @@ func testAcademicAdministrationFilterPreview(t *testing.T, ss store.Store) {
 		Operation:    "class.enroll",
 		Query:        "student",
 		Affiliations: []model.AffiliationKind{model.AffiliationStudent},
+		MFA:          store.UserMFAEnabled,
 		StartAt:      model.OptionalTimeFrom(model.NowUTC().Add(time.Hour)),
 	}
 	create := func(t *testing.T, mutate func(*store.OnboardingImportCreation)) (*store.OnboardingImport, error) {
@@ -110,6 +111,12 @@ func testAcademicAdministrationFilterPreview(t *testing.T, ss store.Store) {
 				creation.Import.Filter = &store.AcademicAdministrationFilter{Operation: "class.enroll", AffiliationKind: model.AffiliationStudent}
 			},
 			"file name": func(creation *store.OnboardingImportCreation) { creation.Import.FileName = "roster.csv" },
+			"reason on an enrollment": func(creation *store.OnboardingImportCreation) {
+				creation.Import.Filter = &store.AcademicAdministrationFilter{Operation: "class.enroll", Reason: "Left"}
+			},
+			"unknown two-step state": func(creation *store.OnboardingImportCreation) {
+				creation.Import.Filter = &store.AcademicAdministrationFilter{Operation: "class.enroll", MFA: "off"}
+			},
 		} {
 			t.Run(name, func(t *testing.T) {
 				_, createErr := create(t, mutate)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -96,10 +97,12 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			require.Equal(t, model.MailTemplateIdentityMFAReset, persistence.input.Notice.Occurrence.TemplateKey, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			// Contract: one revocation, for the User whose MFA was reset, of the
 			// Session the reset retired and its access token.
+			userChanged, eventErr := realtime.NewUserChangedEvent(command.UserID)
+			require.NoError(t, eventErr)
 			require.Equal(t, []realtimetest.Call{{
 				Method: realtimetest.SessionsRevoked, UserID: command.UserID,
 				SessionIDs: []model.SessionID{persistence.revoked.ID}, AccessTokenHashes: []string{"retired-hash"},
-			}}, effects.Calls(), "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
+			}, {Method: realtimetest.Publish, Event: userChanged}}, effects.Calls(), "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			// The reset is audited against the target User, which is its own
 			// subject, with the attestation as its prior state.
 			records := audit.events()

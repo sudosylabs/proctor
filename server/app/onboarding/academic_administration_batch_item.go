@@ -200,6 +200,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		value, err := s.identity.SetUserEnabled(ctx, inv, identity.SetUserEnabledCommand{
 			ID:             item.UserID,
 			Enabled:        batch.Operation == AcademicAdministrationUserEnable,
+			Reason:         batch.Reason,
 			IdempotencyKey: itemKey,
 			Batch: batchitem.New(batchitem.Fields{
 				Replayed:                  &replayed,

@@ -819,7 +819,7 @@ func examResponseFromView(view exam.View) examResponse {
 
 // namePeople names the people an authorized exam record refers to.
 func (h examHandlers) namePeople(request route.Request, ids ...model.UserID) (people.Refs, error) {
-	return namePeople(request, h.people, "exam.unavailable", ids...)
+	return namePeople(request, h.people, ids...)
 }
 
 // examJSON presents an exam with its creator and owner named.

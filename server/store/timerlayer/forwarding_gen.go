@@ -2564,6 +2564,18 @@ func (s *timedUserStore) ListIdentities(arg0 context.Context, arg1 []model.UserI
 	})
 }
 
+func (s *timedUserStore) ListMFAStates(arg0 context.Context, arg1 []model.UserID) ([]store.UserMFAState, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListMFAStates), func(callCtx context.Context) ([]store.UserMFAState, error) {
+		return s.next.ListMFAStates(callCtx, arg1)
+	})
+}
+
+func (s *timedUserStore) ListMemberships(arg0 context.Context, arg1 store.UserMembershipListOptions) ([]store.UserMembership, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListMemberships), func(callCtx context.Context) ([]store.UserMembership, error) {
+		return s.next.ListMemberships(callCtx, arg1)
+	})
+}
+
 func (s *timedUserStore) GetCurrentContext(arg0 context.Context, arg1 model.UserID, arg2 int) (*store.CurrentUserContext, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodGetCurrentContext), func(callCtx context.Context) (*store.CurrentUserContext, error) {
 		return s.next.GetCurrentContext(callCtx, arg1, arg2)
@@ -4013,6 +4025,12 @@ func (s *timedRoleBindingStore) ListVisibleSummariesByUsers(arg0 context.Context
 func (s *timedRoleBindingStore) ListByScope(arg0 context.Context, arg1 model.RoleScopeType, arg2 string) ([]*model.RoleBinding, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListByScope), func(callCtx context.Context) ([]*model.RoleBinding, error) {
 		return s.next.ListByScope(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedRoleBindingStore) ListTeachersByClasses(arg0 context.Context, arg1 store.ClassTeacherOptions) ([]store.ClassTeachers, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListTeachersByClasses), func(callCtx context.Context) ([]store.ClassTeachers, error) {
+		return s.next.ListTeachersByClasses(callCtx, arg1)
 	})
 }
 

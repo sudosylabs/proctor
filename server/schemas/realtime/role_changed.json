@@ -1,0 +1,19 @@
+{
+  "title": "Role changed",
+  "description": "Names the Role to refetch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "role_id": {
+      "$ref": "id.json"
+    }
+  }
+}

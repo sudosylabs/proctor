@@ -9,6 +9,7 @@ package user
 
 import (
 	"context"
+	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
@@ -47,5 +48,13 @@ func (s *Service) publishProfilePictureChanged(
 	if err != nil {
 		return err
 	}
-	return s.publisher.Publish(ctx, event)
+	return errors.Join(s.publisher.Publish(ctx, event), realtime.PublishUsersChanged(ctx, s.publisher, user.ID))
+}
+
+// publishUserChanged reports a failed publication without failing the use
+// case.
+func (s *Service) publishUserChanged(ctx context.Context, userID model.UserID) {
+	if err := realtime.PublishUsersChanged(ctx, s.publisher, userID); err != nil {
+		s.publisher.Report(ctx, "user.changed", err)
+	}
 }

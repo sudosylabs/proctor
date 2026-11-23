@@ -20,36 +20,92 @@ import (
 // change reads at a time.
 const classMembershipSittingPage = 200
 
-func (s *Service) publishAcademicUnitCreated(ctx context.Context, unitID model.AcademicUnitID) error {
-	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitCreatedEvent, unitID)
+func (s *Service) publishAcademicUnitCreated(ctx context.Context, unit *model.AcademicUnit) error {
+	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitCreatedEvent, unit)
 }
 
-func (s *Service) publishAcademicUnitUpdated(ctx context.Context, unitID model.AcademicUnitID) error {
-	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitUpdatedEvent, unitID)
+func (s *Service) publishAcademicUnitUpdated(ctx context.Context, unit *model.AcademicUnit) error {
+	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitUpdatedEvent, unit)
 }
 
-func (s *Service) publishAcademicUnitArchived(ctx context.Context, unitID model.AcademicUnitID) error {
-	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitArchivedEvent, unitID)
+func (s *Service) publishAcademicUnitArchived(ctx context.Context, unit *model.AcademicUnit) error {
+	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitArchivedEvent, unit)
 }
 
-// publishAcademicUnit publishes a payload-free event to everyone who may view
-// the unit.
+// publishAcademicUnit tells everyone who may view the unit that it changed,
+// naming it and its parent.
 func (s *Service) publishAcademicUnit(
 	ctx context.Context,
-	newEvent func(model.AcademicUnitID) (realtime.Event, error),
-	unitID model.AcademicUnitID,
+	newEvent func(model.AcademicUnitID, model.AcademicUnitID) (realtime.Event, error),
+	unit *model.AcademicUnit,
 ) error {
-	event, err := newEvent(unitID)
+	if unit == nil {
+		return errors.New("Academic Unit event requires the unit")
+	}
+	event, err := newEvent(unit.ID, unit.ParentID)
 	if err != nil {
 		return err
 	}
 	return s.publisher.Publish(ctx, event)
 }
 
+// publishClassesChanged reads each Class's unit and reports a failed
+// publication without failing the use case.
+func (s *Service) publishClassesChanged(ctx context.Context, classIDs ...model.ClassID) {
+	if s.publisher == nil {
+		return
+	}
+	if err := realtime.PublishClassesChanged(ctx, s.publisher, s.classes, classIDs...); err != nil {
+		s.publisher.Report(ctx, "class.changed", err)
+	}
+}
+
+// publishClassChanged reports a failed publication without failing the use
+// case.
+func (s *Service) publishClassChanged(ctx context.Context, classID model.ClassID, unitID model.AcademicUnitID) {
+	if s.publisher == nil {
+		return
+	}
+	event, err := realtime.NewClassChangedEvent(classID, unitID)
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "class.changed", err)
+	}
+}
+
+// publishAcademicPeriodChanged reports a failed publication without failing
+// the use case.
+func (s *Service) publishAcademicPeriodChanged(ctx context.Context, period *model.AcademicPeriod) {
+	if period == nil || s.publisher == nil {
+		return
+	}
+	event, err := realtime.NewAcademicPeriodChangedEvent(period.ID, period.Owner)
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "academic_period.changed", err)
+	}
+}
+
+// publishUserChanged reports a failed publication without failing the use
+// case.
+func (s *Service) publishUserChanged(ctx context.Context, userID model.UserID) {
+	if s.publisher == nil {
+		return
+	}
+	if err := realtime.PublishUsersChanged(ctx, s.publisher, userID); err != nil {
+		s.publisher.Report(ctx, "user.changed", err)
+	}
+}
+
 // PublishClassMembershipChanged tells a candidate their exam activity and
-// current-user context changed, then tells the managers of every sitting of
-// each class to refresh their board. One failed publication never stops the
-// rest; failures are returned joined.
+// current-user context changed, tells the candidate's viewers and each
+// class's viewers to refetch them, then tells the managers of every sitting
+// of each class to refresh their board. One failed publication never stops
+// the rest; failures are returned joined.
 //
 // It is a function rather than a Service method because invitation
 // acceptance in app/onboarding grants a class membership through its own
@@ -58,10 +114,11 @@ func PublishClassMembershipChanged(
 	ctx context.Context,
 	publisher realtime.Publisher,
 	sittings store.ExamSittingStore,
+	classes realtime.ClassUnits,
 	candidateID model.UserID,
 	classIDs []model.ClassID,
 ) error {
-	if sittings == nil || publisher == nil {
+	if sittings == nil || publisher == nil || classes == nil {
 		return errors.New("Class Membership realtime dependencies are invalid")
 	}
 
@@ -71,7 +128,9 @@ func PublishClassMembershipChanged(
 	}
 
 	errs := []error{publisher.Publish(ctx, candidateEvent),
-		publisher.InvalidateCurrentUserContext(ctx, candidateID)}
+		publisher.InvalidateCurrentUserContext(ctx, candidateID),
+		realtime.PublishUsersChanged(ctx, publisher, candidateID),
+		realtime.PublishClassesChanged(ctx, publisher, classes, classIDs...)}
 	seen := make(map[model.ClassID]struct{}, len(classIDs))
 	for _, classID := range classIDs {
 		if !classID.IsValid() {

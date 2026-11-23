@@ -374,6 +374,24 @@ func TestExamIntegrityReviewStore(t *testing.T) {
 		storetest.ExamIntegrityReviewSQLProbe{ConcurrentPeer: NewSQLExamIntegrityReviewStore(peerPersistence)})
 }
 
+func TestExamCopyStore(t *testing.T) {
+	persistence := openTestStore(t)
+	resetTestStore(t, persistence)
+	storetest.TestExamCopyStore(t, persistence, func(t *testing.T, ctx context.Context, examID model.ExamID) {
+		t.Helper()
+		_, err := persistence.GetMaster().Exec(ctx, `UPDATE exams
+			SET created_at = statement_timestamp() - interval '2 days', updated_at = statement_timestamp() - interval '2 days',
+				copying_until = statement_timestamp() - interval '1 day'
+			WHERE id = ?`, examID.String())
+		require.NoError(t, err)
+		_, err = persistence.GetMaster().Exec(ctx, `UPDATE exam_starter_workspace_objects
+			SET created_at = statement_timestamp() - interval '2 days', updated_at = statement_timestamp() - interval '2 days',
+				expires_at = statement_timestamp() - interval '1 day'
+			WHERE exam_id = ?`, examID.String())
+		require.NoError(t, err)
+	})
+}
+
 func TestExamIntegrityReviewReopen(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)

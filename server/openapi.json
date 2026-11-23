@@ -1087,6 +1087,21 @@
         "description": "Supplies the expected Draft revision and the complete replacement native security policy.",
         "required": true
       },
+      "CopyExam": {
+        "content": {
+          "application/json": {
+            "example": {
+              "academic_unit_id": "q4nzk1xwe7rbdg3cyjoth5mupa",
+              "title": "Algorithms — resit examination"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CopyExamRequest"
+            }
+          }
+        },
+        "description": "The new Exam's title and the Academic Unit that will own it.",
+        "required": true
+      },
       "CreateAcademicAdministrationPreview": {
         "content": {
           "application/json": {
@@ -18663,6 +18678,26 @@
         },
         "required": [
           "outcome"
+        ],
+        "type": "object"
+      },
+      "CopyExamRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The Academic Unit that will own the copy."
+          },
+          "title": {
+            "description": "The copy's Draft title, up to 200 characters. Leading and trailing spaces are removed.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "academic_unit_id",
+          "title"
         ],
         "type": "object"
       },
@@ -51141,6 +51176,92 @@
           "exam.invalid",
           "exam.archived",
           "exam.revision_conflict",
+          "exam.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exams/{exam_id}/copy": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        }
+      ],
+      "post": {
+        "description": "Creates a new Exam in the given Academic Unit whose Draft copies the source's current Draft: its instructions, every integrity, execution and assistant rule, its browser rules, its Resources and its Starter Workspace. An archived Exam can be copied too. You become the new Exam's owner and only Manager. Revisions, Sittings, Submissions, other Managers and retention holds are never copied. You must be able to manage the source and be allowed to create Exams in the target Academic Unit. The copy is recorded in the audit history of both Exams. Send an Idempotency-Key: retrying with the same key and body returns the original copy.",
+        "operationId": "copyExam",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CopyExam"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/ExamCreated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create a new Exam from a copy of another Exam's current Draft",
+        "tags": [
+          "Examinations"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.invalid",
+          "exam.conflict",
+          "exam.revision.capacity_exceeded",
           "exam.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",

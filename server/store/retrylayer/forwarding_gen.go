@@ -1205,6 +1205,15 @@ func (s *examAuthoringStore) Create(ctx context.Context, arg1 *store.ExamAuthori
 	})
 }
 
+func (s *examAuthoringStore) CommitCopy(ctx context.Context, arg1 *store.ExamCopyCommit, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	if command == nil {
+		return s.ExamAuthoringStore.CommitCopy(ctx, arg1, command)
+	}
+	return retryCall1(ctx, s.layer, func() (*store.ExamAuthoringCommandResult, error) {
+		return s.ExamAuthoringStore.CommitCopy(ctx, arg1, command)
+	})
+}
+
 func (s *examAuthoringStore) UpdateDraftText(ctx context.Context, arg1 *store.ExamDraftTextUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.UpdateDraftText(ctx, arg1, command)

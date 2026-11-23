@@ -334,6 +334,12 @@ type ExamDraftBrowserPolicyUpdate struct {
 // audit. Replays return the committed result without repeating the change.
 type ExamAuthoringStore interface {
 	Create(context.Context, *ExamAuthoringCreation, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
+	// ReserveCopy commits an invisible copy reservation; CommitCopy makes it
+	// visible with its Resources and Starter Workspace in one transaction. A
+	// replay of CommitCopy returns the copy first committed, and the replay's
+	// own reservation lapses.
+	ReserveCopy(context.Context, *ExamCopyReservation) error
+	CommitCopy(context.Context, *ExamCopyCommit, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftText(context.Context, *ExamDraftTextUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftFocusLoss(context.Context, *ExamDraftFocusLossUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftExecution(context.Context, *ExamDraftExecutionUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)

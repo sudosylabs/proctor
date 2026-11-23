@@ -38,6 +38,7 @@ type App struct {
 	Administration  *administration.Service
 	Academic        *academic.Service
 	ExamAuthoring   *exam.Authoring
+	ExamCopies      *exam.Copier
 	ExamPublication *exam.Publication
 	ExamRecords     *exam.Records
 	ExamExports     *exam.Exports

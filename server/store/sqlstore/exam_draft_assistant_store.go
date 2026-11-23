@@ -75,7 +75,7 @@ func updateExamDraftAssistant(
 	input *store.ExamDraftAssistantUpdate,
 ) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
-	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
+	query := examAuthoringSelect + ` AND e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}

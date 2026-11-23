@@ -174,6 +174,7 @@ func examCatalogQuery(options store.ExamListOptions, count bool) (string, []any)
 `
 	}
 	query += `		WHERE (? = '' OR e.academic_unit_id = ?)
+			AND e.copying_until IS NULL
 	`
 	args = append(args, options.AcademicUnitID.String(), options.AcademicUnitID.String())
 	if hasSittingFilters {

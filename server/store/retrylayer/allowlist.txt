@@ -53,6 +53,7 @@ InvitationStore.ReplayAdministration                       always
 InvitationStore.RecordBatchDuplicate                       always
 
 ExamAuthoringStore.Create                                  command
+ExamAuthoringStore.CommitCopy                              command
 ExamAuthoringStore.UpdateDraftText                         command
 ExamAuthoringStore.UpdateDraftFocusLoss                    command
 ExamAuthoringStore.UpdateDraftExecution                    command

@@ -41,6 +41,7 @@ type FileContent interface {
 	jobs.AttemptWorkspaceObjectPurger
 	jobs.RetentionContentPurger
 	exam.ExportContent
+	exam.CopyContent
 	attempt.Content
 	resource.FileContent
 	correction.Content

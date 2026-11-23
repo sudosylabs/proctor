@@ -406,6 +406,7 @@ func lockExamResourceDraft(
 		FROM exams e
 		JOIN exam_drafts d ON d.exam_id = e.id
 		WHERE e.id = ?
+			AND e.copying_until IS NULL
 		FOR UPDATE OF e, d`,
 		actorID.String(),
 		examID.String(),

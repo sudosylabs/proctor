@@ -72,7 +72,7 @@ func TestExamPolicySetRejectsUnsafeDocuments(t *testing.T) {
 func TestExamDraftApplyFocusLossPolicyHonorsExactBoundsAndPreservesConnectionLoss(t *testing.T) {
 	t.Parallel()
 	at := time.Now().UTC()
-	draft, err := NewExamDraft(NewExamID(), "Systems", "", DefaultExamPolicySet(), at)
+	draft, err := NewExamDraft(NewExamID(), "Systems", "", DefaultExamPolicySet(), NewUserID(), at)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -99,7 +99,7 @@ func TestExamDraftApplyFocusLossPolicyRejectsInvalidAndSkipsNoOp(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 9, 4, 12, 0, 0, 123456789, time.UTC)
 	wantUpdatedAt := time.Date(2026, 9, 4, 12, 0, 0, 123456000, time.UTC)
-	draft, err := NewExamDraft(NewExamID(), "Systems", "", DefaultExamPolicySet(), at)
+	draft, err := NewExamDraft(NewExamID(), "Systems", "", DefaultExamPolicySet(), NewUserID(), at)
 	require.NoError(t, err)
 	invalid := []FocusLossPolicy{
 		{Enabled: true, MinimumDuration: 499 * time.Millisecond, IncidentCount: 1, Window: 10 * time.Second, Outcome: IntegrityOutcomeFlag},

@@ -349,7 +349,8 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 
 func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	t.Parallel()
-	view := testExamHTTPView(t, model.NewUserID())
+	editorID := model.NewUserID()
+	view := testExamHTTPView(t, editorID)
 	encoded, err := json.Marshal(examResponseFromView(view))
 	require.NoError(t, err)
 	var document map[string]any
@@ -378,6 +379,7 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	require.Equal(t, float64(1), document["manager_count"])
 	require.Equal(t, float64(0), draft["resource_count"])
 	require.Equal(t, false, draft["has_starter_workspace"])
+	require.Equal(t, editorID.String(), draft["updated_by_user_id"], "the draft names its last editor")
 	require.Equal(t, float64(model.ExamResourceDefaultMaximumCount), capacity["resource_maximum_count"])
 	require.Equal(t, float64(model.ExamWorkspaceDefaultMaximumEntries), capacity["workspace_maximum_entries"])
 }
@@ -387,7 +389,7 @@ func testExamHTTPView(t *testing.T, userID model.UserID) exam.View {
 	at := time.Now().UTC()
 	examRecord, err := model.NewExam(model.NewExamID(), model.NewAcademicUnitID(), userID, at)
 	require.NoError(t, err)
-	draft, err := model.NewExamDraft(examRecord.ID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(examRecord.ID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), userID, at)
 	require.NoError(t, err)
 	return exam.View{Exam: *examRecord, Draft: *draft, OwnerUserID: userID, ManagerCount: 1}
 }

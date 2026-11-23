@@ -24,7 +24,7 @@ func TestNewExamAuthoringState(t *testing.T) {
 
 	exam, err := NewExam(examID, unitID, creatorID, at)
 	require.NoError(t, err)
-	draft, err := NewExamDraft(examID, "  Systems Programming  ", "", DefaultExamPolicySet(), at)
+	draft, err := NewExamDraft(examID, "  Systems Programming  ", "", DefaultExamPolicySet(), NewUserID(), at)
 	require.NoError(t, err)
 	manager, err := NewExamManager(examID, creatorID, creatorID, at)
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestExamAndDraftValidateIndependently(t *testing.T) {
 	at := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
 	exam, err := NewExam(NewExamID(), NewAcademicUnitID(), NewUserID(), at)
 	require.NoError(t, err)
-	draft, err := NewExamDraft(exam.ID, "Compiler Construction", "Read **carefully**.", DefaultExamPolicySet(), at)
+	draft, err := NewExamDraft(exam.ID, "Compiler Construction", "Read **carefully**.", DefaultExamPolicySet(), NewUserID(), at)
 	require.NoError(t, err)
 
 	draft.Revision = 7
@@ -87,7 +87,7 @@ func TestExamAndDraftValidateIndependently(t *testing.T) {
 func TestExamDraftApplyTextPatchPreservesPresenceAndRevision(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
-	draft, err := NewExamDraft(NewExamID(), "Systems", "Use **Go**.", DefaultExamPolicySet(), at)
+	draft, err := NewExamDraft(NewExamID(), "Systems", "Use **Go**.", DefaultExamPolicySet(), NewUserID(), at)
 	require.NoError(t, err)
 	title := "  Distributed Systems  "
 	clearInstructions := ""
@@ -109,7 +109,7 @@ func TestExamDraftApplyTextPatchPreservesPresenceAndRevision(t *testing.T) {
 
 func TestExamDraftApplyTextPatchRejectsMissingOrInvalidFieldsAtomically(t *testing.T) {
 	t.Parallel()
-	draft, err := NewExamDraft(NewExamID(), "Systems", "Instructions", DefaultExamPolicySet(), time.Now().UTC())
+	draft, err := NewExamDraft(NewExamID(), "Systems", "Instructions", DefaultExamPolicySet(), NewUserID(), time.Now().UTC())
 	require.NoError(t, err)
 	original := *draft
 	_, err = draft.ApplyTextPatch(nil, nil, time.Now().UTC())
@@ -128,6 +128,6 @@ func TestExamDraftApplyTextPatchRejectsMissingOrInvalidFieldsAtomically(t *testi
 
 func TestNewExamDraftRejectsInvalidUTF8Title(t *testing.T) {
 	t.Parallel()
-	_, err := NewExamDraft(NewExamID(), string([]byte{0xff}), "", DefaultExamPolicySet(), time.Now().UTC())
+	_, err := NewExamDraft(NewExamID(), string([]byte{0xff}), "", DefaultExamPolicySet(), NewUserID(), time.Now().UTC())
 	require.Error(t, err, "NewExamDraft accepted an invalid UTF-8 title")
 }

@@ -95,7 +95,7 @@ func newExamFixture(t *testing.T, caller model.Principal, actions ...model.Actio
 
 	examRecord, err := model.NewExam(f.examID, f.unitID, caller.UserID, at)
 	require.NoError(t, err)
-	draft, err := model.NewExamDraft(f.examID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(f.examID, "Systems", "Use **Go**.", model.DefaultExamPolicySet(), caller.UserID, at)
 	require.NoError(t, err)
 	f.exams.byID[f.examID] = &examAuthoringEntry{exam: examRecord, draft: draft, managers: []model.UserID{caller.UserID}}
 	f.members.join(caller.UserID, f.unitID)

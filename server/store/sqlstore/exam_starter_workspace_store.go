@@ -1117,10 +1117,11 @@ func completeStarterWorkspaceMutation(
 		ctx,
 		&revision,
 		`UPDATE exam_drafts
-		SET revision = revision + 1, updated_at = ?
+		SET revision = revision + 1, updated_at = ?, updated_by_user_id = ?
 		WHERE exam_id = ?
 		RETURNING revision`,
 		input.ChangedAt,
+		input.ActorUserID.String(),
 		input.ExamID.String(),
 	); err != nil {
 		return nil, fmt.Errorf("advance Starter Workspace Draft revision: %w", err)

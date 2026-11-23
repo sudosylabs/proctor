@@ -42,6 +42,7 @@ type examAuthoringRow struct {
 	BrowserPolicy        jsonValue      `db:"browser_policy"`
 	BaseRevisionID       sql.NullString `db:"base_revision_id"`
 	DraftUpdatedAt       time.Time      `db:"draft_updated_at"`
+	DraftUpdatedBy       string         `db:"draft_updated_by_user_id"`
 	DraftRevision        int64          `db:"draft_revision"`
 	ManagerCount         int            `db:"manager_count"`
 	ActorIsManager       bool           `db:"actor_is_manager"`
@@ -69,6 +70,7 @@ type examAuthoringOutcome struct {
 	BrowserPolicy        json.RawMessage    `json:"browser_policy,omitempty"`
 	BaseRevisionID       string             `json:"base_revision_id,omitempty"`
 	DraftUpdatedAt       time.Time          `json:"draft_updated_at"`
+	DraftUpdatedBy       string             `json:"draft_updated_by_user_id"`
 	DraftRevision        int64              `json:"draft_revision"`
 	ManagerCount         int                `json:"manager_count"`
 	ActorIsManager       bool               `json:"actor_is_manager"`
@@ -110,6 +112,7 @@ func newExamAuthoringOutcome(snapshot *store.ExamAuthoringSnapshot) (examAuthori
 		BrowserPolicy:         json.RawMessage(row.BrowserPolicy),
 		BaseRevisionID:        outcomeString(row.BaseRevisionID),
 		DraftUpdatedAt:        row.DraftUpdatedAt,
+		DraftUpdatedBy:        row.DraftUpdatedBy,
 		DraftRevision:         row.DraftRevision,
 		ManagerCount:          row.ManagerCount,
 		ActorIsManager:        row.ActorIsManager,
@@ -137,6 +140,7 @@ func (o examAuthoringOutcome) model() (*store.ExamAuthoringSnapshot, error) {
 		BrowserPolicy:         jsonValue(o.BrowserPolicy),
 		BaseRevisionID:        outcomeNullString(o.BaseRevisionID),
 		DraftUpdatedAt:        o.DraftUpdatedAt,
+		DraftUpdatedBy:        o.DraftUpdatedBy,
 		DraftRevision:         o.DraftRevision,
 		ManagerCount:          o.ManagerCount,
 		ActorIsManager:        o.ActorIsManager,
@@ -413,7 +417,7 @@ const examAuthoringSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id,
 		e.default_revision_id, e.created_at, e.updated_at, e.archived_at,
 		e.revision AS exam_revision, d.title AS draft_title, d.instructions_markdown, d.policy,
 		d.base_revision_id, d.browser_policy, d.updated_at AS draft_updated_at,
-		d.revision AS draft_revision,
+		d.updated_by_user_id AS draft_updated_by_user_id, d.revision AS draft_revision,
 		(
 			SELECT COUNT(*)
 			FROM exam_managers count_managers
@@ -583,12 +587,13 @@ func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	result, err := tx.Exec(
 		ctx,
 		`UPDATE exam_drafts
-		SET title = ?, instructions_markdown = ?, updated_at = ?, revision = ?
+		SET title = ?, instructions_markdown = ?, updated_at = ?, updated_by_user_id = ?, revision = ?
 		WHERE exam_id = ?
 			AND revision = ?`,
 		candidate.Title,
 		candidate.InstructionsMarkdown,
 		candidate.UpdatedAt,
+		input.ActorUserID.String(),
 		candidate.Revision,
 		input.ExamID.String(),
 		input.ExpectedRevision,
@@ -606,6 +611,7 @@ func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	row.DraftTitle = candidate.Title
 	row.InstructionsMarkdown = candidate.InstructionsMarkdown
 	row.DraftUpdatedAt = candidate.UpdatedAt
+	row.DraftUpdatedBy = input.ActorUserID.String()
 	row.DraftRevision = candidate.Revision
 	auditData, err := model.EncodeAuditData(map[string]any{
 		"exam_id":        input.ExamID.String(),
@@ -663,11 +669,12 @@ func updateExamDraftFocusLoss(
 	result, err := tx.Exec(
 		ctx,
 		`UPDATE exam_drafts
-		SET policy = ?::jsonb, updated_at = ?, revision = ?
+		SET policy = ?::jsonb, updated_at = ?, updated_by_user_id = ?, revision = ?
 		WHERE exam_id = ?
 			AND revision = ?`,
 		string(policy),
 		candidate.UpdatedAt,
+		input.ActorUserID.String(),
 		candidate.Revision,
 		input.ExamID.String(),
 		input.ExpectedRevision,
@@ -684,6 +691,7 @@ func updateExamDraftFocusLoss(
 
 	row.Policy = jsonValue(policy)
 	row.DraftUpdatedAt = candidate.UpdatedAt
+	row.DraftUpdatedBy = input.ActorUserID.String()
 	row.DraftRevision = candidate.Revision
 	auditData, err := model.EncodeAuditData(map[string]any{"exam_id": input.ExamID.String(), "draft_revision": candidate.Revision})
 	if err != nil {
@@ -742,11 +750,12 @@ func updateExamDraftBrowserPolicy(
 	result, err := tx.Exec(
 		ctx,
 		`UPDATE exam_drafts
-		SET browser_policy = ?::jsonb, updated_at = ?, revision = ?
+		SET browser_policy = ?::jsonb, updated_at = ?, updated_by_user_id = ?, revision = ?
 		WHERE exam_id = ?
 			AND revision = ?`,
 		string(policy),
 		candidate.UpdatedAt,
+		input.ActorUserID.String(),
 		candidate.Revision,
 		input.ExamID.String(),
 		input.ExpectedRevision,
@@ -763,6 +772,7 @@ func updateExamDraftBrowserPolicy(
 
 	row.BrowserPolicy = jsonValue(policy)
 	row.DraftUpdatedAt, row.DraftRevision = candidate.UpdatedAt, candidate.Revision
+	row.DraftUpdatedBy = input.ActorUserID.String()
 	auditData, err := model.EncodeAuditData(map[string]any{
 		"exam_id":                input.ExamID.String(),
 		"draft_revision":         candidate.Revision,
@@ -835,11 +845,11 @@ func createExamAuthoring(
 
 	if _, err := tx.NamedExec(ctx, `INSERT INTO exam_drafts (
 			exam_id, title, instructions_markdown, policy, browser_policy,
-				base_revision_id, updated_at, revision
+				base_revision_id, updated_at, updated_by_user_id, revision
 		)
 		VALUES (
 			:id, :draft_title, :instructions_markdown, :policy, :browser_policy,
-				:base_revision_id, :draft_updated_at, :draft_revision
+				:base_revision_id, :draft_updated_at, :draft_updated_by_user_id, :draft_revision
 		)`, &row); err != nil {
 		return nil, fmt.Errorf("create exam draft: %w", translateError("exam_draft", input.Exam.ID.String(), err))
 	}
@@ -900,6 +910,7 @@ func newExamAuthoringRow(snapshot *store.ExamAuthoringSnapshot, actorIsManager b
 		BaseRevisionID:       nullableString(snapshot.Draft.BaseRevisionID.String()),
 		BrowserPolicy:        jsonValue(browserPolicyBytes),
 		DraftUpdatedAt:       snapshot.Draft.UpdatedAt,
+		DraftUpdatedBy:       snapshot.Draft.UpdatedByUserID.String(),
 		DraftRevision:        snapshot.Draft.Revision,
 		ManagerCount:         snapshot.ManagerCount,
 		ActorIsManager:       actorIsManager,
@@ -942,8 +953,14 @@ func (r examAuthoringRow) model() (*store.ExamAuthoringSnapshot, error) {
 		return nil, invalidPersistedState("exam_draft", "browser_policy", err)
 	}
 
+	updatedBy, err := parsePersistedID[model.UserID]("exam_draft", "updated_by_user_id", r.DraftUpdatedBy, model.ParseUserID)
+	if err != nil {
+		return nil, err
+	}
+
 	draft := &model.ExamDraft{
 		ExamID:               exam.ID,
+		UpdatedByUserID:      updatedBy,
 		Title:                r.DraftTitle,
 		InstructionsMarkdown: r.InstructionsMarkdown,
 		Policy:               policy,
@@ -1156,11 +1173,12 @@ func updateExamDraftNativePolicy(
 	result, err := tx.Exec(
 		ctx,
 		`UPDATE exam_drafts
-		SET policy = ?::jsonb, updated_at = ?, revision = ?
+		SET policy = ?::jsonb, updated_at = ?, updated_by_user_id = ?, revision = ?
 		WHERE exam_id = ?
 			AND revision = ?`,
 		string(policy),
 		candidate.UpdatedAt,
+		input.ActorUserID.String(),
 		candidate.Revision,
 		input.ExamID.String(),
 		input.ExpectedRevision,
@@ -1177,6 +1195,7 @@ func updateExamDraftNativePolicy(
 
 	row.Policy = jsonValue(policy)
 	row.DraftUpdatedAt = candidate.UpdatedAt
+	row.DraftUpdatedBy = input.ActorUserID.String()
 	row.DraftRevision = candidate.Revision
 	auditData, err := model.EncodeAuditData(map[string]any{"exam_id": input.ExamID.String(), "draft_revision": candidate.Revision})
 	if err != nil {

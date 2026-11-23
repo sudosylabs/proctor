@@ -106,6 +106,8 @@ type examDraftResponse struct {
 	Capacity            examCapacityPolicyResponse `json:"capacity"`
 	BaseRevisionID      string                     `json:"base_revision_id,omitempty"`
 	UpdatedAt           string                     `json:"updated_at"`
+	UpdatedByUserID     string                     `json:"updated_by_user_id"`
+	UpdatedBy           *personRefResponse         `json:"updated_by,omitempty"`
 	Revision            int64                      `json:"revision"`
 	ResourceCount       int                        `json:"resource_count"`
 	HasStarterWorkspace bool                       `json:"has_starter_workspace"`
@@ -808,6 +810,7 @@ func examResponseFromView(view exam.View) examResponse {
 			Capacity:            examCapacityPolicyResponseFromModel(view.Capacity),
 			BaseRevisionID:      view.Draft.BaseRevisionID.String(),
 			UpdatedAt:           model.FormatRFC3339(view.Draft.UpdatedAt),
+			UpdatedByUserID:     view.Draft.UpdatedByUserID.String(),
 			Revision:            view.Draft.Revision,
 			ResourceCount:       view.ResourceCount,
 			HasStarterWorkspace: view.HasStarterWorkspace,
@@ -822,14 +825,16 @@ func (h examHandlers) namePeople(request route.Request, ids ...model.UserID) (pe
 	return namePeople(request, h.people, "exam.unavailable", ids...)
 }
 
-// examJSON presents an exam with its creator and owner named.
+// examJSON presents an exam with its creator, owner and the draft's last
+// editor named.
 func (h examHandlers) examJSON(request route.Request, status int, view exam.View) (route.Result, error) {
-	refs, err := h.namePeople(request, view.Exam.CreatorUserID, view.Exam.OwnerUserID)
+	refs, err := h.namePeople(request, view.Exam.CreatorUserID, view.Exam.OwnerUserID, view.Draft.UpdatedByUserID)
 	if err != nil {
 		return route.Result{}, err
 	}
 	response := examResponseFromView(view)
 	response.Exam = response.Exam.named(refs)
+	response.Draft.UpdatedBy = personRef(refs, view.Draft.UpdatedByUserID)
 	return route.JSON(status, response), nil
 }
 

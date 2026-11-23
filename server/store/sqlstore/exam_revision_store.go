@@ -517,11 +517,13 @@ func recordExamRevisionPublication(ctx context.Context, tx *sqlxTxWrapper, revis
 	draftResult, err := tx.Exec(
 		ctx,
 		`UPDATE exam_drafts
-		SET base_revision_id = ?, updated_at = GREATEST(updated_at, ?), revision = revision+1
+		SET base_revision_id = ?, updated_at = GREATEST(updated_at, ?), updated_by_user_id = ?,
+			revision = revision+1
 		WHERE exam_id = ?
 			AND revision = ?`,
 		revision.ID.String(),
 		revision.PublishedAt,
+		revision.PublishedByUserID.String(),
 		revision.ExamID.String(),
 		draft.DraftRevision,
 	)

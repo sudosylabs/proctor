@@ -374,6 +374,10 @@ components:
                 workspace_maximum_file_bytes: 10485760
                 workspace_maximum_total_bytes: 52428800
               updated_at: "2026-07-20T10:00:00Z"
+              updated_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+              updated_by:
+                id: c9me3tsk7oyhx1bwuadgz5nqrf
+                display_name: Owen Hughes
               revision: 1
               resource_count: 0
               has_starter_workspace: false

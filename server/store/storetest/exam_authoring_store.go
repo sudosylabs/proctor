@@ -23,6 +23,7 @@ import (
 func TestExamAuthoringStore(t *testing.T, ss store.Store) {
 	t.Run("CreateGetAndReplay", func(t *testing.T) { testExamAuthoringCreateGetAndReplay(t, ss) })
 	t.Run("UpdateDraftTextAndConflict", func(t *testing.T) { testExamAuthoringUpdateDraftTextAndConflict(t, ss) })
+	t.Run("DraftRecordsItsLastEditor", func(t *testing.T) { testExamAuthoringDraftRecordsItsLastEditor(t, ss) })
 	t.Run("BrowserPolicyInstitutionPin", func(t *testing.T) { testBrowserPolicyInstitutionPin(t, ss) })
 	t.Run("UpdateDraftNativePolicyAndConflict", func(t *testing.T) { testExamAuthoringUpdateDraftNativePolicyAndConflict(t, ss) })
 	t.Run("UpdateDraftFocusLossAndConflict", func(t *testing.T) { testExamAuthoringUpdateDraftFocusLossAndConflict(t, ss) })
@@ -173,6 +174,30 @@ func testExamAuthoringUpdateDraftTextAndConflict(t *testing.T, ss store.Store) {
 	require.Equal(t, int64(2), current.Draft.Revision)
 }
 
+func testExamAuthoringDraftRecordsItsLastEditor(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	institution := saveInstitution(t, ctx, ss)
+	unit := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "exam-editor-unit")
+	creator := saveUser(t, ctx, ss)
+	editor := saveUser(t, ctx, ss)
+	createdAt := model.NowUTC()
+	created, err := ss.ExamAuthoring().Create(ctx, newExamAuthoringCreation(t, ctx, ss, unit.ID, creator.ID, createdAt),
+		examCommand(creator.ID, "exam.create", "editor-create", "editor-create-command"))
+	require.NoError(t, err)
+	require.Equal(t, creator.ID, created.Value.Draft.UpdatedByUserID, "a new draft names its creator")
+
+	title := "Compilers"
+	update := newExamDraftTextUpdate(t, ctx, ss, created.Value.Exam.ID, editor.ID, 1, &title, nil, createdAt.Add(time.Minute))
+	update.ManagerOverride = true
+	updated, err := ss.ExamAuthoring().UpdateDraftText(ctx, update, examCommand(editor.ID, "exam.draft.text.edit", "editor-key", "editor-command"))
+	require.NoError(t, err)
+	require.Equal(t, editor.ID, updated.Value.Draft.UpdatedByUserID, "the edit names its editor")
+
+	current, err := ss.ExamAuthoring().Get(ctx, created.Value.Exam.ID, creator.ID)
+	require.NoError(t, err)
+	require.Equal(t, editor.ID, current.Draft.UpdatedByUserID, "the stored draft names its last editor")
+}
+
 func testExamAuthoringUpdateDraftFocusLossAndConflict(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	institution := saveInstitution(t, ctx, ss)
@@ -260,7 +285,7 @@ func newExamAuthoringCreation(t *testing.T, ctx context.Context, ss store.Store,
 	t.Helper()
 	exam, err := model.NewExam(model.NewExamID(), unitID, creatorID, at)
 	require.NoError(t, err)
-	draft, err := model.NewExamDraft(exam.ID, "Programming Languages", "", model.DefaultExamPolicySet(), at)
+	draft, err := model.NewExamDraft(exam.ID, "Programming Languages", "", model.DefaultExamPolicySet(), creatorID, at)
 	require.NoError(t, err)
 	manager, err := model.NewExamManager(exam.ID, creatorID, creatorID, at)
 	require.NoError(t, err)

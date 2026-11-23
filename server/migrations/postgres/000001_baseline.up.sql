@@ -1014,6 +1014,7 @@ CREATE TABLE exam_drafts (
     browser_policy jsonb NOT NULL DEFAULT '{"enabled":false}'::jsonb,
     base_revision_id varchar(26),
     updated_at timestamptz NOT NULL,
+    updated_by_user_id varchar(26) NOT NULL REFERENCES users(id),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
     CONSTRAINT exam_drafts_title_check CHECK (char_length(title) BETWEEN 1 AND 200),
     CONSTRAINT exam_drafts_instructions_markdown_check
@@ -1024,6 +1025,8 @@ CREATE TABLE exam_drafts (
 
 CREATE INDEX exam_drafts_title_search_idx
     ON exam_drafts USING gin (title gin_trgm_ops);
+
+CREATE INDEX exam_drafts_updated_by_user_id_idx ON exam_drafts (updated_by_user_id);
 
 CREATE TABLE exam_managers (
     exam_id varchar(26) NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
@@ -4527,7 +4530,9 @@ ALTER TABLE exam_drafts
     ADD CONSTRAINT exam_drafts_exam_id_canonical_check
     CHECK (exam_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT exam_drafts_base_revision_id_canonical_check
-    CHECK (base_revision_id IS NULL OR base_revision_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (base_revision_id IS NULL OR base_revision_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_drafts_updated_by_user_id_canonical_check
+    CHECK (updated_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE exam_managers
     ADD CONSTRAINT exam_managers_exam_id_canonical_check

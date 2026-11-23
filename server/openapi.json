@@ -5627,7 +5627,12 @@
                 "resource_count": 0,
                 "revision": 1,
                 "title": "Algorithms — final examination",
-                "updated_at": "2026-07-20T10:00:00Z"
+                "updated_at": "2026-07-20T10:00:00Z",
+                "updated_by": {
+                  "display_name": "Owen Hughes",
+                  "id": "c9me3tsk7oyhx1bwuadgz5nqrf"
+                },
+                "updated_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf"
               },
               "exam": {
                 "academic_unit_id": "q4nzk1xwe7rbdg3cyjoth5mupa",
@@ -6320,7 +6325,13 @@
                 "resource_count": 2,
                 "revision": 9,
                 "title": "Algorithms — final examination",
-                "updated_at": "2026-08-03T14:20:00Z"
+                "updated_at": "2026-08-03T14:20:00Z",
+                "updated_by": {
+                  "display_name": "Owen Hughes",
+                  "id": "c9me3tsk7oyhx1bwuadgz5nqrf",
+                  "username": "ohughes"
+                },
+                "updated_by_user_id": "c9me3tsk7oyhx1bwuadgz5nqrf"
               },
               "exam": {
                 "academic_unit_id": "q4nzk1xwe7rbdg3cyjoth5mupa",
@@ -22359,6 +22370,14 @@
             "description": "When the Draft last changed.",
             "format": "date-time",
             "type": "string"
+          },
+          "updated_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The User who made the Draft's latest change, named."
+          },
+          "updated_by_user_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The User who made the Draft's latest change, including a Resource or Starter Workspace change and publishing."
           }
         },
         "required": [
@@ -22369,6 +22388,7 @@
           "browser_policy",
           "capacity",
           "updated_at",
+          "updated_by_user_id",
           "revision",
           "resource_count",
           "has_starter_workspace"

@@ -502,7 +502,7 @@ func (f *authoringStoreFake) Get(_ context.Context, examID model.ExamID, _ model
 	if f.archived {
 		exam.ArchivedAt = model.OptionalTimeFrom(at)
 	}
-	draft, _ := model.NewExamDraft(examID, "Test", "", model.DefaultExamPolicySet(), at)
+	draft, _ := model.NewExamDraft(examID, "Test", "", model.DefaultExamPolicySet(), f.actorID, at)
 	if f.draftRevision > 0 {
 		draft.Revision = f.draftRevision
 	}

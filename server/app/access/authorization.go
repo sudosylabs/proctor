@@ -341,7 +341,7 @@ func (s *Authorizer) AuthorizeInstitution(
 
 // AuthorizeUserRead authorizes through the caller's current user visibility.
 func (s *Authorizer) AuthorizeUserRead(ctx context.Context, inv invocation.Invocation, userID model.UserID) error {
-	_, err := s.authorizeUserRead(ctx, inv, userID.String())
+	_, err := s.authorizeUserRead(ctx, inv, userID, false)
 	return err
 }
 
@@ -386,9 +386,20 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	inv invocation.Invocation,
 	userID model.UserID,
 ) error {
+	return s.authorizeInstitutionUser(ctx, inv, userID, model.ActionUserManage)
+}
+
+// authorizeInstitutionUser checks an institution-level action on any
+// unarchived account, including a disabled account the admin can manage.
+func (s *Authorizer) authorizeInstitutionUser(
+	ctx context.Context,
+	inv invocation.Invocation,
+	userID model.UserID,
+	action model.Action,
+) error {
 	principal := inv.Principal()
 	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
-	definition, known := model.DefinitionForAction(model.ActionUserManage)
+	definition, known := model.DefinitionForAction(action)
 	if principal.Validate() != nil {
 		return InvalidTokenAppError()
 	}
@@ -400,7 +411,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	if err != nil {
 		return ResourceError("user", err)
 	}
-	if user.IsArchived() {
+	if user == nil || user.IsArchived() {
 		return apperror.New("resource.not_found").WithField("resource", "user")
 	}
 
@@ -408,7 +419,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	if err != nil {
 		return ResourceError("institution", err)
 	}
-	if institution.IsArchived() {
+	if institution == nil || institution.IsArchived() {
 		return apperror.New("resource.not_found").WithField("resource", "institution")
 	}
 
@@ -416,7 +427,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 		institutionID:  institution.ID,
 		academicUnitID: make(map[model.AcademicUnitID]struct{}),
 	}
-	allowed, appErr := s.evaluateResolved(ctx, principal, model.ActionUserManage, resource, definition, resolved)
+	allowed, appErr := s.evaluateResolved(ctx, principal, action, resource, definition, resolved)
 	if appErr != nil {
 		return appErr
 	}
@@ -424,7 +435,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	if appErr = s.deps.Audit.RecordAuthorizationDecision(
 		ctx,
 		principal,
-		model.ActionUserManage,
+		action,
 		resource,
 		model.RoleScopeInstitution,
 		institution.ID.String(),
@@ -478,16 +489,21 @@ func (s *Authorizer) authorizeCurrentStateWithScope(
 func (s *Authorizer) authorizeUserRead(
 	ctx context.Context,
 	inv invocation.Invocation,
-	userID string,
+	userID model.UserID,
+	includeDisabled bool,
 ) (bool, error) {
 	principal := inv.Principal()
-	userResource := model.Resource{Type: model.ResourceUser, ID: userID}
+	userResource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
 	visibility, appErr := s.userVisibilityScope(ctx, principal)
 	if appErr != nil {
 		return false, appErr
 	}
 
 	if visibility.InstitutionWide {
+		if includeDisabled {
+			appErr = s.authorizeInstitutionUser(ctx, inv, userID, model.ActionUserView)
+			return appErr == nil, appErr
+		}
 		appErr = s.authorizeCurrentState(ctx, principal, model.ActionUserView, userResource, inv.RequestMetadata())
 		return appErr == nil, appErr
 	}
@@ -499,7 +515,7 @@ func (s *Authorizer) authorizeUserRead(
 		len(visibility.ClassMemberAcademicUnitRootIDs) > 0 ||
 		len(visibility.ClassIDs) > 0 {
 		var err error
-		match, err = s.deps.Resolver.deps.Users.MatchVisibility(ctx, model.UserID(userID), visibility)
+		match, err = s.deps.Resolver.deps.Users.MatchVisibility(ctx, userID, visibility)
 		if err != nil {
 			return false, UnavailableError(err)
 		}
@@ -631,7 +647,7 @@ func (s *Authorizer) AuthorizeProfileRead(
 		return ProfileReadAuthorization{FullProfile: true}, nil
 	}
 
-	fullProfile, err := s.authorizeUserRead(ctx, inv, userID.String())
+	fullProfile, err := s.authorizeUserRead(ctx, inv, userID, true)
 	if err != nil {
 		return ProfileReadAuthorization{}, err
 	}

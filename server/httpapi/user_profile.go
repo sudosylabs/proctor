@@ -192,8 +192,7 @@ type candidateExamActivityItemResponse struct {
 	Class             candidateExamActivityRelationResponse    `json:"class"`
 	ScheduledStartAt  string                                   `json:"scheduled_start_at"`
 	ScheduledEndAt    string                                   `json:"scheduled_end_at"`
-	JoinOpensAt       string                                   `json:"join_opens_at,omitempty"`
-	JoinClosesAt      string                                   `json:"join_closes_at,omitempty"`
+	JoinWindow        *examSittingJoinWindowResponse           `json:"join_window,omitempty"`
 	SittingState      model.ExamSittingState                   `json:"sitting_state"`
 	SittingReasonCode *string                                  `json:"sitting_reason_code"`
 	ActivityState     store.CandidateExamActivityState         `json:"activity_state"`
@@ -421,8 +420,7 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 			Class:            candidateExamActivityRelationResponse{ID: item.ClassID.String(), DisplayName: item.ClassDisplayName},
 			ScheduledStartAt: model.FormatRFC3339(item.ScheduledStartAt),
 			ScheduledEndAt:   model.FormatRFC3339(item.ScheduledEndAt),
-			JoinOpensAt:      item.JoinWindow.OpensAt.FormatRFC3339(),
-			JoinClosesAt:     item.JoinWindow.ClosesAt.FormatRFC3339(),
+			JoinWindow:       joinWindowResponse(item.JoinWindow),
 			SittingState:     item.SittingState,
 			ActivityState:    item.ActivityState,
 			AccessState:      item.AccessState,
@@ -914,17 +912,16 @@ func userDirectoryAccountFilters(values url.Values, query *user.SearchUsersQuery
 	if mfa != "" && !query.MFA.IsValid() {
 		return apperror.Invalid("request.invalid", "mfa")
 	}
-	// role_holder has only the value true: false would name everyone else,
-	// a set no board asks for.
 	roleHolder, err := single("role_holder")
 	if err != nil {
 		return err
 	}
-	if roleHolder != "" {
-		if roleHolder != "true" {
-			return apperror.Invalid("request.invalid", "role_holder")
-		}
+	switch roleHolder {
+	case "", "false":
+	case "true":
 		query.RoleHolder = true
+	default:
+		return apperror.Invalid("request.invalid", "role_holder")
 	}
 	never, err := single("never_signed_in")
 	if err != nil {

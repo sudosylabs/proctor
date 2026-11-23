@@ -449,6 +449,9 @@ func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation,
 		return nil, StoreErrors.Translate(err)
 	}
 	if !read.FullProfile {
+		if !user.IsActive() {
+			return nil, apperror.New("resource.not_found").WithField("resource", "user")
+		}
 		user = scopedUserProjection(user)
 	}
 	// One's own profile is a full read without Institution-wide user.view, so

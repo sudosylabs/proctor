@@ -369,7 +369,7 @@ func TestUserReadMatchesInstitutionWideClassMemberVisibility(t *testing.T) {
 	}
 
 	fullProfile, err := authorization.authorizeUserRead(
-		context.Background(), invocation.New(principal, model.RequestMetadata{}), targetID.String(),
+		context.Background(), invocation.New(principal, model.RequestMetadata{}), targetID, false,
 	)
 	require.NoError(t, err)
 	require.False(t, fullProfile, "fullProfile=%t calls=%d visibility=%#v", fullProfile, users.matchCalls, users.matchVisibility)

@@ -527,8 +527,11 @@ func (s *adminAccountStates) SetDisabled(_ context.Context, input *store.UserDis
 		return nil, store.NewErrConflict("user", "revision", nil)
 	}
 	user.DisabledAt = model.OptionalTime{}
+	user.DisabledByUserID = ""
+	user.DisabledReason = ""
 	if input.Disabled {
 		user.DisabledAt = model.OptionalTimeFrom(input.ChangedAt)
+		user.DisabledByUserID, user.DisabledReason = input.DisabledBy, input.DisabledReason
 	}
 	user.Revision++
 	user.UpdatedAt = input.ChangedAt
@@ -566,7 +569,10 @@ func newAdminAccountTest(t *testing.T, subject *model.User) *adminAccountTest {
 		Stores: identityStores{Users: test.accounts},
 		Grants: []accesstest.Grant{institutionWide(test.principal.UserID, model.ActionUserManage)},
 	})
-	test.api = newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: test.principal}, userAdministrationResource(test.fixture.service))
+	people := testPeople(&directoryUserStore{byID: map[model.UserID]*model.User{
+		test.principal.UserID: {ID: test.principal.UserID, Username: "admin", DisplayName: "Site Admin"},
+	}}, test.fixture.access.Authorizer)
+	test.api = newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: test.principal}, userAdministrationResource(test.fixture.service, people))
 	return test
 }
 
@@ -647,6 +653,7 @@ func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, test.subject.ID.String(), body["id"])
+	require.Equal(t, map[string]any{"id": test.principal.UserID.String(), "display_name": "Site Admin"}, body["disabled_by"])
 	_, exposed := body["revision"]
 	require.False(t, exposed, "revision exposed: %#v", body)
 	attempts := test.fixture.access.Audits.Attempts()
@@ -1027,7 +1034,10 @@ func TestUserTwoStepStateIsShownOnlyToWhoMayResetOrSeeTheInstitution(t *testing.
 		require.True(t, options.RoleHolder)
 		require.Equal(t, store.UserMFADisabled, options.MFA)
 		require.False(t, options.Visibility.ActiveAt.IsZero(), "role holders are read at the visibility's instant")
-		for _, query := range []string{"?role_holder=false", "?role_holder=", "?mfa=off", "?mfa=enabled&mfa=disabled"} {
+		response, fixture = serve(t, "/api/v1/users?role_holder=false", institutionWide("", model.ActionUserView))
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		require.False(t, fixture.users.lastList(t).RoleHolder)
+		for _, query := range []string{"?role_holder=", "?role_holder=off", "?mfa=off", "?mfa=enabled&mfa=disabled"} {
 			response, _ := serve(t, "/api/v1/users"+query, institutionWide("", model.ActionUserView))
 			assertHTTPProblem(t, response, http.StatusBadRequest, "request.invalid")
 		}

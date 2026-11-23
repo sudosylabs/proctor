@@ -662,14 +662,20 @@ func TestAcademicAdministrationDisableBatchWritesItsOneReasonToEveryAudit(t *tes
 	world, result, err := run(t, AcademicAdministrationUserDisable, "  Left before the start of term  ")
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Succeeded, "%#v", result)
-	disables := 0
+	disables, batches := 0, 0
 	for _, event := range world.access.Audits.Events() {
+		if event.Operation() == "disable_user_batch" {
+			batches++
+			require.Equal(t, model.AuditStatusSuccess, event.Status)
+			require.Equal(t, string(model.ActionOnboardingBatchManage), event.Action)
+		}
 		if event.Operation() == model.AuditOperationDisableAccount {
 			disables++
 			require.Equal(t, "Left before the start of term", event.AccountDisableReason(), "the reason is trimmed once for the batch")
 		}
 	}
 	require.Equal(t, 2, disables, "every disabled person's audit entry carries the reason")
+	require.Equal(t, 1, batches, "the batch records its own outcome")
 
 	for name, test := range map[string]struct {
 		operation AcademicAdministrationBatchOperation

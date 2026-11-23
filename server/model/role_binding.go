@@ -28,13 +28,14 @@ type RoleBindingGrantedVia string
 const (
 	RoleBindingGrantedManually     RoleBindingGrantedVia = "manual"
 	RoleBindingGrantedByInvitation RoleBindingGrantedVia = "invitation"
+	RoleBindingGrantedByImport     RoleBindingGrantedVia = "import"
 	RoleBindingGrantedAtBootstrap  RoleBindingGrantedVia = "bootstrap"
 )
 
 // IsValid reports whether v is a known way of granting.
 func (v RoleBindingGrantedVia) IsValid() bool {
 	switch v {
-	case RoleBindingGrantedManually, RoleBindingGrantedByInvitation, RoleBindingGrantedAtBootstrap:
+	case RoleBindingGrantedManually, RoleBindingGrantedByInvitation, RoleBindingGrantedByImport, RoleBindingGrantedAtBootstrap:
 		return true
 	}
 	return false
@@ -120,7 +121,7 @@ func (rb *RoleBinding) Validate() error {
 		return invalidModelError(where, "role_binding", "role_id", "must be a valid identifier", details)
 	}
 	if !rb.GrantedVia.IsValid() {
-		return invalidModelError(where, "role_binding", "granted_via", "must be manual, invitation or bootstrap", details)
+		return invalidModelError(where, "role_binding", "granted_via", "must be manual, invitation, import or bootstrap", details)
 	}
 	if !rb.GrantedByUserID.IsZero() && !rb.GrantedByUserID.IsValid() {
 		return invalidModelError(where, "role_binding", "granted_by_user_id", "must be empty or a valid identifier", details)

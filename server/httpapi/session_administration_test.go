@@ -166,7 +166,7 @@ func TestAdminSessionListUsesApplicationQueryAndOmitsCredentials(t *testing.T) {
 		Stores: identityStores{Users: newIdentityUsers(subject), Sessions: sessions},
 		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionSessionView)},
 	})
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(fixture.service, nil))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/"+subject.ID.String()+"/sessions?include_revoked=true", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
@@ -204,7 +204,7 @@ func TestAdminSessionListPagesWithAnOpaqueCursor(t *testing.T) {
 		Stores: identityStores{Users: newIdentityUsers(subject), Sessions: sessions},
 		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionSessionView)},
 	})
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(fixture.service, nil))
 	serve := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
@@ -255,7 +255,7 @@ func TestAdminSessionRevokeUsesApplicationCommand(t *testing.T) {
 		Stores: identityStores{Users: newIdentityUsers(subject), Sessions: sessions},
 		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionSessionManage)},
 	})
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(fixture.service))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(fixture.service, nil))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/users/"+subject.ID.String()+"/sessions/"+session.ID.String(), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()

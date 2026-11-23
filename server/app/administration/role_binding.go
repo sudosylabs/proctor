@@ -227,6 +227,9 @@ func (s *Service) CreateRoleBinding(
 		GrantedByUserID: inv.Principal().UserID,
 		GrantedVia:      model.RoleBindingGrantedManually,
 	}
+	if command.Batch.Fields().OnboardingImportID.IsValid() {
+		candidate.GrantedVia = model.RoleBindingGrantedByImport
+	}
 	if command.StartAt > 0 {
 		candidate.StartsAt = model.TimeFromMillis(command.StartAt)
 	}

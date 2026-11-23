@@ -14,16 +14,18 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/people"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type userAdministrationHandlers struct {
 	identities *identity.Service
+	people     *people.Resolver
 }
 
-func userAdministrationResource(identities *identity.Service) route.Resource {
-	h := userAdministrationHandlers{identities: identities}
+func userAdministrationResource(identities *identity.Service, resolver *people.Resolver) route.Resource {
+	h := userAdministrationHandlers{identities: identities, people: resolver}
 	return route.NewResource(
 		"user-administration",
 		route.Endpoint{
@@ -127,7 +129,15 @@ func (h userAdministrationHandlers) setEnabled(request route.Request, enabled bo
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, userProfileResponseFromModel(user)), nil
+	response := userProfileResponseFromModel(user)
+	if !user.DisabledByUserID.IsZero() {
+		refs, err := namePeople(request, h.people, user.DisabledByUserID)
+		if err != nil {
+			return route.Result{}, err
+		}
+		response.DisabledBy = personRef(refs, user.DisabledByUserID)
+	}
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func (h userAdministrationHandlers) revokeAllSessions(request route.Request) (route.Result, error) {

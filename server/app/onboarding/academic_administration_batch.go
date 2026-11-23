@@ -179,6 +179,22 @@ func (s *Service) RunAcademicAdministrationBatch(
 		}
 	}
 
+	var disableAuditID model.AuditEventID
+	if command.Operation == AcademicAdministrationUserDisable && command.onboardingImportID.IsZero() {
+		disableAuditID, err = s.auditor.Begin(ctx, access.Mutation{
+			Invocation: inv,
+			Action:     batchAction,
+			Resource:   resource,
+			ScopeType:  command.ScopeType,
+			ScopeID:    command.ScopeID,
+			Operation:  "disable_user_batch",
+			Value:      map[string]any{"item_count": len(command.Items), "reason": reason},
+		})
+		if err != nil {
+			return AcademicAdministrationBatchResult{}, access.AuditUnavailable(err)
+		}
+	}
+
 	result := AcademicAdministrationBatchResult{
 		Operation: command.Operation,
 		Items:     make([]AcademicAdministrationBatchItemResult, len(command.Items)),
@@ -265,6 +281,16 @@ func (s *Service) RunAcademicAdministrationBatch(
 			result.NoOp++
 		case InvitationBatchItemFailed:
 			result.Failed++
+		}
+	}
+
+	if !disableAuditID.IsZero() {
+		if err := s.auditor.Complete(ctx, disableAuditID, map[string]any{
+			"succeeded": result.Succeeded,
+			"no_op":     result.NoOp,
+			"failed":    result.Failed,
+		}); err != nil {
+			return AcademicAdministrationBatchResult{}, access.AuditUnavailable(err)
 		}
 	}
 

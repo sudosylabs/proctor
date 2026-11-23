@@ -715,3 +715,32 @@ func TestUserSearchTwoStepAndRoleHolderFiltersFollowTheirVisibility(t *testing.T
 		})
 	}
 }
+
+func TestGetUserProfileShowsDisabledAccountOnlyToInstitutionReader(t *testing.T) {
+	t.Parallel()
+	caller := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
+		AuthenticationStrength: model.AuthenticationSingleFactor, AuthenticatedAt: model.NowUTC(), ClientType: model.SessionClientWeb,
+	}
+	user := &model.User{
+		ID: model.NewUserID(), DisplayName: "Disabled account", DisabledAt: model.OptionalTimeFrom(model.NowUTC()),
+		DisabledByUserID: caller.UserID, DisabledReason: "Moved away",
+	}
+	events := []string{}
+	users := &userStoreFake{events: &events, current: user}
+	fixture := accesstest.New(t, accesstest.Options{
+		Users:  users,
+		Grants: []accesstest.Grant{{UserID: caller.UserID, Actions: []model.Action{model.ActionUserView}}},
+	})
+	service := &Service{users: users, authorizer: fixture.Authorizer}
+	profile, err := service.GetUserProfile(t.Context(), invocation.New(caller, model.RequestMetadata{}), user.ID)
+	require.NoError(t, err)
+	require.Equal(t, caller.UserID, profile.User.DisabledByUserID)
+	require.Equal(t, "Moved away", profile.User.DisabledReason)
+
+	caller.UserID = model.NewUserID()
+	profile, err = service.GetUserProfile(t.Context(), invocation.New(caller, model.RequestMetadata{}), user.ID)
+	require.True(t, apperror.Is(err, "authorization.denied"), "%v", err)
+	require.Nil(t, profile)
+}

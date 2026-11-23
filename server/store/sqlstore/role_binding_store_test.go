@@ -27,7 +27,7 @@ func TestRoleBindingRowRehydrationRejectsInvalidPersistedState(t *testing.T) {
 		{name: "role", field: "role_id", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.RoleID = "bad" })},
 		{name: "scope", field: "scope_id", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.ScopeID = "bad" })},
 		{name: "domain", field: "scope_type", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.ScopeType = "unknown" })},
-		{name: "granted via", field: "granted_via", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.GrantedVia = "import" })},
+		{name: "granted via", field: "granted_via", row: replaceRoleBindingRow(valid, func(row *roleBindingRow) { row.GrantedVia = "unknown" })},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

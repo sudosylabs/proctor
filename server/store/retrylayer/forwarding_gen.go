@@ -1739,6 +1739,18 @@ func (s *userStore) ListIdentities(ctx context.Context, arg1 []model.UserID) ([]
 	})
 }
 
+func (s *userStore) ListMFAStates(ctx context.Context, arg1 []model.UserID) ([]store.UserMFAState, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserMFAState, error) {
+		return s.UserStore.ListMFAStates(ctx, arg1)
+	})
+}
+
+func (s *userStore) ListMemberships(ctx context.Context, arg1 store.UserMembershipListOptions) ([]store.UserMembership, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserMembership, error) {
+		return s.UserStore.ListMemberships(ctx, arg1)
+	})
+}
+
 func (s *userStore) MatchVisibility(ctx context.Context, arg1 model.UserID, arg2 store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
 	return retryCall1(ctx, s.layer, func() (store.UserVisibilityMatch, error) {
 		return s.UserStore.MatchVisibility(ctx, arg1, arg2)

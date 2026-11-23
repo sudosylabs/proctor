@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -97,11 +98,15 @@ type AcademicAdministrationBatchItemCommand struct {
 	EndAt           int64
 }
 
+// RunAcademicAdministrationBatchCommand applies one operation to every item.
+// Reason is given once per batch, only for user.disable, and reaches every
+// disabled person's audit entry.
 type RunAcademicAdministrationBatchCommand struct {
 	Operation                     AcademicAdministrationBatchOperation
 	ScopeType                     model.RoleScopeType
 	ScopeID                       string
 	IdempotencyKey                string
+	Reason                        *string
 	Items                         []AcademicAdministrationBatchItemCommand
 	onboardingImportID            model.OnboardingImportID
 	onboardingImportRowNumber     int
@@ -145,6 +150,14 @@ func (s *Service) RunAcademicAdministrationBatch(
 		len(command.Items) > MaximumAcademicAdministrationBatchItems ||
 		!academicAdministrationBatchScopeMatches(command.Operation, command.ScopeType) {
 		return AcademicAdministrationBatchResult{}, apperror.New("request.invalid")
+	}
+	reason, err := academicAdministrationBatchReason(command.Operation, command.Reason)
+	if err != nil {
+		return AcademicAdministrationBatchResult{}, err
+	}
+	command.Reason = nil
+	if reason != "" {
+		command.Reason = &reason
 	}
 
 	resource, err := academicAdministrationBatchResource(command.ScopeType, command.ScopeID)
@@ -256,6 +269,18 @@ func (s *Service) RunAcademicAdministrationBatch(
 	}
 
 	return result, nil
+}
+
+// academicAdministrationBatchReason validates a batch's one reason as the
+// single disable does; any other operation takes none.
+func academicAdministrationBatchReason(operation AcademicAdministrationBatchOperation, raw *string) (string, error) {
+	if raw == nil {
+		return "", nil
+	}
+	if operation != AcademicAdministrationUserDisable {
+		return "", apperror.Invalid("request.invalid", "reason")
+	}
+	return identity.AccountDisableReason(*raw)
 }
 
 func academicAdministrationCommandOperation(operation AcademicAdministrationBatchOperation) string {

@@ -53,6 +53,7 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("StateActivityAndRoleFilters", func(t *testing.T) { testUserListStateActivityAndRoleFilters(t, ss) })
 	t.Run("DirectorySummaries", func(t *testing.T) { testUserDirectorySummaries(t, ss) })
 	t.Run("ListIdentities", func(t *testing.T) { testUserListIdentities(t, ss) })
+	t.Run("Memberships", func(t *testing.T) { testUserMemberships(t, ss) })
 	t.Run("EnablementRevocationAndAuditAreAtomic", func(t *testing.T) {
 		testUserStoreEnablementRevocationAndAuditAreAtomic(t, ss)
 	})

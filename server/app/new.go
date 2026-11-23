@@ -126,6 +126,8 @@ func New(deps Dependencies) (*App, error) {
 		ReviewPeople:         people.New(deps.Store, authorizer).Reporting("exam.integrity_review.unavailable"),
 		InvitationPeople:     people.New(deps.Store, authorizer).Reporting("invitation.unavailable"),
 		AdministrationPeople: people.New(deps.Store, authorizer).Reporting("administration.unavailable"),
+		OnboardingPeople:     people.New(deps.Store, authorizer).Reporting("onboarding_import.unavailable"),
+		ProgressionPeople:    people.New(deps.Store, authorizer).Reporting("student_progression.unavailable"),
 		Terminals:            terminals,
 		Previews:             environment.NewPreviews(terminals),
 		Assistant:            assistants,

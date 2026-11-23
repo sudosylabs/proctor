@@ -98,6 +98,8 @@ type directoryUserStore struct {
 	total          int
 	summaries      []store.UserDirectorySummary
 	currentContext *store.CurrentUserContext
+	// mfaEnabledAt holds the users with two-step verification on.
+	mfaEnabledAt map[model.UserID]time.Time
 
 	listOptions []store.UserListOptions
 	update      *store.UserProfileUpdate
@@ -332,6 +334,16 @@ func (s *directoryUserStore) ListVisibleDisplayNames(ctx context.Context, ids []
 		return nil, nil
 	}
 	return s.ListDisplayNames(ctx, ids)
+}
+
+func (s *directoryUserStore) ListMFAStates(_ context.Context, ids []model.UserID) ([]store.UserMFAState, error) {
+	states := []store.UserMFAState{}
+	for _, id := range ids {
+		if at, ok := s.mfaEnabledAt[id]; ok {
+			states = append(states, store.UserMFAState{UserID: id, EnabledAt: model.OptionalTimeFrom(at)})
+		}
+	}
+	return states, nil
 }
 
 func (s *directoryUserStore) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {

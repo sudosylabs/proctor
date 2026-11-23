@@ -330,7 +330,7 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 		ctx, invocation.New(*principal, metadata), target.ID,
 	)
 	require.NoError(t, err, "authorized cross-user read = %#v", visible)
-	require.Equal(t, target.ID, visible.ID, "authorized cross-user read = %#v", visible)
+	require.Equal(t, target.ID, visible.User.ID, "authorized cross-user read = %#v", visible)
 	allowed, permErr = authorizer.Can(
 		ctx, *principal, model.ActionUserManage,
 		model.Resource{Type: model.ResourceUser, ID: target.ID.String()},

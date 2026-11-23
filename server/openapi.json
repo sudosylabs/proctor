@@ -1096,6 +1096,7 @@
                 "never_signed_in": true
               },
               "operation": "user.disable",
+              "reason": "Left the institution before the start of term.",
               "scope_id": "ybndrfg8ejkmcpqxot1uwisza3",
               "scope_type": "institution"
             },
@@ -8694,6 +8695,10 @@
           "application/json": {
             "example": {
               "created_at": "2026-08-18T13:30:00Z",
+              "created_by": {
+                "display_name": "Priya Raman",
+                "id": "wj3drgzdpnf54rxf5d8qd3dqne"
+              },
               "expires_at": "2026-08-25T13:30:00Z",
               "failed_rows": 0,
               "file_name": "chemistry-roster.csv",
@@ -8710,15 +8715,27 @@
               "rows": [
                 {
                   "operation": "student_class.create",
+                  "person": {
+                    "display_name": "Amina Diallo",
+                    "email_masked": "a***@example.edu"
+                  },
                   "reference": "1",
                   "row": 1,
                   "status": "valid"
                 },
                 {
                   "operation": "student_class.create",
+                  "person": {
+                    "display_name": "Jonas Berg",
+                    "email_masked": "j***@example.edu"
+                  },
                   "reference": "2",
                   "row": 2,
-                  "status": "valid"
+                  "status": "valid",
+                  "user": {
+                    "display_name": "Jonas Berg",
+                    "id": "ih1r84kij94nrwis97rft6rduh"
+                  }
                 },
                 {
                   "operation": "student_class.create",
@@ -10856,6 +10873,52 @@
         },
         "description": "The User's email verification state after the change"
       },
+      "UserMembershipListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "academic_unit": {
+                    "id": "14j8umgczgrdp95w77zuxmxfu9",
+                    "name": "Computer Science"
+                  },
+                  "id": "3yqk1oxnmb8gxe4cwa6r1ytsjy",
+                  "kind": "academic_unit",
+                  "start_at": "2025-09-01T00:00:00Z"
+                },
+                {
+                  "academic_period": {
+                    "id": "c4sxtxwr3pd8gmk1o5y9nazhqe",
+                    "name": "2026/27"
+                  },
+                  "class": {
+                    "id": "mx1kgmf7h3drjxs5ub8n3o4wpe",
+                    "name": "CS2 Group A"
+                  },
+                  "end_at": "2027-07-01T00:00:00Z",
+                  "id": "q8n4cx7oufyp5nm1bdt3wh9eia",
+                  "kind": "class",
+                  "programme": {
+                    "id": "kd5u7xdgpbn8zw3r1sfoey9mqc",
+                    "name": "BSc Computing"
+                  },
+                  "programme_level": {
+                    "id": "o9g8oyzef7r1eihn5t3ypu4cwa",
+                    "name": "Year 2"
+                  },
+                  "start_at": "2026-09-01T00:00:00Z"
+                }
+              ],
+              "next_cursor": "eyJraW5kIjoiY2xhc3MifQ"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/UserMembershipListResponse"
+            }
+          }
+        },
+        "description": "The User's current memberships you can see"
+      },
       "UserProfileListOK": {
         "content": {
           "application/json": {
@@ -10867,6 +10930,11 @@
                   "first_name": "Jonas",
                   "id": "ih1r84kij94nrwis97rft6rduh",
                   "last_name": "Berg",
+                  "mfa": {
+                    "enabled": true,
+                    "enabled_at": "2026-03-14T10:22:00Z",
+                    "method": "authenticator_app"
+                  },
                   "profile_picture_kind": "default",
                   "profile_picture_url": "/api/v1/users/ih1r84kij94nrwis97rft6rduh/profile-picture",
                   "summary": {
@@ -10923,6 +10991,9 @@
               "last_login_at": "2026-08-01T09:12:44Z",
               "last_name": "Diallo",
               "locale": "en",
+              "mfa": {
+                "enabled": false
+              },
               "profile_picture_changed_at": "2026-06-12T14:05:00Z",
               "profile_picture_kind": "custom",
               "profile_picture_url": "/api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture?v=14",
@@ -11129,6 +11200,11 @@
             ],
             "type": "string"
           },
+          "reason": {
+            "description": "Why the accounts are disabled, given once for the whole batch. Only `user.disable` takes it; any other operation is refused with `request.invalid` on `reason`. It has the limits of a single disable: leading and trailing spaces are removed, up to 500 characters, no control characters, and not only spaces. An empty string means no reason. It is written to every disabled User's audit record.",
+            "maxLength": 500,
+            "type": "string"
+          },
           "scope_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Institution, Academic Unit or Class the batch runs in."
@@ -11263,6 +11339,14 @@
             "format": "date-time",
             "type": "string"
           },
+          "mfa": {
+            "description": "Keep Users whose account has two-step verification on (`enabled`) or off (`disabled`), as the User directory's `mfa` filter does. Needs Institution-wide user.view or user.mfa.reset.",
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": "string"
+          },
           "never_signed_in": {
             "description": "When true, keep Users who have never signed in. Needs Institution-wide user.view, and cannot be combined with `last_active_after` or `last_active_before`.",
             "type": "boolean"
@@ -11333,6 +11417,11 @@
           "operation": {
             "$ref": "#/components/schemas/AcademicAdministrationPreviewOperation",
             "description": "The operation to apply to every matching User."
+          },
+          "reason": {
+            "description": "Why the accounts are disabled, given once for the whole preview. Only `user.disable` takes it; any other operation is refused with `request.invalid` on `reason`. It has the limits of a single disable: leading and trailing spaces are removed, up to 500 characters, no control characters, and not only spaces. An empty string means no reason. It is written to every disabled User's audit record and to the batch's.",
+            "maxLength": 500,
+            "type": "string"
           },
           "role_id": {
             "$ref": "#/components/schemas/ID",
@@ -11444,6 +11533,11 @@
           "preview_job_id": {
             "$ref": "#/components/schemas/ID",
             "description": "The Job that resolves the filter and builds the rows."
+          },
+          "reason": {
+            "description": "The reason a `user.disable` preview was given. Omitted when none was.",
+            "maxLength": 500,
+            "type": "string"
           },
           "revision": {
             "description": "The preview's revision, which goes up each time it changes. Send it back as `expected_revision` to commit.",
@@ -26229,6 +26323,15 @@
       "InvitationBatchRequest": {
         "additionalProperties": false,
         "properties": {
+          "expires_in_days": {
+            "description": "How many whole days every new Invitation in the batch can be accepted for, from 1 to 30, given once for the batch. Omit it or send null for the default lifetime. Only the `.create` operations take it; on `resend` or `revoke`, or outside the range, the whole batch is refused with `request.invalid` on `expires_in_days`.",
+            "maximum": 30,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "items": {
             "description": "The items to process, from 1 to 200.",
             "items": {
@@ -30435,6 +30538,21 @@
         ],
         "type": "object"
       },
+      "OnboardingImportPerson": {
+        "additionalProperties": false,
+        "description": "The person as the file named them, read from the row's own values. Omitted when the row holds no name or address, as for a student progression.",
+        "properties": {
+          "display_name": {
+            "description": "The file's display name, or its first and last names. Omitted when the file gave none.",
+            "type": "string"
+          },
+          "email_masked": {
+            "description": "The file's email address masked the way mail deliveries mask a recipient, such as `a***@example.edu`. Omitted when the row holds no address.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "OnboardingImportPreviewCode": {
         "description": "Why a preview row is invalid, a duplicate, or carries a note. Examples are a malformed or repeated CSV row, a target that can't be found, a student who can't progress or is already enrolled in the destination, or an academic administration row that will be skipped or changes nothing. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.",
         "enum": [
@@ -30488,6 +30606,10 @@
             "description": "Time the import was created.",
             "format": "date-time",
             "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "Who uploaded the import or started the student progression."
           },
           "destination_class_id": {
             "$ref": "#/components/schemas/ID",
@@ -30740,7 +30862,7 @@
       },
       "OnboardingImportRowResponse": {
         "additionalProperties": false,
-        "description": "One row of an import: where it sits, what it does and how it ended. It never repeats the email address or names the row holds.",
+        "description": "One row of an import: where it sits, what it does, how it ended and who it is about. It never repeats the email address the row holds: `person` shows only a masked form of it.",
         "properties": {
           "invitation_id": {
             "$ref": "#/components/schemas/ID",
@@ -30767,6 +30889,9 @@
               "user_sessions.revoke"
             ],
             "type": "string"
+          },
+          "person": {
+            "$ref": "#/components/schemas/OnboardingImportPerson"
           },
           "preview_code": {
             "anyOf": [
@@ -30821,6 +30946,10 @@
               "canceled"
             ],
             "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/PersonRef",
+            "description": "The account the row was matched to. Omitted until the row is matched to one."
           }
         },
         "required": [
@@ -36526,6 +36655,9 @@
             "description": "Preferred language tag, such as `en`.",
             "type": "string"
           },
+          "mfa": {
+            "$ref": "#/components/schemas/UserMFAResponse"
+          },
           "profile_picture_changed_at": {
             "description": "Time of the latest upload or removal. It does not tell you whether a custom picture exists. Use `profile_picture_kind` for that.",
             "format": "date-time",
@@ -36663,6 +36795,122 @@
         ],
         "type": "object"
       },
+      "UserMFAResponse": {
+        "additionalProperties": false,
+        "description": "Whether the User's account has two-step verification on: an active Proctor authenticator app. It belongs to the account; how strongly a sign-in was proved belongs to each Session. A second factor an external sign-in provider checks does not turn it on. It is present only if you hold Institution-wide user.view or user.mfa.reset, and never says \"off\" to anyone else: for them it is left out. It never shows recovery codes or a setup that has not been finished.",
+        "properties": {
+          "enabled": {
+            "description": "True while the account has an active Proctor authenticator app.",
+            "type": "boolean"
+          },
+          "enabled_at": {
+            "description": "When two-step verification was turned on. Present only while `enabled` is true.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "method": {
+            "description": "The second factor in use, as `/users/me/mfa` names it. Present only while `enabled` is true. More methods may be added later.",
+            "enum": [
+              "authenticator_app"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "UserMembershipListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserMembershipResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "UserMembershipName": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "name": {
+            "description": "The display name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "UserMembershipResponse": {
+        "additionalProperties": false,
+        "description": "One current membership. An `academic_unit` entry names its unit. A `class` entry names its Class, programme level, programme and Academic Period.",
+        "properties": {
+          "academic_period": {
+            "$ref": "#/components/schemas/UserMembershipName",
+            "description": "The Academic Period of the enrolment. Present only for `class` entries."
+          },
+          "academic_unit": {
+            "$ref": "#/components/schemas/UserMembershipName",
+            "description": "The Academic Unit. Present only for `academic_unit` entries."
+          },
+          "class": {
+            "$ref": "#/components/schemas/UserMembershipName",
+            "description": "The Class. Present only for `class` entries."
+          },
+          "end_at": {
+            "description": "When the membership ends. Omitted when it has no end.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "The ID of the Academic Unit membership or Class membership itself."
+          },
+          "kind": {
+            "description": "Whether this is an Academic Unit membership or a Class enrolment.",
+            "enum": [
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
+          },
+          "programme": {
+            "$ref": "#/components/schemas/UserMembershipName",
+            "description": "The Class's programme. Present only for `class` entries."
+          },
+          "programme_level": {
+            "$ref": "#/components/schemas/UserMembershipName",
+            "description": "The Class's programme level. Present only for `class` entries."
+          },
+          "start_at": {
+            "description": "When the membership started.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "start_at"
+        ],
+        "type": "object"
+      },
       "UserProfileListResponse": {
         "additionalProperties": false,
         "description": "A page of Users you can see, sorted by username and then ID unless you choose another order.",
@@ -36759,6 +37007,9 @@
           "locale": {
             "description": "Preferred language tag, such as `en` or `fr-CA`. Defaults to `en`.",
             "type": "string"
+          },
+          "mfa": {
+            "$ref": "#/components/schemas/UserMFAResponse"
           },
           "profile_picture_changed_at": {
             "description": "Time of the latest upload or removal. It does not tell you whether a custom picture exists. Use `profile_picture_kind` for that.",
@@ -55480,6 +55731,87 @@
             }
           },
           {
+            "description": "Return only Invitations that expire at or after this instant.",
+            "in": "query",
+            "name": "expires_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Invitations that expire before this instant. It must be later than `expires_after`.",
+            "in": "query",
+            "name": "expires_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Invitations whose invited address or suggested display name starts with this text, compared case-insensitively after trimming spaces. It is matched literally, at most 254 characters.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 254,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Invitations whose newest delivery is in one of these states. Repeat the parameter for several states. An Invitation with no delivery matches none.",
+            "explode": true,
+            "in": "query",
+            "name": "delivery_state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "queued",
+                  "sending",
+                  "accepted",
+                  "failed",
+                  "suppressed",
+                  "canceled"
+                ],
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Sort by creation (`created`, the default) or expiry (`expires`) time, with Invitation ID breaking ties. A cursor works only with the sort and direction that produced it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "created",
+              "enum": [
+                "created",
+                "expires"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Descending (`desc`, the default, newest or latest first) or ascending (`asc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "description": "The `next_cursor` from the previous page, passed back unchanged.",
             "in": "query",
             "name": "cursor",
@@ -62479,6 +62811,31 @@
             }
           },
           {
+            "description": "Keeps Users whose account has two-step verification on (`enabled`) or off (`disabled`). On means an active Proctor authenticator app; a second factor an external sign-in provider checks does not count. Only callers who can see two-step verification (Institution-wide user.view, or user.mfa.reset) can use it; anyone else gets `request.invalid` on `mfa`.",
+            "in": "query",
+            "name": "mfa",
+            "required": false,
+            "schema": {
+              "enum": [
+                "enabled",
+                "disabled"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "With `true`, keeps active Users who hold a current Role Binding at any scope. Combined with `mfa=disabled` it lists exactly the role holders the access policy preflight counts in `role_holders_without_mfa_count`. Only Institution-wide user.view can use it; anyone else gets `request.invalid` on `role_holder`. The only accepted value is `true`.",
+            "in": "query",
+            "name": "role_holder",
+            "required": false,
+            "schema": {
+              "enum": [
+                true
+              ],
+              "type": "boolean"
+            }
+          },
+          {
             "description": "With `true`, keeps Users who have never signed in. Activity is first recorded when a User gets a Session. Only Institution-wide user.view can filter on activity; anyone else gets `request.invalid`. You can't combine it with `last_active_after` or `last_active_before`.",
             "in": "query",
             "name": "never_signed_in",
@@ -65180,6 +65537,80 @@
         ],
         "x-proctor-idempotency": "none"
       }
+    },
+    "/api/v1/users/{user_id}/memberships": {
+      "get": {
+        "description": "Lists the User's current Academic Unit memberships, then their current Class enrolments, each oldest first. You need to see the User, as for reading their profile, and are refused as that read refuses. Each entry appears only if you can view that unit's members (academic_unit.members.view) or that Class's members (class.members.view). Entries you can't see are left out entirely, so a page never hints at them. Memberships of archived units, and enrolments in archived Classes, levels or programmes, are not listed.",
+        "operationId": "listUserMemberships",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserMembershipListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List what a User is a current member of",
+        "tags": [
+          "Users"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "administration.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserID"
+        }
+      ]
     },
     "/api/v1/users/{user_id}/mfa/reset": {
       "parameters": [

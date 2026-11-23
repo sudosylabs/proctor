@@ -410,7 +410,7 @@ func (s SQLUserStore) Count(ctx context.Context, options store.UserListOptions, 
 
 // filterUserList applies every List filter but the keyset: archived and
 // disabled users, the exact ID, visibility, search, affiliation, academic
-// unit, role, and last activity. List and Count share it so a total always
+// unit, role, role holder, two-step verification and last activity. List and Count share it so a total always
 // counts the listed rows.
 func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.SelectBuilder, error) {
 	query = query.Where(sq.Eq{"users.archived_at": nil})
@@ -436,6 +436,7 @@ func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.S
 	query = filterUserListAffiliations(query, options)
 	query = filterUserListAcademicUnit(query, options)
 	query = filterUserListRoles(query, options)
+	query = filterUserListAccountSecurity(query, options)
 	return filterUserListActivity(query, options), nil
 }
 
@@ -490,6 +491,8 @@ func validUserListOptions(options store.UserListOptions) bool {
 		!validUserListMembershipFilters(options) ||
 		!validUserListRoleFilter(options) ||
 		!validUserListActivityFilter(options) ||
+		(options.MFA != "" && !options.MFA.IsValid()) ||
+		(options.RoleHolder && (!options.Visibility.InstitutionWide || options.Visibility.ActiveAt.IsZero())) ||
 		len(options.Visibility.ClassIDs)+len(options.Visibility.AcademicUnitRootIDs)+
 			len(options.Visibility.ClassMemberAcademicUnitRootIDs) > 256 ||
 		!validVisibilityIDs(options.Visibility.ClassIDs) ||
@@ -618,6 +621,23 @@ func filterUserListRoles(query sq.SelectBuilder, options store.UserListOptions) 
 			AND (filter_rb.end_at IS NULL OR filter_rb.end_at > ?)
 			AND `+predicate+`
 	)`, append(arguments, predicateArguments...)...)
+}
+
+// filterUserListAccountSecurity keeps role holders and users with or without
+// two-step verification through the predicates the access policy preflight
+// counts with, so the directory and the preflight name the same people.
+func filterUserListAccountSecurity(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
+	if options.RoleHolder {
+		activeAt := model.TimeUTC(options.Visibility.ActiveAt)
+		query = query.Where(roleHolderUserPredicate("users"), activeAt, activeAt)
+	}
+	switch options.MFA {
+	case store.UserMFAEnabled:
+		query = query.Where(activeMFACredentialPredicate("users.id"))
+	case store.UserMFADisabled:
+		query = query.Where("NOT " + activeMFACredentialPredicate("users.id"))
+	}
+	return query
 }
 
 // validUserListActivityFilter reports whether the last-activity filters are
@@ -1339,6 +1359,32 @@ func (s SQLUserStore) UpdateLastLogin(ctx context.Context, input *store.UserLast
 		return fmt.Errorf("update user last login: %w", err)
 	}
 	return requireAffected(result, "user", id.String())
+}
+
+// ListMFAStates reads the active two-step credentials of up to
+// MaximumUserDisplayNames users through the predicate the directory filters
+// on.
+func (s SQLUserStore) ListMFAStates(ctx context.Context, userIDs []model.UserID) ([]store.UserMFAState, error) {
+	if len(userIDs) == 0 {
+		return []store.UserMFAState{}, nil
+	}
+	if len(userIDs) > store.MaximumUserDisplayNames || !validVisibilityIDs(userIDs) {
+		return nil, store.NewErrInvalidInput("user", "mfa_states", nil)
+	}
+	rows := []struct {
+		UserID      string       `db:"user_id"`
+		ActivatedAt sql.NullTime `db:"activated_at"`
+	}{}
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT mc.user_id, mc.activated_at
+		FROM mfa_credentials mc
+		WHERE mc.user_id = ANY(?) AND `+activeMFACredentialCondition, pq.Array(idStrings(userIDs))); err != nil {
+		return nil, fmt.Errorf("list user MFA states: %w", err)
+	}
+	states := make([]store.UserMFAState, 0, len(rows))
+	for _, row := range rows {
+		states = append(states, store.UserMFAState{UserID: model.UserID(row.UserID), EnabledAt: OptionalTimeFromNullTime(row.ActivatedAt)})
+	}
+	return states, nil
 }
 
 // ListDisplayNames reads the presentable name of each given unarchived user.

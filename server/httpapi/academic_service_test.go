@@ -638,6 +638,15 @@ func (s *academicAffiliationRecords) Create(_ context.Context, input *store.Affi
 // it names the members of a page from the same Users.
 type academicUserRecords struct {
 	*identityUsers
+	// memberships answers ListMemberships, which records each read in
+	// membershipReads.
+	memberships     []store.UserMembership
+	membershipReads []store.UserMembershipListOptions
+}
+
+func (s *academicUserRecords) ListMemberships(_ context.Context, options store.UserMembershipListOptions) ([]store.UserMembership, error) {
+	s.membershipReads = append(s.membershipReads, options)
+	return s.memberships[:min(len(s.memberships), options.Limit)], nil
 }
 
 func (s *academicUserRecords) add(users ...*model.User) {

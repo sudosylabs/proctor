@@ -270,6 +270,14 @@ func (authenticationUserStore) ListIdentities(context.Context, []model.UserID) (
 	return nil, errors.New("unused")
 }
 
+func (authenticationUserStore) ListMFAStates(context.Context, []model.UserID) ([]store.UserMFAState, error) {
+	return nil, errors.New("unused")
+}
+
+func (authenticationUserStore) ListMemberships(context.Context, store.UserMembershipListOptions) ([]store.UserMembership, error) {
+	return nil, errors.New("unused")
+}
+
 func (authenticationUserStore) ListDirectorySummaries(context.Context, store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
 	return nil, errors.New("unused")
 }

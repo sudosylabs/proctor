@@ -571,6 +571,8 @@ components:
             `profile_picture_kind` for that.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
+        mfa:
+          $ref: '#/components/schemas/UserMFAResponse'
     ProfilePictureKind:
       type: string
       enum:
@@ -914,8 +916,8 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        One row of an import: where it sits, what it does and how it ended. It never repeats the email address or
-        names the row holds.
+        One row of an import: where it sits, what it does, how it ended and who it is about. It never repeats the
+        email address the row holds: `person` shows only a masked form of it.
       required:
         - row
         - reference
@@ -988,6 +990,26 @@ components:
         resource_id:
           $ref: '#/components/schemas/ID'
           description: The ID of the record the row created or changed, when the operation reports one.
+        person:
+          $ref: '#/components/schemas/OnboardingImportPerson'
+        user:
+          $ref: '#/components/schemas/PersonRef'
+          description: The account the row was matched to. Omitted until the row is matched to one.
+    OnboardingImportPerson:
+      type: object
+      additionalProperties: false
+      description: >-
+        The person as the file named them, read from the row's own values. Omitted when the row holds no name or
+        address, as for a student progression.
+      properties:
+        display_name:
+          type: string
+          description: The file's display name, or its first and last names. Omitted when the file gave none.
+        email_masked:
+          type: string
+          description: >-
+            The file's email address masked the way mail deliveries mask a recipient, such as `a***@example.edu`.
+            Omitted when the row holds no address.
     OnboardingImportResponse:
       type: object
       additionalProperties: false
@@ -1173,6 +1195,9 @@ components:
           description: >-
             Base name of the uploaded file as the uploader gave it, omitted when none was given and for student
             progressions.
+        created_by:
+          $ref: '#/components/schemas/PersonRef'
+          description: Who uploaded the import or started the student progression.
     ExternalAuthenticationProviderResponse:
       type: object
       additionalProperties: false

@@ -39,6 +39,12 @@ func (s *Service) RunInvitationBatch(
 		!invitationBatchScopeMatchesOperation(command.Operation, command.ScopeType) {
 		return InvitationBatchResult{}, apperror.New("request.invalid")
 	}
+	if command.ExpiresInDays != nil {
+		issuing := command.Operation != InvitationBatchResend && command.Operation != InvitationBatchRevoke
+		if _, lifetimeErr := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime); lifetimeErr != nil || !issuing {
+			return InvitationBatchResult{}, apperror.Invalid("request.invalid", "expires_in_days")
+		}
+	}
 
 	resource, err := s.invitationBatchAuthorizationResource(ctx, command.ScopeType, command.ScopeID)
 	if err != nil {

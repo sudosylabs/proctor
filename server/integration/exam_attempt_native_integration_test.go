@@ -68,7 +68,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	const password = "correct horse battery staple"
 
 	// An institution, a Class with one enrolled candidate, and an Exam
-	// Manager allowed to author, publish, schedule and manage Sittings.
+	// Manager allowed to author, publish, schedule and manage Sittings and view submissions.
 	bootstrap, err := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "native-flow", InstitutionDisplayName: "Native Flow University",
 		AdministratorUsername: "native-flow-administrator", AdministratorEmail: "native-flow-administrator@example.edu",
@@ -128,7 +128,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 		Permissions: []string{
 			string(model.ActionExamCreate), string(model.ActionExamView), string(model.ActionExamManage),
 			string(model.ActionExamPublish), string(model.ActionExamSittingCreate),
-			string(model.ActionExamSittingView), string(model.ActionExamSittingManage),
+			string(model.ActionExamSittingView), string(model.ActionExamSittingManage), string(model.ActionSubmissionView),
 		},
 	})
 	require.NoError(t, err)

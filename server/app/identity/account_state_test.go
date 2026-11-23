@@ -327,8 +327,12 @@ func TestAccountEnablePublishesNoRevocation(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	user := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3, Username: "student", Email: "student@example.edu", DisabledAt: model.OptionalTimeFromMillis(100), Locale: "en", Timezone: "UTC", DefaultProfilePictureSeed: accountStateTestSeed}
+	user.DisabledByUserID = model.NewUserID()
+	user.DisabledReason = "Leave of absence"
 	updated := *user
 	updated.DisabledAt = model.OptionalTime{}
+	updated.DisabledByUserID = ""
+	updated.DisabledReason = ""
 	updated.Revision++
 	persistence := &accountStateStoreFake{events: &events, user: user, result: &store.UserDisabledStateResult{User: &updated, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}}}
 	fixture := newAccountStateTest(t, &events, persistence, "", nil)
@@ -336,6 +340,10 @@ func TestAccountEnablePublishesNoRevocation(t *testing.T) {
 	result, err := fixture.service.SetUserEnabled(context.Background(), fixture.inv, SetUserEnabledCommand{ID: user.ID, Enabled: true})
 	require.NoError(t, err)
 	require.False(t, result.DisabledAt.Valid, "result/input = %#v / %#v", result, persistence.input)
+	require.Empty(t, result.DisabledByUserID)
+	require.Empty(t, result.DisabledReason)
+	require.NotEmpty(t, user.DisabledByUserID, "preparing the notice does not mutate the stored snapshot")
+	require.Equal(t, "Leave of absence", user.DisabledReason)
 	require.False(t, persistence.input.Disabled, "result/input = %#v / %#v", result, persistence.input)
 	require.Equal(t, 1, fixture.renders.Count())
 	require.Equal(t, model.MailTemplateIdentityAccountEnabled, persistence.input.Delivery.TemplateKey)

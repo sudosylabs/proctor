@@ -147,8 +147,11 @@ func (s *Service) setUserEnabledFromCurrent(
 	recipient := *current
 	// The store, not this snapshot, decides whether the change is a no-op, so
 	// keep the recipient mail-eligible in case a concurrent re-enable turns a
-	// stale no-op into a real change.
+	// stale no-op into a real change. The recipient copy has no disable
+	// metadata, just like the enabled account it represents.
 	recipient.DisabledAt = model.OptionalTime{}
+	recipient.DisabledByUserID = ""
+	recipient.DisabledReason = ""
 	prepared := &store.PreparedMail{}
 	if !batch.RetainedOutcome {
 		prepared, err = s.mail.PrepareAccountStateChanged(mail.NoticePreparation{Recipient: &recipient, At: now}, command.Enabled)

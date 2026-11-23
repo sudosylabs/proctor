@@ -52,6 +52,7 @@ InvitationStore.ReplayAdministration                       always
 # Rejects a nil command as invalid input; with one, the outcome is durable.
 InvitationStore.RecordBatchDuplicate                       always
 
+ExamAuthoringStore.FindCopy                               always
 ExamAuthoringStore.Create                                  command
 ExamAuthoringStore.CommitCopy                              command
 ExamAuthoringStore.UpdateDraftText                         command
@@ -199,6 +200,7 @@ RoleStore.GetByIDs                                         always
 RoleStore.List                                             always
 
 RoleBindingStore.Get                                       always
+RoleBindingStore.ListExpiries                              always
 RoleBindingStore.ListByUser                                always
 RoleBindingStore.ListVisibleByUser                         always
 RoleBindingStore.ListVisibleSummariesByUsers               always
@@ -251,3 +253,6 @@ AssistantTranscriptStore.Decision always
 AssistantProfileStore.Usage always
 
 ExamAttemptStore.ListCandidateStarterWorkspace always
+
+AuditExportStore.FindCreation                             always
+AuditExportStore.TopologyRevision                         always

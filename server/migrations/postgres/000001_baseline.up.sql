@@ -1475,6 +1475,8 @@ CREATE TABLE exam_sittings (
     canceled_at timestamptz,
     reason_code varchar(32),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
+    -- Join-window changes do not change the schedule announced in mail.
+    mail_schedule_revision bigint NOT NULL DEFAULT 1 CHECK (mail_schedule_revision BETWEEN 1 AND revision),
     mail_reconciliation_actor_user_id varchar(26) REFERENCES users(id),
     mail_disabled_suppressed_revision bigint,
     mail_disabled_suppressed_audience_revision bigint,
@@ -1491,7 +1493,7 @@ CREATE TABLE exam_sittings (
     CONSTRAINT exam_sittings_mail_disabled_suppressed_revision_check CHECK (
         (mail_disabled_suppressed_revision IS NULL AND mail_disabled_suppressed_audience_revision IS NULL AND
             mail_disabled_suppressed_eligibility_revision IS NULL) OR
-        (mail_disabled_suppressed_revision BETWEEN 1 AND revision AND mail_disabled_suppressed_audience_revision >= 0 AND
+        (mail_disabled_suppressed_revision BETWEEN 1 AND mail_schedule_revision AND mail_disabled_suppressed_audience_revision >= 0 AND
             mail_disabled_suppressed_eligibility_revision >= 0)
     ),
     CONSTRAINT exam_sittings_timestamps_check CHECK (
@@ -1755,7 +1757,7 @@ CREATE TABLE role_bindings (
     -- inviter, who is the importer for an imported invitation; the bootstrap
     -- row has no person behind it.
     granted_by_user_id varchar(26) REFERENCES users(id),
-    granted_via varchar(16) NOT NULL CHECK (granted_via IN ('manual', 'invitation', 'bootstrap')),
+    granted_via varchar(16) NOT NULL CHECK (granted_via IN ('manual', 'invitation', 'import', 'bootstrap')),
     CONSTRAINT role_bindings_granted_by_check CHECK ((granted_via = 'bootstrap') = (granted_by_user_id IS NULL)),
     CONSTRAINT role_bindings_start_at_end_at_check CHECK (end_at IS NULL OR end_at > start_at),
     CONSTRAINT role_bindings_lifecycle_check CHECK (updated_at >= created_at)
@@ -1777,6 +1779,9 @@ CREATE INDEX role_bindings_granted_by_user_id_idx
 CREATE INDEX role_bindings_user_id_start_at_end_at_idx
     ON role_bindings (user_id, start_at, end_at)
     WHERE archived_at IS NULL;
+
+CREATE INDEX role_bindings_expiry_idx ON role_bindings (end_at, id)
+    WHERE archived_at IS NULL AND end_at IS NOT NULL;
 
 CREATE INDEX role_bindings_origin_invitation_id_idx
     ON role_bindings (origin_invitation_id)
@@ -5258,6 +5263,7 @@ CREATE TABLE retention_holds (
     created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
     -- When the hold is due for review. It never releases the hold.
     until timestamptz CHECK (until IS NULL OR until > created_at),
+    due_notified_at timestamptz CHECK (due_notified_at IS NULL OR (until IS NOT NULL AND due_notified_at >= until)),
     reason_code varchar(64) NOT NULL CHECK (reason_code IN ('institution_request','integrity_review','records_review','review_not_required','case_closed','mistake','other')),
     private_reason text NOT NULL CHECK (private_reason = btrim(private_reason) AND char_length(private_reason) BETWEEN 1 AND 1000 AND octet_length(private_reason) <= 4000),
     creation_audit_event_id varchar(26) NOT NULL REFERENCES audit_events(id),
@@ -5279,6 +5285,8 @@ CREATE TABLE retention_holds (
 CREATE INDEX retention_holds_exam_id_id_idx ON retention_holds (exam_id, id);
 -- The Institution-wide hold list pages by ID, mostly over unreleased holds.
 CREATE INDEX retention_holds_unreleased_id_idx ON retention_holds (id) WHERE released_at IS NULL;
+CREATE INDEX retention_holds_due_notification_idx ON retention_holds (until, id)
+    WHERE until IS NOT NULL AND released_at IS NULL AND due_notified_at IS NULL;
 CREATE INDEX retention_holds_active_scope_idx ON retention_holds (exam_id, exam_sitting_id, submission_id) WHERE released_at IS NULL;
 
 -- Configuration and authorization of recurring retirement are independent.
@@ -5457,6 +5465,39 @@ CREATE TABLE exam_export_artifacts (
 CREATE INDEX exam_export_artifacts_cleanup_idx ON exam_export_artifacts (reconcile_after, export_id, attempt_id);
 ALTER TABLE retention_source_protections ADD CONSTRAINT retention_source_protections_export_fkey FOREIGN KEY (export_id) REFERENCES exam_exports(id);
 
+CREATE TABLE academic_topology_revision (
+    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+    revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0)
+);
+INSERT INTO academic_topology_revision DEFAULT VALUES;
+
+-- Subtree-scoped audit files are invalid after an ownership move. Taking
+-- this fence in the same transaction as the move lets export creation and
+-- publication see either topology, never an unfenced mixture.
+CREATE FUNCTION bump_academic_topology_revision() RETURNS trigger AS $$
+BEGIN
+    UPDATE academic_topology_revision SET revision = revision + 1 WHERE singleton;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER academic_units_audit_topology_update
+    AFTER UPDATE OF parent_id ON academic_units
+    FOR EACH ROW WHEN (OLD.parent_id IS DISTINCT FROM NEW.parent_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+CREATE TRIGGER programmes_audit_topology_update
+    AFTER UPDATE OF academic_unit_id ON programmes
+    FOR EACH ROW WHEN (OLD.academic_unit_id IS DISTINCT FROM NEW.academic_unit_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+CREATE TRIGGER programme_levels_audit_topology_update
+    AFTER UPDATE OF programme_id ON programme_levels
+    FOR EACH ROW WHEN (OLD.programme_id IS DISTINCT FROM NEW.programme_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+CREATE TRIGGER classes_audit_topology_update
+    AFTER UPDATE OF programme_level_id ON classes
+    FOR EACH ROW WHEN (OLD.programme_level_id IS DISTINCT FROM NEW.programme_level_id)
+    EXECUTE FUNCTION bump_academic_topology_revision();
+
 -- Temporary files of audit events. Visibility is the requester's audit
 -- visibility, frozen at the request and checked again on every read. The
 -- query holds the frozen filters and exists only while the file is pending.
@@ -5473,6 +5514,7 @@ CREATE TABLE audit_exports (
     job_id varchar(26) NOT NULL UNIQUE,
     visibility jsonb NOT NULL CHECK (octet_length(visibility::text) <= 65536),
     query jsonb,
+    topology_revision bigint CHECK (topology_revision IS NULL OR (redacted AND topology_revision > 0)),
     archive_attempt_id varchar(26),
     archive_size_bytes bigint,
     archive_sha256 char(64),

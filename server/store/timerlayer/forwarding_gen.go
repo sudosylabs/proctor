@@ -1363,6 +1363,12 @@ func (s *timedExamAuthoringStore) ReserveCopy(arg0 context.Context, arg1 *store.
 	})
 }
 
+func (s *timedExamAuthoringStore) FindCopy(arg0 context.Context, arg1 *store.CommandIdempotency) (*store.ExamAuthoringSnapshot, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodFindCopy), func(callCtx context.Context) (*store.ExamAuthoringSnapshot, error) {
+		return s.next.FindCopy(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAuthoringStore) CommitCopy(arg0 context.Context, arg1 *store.ExamCopyCommit, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodCommitCopy), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
 		return s.next.CommitCopy(callCtx, arg1, arg2)
@@ -1615,9 +1621,9 @@ func (s *timedExamSittingStore) ListCandidateBoardTargets(arg0 context.Context, 
 	})
 }
 
-func (s *timedExamSittingStore) CountCandidates(arg0 context.Context, arg1 []model.ExamSittingID) (map[model.ExamSittingID]int, error) {
+func (s *timedExamSittingStore) CountCandidates(arg0 context.Context, arg1 []model.ExamSittingID, arg2 model.UserID) (map[model.ExamSittingID]int, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSitting, methodCountCandidates), func(callCtx context.Context) (map[model.ExamSittingID]int, error) {
-		return s.next.CountCandidates(callCtx, arg1)
+		return s.next.CountCandidates(callCtx, arg1, arg2)
 	})
 }
 
@@ -2275,6 +2281,18 @@ func (s *timedExamIntegrityReviewStore) Release(arg0 context.Context, arg1 *stor
 	})
 }
 
+func (s *timedExamIntegrityReviewStore) ClaimResultReleaseBatch(arg0 context.Context, arg1 *store.ExamResultReleaseBatchStart, arg2 *store.CommandIdempotency) (*store.ExamResultReleaseBatchClaim, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodClaimResultReleaseBatch), func(callCtx context.Context) (*store.ExamResultReleaseBatchClaim, error) {
+		return s.next.ClaimResultReleaseBatch(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) CompleteResultReleaseBatch(arg0 context.Context, arg1 *store.ExamResultReleaseBatchCompletion, arg2 *store.CommandIdempotency) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodCompleteResultReleaseBatch), func(callCtx context.Context) error {
+		return s.next.CompleteResultReleaseBatch(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamIntegrityReviewStore) Reopen(arg0 context.Context, arg1 *store.ExamIntegrityReviewReopen, arg2 *store.CommandIdempotency) (*store.ExamIntegrityReviewMutationResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodReopen), func(callCtx context.Context) (*store.ExamIntegrityReviewMutationResult, error) {
 		return s.next.Reopen(callCtx, arg1, arg2)
@@ -2434,6 +2452,18 @@ func (s *timedExamExportStore) CompletePurge(arg0 context.Context, arg1 store.Ex
 func (s *timedExamExportStore) ListBuildTitles(arg0 context.Context, arg1 []model.JobID) ([]store.ExamExportBuildTitle, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamExport, methodListBuildTitles), func(callCtx context.Context) ([]store.ExamExportBuildTitle, error) {
 		return s.next.ListBuildTitles(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) FindCreation(arg0 context.Context, arg1 *store.CommandIdempotency) (model.AuditExportID, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAuditExport, methodFindCreation), func(callCtx context.Context) (model.AuditExportID, error) {
+		return s.next.FindCreation(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditExportStore) TopologyRevision(arg0 context.Context) (int64, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAuditExport, methodTopologyRevision), func(callCtx context.Context) (int64, error) {
+		return s.next.TopologyRevision(callCtx)
 	})
 }
 
@@ -3967,9 +3997,9 @@ func (s *timedClassMemberStore) CountCurrentByClasses(ctx context.Context, class
 	})
 }
 
-func (s *timedClassMemberStore) ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID) ([]store.ClassMemberTransfer, error) {
+func (s *timedClassMemberStore) ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID, visibility store.ClassVisibilityScope) ([]store.ClassMemberTransfer, error) {
 	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateClassMember, methodListTransfers), func(callCtx context.Context) ([]store.ClassMemberTransfer, error) {
-		return s.next.ListTransfers(callCtx, memberIDs)
+		return s.next.ListTransfers(callCtx, memberIDs, visibility)
 	})
 }
 
@@ -4180,6 +4210,12 @@ func (s *timedRoleStore) SeedBuiltIn(arg0 context.Context, arg1 *model.Role) (*m
 func (s *timedRoleStore) SeedUpdate(arg0 context.Context, arg1 *model.Role) (*model.Role, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRole, methodSeedUpdate), func(callCtx context.Context) (*model.Role, error) {
 		return s.next.SeedUpdate(callCtx, arg1)
+	})
+}
+
+func (s *timedRoleBindingStore) ListExpiries(arg0 context.Context, arg1 store.RoleBindingExpiryCursor, arg2 int) (store.RoleBindingExpiryPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListExpiries), func(callCtx context.Context) (store.RoleBindingExpiryPage, error) {
+		return s.next.ListExpiries(callCtx, arg1, arg2)
 	})
 }
 
@@ -4696,6 +4732,12 @@ func (s *timedRetentionStore) SummarizeRecordsByExam(arg0 context.Context, arg1 
 func (s *timedRetentionStore) ListHolds(arg0 context.Context, arg1 store.RetentionHoldListOptions) (*store.RetentionHoldPage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetention, methodListHolds), func(callCtx context.Context) (*store.RetentionHoldPage, error) {
 		return s.next.ListHolds(callCtx, arg1)
+	})
+}
+
+func (s *timedRetentionStore) ClaimDueHoldNotifications(arg0 context.Context) ([]store.RetentionHoldDue, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetention, methodClaimDueHoldNotifications), func(callCtx context.Context) ([]store.RetentionHoldDue, error) {
+		return s.next.ClaimDueHoldNotifications(callCtx)
 	})
 }
 

@@ -1222,6 +1222,12 @@ func (s *examAuthoringStore) Create(ctx context.Context, arg1 *store.ExamAuthori
 	})
 }
 
+func (s *examAuthoringStore) FindCopy(ctx context.Context, command *store.CommandIdempotency) (*store.ExamAuthoringSnapshot, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamAuthoringSnapshot, error) {
+		return s.ExamAuthoringStore.FindCopy(ctx, command)
+	})
+}
+
 func (s *examAuthoringStore) CommitCopy(ctx context.Context, arg1 *store.ExamCopyCommit, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.CommitCopy(ctx, arg1, command)
@@ -1438,9 +1444,9 @@ func (s *examSittingStore) ListCandidateBoardTargets(ctx context.Context, arg1 m
 	})
 }
 
-func (s *examSittingStore) CountCandidates(ctx context.Context, arg1 []model.ExamSittingID) (map[model.ExamSittingID]int, error) {
+func (s *examSittingStore) CountCandidates(ctx context.Context, arg1 []model.ExamSittingID, arg2 model.UserID) (map[model.ExamSittingID]int, error) {
 	return retryCall1(ctx, s.layer, func() (map[model.ExamSittingID]int, error) {
-		return s.ExamSittingStore.CountCandidates(ctx, arg1)
+		return s.ExamSittingStore.CountCandidates(ctx, arg1, arg2)
 	})
 }
 
@@ -1627,6 +1633,18 @@ func (s *examAttemptWorkspaceStore) ApplyBatch(ctx context.Context, arg1 *store.
 	}
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceBatchResult, error) {
 		return s.ExamAttemptWorkspaceStore.ApplyBatch(ctx, arg1, command)
+	})
+}
+
+func (s *auditExportStore) FindCreation(ctx context.Context, command *store.CommandIdempotency) (model.AuditExportID, error) {
+	return retryCall1(ctx, s.layer, func() (model.AuditExportID, error) {
+		return s.AuditExportStore.FindCreation(ctx, command)
+	})
+}
+
+func (s *auditExportStore) TopologyRevision(ctx context.Context) (int64, error) {
+	return retryCall1(ctx, s.layer, func() (int64, error) {
+		return s.AuditExportStore.TopologyRevision(ctx)
 	})
 }
 
@@ -2095,6 +2113,12 @@ func (s *roleStore) GetByIDs(ctx context.Context, arg1 []model.RoleID) ([]*model
 func (s *roleStore) List(ctx context.Context) ([]*model.Role, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Role, error) {
 		return s.RoleStore.List(ctx)
+	})
+}
+
+func (s *roleBindingStore) ListExpiries(ctx context.Context, arg1 store.RoleBindingExpiryCursor, arg2 int) (store.RoleBindingExpiryPage, error) {
+	return retryCall1(ctx, s.layer, func() (store.RoleBindingExpiryPage, error) {
+		return s.RoleBindingStore.ListExpiries(ctx, arg1, arg2)
 	})
 }
 

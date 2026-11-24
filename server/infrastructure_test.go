@@ -357,3 +357,22 @@ func (s savedPluginSettings) ChangeCount(context.Context) (int64, error) {
 func (layerOrderStore) AssistantProfile() store.AssistantProfileStore { return nil }
 
 func (layerOrderStore) AssistantTranscript() store.AssistantTranscriptStore { return nil }
+
+type listeningStore struct{ store.Store }
+
+func (listeningStore) ListenJobs(context.Context, func(...model.JobType)) error { return nil }
+
+// TestProvidedStoreThatListensWakesTheJobEngine pins that a provided store,
+// not only one the node opens itself, carries job notifications; without
+// them the engine waits for its backstop.
+func TestProvidedStoreThatListensWakesTheJobEngine(t *testing.T) {
+	t.Parallel()
+
+	listening := &ownedInfrastructure{resources: platform.OwnedResources{Persistence: listeningStore{}}}
+	require.NoError(t, listening.acquirePersistence(context.Background(), config.Config{}, schemaPolicy(0)))
+	require.Equal(t, listeningStore{}, listening.jobNotifications)
+
+	plain := &ownedInfrastructure{resources: platform.OwnedResources{Persistence: releaseStore{}}}
+	require.NoError(t, plain.acquirePersistence(context.Background(), config.Config{}, schemaPolicy(0)))
+	require.Nil(t, plain.jobNotifications)
+}

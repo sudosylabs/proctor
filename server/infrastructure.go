@@ -90,8 +90,8 @@ func prepareSchema(ctx context.Context, persistence *sqlstore.SQLStore, policy s
 type ownedInfrastructure struct {
 	resources platform.OwnedResources
 	migration *sqlstore.MigrationResult
-	// jobNotifications is the raw SQL store's listener, kept before the
-	// retry, timer and cache layers wrap the store.
+	// jobNotifications is the store's listener, kept before the retry,
+	// timer and cache layers wrap the store; nil when it has none.
 	jobNotifications job.Notifications
 	metrics          *metrics.Module
 	tracing          *tracing.Module
@@ -231,9 +231,11 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 			return errors.Join(err, persistence.Close())
 		}
 		i.migration = migration
-		i.jobNotifications = persistence
 		i.resources.Persistence = persistence
 	}
+	// A provided store listens too when it can; one that can't leaves the
+	// engine to its backstop.
+	i.jobNotifications, _ = i.resources.Persistence.(job.Notifications)
 	return checkAcquisitionContext(ctx, "acquire persistence")
 }
 

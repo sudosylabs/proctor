@@ -385,6 +385,37 @@ func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimReque
 	return outcome.claim, nil
 }
 
+type jobNextDueRow struct {
+	Type        string    `db:"type"`
+	AvailableAt time.Time `db:"available_at"`
+}
+
+// NextDue reads each type's earliest claimable Job in one statement over the
+// type-first claim index, so a dispatcher can sleep until work is due.
+func (s SQLJobStore) NextDue(ctx context.Context, types []model.JobType) (map[model.JobType]time.Time, error) {
+	if len(types) == 0 {
+		return map[model.JobType]time.Time{}, nil
+	}
+	names := make([]string, len(types))
+	for index, jobType := range types {
+		names[index] = string(jobType)
+	}
+	var rows []jobNextDueRow
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT type, min(available_at) AS available_at
+		FROM jobs
+		WHERE status = 'queued'
+			AND attempt_count < maximum_attempts
+			AND type = ANY(?)
+		GROUP BY type`, pq.Array(names)); err != nil {
+		return nil, fmt.Errorf("read next due jobs: %w", err)
+	}
+	due := make(map[model.JobType]time.Time, len(rows))
+	for _, row := range rows {
+		due[model.JobType(row.Type)] = row.AvailableAt.UTC()
+	}
+	return due, nil
+}
+
 // claimTypeCondition matches the claimed types. A single type is an equality,
 // which lets the planner read jobs_claim_type_idx in claim order; an array
 // would make it merge the due Jobs of every type instead.

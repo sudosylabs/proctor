@@ -50,7 +50,7 @@ func newJobFixture(t *testing.T, operator model.UserID, record *model.Job, actio
 	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
 	engine, err := job.New(job.Dependencies{
 		Store: fixture.jobs, Descriptors: []job.Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: logger, Policy: job.Policy{PollInterval: time.Hour},
+		Diagnostics: logger, Policy: job.Policy{BackstopInterval: time.Hour},
 	})
 	require.NoError(t, err)
 	fixture.service, err = job.NewOperations(job.OperationsDependencies{

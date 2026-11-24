@@ -122,7 +122,7 @@ func TestEngineOwnsPeriodicTaskLifecycleAndCopiesDefinitions(t *testing.T) {
 		descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 		engine, err := New(Dependencies{
 			Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-			Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour}, PeriodicTasks: tasks,
+			Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Hour}, PeriodicTasks: tasks,
 		})
 		require.NoError(t, err)
 		tasks[0] = PeriodicTask{Name: "replacement", Interval: time.Hour, Runner: replacement}

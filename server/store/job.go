@@ -140,6 +140,10 @@ type JobStore interface {
 	// requeues their Jobs with growing backoff, or fails a Job whose attempts
 	// are exhausted. One node sweeps at a time; the others recover nothing.
 	RecoverLostAttempts(ctx context.Context, limit int) (int, error)
+	// NextDue reports, for each listed type with a claimable queued Job, the
+	// earliest instant one becomes available. A type with nothing queued is
+	// absent.
+	NextDue(ctx context.Context, types []model.JobType) (map[model.JobType]time.Time, error)
 	// Heartbeat extends only the live attempt holding the claim token.
 	Heartbeat(context.Context, *JobHeartbeat) (*model.JobAttempt, error)
 	// Checkpoint saves progress only for the live token before its lease

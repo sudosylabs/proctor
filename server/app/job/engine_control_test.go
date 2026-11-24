@@ -27,7 +27,7 @@ func TestEnginePreparesAndAppliesDescriptorGovernedControls(t *testing.T) {
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	descriptor.Cancelable = true
 	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Second}})
 	require.NoError(t, err)
 	target, err := engine.PrepareCancellation(context.Background(), queued.ID)
 	require.NoError(t, err, "PrepareCancellation()")
@@ -64,7 +64,7 @@ func TestEngineRejectsInvalidQueriesAndUnsupportedControls(t *testing.T) {
 	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "unsupported", at, at, 8)
 	require.NoError(t, err)
 	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Second}})
 	require.NoError(t, err)
 	_, err = engine.List(context.Background(), ListQuery{Limit: 201})
 	require.ErrorIs(t, err, ErrQueryInvalid)

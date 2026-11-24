@@ -50,7 +50,7 @@ func TestEngineTracesEachExecutionWithTheHandlerInsideTheSpan(t *testing.T) {
 	tracer := &jobTracerFake{}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Tracer: tracer, Policy: Policy{PollInterval: time.Millisecond},
+		Diagnostics: newDiscardLogger(t), Tracer: tracer, Policy: Policy{BackstopInterval: time.Millisecond},
 	})
 	require.NoError(t, err)
 	require.NoError(t, engine.Start(context.Background()))

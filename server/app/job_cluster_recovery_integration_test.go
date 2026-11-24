@@ -81,7 +81,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			descriptor := clusteredRecoveryJobDescriptor(handler)
 			nodeA, err := job.New(job.Dependencies{
 				Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor}, NodeID: "node-a",
-				Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond},
+				Diagnostics: newDiscardLogger(t), Policy: job.Policy{BackstopInterval: 5 * time.Millisecond},
 			})
 			require.NoError(t, err)
 			err = nodeA.Start(context.Background())
@@ -118,7 +118,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			time.Sleep(3 * descriptor.LeaseDuration)
 			nodeB, err := job.New(job.Dependencies{
 				Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor}, NodeID: "node-b",
-				Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond},
+				Diagnostics: newDiscardLogger(t), Policy: job.Policy{BackstopInterval: 5 * time.Millisecond},
 			})
 			require.NoError(t, err)
 			err = nodeB.Start(context.Background())

@@ -115,7 +115,7 @@ func newJobOperationsFixture(t *testing.T, events *[]string, persistence store.J
 	}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: descriptors, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour},
+		Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Hour},
 	})
 	require.NoError(t, err)
 	return jobOperationsFixture{

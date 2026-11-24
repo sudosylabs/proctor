@@ -80,7 +80,7 @@ func newJobRuntime(
 		Diagnostics:   deps.RecoveryDiagnostics,
 		Recorder:      deps.JobRecorder,
 		Tracer:        deps.JobTracer,
-		Policy:        job.Policy{PollInterval: 500 * time.Millisecond},
+		Policy:        job.Policy{BackstopInterval: 30 * time.Second},
 		Recurrences:   definitions.recurrences,
 		PeriodicTasks: definitions.periodicTasks,
 	})

@@ -53,6 +53,16 @@ func (*jobRunnerStoreFake) RecoverLostAttempts(context.Context, int) (int, error
 	return 0, nil
 }
 
+// NextDue reports every type as due now, so the dispatcher signals its
+// workers at every backstop, as the polling engine once claimed.
+func (*jobRunnerStoreFake) NextDue(_ context.Context, types []model.JobType) (map[model.JobType]time.Time, error) {
+	due := make(map[model.JobType]time.Time, len(types))
+	for _, jobType := range types {
+		due[jobType] = time.Now()
+	}
+	return due, nil
+}
+
 func (s *jobRunnerStoreFake) ClaimNext(context.Context, *store.JobClaimRequest) (*store.JobClaim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -254,5 +264,5 @@ func newTestEngine(persistence store.JobStore, registry *Registry, nodeID string
 	for _, jobType := range registry.types {
 		descriptors = append(descriptors, registry.descriptors[jobType])
 	}
-	return New(Dependencies{Store: persistence, Descriptors: descriptors, NodeID: nodeID, Diagnostics: diagnostics, Policy: Policy{PollInterval: poll}})
+	return New(Dependencies{Store: persistence, Descriptors: descriptors, NodeID: nodeID, Diagnostics: diagnostics, Policy: Policy{BackstopInterval: poll}})
 }

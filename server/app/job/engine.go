@@ -24,7 +24,10 @@ import (
 type Engine struct {
 	deps     Dependencies
 	registry *Registry
-	wake     chan struct{}
+	dispatch *dispatcher
+	// claims bounds how many claim transactions run at once, so a wave of
+	// work can never take the whole pool.
+	claims chan struct{}
 	// changes hears committed transitions once attached; progress coalesces
 	// the checkpoint announcements.
 	changes  ChangeListener
@@ -55,13 +58,16 @@ type Dependencies struct {
 	PeriodicTasks []PeriodicTask
 }
 
-// Policy is the engine's timing. PollInterval is how long a claim loop that
-// found no work waits before asking the store again. ProposalRetryDelay is
-// how long a failed recurrence proposal waits before it is retried; New sets
-// one minute when it is not positive.
+// Policy is the engine's timing. BackstopInterval bounds how long a Job can
+// wait when every wake about it was lost; workers otherwise claim only when
+// woken or when the earliest due Job comes due. MaximumConcurrentClaims bounds
+// the claim transactions running at once; New sets 4 when it is not
+// positive. ProposalRetryDelay is how long a failed recurrence proposal waits
+// before it is retried; New sets one minute when it is not positive.
 type Policy struct {
-	PollInterval       time.Duration
-	ProposalRetryDelay time.Duration
+	BackstopInterval        time.Duration
+	MaximumConcurrentClaims int
+	ProposalRetryDelay      time.Duration
 }
 
 // New validates deps and returns an idle engine; Start begins claiming work.
@@ -70,7 +76,7 @@ func New(deps Dependencies) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	if deps.Store == nil || deps.NodeID == "" || deps.Diagnostics == nil || deps.Policy.PollInterval <= 0 {
+	if deps.Store == nil || deps.NodeID == "" || deps.Diagnostics == nil || deps.Policy.BackstopInterval <= 0 {
 		return nil, errors.New("invalid job engine dependencies")
 	}
 	recurrences, err := cloneRecurrences(deps.Recurrences)
@@ -84,6 +90,9 @@ func New(deps Dependencies) (*Engine, error) {
 	if deps.Policy.ProposalRetryDelay <= 0 {
 		deps.Policy.ProposalRetryDelay = time.Minute
 	}
+	if deps.Policy.MaximumConcurrentClaims <= 0 {
+		deps.Policy.MaximumConcurrentClaims = 4
+	}
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
@@ -91,7 +100,8 @@ func New(deps Dependencies) (*Engine, error) {
 	return &Engine{
 		deps:     deps,
 		registry: registry,
-		wake:     make(chan struct{}, 1),
+		dispatch: newDispatcher(deps.Store, registry, deps.Policy.BackstopInterval, deps.Diagnostics, deps.Recorder, deps.Now),
+		claims:   make(chan struct{}, deps.Policy.MaximumConcurrentClaims),
 		progress: newProgressCoalescer(progressWindow, deps.Now),
 	}, nil
 }
@@ -140,9 +150,14 @@ func (r *Engine) Start(ctx context.Context) error {
 
 		for range descriptor.Concurrency {
 			r.wg.Add(1)
-			go r.claimLoop(runCtx, descriptor)
+			go r.claimLoop(runCtx, descriptor, r.dispatch.ready[jobType])
 		}
 	}
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.dispatch.run(runCtx)
+	}()
 
 	for _, recurrence := range r.deps.Recurrences {
 		r.wg.Add(1)
@@ -194,12 +209,17 @@ func (r *Engine) Close(ctx context.Context) error {
 	}
 }
 
-// Wake makes one waiting claim loop look for work now rather than at its next
-// poll. It never blocks, and one pending wake is remembered when no loop is
-// waiting.
+// Wake makes every type's workers look for work now rather than at the next
+// due time or backstop. It never blocks, and wakes before Start are kept.
 func (r *Engine) Wake() {
-	select {
-	case r.wake <- struct{}{}:
-	default:
+	r.dispatch.wake()
+}
+
+// WakeTypes makes the listed types' workers look for work now. Call it after
+// committing work of those types; it never blocks.
+func (r *Engine) WakeTypes(types ...model.JobType) {
+	if len(types) == 0 {
+		return
 	}
+	r.dispatch.wake(types...)
 }

@@ -207,6 +207,9 @@ CREATE TABLE jobs (
 );
 
 CREATE INDEX jobs_claim_idx ON jobs (available_at, created_at, id) WHERE status = 'queued';
+-- Each worker claims one type, so its claim reads only that type's due Jobs:
+-- a backlog of one type never slows another type's claims.
+CREATE INDEX jobs_claim_type_idx ON jobs (type, available_at, created_at, id) WHERE status = 'queued';
 CREATE UNIQUE INDEX jobs_active_type_dedupe_key_idx ON jobs (type, dedupe_key)
     WHERE dedupe_policy = 'active' AND status IN ('queued', 'running', 'cancel_requested');
 CREATE UNIQUE INDEX jobs_permanent_type_dedupe_key_idx ON jobs (type, dedupe_key)
@@ -214,6 +217,24 @@ CREATE UNIQUE INDEX jobs_permanent_type_dedupe_key_idx ON jobs (type, dedupe_key
 -- The administration summary counts recent failures without scanning history.
 CREATE INDEX jobs_failed_updated_at_idx ON jobs (updated_at DESC) WHERE status = 'failed';
 CREATE INDEX jobs_created_at_id_idx ON jobs (created_at DESC, id DESC);
+
+-- A Job that becomes claimable tells every node's dispatcher, by type, once
+-- its transaction commits: an enqueue, a retry and a recovered attempt alike.
+-- PostgreSQL delivers a transaction's identical notifications once, so a
+-- batch of one type wakes each listener once.
+CREATE FUNCTION notify_job_queued() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_notify('proctor_jobs', NEW.type);
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER jobs_notify_queued
+    AFTER INSERT OR UPDATE OF status, available_at ON jobs
+    FOR EACH ROW
+    WHEN (NEW.status = 'queued')
+    EXECUTE FUNCTION notify_job_queued();
 
 -- Permanent occurrence keys deliberately outlive retained Job history. The
 -- referenced Job ID is informational rather than a foreign key so cleanup can

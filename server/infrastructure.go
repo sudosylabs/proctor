@@ -10,7 +10,6 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -28,6 +27,7 @@ import (
 	localvfs "github.com/sudosylabs/proctor/packages/vfs/local"
 	"github.com/sudosylabs/proctor/packages/vfs/s3"
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/cluster/local"
 	"github.com/sudosylabs/proctor/server/cluster/memberlist"
@@ -90,9 +90,12 @@ func prepareSchema(ctx context.Context, persistence *sqlstore.SQLStore, policy s
 type ownedInfrastructure struct {
 	resources platform.OwnedResources
 	migration *sqlstore.MigrationResult
-	metrics   *metrics.Module
-	tracing   *tracing.Module
-	plugins   *pluginhost.Host
+	// jobNotifications is the store's listener, kept before the retry,
+	// timer and cache layers wrap the store; nil when it has none.
+	jobNotifications job.Notifications
+	metrics          *metrics.Module
+	tracing          *tracing.Module
+	plugins          *pluginhost.Host
 	// pluginSettingsCount is the saved-settings change count the plugins
 	// were activated with; the reconciler continues from it.
 	pluginSettingsCount int64
@@ -111,8 +114,11 @@ type constructionCapabilities struct {
 	externalAuthentication *externalauth.Registry
 	nodeID                 string
 	migration              *sqlstore.MigrationResult
-	metrics                *metrics.Module
-	tracing                *tracing.Module
+	// jobNotifications is the raw SQL store's listener, kept before the
+	// retry, timer and cache layers wrap the store.
+	jobNotifications job.Notifications
+	metrics          *metrics.Module
+	tracing          *tracing.Module
 	// plugins, like metrics and tracing, passes to compositionRelease and
 	// then to the Server, which deactivates it.
 	plugins             *pluginhost.Host
@@ -227,13 +233,23 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 		i.migration = migration
 		i.resources.Persistence = persistence
 	}
+	// A provided store listens too when it can; one that can't leaves the
+	// engine to its backstop.
+	i.jobNotifications, _ = i.resources.Persistence.(job.Notifications)
 	return checkAcquisitionContext(ctx, "acquire persistence")
 }
 
 func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Module, *tracing.Module, error) {
-	var databaseStats func() sql.DBStats
-	if source, ok := i.resources.Persistence.(interface{ Stats() sql.DBStats }); ok {
-		databaseStats = source.Stats
+	var databaseStats func() []metrics.DatabasePool
+	if source, ok := i.resources.Persistence.(interface{ PoolStats() []sqlstore.PoolStats }); ok {
+		databaseStats = func() []metrics.DatabasePool {
+			stats := source.PoolStats()
+			pools := make([]metrics.DatabasePool, 0, len(stats))
+			for _, pool := range stats {
+				pools = append(pools, metrics.DatabasePool{Pool: pool.Pool, Stats: pool.Stats, Opened: pool.Opened})
+			}
+			return pools
+		}
 	}
 
 	currentBuild := app.CurrentBuildInfo()
@@ -504,6 +520,7 @@ func (i *ownedInfrastructure) acceptPlatform(
 		filesystem:             resources.VFS,
 		externalAuthentication: resources.ExternalAuthentication,
 		migration:              i.migration,
+		jobNotifications:       i.jobNotifications,
 		metrics:                i.metrics,
 		tracing:                i.tracing,
 		plugins:                i.plugins,

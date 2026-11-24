@@ -60,6 +60,10 @@ type Dependencies struct {
 	MailDeliveryRecorder mail.DeliveryRecorder
 	MailMetricsReader    mail.MetricsReader
 	JobRecorder          job.Recorder
+	// JobNotifications wakes this node's job workers when any node commits
+	// work for them; nil leaves work from other nodes to its due time or the
+	// engine's backstop.
+	JobNotifications job.Notifications
 	// JobTracer, when set, encloses each claimed job execution in a span.
 	JobTracer           job.Tracer
 	OperationalRecorder operational.Recorder

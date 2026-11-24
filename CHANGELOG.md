@@ -154,6 +154,31 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: the job engine no longer polls. One dispatcher per node reads when
+  each job type next has work, and PostgreSQL `LISTEN`/`NOTIFY` wakes every
+  node when a job is queued. A 30-second backstop, with jitter, bounds a lost
+  notification. An idle node now reads the queue about twice a minute instead
+  of claiming about a hundred times a second.
+  - Lost job attempts are recovered by one bounded sweep every 10 seconds,
+    instead of inside every claim, and a claim that finds nothing writes
+    nothing.
+  - Periodic tasks start at a random offset and add jitter, and back off
+    after failures.
+  - Sizing: each node opens up to `MaxOpenConnections + ControlConnections`
+    pooled connections plus one listener connection.
+- Server (**breaking**): database pool defaults change to 40 open and 40 idle
+  connections, a 30-minute lifetime and a 10-minute idle time.
+  `Database.MaxIdleConnections` must now be at least half of
+  `MaxOpenConnections`. A new `Database.ControlConnections` (default `2`) sizes
+  a separate pool that serves only the serving-node lease.
+- Server: new metrics `proctor_database_connections_opened_total` (and a
+  `pool` label on every database family), `proctor_jobs_queued`,
+  `proctor_jobs_dispatcher_wakes_total`,
+  `proctor_jobs_lost_attempts_recovered_total`,
+  `proctor_serving_lease_renewals_total` and
+  `proctor_serving_lease_renew_duration_seconds`. The observability stack adds
+  a "Proctor jobs and database" dashboard and alerts on slow lease renewals and
+  connection churn.
 - Server (**breaking**): Desktop compatibility policy replaces
   `revoked_desktop_build_ids` with `revoked_desktop_builds`. The PUT accepts
   `{build_id, reason}` entries.
@@ -804,6 +829,13 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: PostgreSQL could reach several hundred percent CPU with a single
+  idle node, and the node then stopped itself because its serving lease could
+  not renew. Every job worker polled twice a second in step with the others,
+  each claim swept for lost attempts and rolled back when empty, and bursts
+  above `MaxIdleConnections` made the pool close and reopen tens of
+  connections each time. The lease now has its own pool and renews in one
+  statement with a 2-second statement deadline.
 - Server: a change to a User that no mail reads, such as the default profile
   picture attached just after an account is created, could make a concurrent
   write refuse or drop that User's mail. A Sitting's schedule mail silently

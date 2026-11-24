@@ -1867,6 +1867,24 @@ func (s *userStore) ListVisibleDisplayNames(ctx context.Context, arg1 []model.Us
 	})
 }
 
+func (s *jobStore) RecoverLostAttempts(ctx context.Context, limit int) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) {
+		return s.JobStore.RecoverLostAttempts(ctx, limit)
+	})
+}
+
+func (s *jobStore) NextDue(ctx context.Context, types []model.JobType) (map[model.JobType]time.Time, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.JobType]time.Time, error) {
+		return s.JobStore.NextDue(ctx, types)
+	})
+}
+
+func (s *jobStore) QueueDepth(ctx context.Context, types []model.JobType) (map[model.JobType]store.JobQueueDepth, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.JobType]store.JobQueueDepth, error) {
+		return s.JobStore.QueueDepth(ctx, types)
+	})
+}
+
 func (s *externalIdentityStore) Get(ctx context.Context, arg1 model.ExternalIdentityID) (*model.ExternalIdentity, error) {
 	return retryCall1(ctx, s.layer, func() (*model.ExternalIdentity, error) {
 		return s.ExternalIdentityStore.Get(ctx, arg1)

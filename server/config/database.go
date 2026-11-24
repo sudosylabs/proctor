@@ -19,8 +19,12 @@ type Database struct {
 	MaxIdleConnections    int      `json:"MaxIdleConnections"`
 	ConnectionMaxLifetime Duration `json:"ConnectionMaxLifetime"`
 	ConnectionMaxIdleTime Duration `json:"ConnectionMaxIdleTime"`
-	QueryTimeout          Duration `json:"QueryTimeout"`
-	MigrationTimeout      Duration `json:"MigrationTimeout"`
+	// ControlConnections sizes a second, always-open pool kept for the serving
+	// node lease, so ordinary load can never starve the lease renewal that
+	// keeps this node serving.
+	ControlConnections int      `json:"ControlConnections"`
+	QueryTimeout       Duration `json:"QueryTimeout"`
+	MigrationTimeout   Duration `json:"MigrationTimeout"`
 	// SlowOperationThreshold logs store operations at least this slow, by name
 	// and duration only. Zero disables the log.
 	SlowOperationThreshold Duration `json:"SlowOperationThreshold"`
@@ -39,8 +43,14 @@ func validateDatabase(database Database, add func(string, string)) {
 	if database.MaxOpenConnections < 2 {
 		add("database.max_open_connections", "must be at least 2 for locked migrations")
 	}
-	if database.MaxIdleConnections < 0 || database.MaxIdleConnections > database.MaxOpenConnections {
-		add("database.max_idle_connections", "must be between zero and max_open_connections")
+	// database/sql closes a released connection above the idle limit at
+	// once, so an idle limit well below the open limit reopens connections on
+	// every burst of load: each one a backend start and an authentication.
+	if database.MaxIdleConnections < database.MaxOpenConnections/2 || database.MaxIdleConnections > database.MaxOpenConnections {
+		add("database.max_idle_connections", "must be between half of max_open_connections and max_open_connections")
+	}
+	if database.ControlConnections < 2 || database.ControlConnections > 4 {
+		add("database.control_connections", "must be between 2 and 4")
 	}
 
 	for _, item := range []struct {

@@ -10,7 +10,6 @@ package sqlstore
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -49,7 +48,13 @@ func (s SQLServingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Servi
 		return nil, store.NewErrInvalidInput("serving_node_lease", "upsert", nil)
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "upsert serving node lease", func(
+	// The lease runs on the control pool, so ordinary load never makes a
+	// renewal wait for a connection. It is four round trips: BEGIN, the
+	// locks, one statement that decides and writes, and COMMIT. The locks
+	// stay a statement of their own because a statement reads with the
+	// snapshot it started with: a decision made in the locking statement could
+	// miss a renewal that committed while the lock was being waited for.
+	return runSQLTransaction(ctx, s.GetControl().Begin, "upsert serving node lease", func(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.ServingNodeLease, error) {
@@ -57,36 +62,55 @@ func (s SQLServingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Servi
 			return nil, err
 		}
 
-		var databaseAt time.Time
-		if err := tx.Get(ctx, &databaseAt, `SELECT clock_timestamp()`); err != nil {
-			return nil, fmt.Errorf("read serving node lease time: %w", err)
-		}
-
-		var current servingNodeLeaseRow
-		err := tx.Get(ctx, &current, `SELECT node_id, lease_id, updated_at, expires_at FROM serving_node_leases WHERE node_id = ?`, nodeID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("read serving node lease: %w", err)
-		}
-		if err == nil && current.LeaseID == leaseID && !current.ExpiresAt.After(databaseAt) {
-			return nil, store.NewErrConflict("serving_node_lease", "lease_expired", nil)
-		}
-		if err == nil && current.LeaseID != leaseID && current.ExpiresAt.After(databaseAt) {
-			return nil, store.NewErrConflict("serving_node_lease", "node_id_live", nil)
-		}
-
-		expiresAt := databaseAt.Add(lifetime)
-		var row servingNodeLeaseRow
-		if err := tx.Get(ctx, &row, `
-			INSERT INTO serving_node_leases (node_id, lease_id, updated_at, expires_at)
-			VALUES (?, ?, ?, ?)
-			ON CONFLICT (node_id) DO UPDATE
-			SET lease_id = EXCLUDED.lease_id, updated_at = EXCLUDED.updated_at, expires_at = EXCLUDED.expires_at
-			RETURNING node_id, lease_id, updated_at, expires_at`, nodeID, leaseID, databaseAt, expiresAt); err != nil {
+		var row servingNodeLeaseUpsertRow
+		if err := tx.Get(ctx, &row, servingNodeLeaseUpsertSQL,
+			leaseID, leaseID, nodeID, nodeID, leaseID, lifetime.Microseconds()); err != nil {
 			return nil, fmt.Errorf("upsert serving node lease: %w", translateError("serving_node_lease", nodeID, err))
 		}
-
-		return servingNodeLeaseModel(row)
+		if row.Conflict != "" {
+			return nil, store.NewErrConflict("serving_node_lease", row.Conflict, nil)
+		}
+		return servingNodeLeaseModel(servingNodeLeaseRow{
+			NodeID: row.NodeID.String, LeaseID: row.LeaseID.String,
+			UpdatedAt: row.UpdatedAt.Time, ExpiresAt: row.ExpiresAt.Time,
+		})
 	})
+}
+
+// servingNodeLeaseUpsertSQL decides and writes a renewal in one statement on
+// the database clock. A lease that expired under its own ID is never revived
+// (lease_expired), and another live lease for the node is never replaced
+// (node_id_live); otherwise the lease is written with a fresh expiry.
+const servingNodeLeaseUpsertSQL = `
+WITH clock AS (
+	SELECT clock_timestamp() AS at
+), verdict AS (
+	SELECT clock.at, CASE
+		WHEN current.lease_id = ? AND current.expires_at <= clock.at THEN 'lease_expired'
+		WHEN current.lease_id <> ? AND current.expires_at > clock.at THEN 'node_id_live'
+		ELSE ''
+	END AS conflict
+	FROM clock
+	LEFT JOIN serving_node_leases current ON current.node_id = ?
+), written AS (
+	INSERT INTO serving_node_leases (node_id, lease_id, updated_at, expires_at)
+	SELECT ?, ?, verdict.at, verdict.at + ? * interval '1 microsecond'
+	FROM verdict
+	WHERE verdict.conflict = ''
+	ON CONFLICT (node_id) DO UPDATE
+	SET lease_id = EXCLUDED.lease_id, updated_at = EXCLUDED.updated_at, expires_at = EXCLUDED.expires_at
+	RETURNING node_id, lease_id, updated_at, expires_at
+)
+SELECT verdict.conflict, written.node_id, written.lease_id, written.updated_at, written.expires_at
+FROM verdict
+LEFT JOIN written ON true`
+
+type servingNodeLeaseUpsertRow struct {
+	Conflict  string         `db:"conflict"`
+	NodeID    sql.NullString `db:"node_id"`
+	LeaseID   sql.NullString `db:"lease_id"`
+	UpdatedAt sql.NullTime   `db:"updated_at"`
+	ExpiresAt sql.NullTime   `db:"expires_at"`
 }
 
 // Delete releases the input node's serving lease when it still holds the input lease ID.
@@ -97,7 +121,7 @@ func (s SQLServingNodeLeaseStore) Delete(ctx context.Context, input *store.Servi
 	if !validServingNodeLeaseIdentity(nodeID, leaseID) {
 		return store.NewErrInvalidInput("serving_node_lease", "node_id", nil)
 	}
-	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "delete serving node lease", func(
+	_, err := runSQLTransaction(ctx, s.GetControl().Begin, "delete serving node lease", func(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (struct{}, error) {

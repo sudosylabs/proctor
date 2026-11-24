@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // Recorder observes bounded runtime facts and never receives commands,
@@ -22,6 +23,32 @@ type Recorder interface {
 	Finished(model.JobType, ExecutionOutcome, time.Duration)
 	Record(Activity)
 }
+
+// QueueRecorder is an optional Recorder capability for the queue as the
+// dispatcher and the lost-attempt sweep see it.
+type QueueRecorder interface {
+	Woke(WakeSource)
+	// Queued receives every registered type, zero when nothing is queued.
+	Queued(map[model.JobType]store.JobQueueDepth)
+	LostAttemptsRecovered(int)
+}
+
+// WakeSource names what made the dispatcher look for work.
+type WakeSource string
+
+const (
+	// WakeLocal is a commit on this node.
+	WakeLocal WakeSource = "local"
+	// WakeNotify is a commit on any node, heard through the listener.
+	WakeNotify WakeSource = "notify"
+	// WakeReconnect is the listener connecting after notifications may
+	// have been missed.
+	WakeReconnect WakeSource = "reconnect"
+	// WakeDue is a scheduled Job reaching its time.
+	WakeDue WakeSource = "due"
+	// WakeBackstop is the periodic read that bounds a lost wake.
+	WakeBackstop WakeSource = "backstop"
+)
 
 // Activity is a bounded runtime fact. Name is a registered job type,
 // recurrence or periodic-task name; Operation and Outcome come only from this

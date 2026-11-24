@@ -10,6 +10,7 @@ package job
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/logging"
@@ -45,12 +46,21 @@ func clonePeriodicTasks(values []PeriodicTask) ([]PeriodicTask, error) {
 	return cloned, nil
 }
 
+// runPeriodicTask runs task after a random first delay within one interval,
+// so the nodes of a cluster never run it in step, and then every interval
+// with a tenth of jitter either way. A failed run doubles the wait, up to ten
+// intervals, so a broken dependency is not hammered.
 func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *logging.Logger, recorder Recorder) {
 	if task.Name == "" || task.Interval <= 0 || task.Runner == nil || diagnostics == nil {
 		return
 	}
 
+	wait := time.Duration(rand.Float64() * float64(task.Interval)) //nolint:gosec // G404: timing jitter, not a secret.
+	failures := 0
 	for {
+		if !sleepContext(ctx, wait) {
+			return
+		}
 		started := time.Now()
 		err := task.Runner.Run(ctx)
 		if recorder != nil {
@@ -69,19 +79,25 @@ func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *loggin
 		if ctx.Err() != nil {
 			return
 		}
-
-		timer := time.NewTimer(task.Interval)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-
-			return
-		case <-timer.C:
+		if err != nil {
+			failures++
+		} else {
+			failures = 0
 		}
+		wait = periodicWait(task.Interval, failures)
 	}
+}
+
+// periodicWait is the jittered wait before the next run: the interval,
+// doubled for each failure in a row up to ten intervals.
+func periodicWait(interval time.Duration, failures int) time.Duration {
+	wait := interval
+	for range failures {
+		if wait >= 10*interval {
+			break
+		}
+		wait *= 2
+	}
+	wait = min(wait, 10*interval)
+	return wait + time.Duration((rand.Float64()*2-1)*0.1*float64(wait)) //nolint:gosec // G404: timing jitter, not a secret.
 }

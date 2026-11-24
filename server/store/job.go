@@ -125,6 +125,12 @@ type JobHistoryCleanupResult struct {
 
 // JobStore claims Jobs at least once and fences each attempt by its claim
 // token. Every time it compares is on the primary database clock.
+// JobQueueDepth is one type's queued Jobs at one instant.
+type JobQueueDepth struct {
+	Due       int
+	Scheduled int
+}
+
 type JobStore interface {
 	// Enqueue deduplicates by type, key and the Job's dedupe policy. Active
 	// dedupe admits a new Job once the old one is terminal; permanent dedupe
@@ -132,10 +138,21 @@ type JobStore interface {
 	// reports whether the given Job was inserted; otherwise the existing one
 	// is returned when it still exists.
 	Enqueue(context.Context, *JobEnqueue) (*model.Job, bool, error)
-	// ClaimNext first expires lost attempts and requeues their Jobs, or fails
-	// a Job whose attempts are exhausted, then claims one eligible Job with
-	// SKIP LOCKED and appends its next attempt.
+	// ClaimNext claims one eligible Job of the requested types with SKIP
+	// LOCKED and appends its next attempt. It writes nothing when no Job is
+	// due; lost attempts are recovered by RecoverLostAttempts, never here.
 	ClaimNext(context.Context, *JobClaimRequest) (*JobClaim, error)
+	// RecoverLostAttempts ends up to limit attempts whose lease expired and
+	// requeues their Jobs with growing backoff, or fails a Job whose attempts
+	// are exhausted. One node sweeps at a time; the others recover nothing.
+	RecoverLostAttempts(ctx context.Context, limit int) (int, error)
+	// NextDue reports, for each listed type with a claimable queued Job, the
+	// earliest instant one becomes available. A type with nothing queued is
+	// absent.
+	NextDue(ctx context.Context, types []model.JobType) (map[model.JobType]time.Time, error)
+	// QueueDepth counts each listed type's queued Jobs, split into those due
+	// now and those scheduled later. A type with nothing queued is absent.
+	QueueDepth(ctx context.Context, types []model.JobType) (map[model.JobType]JobQueueDepth, error)
 	// Heartbeat extends only the live attempt holding the claim token.
 	Heartbeat(context.Context, *JobHeartbeat) (*model.JobAttempt, error)
 	// Checkpoint saves progress only for the live token before its lease

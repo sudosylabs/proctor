@@ -85,6 +85,7 @@ func applicationDependencies(
 	return app.Dependencies{
 		AssistantGateway:        gateway,
 		Store:                   capabilities.persistence,
+		JobNotifications:        capabilities.jobNotifications,
 		Cache:                   cache,
 		MailDeliverySender:      mailer,
 		MailTemplateRenderer:    mailRenderer,

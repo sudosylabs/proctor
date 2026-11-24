@@ -19,8 +19,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestModuleServesAuthenticatedNodeMetricsWithoutDebugEndpoints(t *testing.T) {
@@ -149,10 +152,13 @@ func TestModuleServesProfilesOnlyWhenEnabledAndAuthenticated(t *testing.T) {
 func TestModuleExportsDatabasePoolSaturation(t *testing.T) {
 	t.Parallel()
 
-	module, err := New(config.Default().Metrics, BuildInfo{}, Sources{Database: func() sql.DBStats {
-		return sql.DBStats{
-			MaxOpenConnections: 50, OpenConnections: 12, InUse: 9, Idle: 3,
-			WaitCount: 4, WaitDuration: 1500 * time.Millisecond,
+	module, err := New(config.Default().Metrics, BuildInfo{}, Sources{Database: func() []DatabasePool {
+		return []DatabasePool{
+			{Pool: "proctor", Opened: 17, Stats: sql.DBStats{
+				MaxOpenConnections: 50, OpenConnections: 12, InUse: 9, Idle: 3,
+				WaitCount: 4, WaitDuration: 1500 * time.Millisecond,
+			}},
+			{Pool: "proctor-control", Opened: 2, Stats: sql.DBStats{MaxOpenConnections: 2, OpenConnections: 2, Idle: 2}},
 		}
 	}})
 	require.NoError(t, err)
@@ -160,12 +166,48 @@ func TestModuleExportsDatabasePoolSaturation(t *testing.T) {
 	module.handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	require.Equal(t, http.StatusOK, response.Code)
 	for _, sample := range []string{
-		"proctor_database_in_use_connections 9",
-		"proctor_database_idle_connections 3",
-		"proctor_database_open_connections 12",
-		"proctor_database_max_open_connections 50",
-		"proctor_database_waits_total 4",
-		"proctor_database_wait_duration_seconds_total 1.5",
+		`proctor_database_in_use_connections{pool="proctor"} 9`,
+		`proctor_database_idle_connections{pool="proctor"} 3`,
+		`proctor_database_open_connections{pool="proctor"} 12`,
+		`proctor_database_max_open_connections{pool="proctor"} 50`,
+		`proctor_database_waits_total{pool="proctor"} 4`,
+		`proctor_database_wait_duration_seconds_total{pool="proctor"} 1.5`,
+		`proctor_database_connections_opened_total{pool="proctor"} 17`,
+		`proctor_database_open_connections{pool="proctor-control"} 2`,
+		`proctor_database_connections_opened_total{pool="proctor-control"} 2`,
+	} {
+		require.Contains(t, response.Body.String(), sample+"\n")
+	}
+}
+
+func TestModuleExportsJobQueueAndServingLease(t *testing.T) {
+	t.Parallel()
+
+	module, err := New(config.Default().Metrics, BuildInfo{}, Sources{})
+	require.NoError(t, err)
+	recorder, ok := module.JobRecorder().(job.QueueRecorder)
+	require.True(t, ok, "the job recorder reports the queue")
+	recorder.Queued(map[model.JobType]store.JobQueueDepth{model.JobTypeMailDeliver: {Due: 7, Scheduled: 3}, model.JobTypeCleanup: {}})
+	recorder.Woke(job.WakeNotify)
+	recorder.Woke(job.WakeNotify)
+	recorder.LostAttemptsRecovered(4)
+	lease := module.ServingLeaseRecorder()
+	lease("renewed", 30*time.Millisecond)
+	lease("failed", 3*time.Second)
+
+	response := httptest.NewRecorder()
+	module.handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	for _, sample := range []string{
+		`proctor_jobs_queued{state="due",type="mail.deliver"} 7`,
+		`proctor_jobs_queued{state="scheduled",type="mail.deliver"} 3`,
+		`proctor_jobs_queued{state="due",type="job.cleanup"} 0`,
+		`proctor_jobs_dispatcher_wakes_total{source="notify"} 2`,
+		`proctor_jobs_lost_attempts_recovered_total 4`,
+		`proctor_serving_lease_renewals_total{outcome="renewed"} 1`,
+		`proctor_serving_lease_renewals_total{outcome="failed"} 1`,
+		`proctor_serving_lease_renew_duration_seconds_bucket{le="0.05"} 1`,
+		`proctor_serving_lease_renew_duration_seconds_bucket{le="5"} 2`,
 	} {
 		require.Contains(t, response.Body.String(), sample+"\n")
 	}

@@ -66,7 +66,65 @@ func (m *Module) newJobCollectors() {
 		},
 		[]string{"type"},
 	)
+	m.jobsQueued = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "proctor",
+			Subsystem: "jobs",
+			Name:      "queued",
+			Help:      "Queued durable Jobs cluster-wide as this node last counted them, due now or scheduled later.",
+		},
+		[]string{"type", "state"},
+	)
+	m.jobWakes = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "jobs",
+			Name:      "dispatcher_wakes_total",
+			Help:      "Times this node's Job dispatcher looked for work, by what woke it.",
+		},
+		[]string{"source"},
+	)
+	m.jobLostAttempts = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "proctor",
+		Subsystem: "jobs",
+		Name:      "lost_attempts_recovered_total",
+		Help:      "Job attempts whose lease expired and that this node's sweep recovered.",
+	})
+	m.leaseRenewals = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "serving_lease",
+			Name:      "renewals_total",
+			Help:      "Serving node lease renewal attempts, by outcome.",
+		},
+		[]string{"outcome"},
+	)
+	// The buckets bracket the five-second renewal budget.
+	m.leaseRenewalDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "proctor",
+		Subsystem: "serving_lease",
+		Name:      "renew_duration_seconds",
+		Help:      "Serving node lease renewal duration, successful or not.",
+		Buckets:   []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
+	})
 }
+
+// ObserveJobsQueued sets the queue gauges for each type.
+func (m *Module) ObserveJobsQueued(jobType string, due, scheduled int) {
+	m.jobsQueued.WithLabelValues(jobType, "due").Set(float64(due))
+	m.jobsQueued.WithLabelValues(jobType, "scheduled").Set(float64(scheduled))
+}
+
+func (m *Module) ObserveJobWake(source string) { m.jobWakes.WithLabelValues(source).Inc() }
+
+func (m *Module) ObserveLostAttemptsRecovered(count int) { m.jobLostAttempts.Add(float64(count)) }
+
+// ObserveServingLeaseRenewal records one renewal attempt.
+func (m *Module) ObserveServingLeaseRenewal(outcome string, duration time.Duration) {
+	m.leaseRenewals.WithLabelValues(outcome).Inc()
+	m.leaseRenewalDuration.Observe(duration.Seconds())
+}
+
 func (m *Module) JobStarted(jobType string) { m.jobsActive.WithLabelValues(jobType).Inc() }
 func (m *Module) JobFinished(jobType, result string, duration time.Duration) {
 	m.jobsActive.WithLabelValues(jobType).Dec()

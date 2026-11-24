@@ -50,3 +50,19 @@ groups:
         annotations:
           summary: Proctor could not submit mail
           description: Node {{ $labels.node }} reported an unsuccessful SMTP submission.
+      - alert: ProctorServingLeaseRenewalSlow
+        expr: histogram_quantile(0.99, sum by (instance, node, topology, le) (rate(proctor_serving_lease_renew_duration_seconds_bucket[5m]))) > 2.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Proctor serving lease renewal is slow
+          description: Lease renewals on {{ $labels.node }} take more than half their five-second budget; if they exceed it the node stops serving.
+      - alert: ProctorDatabaseConnectionChurn
+        expr: sum by (instance, node, topology, pool) (rate(proctor_database_connections_opened_total[10m])) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Proctor keeps opening database connections
+          description: Pool {{ $labels.pool }} on {{ $labels.node }} opens connections faster than its lifetime explains; MaxIdleConnections is probably below MaxOpenConnections.

@@ -209,7 +209,7 @@ func TestAttachChangeListenerOnlyOnceBeforeStart(t *testing.T) {
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	engine, err := New(Dependencies{
 		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour},
+		Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Hour},
 	})
 	require.NoError(t, err)
 	require.Error(t, engine.AttachChangeListener(nil))
@@ -218,7 +218,7 @@ func TestAttachChangeListenerOnlyOnceBeforeStart(t *testing.T) {
 
 	started, err := New(Dependencies{
 		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour},
+		Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Hour},
 	})
 	require.NoError(t, err)
 	require.NoError(t, started.Start(context.Background()))
@@ -230,7 +230,7 @@ func newChangeTestEngine(t *testing.T, persistence store.JobStore, descriptor De
 	t.Helper()
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour}, Now: now,
+		Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Hour}, Now: now,
 	})
 	require.NoError(t, err)
 	require.NoError(t, engine.AttachChangeListener(listener))

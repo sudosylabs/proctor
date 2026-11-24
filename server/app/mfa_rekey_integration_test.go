@@ -73,7 +73,7 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 
 	descriptor := jobs.NewMFARekey(persistence.MFA(), newSealer).Descriptor
 	node, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor},
-		NodeID: "mfa-rekey-node", Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+		NodeID: "mfa-rekey-node", Diagnostics: newDiscardLogger(t), Policy: job.Policy{BackstopInterval: 5 * time.Millisecond}})
 	require.NoError(t, err)
 	require.NoError(t, node.Start(ctx))
 	defer func() { _ = node.Close(context.Background()) }()

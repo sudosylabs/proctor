@@ -23,7 +23,7 @@ func TestEngineClaimsAndCompletesThroughItsPublicLifecycle(t *testing.T) {
 	recorder := &jobMetricsFake{}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Recorder: recorder, Policy: Policy{PollInterval: time.Millisecond},
+		Diagnostics: newDiscardLogger(t), Recorder: recorder, Policy: Policy{BackstopInterval: time.Millisecond},
 	})
 	require.NoError(t, err)
 	described, describeErr := engine.Descriptor(descriptor.Type)

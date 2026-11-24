@@ -76,7 +76,6 @@ func TestJobTransactionPoliciesPreserveLegacyBranchSemantics(t *testing.T) {
 		{name: "deduplicated enqueue commit", got: permanentJobTransactionPolicy().commitError(&permanentJobEnqueueOutcome{}, failure), want: "commit deduplicated permanent job enqueue: database failure"},
 		{name: "job claim begin", got: jobClaimSQLTransactionPolicy().beginError(failure), want: "begin job claim: database failure"},
 		{name: "job claim commit", got: jobClaimSQLTransactionPolicy().commitError(&jobClaimTransactionOutcome{}, failure), want: "commit job claim: database failure"},
-		{name: "expired recovery commit", got: jobClaimSQLTransactionPolicy().commitError(&jobClaimTransactionOutcome{postCommitErr: errors.New("not found")}, failure), want: "commit expired job recovery: database failure"},
 		{name: "history cleanup begin", got: jobHistorySQLTransactionPolicy().beginError(failure), want: "begin job history cleanup: database failure"},
 		{name: "history cleanup commit", got: jobHistorySQLTransactionPolicy().commitError(&jobHistoryCleanupOutcome{}, failure), want: "commit job history cleanup: database failure"},
 		{name: "empty history cleanup commit", got: jobHistorySQLTransactionPolicy().commitError(&jobHistoryCleanupOutcome{empty: true}, failure), want: "commit empty job history cleanup: database failure"},

@@ -160,6 +160,7 @@ func testSettings(t *testing.T) Settings {
 		DataSource:            dataSource,
 		MaxOpenConnections:    10,
 		MaxIdleConnections:    2,
+		ControlConnections:    2,
 		ConnectionMaxLifetime: time.Minute,
 		ConnectionMaxIdleTime: time.Minute,
 		QueryTimeout:          10 * time.Second,

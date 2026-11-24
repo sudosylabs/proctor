@@ -271,10 +271,8 @@ func prepareConcurrentProfilePicturePublication(t *testing.T, ctx context.Contex
 // can take over from the dead node without waiting out the backoff.
 func skipLeaseExpiryBackoff(t *testing.T, ctx context.Context, persistence *SQLStore, jobID model.JobID) {
 	t.Helper()
-	token, err := model.NewJobClaimToken()
-	require.NoError(t, err)
-	_, err = persistence.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{model.JobTypeCleanup}, NodeID: "lease-recovery", ClaimToken: token, LeaseDuration: time.Minute})
-	require.True(t, err == nil || store.IsNotFound(err), "recover expired leases: %v", err)
+	_, err := persistence.Job().RecoverLostAttempts(ctx, 100)
+	require.NoError(t, err, "recover expired leases")
 	_, err = persistence.GetMaster().Exec(ctx, `UPDATE jobs SET available_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued'`, jobID.String())
 	require.NoError(t, err)
 }

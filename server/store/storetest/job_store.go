@@ -126,6 +126,16 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	dead, err := ss.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{crashed.Type}, NodeID: "dead-node", ClaimToken: deadToken, LeaseDuration: 200 * time.Millisecond})
 	require.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
+	// A claim never recovers a lost attempt: the Job stays running until the
+	// sweep ends its attempt.
+	_, err = ss.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{crashed.Type}, NodeID: "live-node", ClaimToken: mustClaimToken(t), LeaseDuration: time.Minute})
+	require.True(t, store.IsNotFound(err), "a lost attempt was reclaimed before the sweep")
+	stillRunning, err := ss.Job().Get(ctx, crashed.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.JobStatusRunning, stillRunning.Status, "ClaimNext recovered a lost attempt")
+	recoveredCount, err := ss.Job().RecoverLostAttempts(ctx, 100)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, recoveredCount, 1)
 	// Lease expiry requeues behind a backoff of at least the expired lease, so
 	// work that crashed its worker is not handed straight to the next node.
 	_, err = ss.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{crashed.Type}, NodeID: "live-node", ClaimToken: mustClaimToken(t), LeaseDuration: time.Minute})
@@ -156,6 +166,8 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	_, err = ss.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{exhausted.Type}, NodeID: "last-node", ClaimToken: mustClaimToken(t), LeaseDuration: 10 * time.Millisecond})
 	require.NoError(t, err)
 	time.Sleep(20 * time.Millisecond)
+	_, err = ss.Job().RecoverLostAttempts(ctx, 100)
+	require.NoError(t, err)
 	_, err = ss.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{exhausted.Type}, NodeID: "next-node", ClaimToken: mustClaimToken(t), LeaseDuration: time.Minute})
 	require.True(t, store.IsNotFound(err), "ClaimNext(exhausted) error")
 	exhausted, err = ss.Job().Get(ctx, exhausted.ID)

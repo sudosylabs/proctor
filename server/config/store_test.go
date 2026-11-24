@@ -607,3 +607,45 @@ type failingSaveBacking struct {
 func (failingSaveBacking) Save(context.Context, []byte) error {
 	return errors.New("save failed")
 }
+
+// TestDatabasePoolLimitsPreventChurn pins the limits that keep the pool from
+// reopening connections under bursts, and the size of the lease's pool.
+func TestDatabasePoolLimitsPreventChurn(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name       string
+		open, idle int
+		control    int
+		field      string
+	}{
+		{name: "defaults", open: 40, idle: 40, control: 2},
+		{name: "idle at half of open", open: 40, idle: 20, control: 2},
+		{name: "idle below half of open churns", open: 50, idle: 10, control: 2, field: "database.max_idle_connections"},
+		{name: "idle above open", open: 10, idle: 11, control: 2, field: "database.max_idle_connections"},
+		{name: "one control connection", open: 40, idle: 40, control: 1, field: "database.control_connections"},
+		{name: "too many control connections", open: 40, idle: 40, control: 5, field: "database.control_connections"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := Default()
+			cfg.Database.MaxOpenConnections = test.open
+			cfg.Database.MaxIdleConnections = test.idle
+			cfg.Database.ControlConnections = test.control
+			err := cfg.Validate()
+			var fields []string
+			var validationError *ValidationError
+			if errors.As(err, &validationError) {
+				for _, field := range validationError.Fields {
+					fields = append(fields, field.Field)
+				}
+			}
+			if test.field == "" {
+				require.NotContains(t, fields, "database.max_idle_connections")
+				require.NotContains(t, fields, "database.control_connections")
+				return
+			}
+			require.Contains(t, fields, test.field)
+		})
+	}
+}

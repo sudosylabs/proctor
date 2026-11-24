@@ -44,7 +44,7 @@ func TestJobHistoryCleanupContinuesAcrossNodesPastOneDailyBatch(t *testing.T) {
 	logger, logs := newTestLogger(t)
 	for _, nodeID := range []string{"cleanup-node-a", "cleanup-node-b"} {
 		engine, err := job.New(job.Dependencies{Store: ss.Job(), Descriptors: []job.Descriptor{descriptor}, NodeID: nodeID,
-			Diagnostics: logger, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+			Diagnostics: logger, Policy: job.Policy{BackstopInterval: 5 * time.Millisecond}})
 		require.NoError(t, err)
 		err = engine.Start(ctx)
 		require.NoError(t, err)

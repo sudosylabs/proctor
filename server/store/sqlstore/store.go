@@ -41,8 +41,12 @@ type Settings struct {
 	MaxIdleConnections    int
 	ConnectionMaxLifetime time.Duration
 	ConnectionMaxIdleTime time.Duration
-	QueryTimeout          time.Duration
-	MigrationTimeout      time.Duration
+	// ControlConnections sizes the pool kept for the serving node lease. It
+	// stays open and full, so a lease renewal never waits for the main pool
+	// or for a new connection.
+	ControlConnections int
+	QueryTimeout       time.Duration
+	MigrationTimeout   time.Duration
 	// ReadOnly opens every session with default_transaction_read_only, so
 	// PostgreSQL itself rejects any write, DDL, or sequence advance the
 	// holder attempts. Operator inspection commands open the store this way.
@@ -58,6 +62,7 @@ func SettingsFromConfig(cfg config.Database) Settings {
 		MaxIdleConnections:    cfg.MaxIdleConnections,
 		ConnectionMaxLifetime: cfg.ConnectionMaxLifetime.Duration,
 		ConnectionMaxIdleTime: cfg.ConnectionMaxIdleTime.Duration,
+		ControlConnections:    cfg.ControlConnections,
 		QueryTimeout:          cfg.QueryTimeout.Duration,
 		MigrationTimeout:      cfg.MigrationTimeout.Duration,
 	}
@@ -72,6 +77,9 @@ func (s Settings) validate() error {
 	}
 	if s.MaxIdleConnections < 0 || s.MaxIdleConnections > s.MaxOpenConnections {
 		return errors.New("database max idle connections must be between zero and max open connections")
+	}
+	if s.ControlConnections < 0 || s.ControlConnections > 4 {
+		return errors.New("database control connections must be between 0 and 4")
 	}
 	if s.ConnectionMaxLifetime <= 0 ||
 		s.ConnectionMaxIdleTime <= 0 ||
@@ -152,7 +160,11 @@ type SQLStoreStores struct {
 
 // SQLStore owns PostgreSQL connections and all concrete model stores.
 type SQLStore struct {
-	masterX             *sqlxDBWrapper
+	masterX *sqlxDBWrapper
+	// controlX serves only the serving node lease; it is masterX when
+	// Settings.ControlConnections is zero, as for operator commands.
+	controlX            *sqlxDBWrapper
+	opened              map[string]*countingConnector
 	stores              SQLStoreStores
 	settings            Settings
 	executionLeaseSlots chan struct{}
@@ -166,7 +178,7 @@ type SQLStore struct {
 // daylight-saving zone would otherwise shift lifetimes by an hour across a
 // transition. A read-only connector likewise replaces any
 // default_transaction_read_only the data source names.
-func sessionConnector(dataSource string, readOnly bool) (*pq.Connector, error) {
+func sessionConnector(dataSource string, readOnly bool, applicationName string) (*pq.Connector, error) {
 	cfg, err := pq.NewConfig(dataSource)
 	if err != nil {
 		return nil, err
@@ -180,6 +192,14 @@ func sessionConnector(dataSource string, readOnly bool) (*pq.Connector, error) {
 		cfg.Runtime = map[string]string{}
 	}
 	cfg.Runtime["TimeZone"] = "UTC"
+	if applicationName != "" {
+		for name := range cfg.Runtime {
+			if strings.EqualFold(name, "application_name") {
+				delete(cfg.Runtime, name)
+			}
+		}
+		cfg.Runtime["application_name"] = applicationName
+	}
 	if readOnly {
 		for name := range cfg.Runtime {
 			if strings.EqualFold(name, "default_transaction_read_only") {
@@ -198,18 +218,15 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 		return nil, err
 	}
 
-	connector, err := sessionConnector(settings.DataSource, settings.ReadOnly)
+	main, err := openMainPool(settings)
 	if err != nil {
-		return nil, fmt.Errorf("open PostgreSQL: %w", err)
+		return nil, err
 	}
-	db := sqlx.NewDb(sql.OpenDB(connector), "postgres")
-	db.SetMaxOpenConns(settings.MaxOpenConnections)
-	db.SetMaxIdleConns(settings.MaxIdleConnections)
-	db.SetConnMaxLifetime(settings.ConnectionMaxLifetime)
-	db.SetConnMaxIdleTime(settings.ConnectionMaxIdleTime)
+	db, mainConnector := main.db, main.connector
 
 	sqlStore := &SQLStore{
 		masterX:  newSqlxDBWrapper(db, settings.QueryTimeout),
+		opened:   map[string]*countingConnector{PoolMain: mainConnector},
 		settings: settings,
 		// A host-effect lease retains one connection while its owner performs
 		// ordinary Store operations. Those operations must still make progress.
@@ -219,12 +236,16 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 		// and mutations, independently of the durable per-candidate rate limit.
 		deliveryAppendSlots: make(chan struct{}, min(8, settings.MaxOpenConnections/2)),
 	}
-	if err := sqlStore.Ping(ctx); err != nil {
+	if err := sqlStore.attachControlPool(); err != nil {
 		_ = db.Close()
+		return nil, err
+	}
+	if err := sqlStore.Ping(ctx); err != nil {
+		_ = sqlStore.Close()
 		return nil, fmt.Errorf("connect PostgreSQL: %w", err)
 	}
 	if err := sqlStore.verifyPostgresVersion(ctx); err != nil {
-		_ = db.Close()
+		_ = sqlStore.Close()
 		return nil, err
 	}
 
@@ -297,15 +318,34 @@ func (ss *SQLStore) Close() error {
 	if ss == nil || ss.masterX == nil {
 		return nil
 	}
-	return ss.masterX.Close()
+	err := ss.masterX.Close()
+	if ss.controlX != nil && ss.controlX != ss.masterX {
+		err = errors.Join(err, ss.controlX.Close())
+	}
+	return err
 }
 
 func (ss *SQLStore) Ping(ctx context.Context) error {
-	return ss.GetMaster().Ping(ctx)
+	if err := ss.GetMaster().Ping(ctx); err != nil {
+		return err
+	}
+	if ss.controlX != ss.masterX {
+		return ss.controlX.Ping(ctx)
+	}
+	return nil
 }
 
 func (ss *SQLStore) Stats() sql.DBStats {
 	return ss.GetMaster().Stats()
+}
+
+// PoolStats reports every pool this store opened, main first.
+func (ss *SQLStore) PoolStats() []PoolStats {
+	stats := []PoolStats{{Pool: PoolMain, Stats: ss.masterX.Stats(), Opened: ss.opened[PoolMain].opened.Load()}}
+	if ss.controlX != ss.masterX {
+		stats = append(stats, PoolStats{Pool: PoolControl, Stats: ss.controlX.Stats(), Opened: ss.opened[PoolControl].opened.Load()})
+	}
+	return stats
 }
 
 func (ss *SQLStore) Institution() store.InstitutionStore {
@@ -525,6 +565,70 @@ func (ss *SQLStore) DomainEvent() store.DomainEventStore { return ss.stores.doma
 
 func (ss *SQLStore) GetMaster() *sqlxDBWrapper {
 	return ss.masterX
+}
+
+// GetControl returns the pool kept for the serving node lease. Only work that
+// keeps this node serving may use it: anything else could starve the lease
+// the control pool exists to protect.
+func (ss *SQLStore) GetControl() *sqlxDBWrapper {
+	return ss.controlX
+}
+
+// controlStatementTimeout bounds each statement on the control pool. A lease
+// renewal has five seconds; a statement stuck behind a slow server gives way
+// early enough for a retry to fit.
+const controlStatementTimeout = 2 * time.Second
+
+// attachControlPool opens the lease's pool, or shares the main pool when the
+// settings ask for none, as operator commands do.
+func (ss *SQLStore) attachControlPool() error {
+	ss.controlX = ss.masterX
+	if ss.settings.ControlConnections == 0 {
+		return nil
+	}
+	control, err := openControlPool(ss.settings)
+	if err != nil {
+		return err
+	}
+	ss.controlX = newSqlxDBWrapper(control.db, min(ss.settings.QueryTimeout, controlStatementTimeout))
+	ss.opened[PoolControl] = control.connector
+	return nil
+}
+
+// openMainPool opens the pool every store operation except the lease uses.
+func openMainPool(settings Settings) (openedPool, error) {
+	connector, err := sessionConnector(settings.DataSource, settings.ReadOnly, PoolMain)
+	if err != nil {
+		return openedPool{}, fmt.Errorf("open PostgreSQL: %w", err)
+	}
+	counting := &countingConnector{Connector: connector}
+	db := sqlx.NewDb(sql.OpenDB(counting), "postgres")
+	db.SetMaxOpenConns(settings.MaxOpenConnections)
+	db.SetMaxIdleConns(settings.MaxIdleConnections)
+	db.SetConnMaxLifetime(settings.ConnectionMaxLifetime)
+	db.SetConnMaxIdleTime(settings.ConnectionMaxIdleTime)
+	return openedPool{db: db, connector: counting}, nil
+}
+
+type openedPool struct {
+	db        *sqlx.DB
+	connector *countingConnector
+}
+
+// openControlPool opens the lease's pool full and keeps it full: no idle
+// timeout, so a renewal never pays for a new connection.
+func openControlPool(settings Settings) (openedPool, error) {
+	connector, err := sessionConnector(settings.DataSource, settings.ReadOnly, PoolControl)
+	if err != nil {
+		return openedPool{}, fmt.Errorf("open PostgreSQL control pool: %w", err)
+	}
+	counting := &countingConnector{Connector: connector}
+	db := sqlx.NewDb(sql.OpenDB(counting), "postgres")
+	db.SetMaxOpenConns(settings.ControlConnections)
+	db.SetMaxIdleConns(settings.ControlConnections)
+	db.SetConnMaxLifetime(settings.ConnectionMaxLifetime)
+	db.SetConnMaxIdleTime(0)
+	return openedPool{db: db, connector: counting}, nil
 }
 
 func (ss *SQLStore) getQueryBuilder() sq.StatementBuilderType {

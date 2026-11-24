@@ -46,7 +46,7 @@ func TestEngineValidatesRecurrencesAtConstruction(t *testing.T) {
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	config := Dependencies{
 		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second},
+		Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Second},
 		Recurrences: []Recurrence{{Name: "daily", Proposer: noOpProposer{}}, {Name: "daily", Proposer: noOpProposer{}}},
 	}
 	_, err := New(config)
@@ -71,7 +71,7 @@ func TestEngineRetriesSameOccurrenceWakesLocallyAndStopsRecurrence(t *testing.T)
 		persistence := &jobRunnerStoreFake{claimRequests: make(chan struct{}, 8)}
 		engine, err := New(Dependencies{
 			Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
-			Policy: Policy{PollInterval: time.Hour, ProposalRetryDelay: 10 * time.Second}, Now: bubbleClock(at),
+			Policy: Policy{BackstopInterval: time.Hour, ProposalRetryDelay: 10 * time.Second}, Now: bubbleClock(at),
 			Recurrences: []Recurrence{{Name: "daily", Proposer: proposer}},
 		})
 		require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestEngineCopiesRecurrenceDefinitionsAtConstruction(t *testing.T) {
 		descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 		engine, err := New(Dependencies{
 			Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
-			Policy: Policy{PollInterval: time.Hour}, Now: bubbleClock(at), Recurrences: recurrences,
+			Policy: Policy{BackstopInterval: time.Hour}, Now: bubbleClock(at), Recurrences: recurrences,
 		})
 		require.NoError(t, err)
 		recurrences[0] = Recurrence{Name: "replacement", Proposer: replacement}
@@ -129,7 +129,7 @@ func TestConcurrentEnginesAndRestartProposeTheSameOccurrence(t *testing.T) {
 		t.Helper()
 		engine, err := New(Dependencies{
 			Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: nodeID, Diagnostics: newDiscardLogger(t),
-			Policy: Policy{PollInterval: time.Hour}, Now: func() time.Time { return at },
+			Policy: Policy{BackstopInterval: time.Hour}, Now: func() time.Time { return at },
 			Recurrences: []Recurrence{{Name: "daily", Proposer: proposer}},
 		})
 		require.NoError(t, err)

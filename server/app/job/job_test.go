@@ -49,6 +49,10 @@ func (*jobRunnerStoreFake) Enqueue(context.Context, *store.JobEnqueue) (*model.J
 	return nil, false, nil
 }
 
+func (*jobRunnerStoreFake) RecoverLostAttempts(context.Context, int) (int, error) {
+	return 0, nil
+}
+
 func (s *jobRunnerStoreFake) ClaimNext(context.Context, *store.JobClaimRequest) (*store.JobClaim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

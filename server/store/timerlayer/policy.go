@@ -154,6 +154,7 @@ const (
 	methodClaimObjectsForCleanup                    methodName = "claim_objects_for_cleanup"
 	methodClaimPurgeCandidate                       methodName = "claim_purge_candidate"
 	methodClaimNext                                 methodName = "claim_next"
+	methodRecoverLostAttempts                       methodName = "recover_lost_attempts"
 	methodCompleteResultReleaseBatch                methodName = "complete_result_release_batch"
 	methodClaimResultReleaseBatch                   methodName = "claim_result_release_batch"
 	methodFindCopy                                  methodName = "find_copy"

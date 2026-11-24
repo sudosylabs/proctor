@@ -132,10 +132,14 @@ type JobStore interface {
 	// reports whether the given Job was inserted; otherwise the existing one
 	// is returned when it still exists.
 	Enqueue(context.Context, *JobEnqueue) (*model.Job, bool, error)
-	// ClaimNext first expires lost attempts and requeues their Jobs, or fails
-	// a Job whose attempts are exhausted, then claims one eligible Job with
-	// SKIP LOCKED and appends its next attempt.
+	// ClaimNext claims one eligible Job of the requested types with SKIP
+	// LOCKED and appends its next attempt. It writes nothing when no Job is
+	// due; lost attempts are recovered by RecoverLostAttempts, never here.
 	ClaimNext(context.Context, *JobClaimRequest) (*JobClaim, error)
+	// RecoverLostAttempts ends up to limit attempts whose lease expired and
+	// requeues their Jobs with growing backoff, or fails a Job whose attempts
+	// are exhausted. One node sweeps at a time; the others recover nothing.
+	RecoverLostAttempts(ctx context.Context, limit int) (int, error)
 	// Heartbeat extends only the live attempt holding the claim token.
 	Heartbeat(context.Context, *JobHeartbeat) (*model.JobAttempt, error)
 	// Checkpoint saves progress only for the live token before its lease

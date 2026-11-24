@@ -207,6 +207,9 @@ CREATE TABLE jobs (
 );
 
 CREATE INDEX jobs_claim_idx ON jobs (available_at, created_at, id) WHERE status = 'queued';
+-- Each worker claims one type, so its claim reads only that type's due Jobs:
+-- a backlog of one type never slows another type's claims.
+CREATE INDEX jobs_claim_type_idx ON jobs (type, available_at, created_at, id) WHERE status = 'queued';
 CREATE UNIQUE INDEX jobs_active_type_dedupe_key_idx ON jobs (type, dedupe_key)
     WHERE dedupe_policy = 'active' AND status IN ('queued', 'running', 'cancel_requested');
 CREATE UNIQUE INDEX jobs_permanent_type_dedupe_key_idx ON jobs (type, dedupe_key)

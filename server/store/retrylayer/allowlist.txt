@@ -256,3 +256,7 @@ ExamAttemptStore.ListCandidateStarterWorkspace always
 
 AuditExportStore.FindCreation                             always
 AuditExportStore.TopologyRevision                         always
+
+# Recovery rechecks each attempt's state under SKIP LOCKED, so a replay after
+# a lost commit acknowledgement recovers nothing twice.
+JobStore.RecoverLostAttempts                               always

@@ -1867,6 +1867,12 @@ func (s *userStore) ListVisibleDisplayNames(ctx context.Context, arg1 []model.Us
 	})
 }
 
+func (s *jobStore) RecoverLostAttempts(ctx context.Context, limit int) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) {
+		return s.JobStore.RecoverLostAttempts(ctx, limit)
+	})
+}
+
 func (s *externalIdentityStore) Get(ctx context.Context, arg1 model.ExternalIdentityID) (*model.ExternalIdentity, error) {
 	return retryCall1(ctx, s.layer, func() (*model.ExternalIdentity, error) {
 		return s.ExternalIdentityStore.Get(ctx, arg1)

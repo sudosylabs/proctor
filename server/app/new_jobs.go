@@ -270,7 +270,10 @@ func buildApplicationJobDefinitions(
 	descriptors = append(descriptors, historyCleanup.Descriptor)
 	recurrences = append(recurrences, *historyCleanup.Recurrence)
 
-	periodicTasks := []job.PeriodicTask{jobs.NewExamAttemptExpiryTask(exams.attempts)}
+	periodicTasks := []job.PeriodicTask{
+		jobs.NewExamAttemptExpiryTask(exams.attempts),
+		jobs.NewLostAttemptSweepTask(jobStore),
+	}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
 	if shared.realtime != nil && deps.Store.RoleBinding() != nil {
 		periodicTasks = append(periodicTasks, shared.realtime.NewRoleBindingExpiryTask(deps.Store.RoleBinding()))

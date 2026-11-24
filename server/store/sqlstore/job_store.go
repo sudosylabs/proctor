@@ -33,8 +33,7 @@ type permanentJobEnqueueOutcome struct {
 }
 
 type jobClaimTransactionOutcome struct {
-	claim         *store.JobClaim
-	postCommitErr error
+	claim *store.JobClaim
 }
 
 type jobHistoryCleanupOutcome struct {
@@ -59,10 +58,7 @@ func jobClaimSQLTransactionPolicy() sqlTransactionPolicy[*jobClaimTransactionOut
 	return sqlTransactionPolicy[*jobClaimTransactionOutcome]{
 		beginError: func(err error) error { return fmt.Errorf("begin job claim: %w", err) },
 		commit:     true,
-		commitError: func(outcome *jobClaimTransactionOutcome, err error) error {
-			if outcome != nil && outcome.postCommitErr != nil {
-				return fmt.Errorf("commit expired job recovery: %w", err)
-			}
+		commitError: func(_ *jobClaimTransactionOutcome, err error) error {
 			return fmt.Errorf("commit job claim: %w", err)
 		},
 	}
@@ -311,53 +307,6 @@ func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimReque
 		}
 
 		leaseExpiresAt := databaseNow.Add(request.LeaseDuration)
-		var expiredJobIDs []string
-		if err = tx.Select(
-			ctx,
-			&expiredJobIDs,
-			`UPDATE job_attempts
-			SET status = 'lease_expired', completed_at = ?
-			WHERE status = 'running'
-				AND lease_expires_at <= ?
-			RETURNING job_id`,
-			databaseNow,
-			databaseNow,
-		); err != nil {
-			return nil, fmt.Errorf("expire lost job attempts: %w", err)
-		}
-
-		for _, jobID := range expiredJobIDs {
-			if _, err = tx.Exec(
-				ctx,
-				`UPDATE jobs
-				SET status = CASE
-						WHEN status = 'cancel_requested' THEN 'canceled'
-						WHEN attempt_count >= maximum_attempts THEN 'failed'
-						ELSE 'queued'
-					END,
-					completed_at = CASE
-						WHEN status = 'cancel_requested' OR attempt_count >= maximum_attempts THEN CAST(? AS timestamptz)
-						ELSE NULL
-					END,
-					public_error_code = CASE
-						WHEN status = 'cancel_requested' THEN 'job.canceled'
-						WHEN attempt_count >= maximum_attempts THEN 'job.lease_expired'
-						ELSE public_error_code
-					END,
-					available_at = CAST(? AS timestamptz) + `+leaseExpiryBackoff+`,
-					updated_at = GREATEST(updated_at, ?),
-					revision = revision + 1
-				WHERE id = ?
-					AND status IN ('running', 'cancel_requested')`,
-				databaseNow,
-				databaseNow,
-				databaseNow,
-				jobID,
-			); err != nil {
-				return nil, fmt.Errorf("recover expired job %s: %w", jobID, err)
-			}
-		}
-
 		var row jobRow
 		if err = tx.Get(
 			ctx,
@@ -366,7 +315,7 @@ func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimReque
 			WHERE status = 'queued'
 				AND available_at <= ?
 				AND attempt_count < maximum_attempts
-				AND type = ANY(?)
+				AND `+claimTypeCondition(types)+`
 				AND NOT EXISTS (
 					SELECT 1
 					FROM job_attempts
@@ -378,15 +327,10 @@ func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimReque
 			FOR UPDATE SKIP LOCKED
 			LIMIT 1`,
 			databaseNow,
-			pq.Array(types),
+			claimTypeArgument(types),
 			strings.TrimSpace(request.NodeID),
 		); err != nil {
-			claimableErr := translateError("job", "claimable", err)
-			if errors.Is(err, sql.ErrNoRows) && len(expiredJobIDs) > 0 {
-				return &jobClaimTransactionOutcome{postCommitErr: claimableErr}, nil
-			}
-
-			return nil, claimableErr
+			return nil, translateError("job", "claimable", err)
 		}
 
 		job, err := row.model()
@@ -438,11 +382,112 @@ func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimReque
 	if err != nil {
 		return nil, err
 	}
-	if outcome.postCommitErr != nil {
-		return nil, outcome.postCommitErr
-	}
-
 	return outcome.claim, nil
+}
+
+// claimTypeCondition matches the claimed types. A single type is an equality,
+// which lets the planner read jobs_claim_type_idx in claim order; an array
+// would make it merge the due Jobs of every type instead.
+func claimTypeCondition(types []string) string {
+	if len(types) == 1 {
+		return `type = ?`
+	}
+	return `type = ANY(?)`
+}
+
+func claimTypeArgument(types []string) any {
+	if len(types) == 1 {
+		return types[0]
+	}
+	return pq.Array(types)
+}
+
+// lostAttemptSweepLockKey admits one sweeping node at a time. The rows are
+// also taken with SKIP LOCKED, so two sweeps never wait on each other even
+// without it; the lock only spares the others the work.
+var lostAttemptSweepLockKey = advisoryLockKey("job-lost-attempt-sweep")
+
+// MaximumLostAttemptRecovery bounds one RecoverLostAttempts call.
+const MaximumLostAttemptRecovery = 1000
+
+// RecoverLostAttempts ends up to limit attempts whose lease expired without a
+// heartbeat and requeues their Jobs with growing backoff, or fails a Job
+// whose attempts are exhausted. It returns how many it recovered, and zero
+// when another node is sweeping.
+func (s SQLJobStore) RecoverLostAttempts(ctx context.Context, limit int) (int, error) {
+	if limit < 1 || limit > MaximumLostAttemptRecovery {
+		return 0, store.NewErrInvalidInput("job_attempt", "recover_limit", nil)
+	}
+	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy(true, func(_ int, err error) error {
+		return fmt.Errorf("commit lost job attempt recovery: %w", err)
+	}), func(ctx context.Context, tx *sqlxTxWrapper) (int, error) {
+		var sweeping bool
+		if err := tx.Get(ctx, &sweeping, `SELECT pg_try_advisory_xact_lock(hashtextextended(?, 0))`, lostAttemptSweepLockKey); err != nil {
+			return 0, fmt.Errorf("lock lost job attempt sweep: %w", err)
+		}
+		if !sweeping {
+			return 0, nil
+		}
+		databaseNow, err := jobDatabaseNow(ctx, tx)
+		if err != nil {
+			return 0, err
+		}
+
+		var expiredJobIDs []string
+		if err = tx.Select(
+			ctx,
+			&expiredJobIDs,
+			`UPDATE job_attempts
+			SET status = 'lease_expired', completed_at = ?
+			WHERE id IN (
+				SELECT id FROM job_attempts
+				WHERE status = 'running' AND lease_expires_at <= ?
+				ORDER BY lease_expires_at, id
+				LIMIT ?
+				FOR UPDATE SKIP LOCKED
+			)
+			RETURNING job_id`,
+			databaseNow,
+			databaseNow,
+			limit,
+		); err != nil {
+			return 0, fmt.Errorf("expire lost job attempts: %w", err)
+		}
+		if len(expiredJobIDs) == 0 {
+			return 0, nil
+		}
+
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE jobs
+			SET status = CASE
+					WHEN status = 'cancel_requested' THEN 'canceled'
+					WHEN attempt_count >= maximum_attempts THEN 'failed'
+					ELSE 'queued'
+				END,
+				completed_at = CASE
+					WHEN status = 'cancel_requested' OR attempt_count >= maximum_attempts THEN CAST(? AS timestamptz)
+					ELSE NULL
+				END,
+				public_error_code = CASE
+					WHEN status = 'cancel_requested' THEN 'job.canceled'
+					WHEN attempt_count >= maximum_attempts THEN 'job.lease_expired'
+					ELSE public_error_code
+				END,
+				available_at = CAST(? AS timestamptz) + `+leaseExpiryBackoff+`,
+				updated_at = GREATEST(updated_at, ?),
+				revision = revision + 1
+			WHERE id = ANY(?)
+				AND status IN ('running', 'cancel_requested')`,
+			databaseNow,
+			databaseNow,
+			databaseNow,
+			pq.Array(expiredJobIDs),
+		); err != nil {
+			return 0, fmt.Errorf("recover expired jobs: %w", err)
+		}
+		return len(expiredJobIDs), nil
+	})
 }
 
 func (s SQLJobStore) Heartbeat(ctx context.Context, input *store.JobHeartbeat) (*model.JobAttempt, error) {

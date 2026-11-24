@@ -27,8 +27,10 @@ const (
 // depend on receiving cluster messages.
 func (s *Service) NewRoleBindingExpiryTask(bindings store.RoleBindingStore) job.PeriodicTask {
 	return job.PeriodicTask{
-		Name:     "role-binding-expiry",
-		Interval: time.Second,
+		Name: "role-binding-expiry",
+		// Closing a socket a few seconds after its binding ended is soon
+		// enough, and every node runs this scan.
+		Interval: 15 * time.Second,
 		Runner:   &roleBindingExpiry{bindings: bindings, closeUser: s.deps.Delivery.applyAuthorizationInvalidation},
 	}
 }

@@ -72,7 +72,7 @@ func TestClonePeriodicTasksValidatesAndClones(t *testing.T) {
 	}
 }
 
-func TestRunPeriodicTaskRunsImmediatelyAndOnEachInterval(t *testing.T) {
+func TestRunPeriodicTaskSpreadsItsRunsAroundTheInterval(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		runner := &periodicTestRunner{seen: make(chan struct{}, 3)}
@@ -84,16 +84,18 @@ func TestRunPeriodicTaskRunsImmediatelyAndOnEachInterval(t *testing.T) {
 			close(done)
 		}()
 
-		waitPeriodicCall(t, runner.seen)
-		waitPeriodicInterval(t, runner.seen, 2*time.Second)
-		waitPeriodicInterval(t, runner.seen, 2*time.Second)
+		// The first run comes within one interval, at a random offset.
+		waitPeriodicWithin(t, runner.seen, 0, 2*time.Second)
+		// Each later run comes after the interval, give or take a tenth.
+		waitPeriodicWithin(t, runner.seen, 1800*time.Millisecond, 2200*time.Millisecond)
+		waitPeriodicWithin(t, runner.seen, 1800*time.Millisecond, 2200*time.Millisecond)
 		cancel()
 		<-done
 		require.Equal(t, 3, runner.count(), "Run() calls")
 	})
 }
 
-func TestRunPeriodicTaskReportsErrorAndContinues(t *testing.T) {
+func TestRunPeriodicTaskReportsErrorAndBacksOff(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		runner := &periodicTestRunner{err: errors.New("database unavailable"), seen: make(chan struct{}, 2)}
@@ -104,13 +106,25 @@ func TestRunPeriodicTaskReportsErrorAndContinues(t *testing.T) {
 			runPeriodicTask(ctx, PeriodicTask{Name: "scan", Interval: 2 * time.Second, Runner: runner}, diagnostics, nil)
 			close(done)
 		}()
-		waitPeriodicCall(t, runner.seen)
+		waitPeriodicWithin(t, runner.seen, 0, 2*time.Second)
 		require.Contains(t, logs.String(), "run periodic runtime task scan", "periodic task error was not reported")
 		require.Contains(t, logs.String(), "database unavailable", "periodic task error was not reported")
-		waitPeriodicInterval(t, runner.seen, 2*time.Second)
+		// After a failure the wait doubles: four seconds, give or take a tenth.
+		waitPeriodicWithin(t, runner.seen, 3600*time.Millisecond, 4400*time.Millisecond)
 		cancel()
 		<-done
 	})
+}
+
+func TestPeriodicWaitDoublesUpToTenIntervals(t *testing.T) {
+	t.Parallel()
+	for failures, base := range map[int]time.Duration{0: time.Second, 1: 2 * time.Second, 3: 8 * time.Second, 4: 10 * time.Second, 20: 10 * time.Second} {
+		for range 100 {
+			wait := periodicWait(time.Second, failures)
+			require.GreaterOrEqual(t, wait, time.Duration(float64(base)*0.9), "failures %d", failures)
+			require.LessOrEqual(t, wait, time.Duration(float64(base)*1.1), "failures %d", failures)
+		}
+	}
 }
 
 func TestEngineOwnsPeriodicTaskLifecycleAndCopiesDefinitions(t *testing.T) {
@@ -128,15 +142,15 @@ func TestEngineOwnsPeriodicTaskLifecycleAndCopiesDefinitions(t *testing.T) {
 		tasks[0] = PeriodicTask{Name: "replacement", Interval: time.Hour, Runner: replacement}
 		err = engine.Start(context.Background())
 		require.NoError(t, err)
-		waitPeriodicCall(t, original.seen)
+		waitPeriodicWithin(t, original.seen, 0, 2*time.Second)
 		select {
 		case <-replacement.seen:
 			require.FailNow(t, "Engine retained the caller-owned periodic task slice")
 		default:
 		}
-		time.Sleep(2*time.Second - time.Nanosecond)
+		time.Sleep(1800*time.Millisecond - time.Nanosecond)
 		synctest.Wait()
-		require.Equal(t, 1, original.count(), "the periodic task ran before its interval")
+		require.Equal(t, 1, original.count(), "the periodic task ran before its jittered interval")
 		err = engine.Close(context.Background())
 		require.NoError(t, err)
 		time.Sleep(time.Hour)
@@ -145,29 +159,28 @@ func TestEngineOwnsPeriodicTaskLifecycleAndCopiesDefinitions(t *testing.T) {
 	})
 }
 
-// waitPeriodicCall requires that the task ran once by the time every
-// goroutine in the bubble is waiting again.
-func waitPeriodicCall(t *testing.T, seen <-chan struct{}) {
+// waitPeriodicWithin requires that the task runs again no sooner than
+// earliest and no later than latest from now.
+func waitPeriodicWithin(t *testing.T, seen <-chan struct{}, earliest, latest time.Duration) {
 	t.Helper()
-	synctest.Wait()
-	select {
-	case <-seen:
-	default:
-		require.FailNow(t, "periodic task did not run")
+	if earliest > 0 {
+		time.Sleep(earliest - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-seen:
+			require.FailNow(t, "periodic task ran too early")
+		default:
+		}
 	}
-}
-
-// waitPeriodicInterval requires that the task runs again exactly when the
-// interval has passed, and not a moment before.
-func waitPeriodicInterval(t *testing.T, seen <-chan struct{}, interval time.Duration) {
-	t.Helper()
-	time.Sleep(interval - time.Nanosecond)
-	synctest.Wait()
-	select {
-	case <-seen:
-		require.FailNow(t, "periodic task ran before its interval")
-	default:
+	deadline := time.Now().Add(latest - max(earliest-time.Nanosecond, 0))
+	for time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
+		select {
+		case <-seen:
+			return
+		default:
+		}
 	}
-	time.Sleep(time.Nanosecond)
-	waitPeriodicCall(t, seen)
+	require.FailNow(t, "periodic task did not run in time")
 }

@@ -72,10 +72,14 @@ identifiers, mail recipients, payloads, credentials or error text.
 
 ### Database pool saturation
 
-Each node exports its PostgreSQL connection pool:
+Each node exports its PostgreSQL connection pools. The `pool` label is
+`proctor` for the main pool and `proctor-control` for the pool that serves
+only the serving lease; the same names appear as `application_name` in
+`pg_stat_activity`.
 
 | Family | What it counts |
 | --- | --- |
+| `proctor_database_connections_opened_total` | Connections the pool has opened since the node started |
 | `proctor_database_in_use_connections` | Connections running work right now |
 | `proctor_database_idle_connections` | Connections open and waiting in the pool |
 | `proctor_database_open_connections`, `proctor_database_max_open_connections` | Current and configured pool size |
@@ -87,6 +91,35 @@ sit at `Database.MaxOpenConnections`, the bottleneck is the pool, not
 PostgreSQL. To get the mean wait, divide the wait-duration rate by the
 wait-count rate. Before you raise the pool size, multiply it by the number of
 nodes and compare the result with PostgreSQL's own connection limit.
+
+A healthy pool opens a connection only when an old one reaches
+`Database.ConnectionMaxLifetime`, so `rate(proctor_database_connections_opened_total[10m])`
+stays near zero. A steady rate above a few per minute means the pool keeps
+closing connections it will need again, usually because
+`Database.MaxIdleConnections` is lower than the bursts of work.
+
+### Job engine and serving lease
+
+| Family | Meaning |
+| --- | --- |
+| `proctor_jobs_queued` | queued Jobs by `type` and `state` (`due` or `scheduled`), counted from the database at most every 15 seconds |
+| `proctor_jobs_dispatcher_wakes_total` | times the node looked for work, by `source`: `local` and `notify` for queued Jobs, `due` for a scheduled Job reaching its time, `backstop` for the periodic check, `reconnect` after the listener reconnected |
+| `proctor_jobs_activities_total{kind="job",operation="claim"}` | claims by `outcome`; `empty` means the node woke and found nothing |
+| `proctor_jobs_lost_attempts_recovered_total` | attempts recovered after the node running them stopped renewing their lease |
+| `proctor_serving_lease_renewals_total` | lease renewals by `outcome`: `renewed`, `failed` (retried) or `rejected` (the node stops serving) |
+| `proctor_serving_lease_renew_duration_seconds` | how long each renewal took |
+
+`proctor_jobs_queued` counts the whole cluster's queue, so every node reports
+the same value; use `max`, not `sum`, across nodes. A `due` count that keeps
+growing means the workers can't keep up or a handler keeps failing. Wakes from
+`backstop` should stay near two a minute per node. If most claims come from
+`backstop` while Jobs are queued, the listener isn't receiving notifications.
+
+Each renewal has 5 seconds. The `ProctorServingLeaseRenewalSlow` alert in
+`build/observability/prometheus/rules/proctor.yaml` fires when the 99th
+percentile passes 2.5 seconds, well before the node would stop serving. The
+"Proctor jobs and database" Grafana dashboard shows these families beside the
+database pools.
 
 ### Slow store operations
 

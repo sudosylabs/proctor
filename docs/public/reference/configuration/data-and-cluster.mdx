@@ -29,9 +29,16 @@ you change anything on this page.
 
 Proctor checks the shape of the URL and the limits. It doesn't connect to
 PostgreSQL to check them. Put the TLS and credential options your deployment
-needs in the query part of the data source. When you size
-`MaxOpenConnections`, count every application node, migrations, and the
-connections you keep back for administration.
+needs in the query part of the data source.
+
+Each node holds up to `MaxOpenConnections + ControlConnections + 1`
+connections: the main pool, the lease pool, and one connection that listens
+for queued Jobs. With the defaults that is 43 per node. Multiply by the number
+of nodes and keep the result below PostgreSQL's `max_connections`, minus the
+`superuser_reserved_connections` and whatever you keep back for
+administration and backups. Three nodes with the defaults need 129, so the
+PostgreSQL default of 100 is too low. Either raise `max_connections` or lower
+`MaxOpenConnections` and `MaxIdleConnections` together.
 
 {/* TODO(production): publish measured database pool profiles after supported
 deployment sizes and PostgreSQL capacity assumptions are established. */}

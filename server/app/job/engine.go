@@ -56,6 +56,16 @@ type Dependencies struct {
 	Now           func() time.Time
 	Recurrences   []Recurrence
 	PeriodicTasks []PeriodicTask
+	// Notifications, when set, wakes this node's workers when any node
+	// commits work for them. Without it, work from other nodes waits for its
+	// due time or the backstop.
+	Notifications Notifications
+}
+
+// Notifications delivers a wake for every Job any node makes claimable. It is
+// a port to the database connection that hears them.
+type Notifications interface {
+	ListenJobs(ctx context.Context, wake func(types ...model.JobType)) error
 }
 
 // Policy is the engine's timing. BackstopInterval bounds how long a Job can
@@ -158,6 +168,13 @@ func (r *Engine) Start(ctx context.Context) error {
 		defer r.wg.Done()
 		r.dispatch.run(runCtx)
 	}()
+	if r.deps.Notifications != nil {
+		r.wg.Add(1)
+		go func() {
+			defer r.wg.Done()
+			r.listen(runCtx)
+		}()
+	}
 
 	for _, recurrence := range r.deps.Recurrences {
 		r.wg.Add(1)
@@ -222,4 +239,21 @@ func (r *Engine) WakeTypes(types ...model.JobType) {
 		return
 	}
 	r.dispatch.wake(types...)
+}
+
+// listen keeps the notification connection open until ctx ends. A failure to
+// listen at all backs off and tries again; meanwhile the backstop still finds
+// the work.
+func (r *Engine) listen(ctx context.Context) {
+	for failures := 0; ctx.Err() == nil; {
+		err := r.deps.Notifications.ListenJobs(ctx, r.dispatch.wake)
+		if err == nil || ctx.Err() != nil {
+			return
+		}
+		failures++
+		r.deps.Diagnostics.ErrorContext(ctx, "listen for queued durable jobs", logging.Err(err))
+		if !sleepContext(ctx, backoff(failures)) {
+			return
+		}
+	}
 }

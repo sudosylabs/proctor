@@ -81,6 +81,7 @@ func newJobRuntime(
 		Recorder:      deps.JobRecorder,
 		Tracer:        deps.JobTracer,
 		Policy:        job.Policy{BackstopInterval: 30 * time.Second},
+		Notifications: deps.JobNotifications,
 		Recurrences:   definitions.recurrences,
 		PeriodicTasks: definitions.periodicTasks,
 	})

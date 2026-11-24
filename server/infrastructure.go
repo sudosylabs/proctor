@@ -27,6 +27,7 @@ import (
 	localvfs "github.com/sudosylabs/proctor/packages/vfs/local"
 	"github.com/sudosylabs/proctor/packages/vfs/s3"
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/cluster/local"
 	"github.com/sudosylabs/proctor/server/cluster/memberlist"
@@ -89,9 +90,12 @@ func prepareSchema(ctx context.Context, persistence *sqlstore.SQLStore, policy s
 type ownedInfrastructure struct {
 	resources platform.OwnedResources
 	migration *sqlstore.MigrationResult
-	metrics   *metrics.Module
-	tracing   *tracing.Module
-	plugins   *pluginhost.Host
+	// jobNotifications is the raw SQL store's listener, kept before the
+	// retry, timer and cache layers wrap the store.
+	jobNotifications job.Notifications
+	metrics          *metrics.Module
+	tracing          *tracing.Module
+	plugins          *pluginhost.Host
 	// pluginSettingsCount is the saved-settings change count the plugins
 	// were activated with; the reconciler continues from it.
 	pluginSettingsCount int64
@@ -110,8 +114,11 @@ type constructionCapabilities struct {
 	externalAuthentication *externalauth.Registry
 	nodeID                 string
 	migration              *sqlstore.MigrationResult
-	metrics                *metrics.Module
-	tracing                *tracing.Module
+	// jobNotifications is the raw SQL store's listener, kept before the
+	// retry, timer and cache layers wrap the store.
+	jobNotifications job.Notifications
+	metrics          *metrics.Module
+	tracing          *tracing.Module
 	// plugins, like metrics and tracing, passes to compositionRelease and
 	// then to the Server, which deactivates it.
 	plugins             *pluginhost.Host
@@ -224,6 +231,7 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 			return errors.Join(err, persistence.Close())
 		}
 		i.migration = migration
+		i.jobNotifications = persistence
 		i.resources.Persistence = persistence
 	}
 	return checkAcquisitionContext(ctx, "acquire persistence")
@@ -510,6 +518,7 @@ func (i *ownedInfrastructure) acceptPlatform(
 		filesystem:             resources.VFS,
 		externalAuthentication: resources.ExternalAuthentication,
 		migration:              i.migration,
+		jobNotifications:       i.jobNotifications,
 		metrics:                i.metrics,
 		tracing:                i.tracing,
 		plugins:                i.plugins,

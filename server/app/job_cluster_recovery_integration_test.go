@@ -116,9 +116,15 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			require.Equal(t, model.JobStatusRunning, afterShutdown.Status)
 
 			time.Sleep(3 * descriptor.LeaseDuration)
+			// Recovering node A's lost attempt is the sweep's work, so node B
+			// runs it, on a short interval to keep the test quick.
 			nodeB, err := job.New(job.Dependencies{
 				Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor}, NodeID: "node-b",
 				Diagnostics: newDiscardLogger(t), Policy: job.Policy{BackstopInterval: 5 * time.Millisecond},
+				PeriodicTasks: []job.PeriodicTask{{
+					Name: jobs.LostAttemptSweepTaskName, Interval: 20 * time.Millisecond,
+					Runner: jobs.LostAttemptSweep{Jobs: persistence.Job()},
+				}},
 			})
 			require.NoError(t, err)
 			err = nodeB.Start(context.Background())

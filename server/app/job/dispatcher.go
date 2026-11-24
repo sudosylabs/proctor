@@ -27,6 +27,9 @@ const (
 	dispatchJitter = 0.2
 	backoffBase    = 500 * time.Millisecond
 	backoffCap     = 30 * time.Second
+	// queueCountInterval is the least time between two queue counts for
+	// metrics; counting reads every queued row, unlike the next-due read.
+	queueCountInterval = 15 * time.Second
 )
 
 // dispatcher wakes a type's workers only when that type has work: at the
@@ -39,7 +42,7 @@ type dispatcher struct {
 	ready       map[model.JobType]chan struct{}
 	backstop    time.Duration
 	diagnostics *logging.Logger
-	recorder    Recorder
+	queue       QueueRecorder
 	now         func() time.Time
 
 	mu         sync.Mutex
@@ -56,11 +59,11 @@ func newDispatcher(persistence store.JobStore, registry *Registry, backstop time
 		ready:       map[model.JobType]chan struct{}{},
 		backstop:    backstop,
 		diagnostics: diagnostics,
-		recorder:    recorder,
 		now:         now,
 		pending:     map[model.JobType]struct{}{},
 		notify:      make(chan struct{}, 1),
 	}
+	d.queue, _ = recorder.(QueueRecorder)
 	for _, jobType := range d.types {
 		descriptor, _ := registry.Descriptor(jobType)
 		d.ready[jobType] = make(chan struct{}, max(descriptor.Concurrency, 1))
@@ -70,7 +73,8 @@ func newDispatcher(persistence store.JobStore, registry *Registry, backstop time
 
 // wake asks for the types' workers to look for work now; no types means
 // every type. It never blocks, and wakes that arrive together coalesce.
-func (d *dispatcher) wake(types ...model.JobType) {
+func (d *dispatcher) wake(source WakeSource, types ...model.JobType) {
+	d.record(source)
 	d.mu.Lock()
 	if len(types) == 0 {
 		d.pendingAll = true
@@ -82,6 +86,22 @@ func (d *dispatcher) wake(types ...model.JobType) {
 	select {
 	case d.notify <- struct{}{}:
 	default:
+	}
+}
+
+// heard is the listener's wake: a type it was told about, or every type
+// when it has just connected and may have missed some.
+func (d *dispatcher) heard(types ...model.JobType) {
+	if len(types) == 0 {
+		d.wake(WakeReconnect)
+		return
+	}
+	d.wake(WakeNotify, types...)
+}
+
+func (d *dispatcher) record(source WakeSource) {
+	if d.queue != nil && source != "" {
+		d.queue.Woke(source)
 	}
 }
 
@@ -122,8 +142,10 @@ func (d *dispatcher) run(ctx context.Context) {
 	var (
 		nextDue     map[model.JobType]time.Time
 		lastRefresh time.Time
+		lastCount   time.Time
 		stale       = true
 		failures    int
+		timerSource WakeSource
 	)
 	for {
 		// woken holds the types a wake just signaled, so the refresh it
@@ -139,6 +161,7 @@ func (d *dispatcher) run(ctx context.Context) {
 			}
 			stale = true
 		case <-timer.C:
+			d.record(timerSource)
 			stale = true
 		}
 
@@ -153,9 +176,15 @@ func (d *dispatcher) run(ctx context.Context) {
 			} else {
 				failures, stale, nextDue = 0, false, due
 				d.signalDue(nextDue, woken)
+				if d.queue != nil && d.now().Sub(lastCount) >= queueCountInterval {
+					lastCount = d.now()
+					d.countQueue(ctx)
+				}
 			}
 		}
-		resetTimer(timer, d.wait(nextDue, stale, lastRefresh, failures))
+		var wait time.Duration
+		wait, timerSource = d.wait(nextDue, stale, lastRefresh, failures)
+		resetTimer(timer, wait)
 	}
 }
 
@@ -175,21 +204,44 @@ func (d *dispatcher) signalDue(nextDue map[model.JobType]time.Time, woken map[mo
 	}
 }
 
-// wait is the sleep until the next thing to do: a failed read's backoff, a
-// deferred refresh, the earliest future Job, or the jittered backstop.
-func (d *dispatcher) wait(nextDue map[model.JobType]time.Time, stale bool, lastRefresh time.Time, failures int) time.Duration {
-	if failures > 0 {
-		return backoff(failures)
+// countQueue reports the queue for metrics. A failed count leaves the
+// gauges as they were; the next one corrects them.
+func (d *dispatcher) countQueue(ctx context.Context) {
+	depth, err := d.store.QueueDepth(ctx, d.types)
+	if err != nil {
+		if ctx.Err() == nil {
+			d.diagnostics.WarnContext(ctx, "count queued durable jobs", logging.Err(err))
+		}
+		return
 	}
-	wait := jitter(d.backstop)
+	all := make(map[model.JobType]store.JobQueueDepth, len(d.types))
+	for _, jobType := range d.types {
+		all[jobType] = depth[jobType]
+	}
+	d.queue.Queued(all)
+}
+
+// wait is the sleep until the next thing to do: a failed read's backoff, a
+// deferred refresh, the earliest future Job, or the jittered backstop. The
+// source names what the timer means when it fires; a retry or a deferred
+// refresh continues an earlier wake and has none.
+func (d *dispatcher) wait(nextDue map[model.JobType]time.Time, stale bool, lastRefresh time.Time, failures int) (time.Duration, WakeSource) {
+	if failures > 0 {
+		return backoff(failures), ""
+	}
+	wait, source := jitter(d.backstop), WakeBackstop
 	if stale {
-		wait = min(wait, max(lastRefresh.Add(dispatchRefreshInterval).Sub(d.now()), 0))
+		if deferred := max(lastRefresh.Add(dispatchRefreshInterval).Sub(d.now()), 0); deferred < wait {
+			wait, source = deferred, ""
+		}
 	}
 	now := d.now()
 	for _, at := range nextDue {
-		wait = min(wait, max(at.Sub(now), 0))
+		if due := max(at.Sub(now), 0); due < wait {
+			wait, source = due, WakeDue
+		}
 	}
-	return wait
+	return wait, source
 }
 
 // backoff is the jittered wait after the failures-th failure in a row:

@@ -416,6 +416,38 @@ func (s SQLJobStore) NextDue(ctx context.Context, types []model.JobType) (map[mo
 	return due, nil
 }
 
+type jobQueueDepthRow struct {
+	Type      string `db:"type"`
+	Due       int    `db:"due"`
+	Scheduled int    `db:"scheduled"`
+}
+
+// QueueDepth counts the queue for metrics. It reads every queued Job of the
+// listed types, so its callers read it seldom.
+func (s SQLJobStore) QueueDepth(ctx context.Context, types []model.JobType) (map[model.JobType]store.JobQueueDepth, error) {
+	if len(types) == 0 {
+		return map[model.JobType]store.JobQueueDepth{}, nil
+	}
+	names := make([]string, len(types))
+	for index, jobType := range types {
+		names[index] = string(jobType)
+	}
+	var rows []jobQueueDepthRow
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT type,
+			count(*) FILTER (WHERE available_at <= CURRENT_TIMESTAMP) AS due,
+			count(*) FILTER (WHERE available_at > CURRENT_TIMESTAMP) AS scheduled
+		FROM jobs
+		WHERE status = 'queued' AND type = ANY(?)
+		GROUP BY type`, pq.Array(names)); err != nil {
+		return nil, fmt.Errorf("count queued jobs: %w", err)
+	}
+	depth := make(map[model.JobType]store.JobQueueDepth, len(rows))
+	for _, row := range rows {
+		depth[model.JobType(row.Type)] = store.JobQueueDepth{Due: row.Due, Scheduled: row.Scheduled}
+	}
+	return depth, nil
+}
+
 // claimTypeCondition matches the claimed types. A single type is an equality,
 // which lets the planner read jobs_claim_type_idx in claim order; an array
 // would make it merge the due Jobs of every type instead.

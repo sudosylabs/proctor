@@ -1879,6 +1879,12 @@ func (s *jobStore) NextDue(ctx context.Context, types []model.JobType) (map[mode
 	})
 }
 
+func (s *jobStore) QueueDepth(ctx context.Context, types []model.JobType) (map[model.JobType]store.JobQueueDepth, error) {
+	return retryCall1(ctx, s.layer, func() (map[model.JobType]store.JobQueueDepth, error) {
+		return s.JobStore.QueueDepth(ctx, types)
+	})
+}
+
 func (s *externalIdentityStore) Get(ctx context.Context, arg1 model.ExternalIdentityID) (*model.ExternalIdentity, error) {
 	return retryCall1(ctx, s.layer, func() (*model.ExternalIdentity, error) {
 		return s.ExternalIdentityStore.Get(ctx, arg1)

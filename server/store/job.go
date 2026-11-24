@@ -125,6 +125,12 @@ type JobHistoryCleanupResult struct {
 
 // JobStore claims Jobs at least once and fences each attempt by its claim
 // token. Every time it compares is on the primary database clock.
+// JobQueueDepth is one type's queued Jobs at one instant.
+type JobQueueDepth struct {
+	Due       int
+	Scheduled int
+}
+
 type JobStore interface {
 	// Enqueue deduplicates by type, key and the Job's dedupe policy. Active
 	// dedupe admits a new Job once the old one is terminal; permanent dedupe
@@ -144,6 +150,9 @@ type JobStore interface {
 	// earliest instant one becomes available. A type with nothing queued is
 	// absent.
 	NextDue(ctx context.Context, types []model.JobType) (map[model.JobType]time.Time, error)
+	// QueueDepth counts each listed type's queued Jobs, split into those due
+	// now and those scheduled later. A type with nothing queued is absent.
+	QueueDepth(ctx context.Context, types []model.JobType) (map[model.JobType]JobQueueDepth, error)
 	// Heartbeat extends only the live attempt holding the claim token.
 	Heartbeat(context.Context, *JobHeartbeat) (*model.JobAttempt, error)
 	// Checkpoint saves progress only for the live token before its lease

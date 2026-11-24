@@ -24,10 +24,11 @@ import (
 // claim finds nothing; due says when each type next has work.
 type dispatchStoreFake struct {
 	store.JobStore
-	mu       sync.Mutex
-	due      map[model.JobType]time.Time
-	nextDues int
-	claims   map[model.JobType]int
+	mu          sync.Mutex
+	due         map[model.JobType]time.Time
+	nextDues    int
+	queueCounts int
+	claims      map[model.JobType]int
 }
 
 func (f *dispatchStoreFake) NextDue(_ context.Context, types []model.JobType) (map[model.JobType]time.Time, error) {
@@ -155,4 +156,109 @@ func TestBackoffAndJitterStayInBounds(t *testing.T) {
 			require.LessOrEqual(t, value, time.Duration(float64(base)*1.2), "failure %d", failures)
 		}
 	}
+}
+
+func (f *dispatchStoreFake) QueueDepth(_ context.Context, types []model.JobType) (map[model.JobType]store.JobQueueDepth, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queueCounts++
+	depth := map[model.JobType]store.JobQueueDepth{}
+	for _, jobType := range types {
+		if at, ok := f.due[jobType]; ok && at.After(time.Now()) {
+			depth[jobType] = store.JobQueueDepth{Scheduled: 1}
+		} else if ok {
+			depth[jobType] = store.JobQueueDepth{Due: 1}
+		}
+	}
+	return depth, nil
+}
+
+// queueRecorderFake records what the dispatcher reports through the
+// optional QueueRecorder capability.
+type queueRecorderFake struct {
+	mu     sync.Mutex
+	wakes  map[WakeSource]int
+	queued []map[model.JobType]store.JobQueueDepth
+}
+
+func (*queueRecorderFake) Started(model.JobType)                                   {}
+func (*queueRecorderFake) Finished(model.JobType, ExecutionOutcome, time.Duration) {}
+func (*queueRecorderFake) Record(Activity)                                         {}
+func (*queueRecorderFake) LostAttemptsRecovered(int)                               {}
+
+func (r *queueRecorderFake) Woke(source WakeSource) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.wakes[source]++
+}
+
+func (r *queueRecorderFake) Queued(depth map[model.JobType]store.JobQueueDepth) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.queued = append(r.queued, depth)
+}
+
+func (r *queueRecorderFake) snapshot() (map[WakeSource]int, []map[model.JobType]store.JobQueueDepth) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	wakes := map[WakeSource]int{}
+	for source, count := range r.wakes {
+		wakes[source] = count
+	}
+	return wakes, append([]map[model.JobType]store.JobQueueDepth(nil), r.queued...)
+}
+
+// TestDispatcherReportsWakeSourcesAndQueueDepth pins what the metrics see:
+// each wake is counted by what caused it, and the queue is counted for every
+// registered type, at most once per count interval.
+func TestDispatcherReportsWakeSourcesAndQueueDepth(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		persistence := &dispatchStoreFake{
+			due:    map[model.JobType]time.Time{model.JobTypeCleanup: time.Now().Add(10 * time.Minute)},
+			claims: map[model.JobType]int{},
+		}
+		recorder := &queueRecorderFake{wakes: map[WakeSource]int{}}
+		descriptors := make([]Descriptor, 0, 2)
+		for _, jobType := range []model.JobType{model.JobTypeMailDeliver, model.JobTypeCleanup} {
+			descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
+			descriptor.Type = jobType
+			descriptors = append(descriptors, descriptor)
+		}
+		engine, err := New(Dependencies{Store: persistence, Descriptors: descriptors, NodeID: "node-a",
+			Diagnostics: newDiscardLogger(t), Recorder: recorder, Policy: Policy{BackstopInterval: time.Hour}})
+		require.NoError(t, err)
+		require.NoError(t, engine.Start(context.Background()))
+		synctest.Wait()
+
+		_, queued := recorder.snapshot()
+		require.Equal(t, []map[model.JobType]store.JobQueueDepth{{
+			model.JobTypeMailDeliver: {},
+			model.JobTypeCleanup:     {Scheduled: 1},
+		}}, queued, "the first read counts every registered type")
+
+		engine.WakeTypes(model.JobTypeMailDeliver)
+		engine.dispatch.heard(model.JobTypeMailDeliver)
+		synctest.Wait()
+		_, queued = recorder.snapshot()
+		require.Len(t, queued, 1, "wakes within the count interval do not count the queue again")
+
+		time.Sleep(11 * time.Minute)
+		synctest.Wait()
+		wakes, queued := recorder.snapshot()
+		require.Equal(t, map[WakeSource]int{WakeLocal: 1, WakeNotify: 1, WakeDue: 1}, wakes)
+		require.Len(t, queued, 2, "the due read counts the queue again")
+		require.Equal(t, store.JobQueueDepth{Due: 1}, queued[1][model.JobTypeCleanup])
+
+		engine.dispatch.heard()
+		synctest.Wait()
+		wakes, _ = recorder.snapshot()
+		require.Equal(t, 1, wakes[WakeReconnect], "a listener wake without types is a reconnect")
+
+		time.Sleep(time.Hour + 15*time.Minute)
+		synctest.Wait()
+		wakes, _ = recorder.snapshot()
+		require.Equal(t, 1, wakes[WakeBackstop], "an idle hour ends in one backstop wake")
+		require.NoError(t, engine.Close(context.Background()))
+	})
 }

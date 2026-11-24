@@ -95,6 +95,11 @@ type Module struct {
 	jobActivities          *prometheus.CounterVec
 	jobActivityDuration    *prometheus.HistogramVec
 	jobQueueLatency        *prometheus.HistogramVec
+	jobsQueued             *prometheus.GaugeVec
+	jobWakes               *prometheus.CounterVec
+	jobLostAttempts        prometheus.Counter
+	leaseRenewals          *prometheus.CounterVec
+	leaseRenewalDuration   prometheus.Histogram
 	vfsOperations          *prometheus.CounterVec
 	vfsDuration            *prometheus.HistogramVec
 	vfsBytes               *prometheus.CounterVec
@@ -235,6 +240,11 @@ func (m *Module) registerCollectors(registry *prometheus.Registry, build BuildIn
 		m.jobActivities,
 		m.jobActivityDuration,
 		m.jobQueueLatency,
+		m.jobsQueued,
+		m.jobWakes,
+		m.jobLostAttempts,
+		m.leaseRenewals,
+		m.leaseRenewalDuration,
 		m.vfsOperations,
 		m.vfsDuration,
 		m.vfsBytes,

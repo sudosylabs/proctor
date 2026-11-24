@@ -221,7 +221,11 @@ func composeConsumers(
 		return nil, fmt.Errorf("require durable Job runtime: %w", errDurableJobRuntimeUnavailable)
 	}
 
-	servingLease, err := cluster.NewServingLease(capabilities.persistence.ServingNodeLease(), capabilities.nodeID)
+	var leaseRecorder cluster.LeaseRecorder
+	if capabilities.metrics.Enabled() {
+		leaseRecorder = capabilities.metrics.ServingLeaseRecorder()
+	}
+	servingLease, err := cluster.NewServingLease(capabilities.persistence.ServingNodeLease(), capabilities.nodeID, leaseRecorder)
 	if err != nil {
 		return nil, fmt.Errorf("construct serving node lease: %w", err)
 	}

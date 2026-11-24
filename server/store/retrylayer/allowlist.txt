@@ -261,3 +261,4 @@ AuditExportStore.TopologyRevision                         always
 # a lost commit acknowledgement recovers nothing twice.
 JobStore.RecoverLostAttempts                               always
 JobStore.NextDue                                           always
+JobStore.QueueDepth                                        always

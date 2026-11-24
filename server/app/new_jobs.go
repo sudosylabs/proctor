@@ -273,7 +273,7 @@ func buildApplicationJobDefinitions(
 
 	periodicTasks := []job.PeriodicTask{
 		jobs.NewExamAttemptExpiryTask(exams.attempts),
-		jobs.NewLostAttemptSweepTask(jobStore),
+		jobs.NewLostAttemptSweepTask(jobStore, deps.JobRecorder),
 	}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
 	if shared.realtime != nil && deps.Store.RoleBinding() != nil {

@@ -19,8 +19,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestModuleServesAuthenticatedNodeMetricsWithoutDebugEndpoints(t *testing.T) {
@@ -172,6 +175,39 @@ func TestModuleExportsDatabasePoolSaturation(t *testing.T) {
 		`proctor_database_connections_opened_total{pool="proctor"} 17`,
 		`proctor_database_open_connections{pool="proctor-control"} 2`,
 		`proctor_database_connections_opened_total{pool="proctor-control"} 2`,
+	} {
+		require.Contains(t, response.Body.String(), sample+"\n")
+	}
+}
+
+func TestModuleExportsJobQueueAndServingLease(t *testing.T) {
+	t.Parallel()
+
+	module, err := New(config.Default().Metrics, BuildInfo{}, Sources{})
+	require.NoError(t, err)
+	recorder, ok := module.JobRecorder().(job.QueueRecorder)
+	require.True(t, ok, "the job recorder reports the queue")
+	recorder.Queued(map[model.JobType]store.JobQueueDepth{model.JobTypeMailDeliver: {Due: 7, Scheduled: 3}, model.JobTypeCleanup: {}})
+	recorder.Woke(job.WakeNotify)
+	recorder.Woke(job.WakeNotify)
+	recorder.LostAttemptsRecovered(4)
+	lease := module.ServingLeaseRecorder()
+	lease("renewed", 30*time.Millisecond)
+	lease("failed", 3*time.Second)
+
+	response := httptest.NewRecorder()
+	module.handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	for _, sample := range []string{
+		`proctor_jobs_queued{state="due",type="mail.deliver"} 7`,
+		`proctor_jobs_queued{state="scheduled",type="mail.deliver"} 3`,
+		`proctor_jobs_queued{state="due",type="job.cleanup"} 0`,
+		`proctor_jobs_dispatcher_wakes_total{source="notify"} 2`,
+		`proctor_jobs_lost_attempts_recovered_total 4`,
+		`proctor_serving_lease_renewals_total{outcome="renewed"} 1`,
+		`proctor_serving_lease_renewals_total{outcome="failed"} 1`,
+		`proctor_serving_lease_renew_duration_seconds_bucket{le="0.05"} 1`,
+		`proctor_serving_lease_renew_duration_seconds_bucket{le="5"} 2`,
 	} {
 		require.Contains(t, response.Body.String(), sample+"\n")
 	}

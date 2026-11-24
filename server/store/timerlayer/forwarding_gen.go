@@ -2947,6 +2947,12 @@ func (s *timedJobStore) NextDue(ctx context.Context, types []model.JobType) (map
 	})
 }
 
+func (s *timedJobStore) QueueDepth(ctx context.Context, types []model.JobType) (map[model.JobType]store.JobQueueDepth, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateJob, methodQueueDepth), func(callCtx context.Context) (map[model.JobType]store.JobQueueDepth, error) {
+		return s.next.QueueDepth(callCtx, types)
+	})
+}
+
 func (s *timedJobStore) Heartbeat(arg0 context.Context, arg1 *store.JobHeartbeat) (*model.JobAttempt, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateJob, methodHeartbeat), func(callCtx context.Context) (*model.JobAttempt, error) {
 		return s.next.Heartbeat(callCtx, arg1)

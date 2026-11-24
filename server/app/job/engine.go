@@ -229,7 +229,7 @@ func (r *Engine) Close(ctx context.Context) error {
 // Wake makes every type's workers look for work now rather than at the next
 // due time or backstop. It never blocks, and wakes before Start are kept.
 func (r *Engine) Wake() {
-	r.dispatch.wake()
+	r.dispatch.wake(WakeLocal)
 }
 
 // WakeTypes makes the listed types' workers look for work now. Call it after
@@ -238,7 +238,7 @@ func (r *Engine) WakeTypes(types ...model.JobType) {
 	if len(types) == 0 {
 		return
 	}
-	r.dispatch.wake(types...)
+	r.dispatch.wake(WakeLocal, types...)
 }
 
 // listen keeps the notification connection open until ctx ends. A failure to
@@ -246,7 +246,7 @@ func (r *Engine) WakeTypes(types ...model.JobType) {
 // the work.
 func (r *Engine) listen(ctx context.Context) {
 	for failures := 0; ctx.Err() == nil; {
-		err := r.deps.Notifications.ListenJobs(ctx, r.dispatch.wake)
+		err := r.deps.Notifications.ListenJobs(ctx, r.dispatch.heard)
 		if err == nil || ctx.Err() != nil {
 			return
 		}

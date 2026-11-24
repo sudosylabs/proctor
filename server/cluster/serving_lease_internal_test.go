@@ -75,7 +75,7 @@ func TestServingNodeLeaseConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	persistence := &servingNodeLeasePersistenceFake{}
-	runtime, err := NewServingLease(persistence, "node-a")
+	runtime, err := NewServingLease(persistence, "node-a", nil)
 	require.NoError(t, err)
 	require.Equal(t, 0, persistence.upserts, "construction upserts")
 	require.NoError(t, runtime.Close())
@@ -86,7 +86,7 @@ func TestServingNodeLeaseRenewalSurvivesTransientFailureShorterThanSlack(t *test
 	t.Parallel()
 
 	persistence := &servingNodeLeasePersistenceFake{failOnCall: 2, recoverOnCall: 6, renewalErr: errors.New("database failover")}
-	runtime, err := NewServingLease(persistence, "node-a")
+	runtime, err := NewServingLease(persistence, "node-a", nil)
 	require.NoError(t, err)
 	useFastServingNodeLeaseTiming(t, runtime)
 	require.NoError(t, runtime.Start(context.Background()))
@@ -113,7 +113,7 @@ func TestServingNodeLeaseRenewalFailsBeforeLastProvenLeaseExpires(t *testing.T) 
 
 	renewalErr := errors.New("database renewal failed")
 	persistence := &servingNodeLeasePersistenceFake{failOnCall: 2, renewalErr: renewalErr}
-	runtime, err := NewServingLease(persistence, "node-a")
+	runtime, err := NewServingLease(persistence, "node-a", nil)
 	require.NoError(t, err)
 	useFastServingNodeLeaseTiming(t, runtime)
 	startedAt := time.Now()
@@ -137,7 +137,7 @@ func TestServingNodeLeaseNormalCloseWithdrawsExactIncarnation(t *testing.T) {
 	t.Parallel()
 
 	persistence := &servingNodeLeasePersistenceFake{}
-	runtime, err := NewServingLease(persistence, "node-a")
+	runtime, err := NewServingLease(persistence, "node-a", nil)
 	require.NoError(t, err)
 	require.NoError(t, runtime.Start(context.Background()))
 	require.NoError(t, runtime.Close())
@@ -152,7 +152,7 @@ func TestServingNodeLeaseExpiredIncarnationRejectionIsTerminal(t *testing.T) {
 
 	expiredErr := store.NewErrConflict("serving_node_lease", "lease_expired", nil)
 	persistence := &servingNodeLeasePersistenceFake{failOnCall: 2, renewalErr: expiredErr}
-	runtime, err := NewServingLease(persistence, "paused-node")
+	runtime, err := NewServingLease(persistence, "paused-node", nil)
 	require.NoError(t, err)
 	useFastServingNodeLeaseTiming(t, runtime)
 	require.NoError(t, runtime.Start(context.Background()))
@@ -177,7 +177,7 @@ func TestServingNodeLeaseKeepsRenewingAfterStartContextEndsUntilClose(t *testing
 	t.Parallel()
 
 	persistence := &servingNodeLeasePersistenceFake{}
-	runtime, err := NewServingLease(persistence, "node-a")
+	runtime, err := NewServingLease(persistence, "node-a", nil)
 	require.NoError(t, err)
 	useFastServingNodeLeaseTiming(t, runtime)
 	// The server cancels its run context when graceful shutdown begins, while
@@ -193,4 +193,39 @@ func TestServingNodeLeaseKeepsRenewingAfterStartContextEndsUntilClose(t *testing
 	require.NoError(t, runtime.Close())
 	_, deletes := persistence.calls()
 	require.Equal(t, 1, deletes, "lease withdrawals")
+}
+
+func TestServingNodeLeaseRecordsEachRenewal(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu       sync.Mutex
+		outcomes []string
+	)
+	recorder := func(outcome string, duration time.Duration) {
+		mu.Lock()
+		defer mu.Unlock()
+		require.GreaterOrEqual(t, duration, time.Duration(0))
+		outcomes = append(outcomes, outcome)
+	}
+	persistence := &servingNodeLeasePersistenceFake{failOnCall: 2, recoverOnCall: 3, renewalErr: errors.New("database failover")}
+	runtime, err := NewServingLease(persistence, "node-a", recorder)
+	require.NoError(t, err)
+	useFastServingNodeLeaseTiming(t, runtime)
+	require.NoError(t, runtime.Start(context.Background()))
+	require.Eventually(t, func() bool {
+		upserts, _ := persistence.calls()
+		return upserts >= 3
+	}, 5*time.Second, time.Millisecond)
+	require.NoError(t, runtime.Close())
+	mu.Lock()
+	require.Equal(t, []string{"renewed", "failed", "renewed"}, outcomes[:3])
+	mu.Unlock()
+
+	rejected := &servingNodeLeasePersistenceFake{failOnCall: 1, renewalErr: store.NewErrConflict("serving_node_lease", "node_id_live", nil)}
+	var rejections []string
+	runtime, err = NewServingLease(rejected, "node-a", func(outcome string, _ time.Duration) { rejections = append(rejections, outcome) })
+	require.NoError(t, err)
+	require.Error(t, runtime.Start(context.Background()))
+	require.Equal(t, []string{"rejected"}, rejections)
 }

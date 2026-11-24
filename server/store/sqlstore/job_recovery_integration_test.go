@@ -150,3 +150,27 @@ func TestJobClaimReadsOnlyItsOwnType(t *testing.T) {
 	joined := strings.Join(plan, "\n")
 	require.Contains(t, joined, "jobs_claim_type_idx", "plan:\n%s", joined)
 }
+
+// TestJobQueueDepthSplitsDueFromScheduled pins the metrics count: only queued
+// Jobs of the listed types count, split at the database's now.
+func TestJobQueueDepthSplitsDueFromScheduled(t *testing.T) {
+	ctx := context.Background()
+	persistence := openTestStore(t)
+	resetPristineTestStore(t, persistence)
+
+	now := model.NowUTC()
+	enqueueRecoveryJob(t, ctx, persistence, model.JobTypeProfilePictureGenerateDefault, now.Add(-time.Minute))
+	enqueueRecoveryJob(t, ctx, persistence, model.JobTypeProfilePictureGenerateDefault, now.Add(-time.Second))
+	enqueueRecoveryJob(t, ctx, persistence, model.JobTypeProfilePictureGenerateDefault, now.Add(time.Hour))
+	enqueueRecoveryJob(t, ctx, persistence, model.JobTypeMailDeliver, now.Add(-time.Minute))
+	claimed := enqueueRecoveryJob(t, ctx, persistence, model.JobTypeCleanup, now.Add(-time.Minute))
+	_, err := persistence.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{claimed.Type}, NodeID: "node-a",
+		ClaimToken: newRecoveryClaimToken(t), LeaseDuration: time.Minute})
+	require.NoError(t, err)
+
+	depth, err := persistence.Job().QueueDepth(ctx, []model.JobType{model.JobTypeProfilePictureGenerateDefault, model.JobTypeCleanup})
+	require.NoError(t, err)
+	require.Equal(t, map[model.JobType]store.JobQueueDepth{
+		model.JobTypeProfilePictureGenerateDefault: {Due: 2, Scheduled: 1},
+	}, depth, "a running Job and an unlisted type do not count")
+}

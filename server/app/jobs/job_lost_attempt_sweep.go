@@ -37,12 +37,18 @@ type LostAttemptRecovery interface {
 // sweeps at a time; the store reports nothing recovered on the others.
 type LostAttemptSweep struct {
 	Jobs LostAttemptRecovery
+	// Recorder counts recovered attempts when it is a job.QueueRecorder.
+	Recorder job.Recorder
 }
 
 // Run sweeps until a batch comes back short or the run's bound is reached.
 func (r LostAttemptSweep) Run(ctx context.Context) error {
+	queue, _ := r.Recorder.(job.QueueRecorder)
 	for range lostAttemptSweepBatches {
 		recovered, err := r.Jobs.RecoverLostAttempts(ctx, lostAttemptSweepBatch)
+		if queue != nil && recovered > 0 {
+			queue.LostAttemptsRecovered(recovered)
+		}
 		if err != nil || recovered < lostAttemptSweepBatch {
 			return err
 		}
@@ -51,10 +57,10 @@ func (r LostAttemptSweep) Run(ctx context.Context) error {
 }
 
 // NewLostAttemptSweepTask returns the periodic sweep over jobs.
-func NewLostAttemptSweepTask(jobs store.JobStore) job.PeriodicTask {
+func NewLostAttemptSweepTask(jobs store.JobStore, recorder job.Recorder) job.PeriodicTask {
 	return job.PeriodicTask{
 		Name:     LostAttemptSweepTaskName,
 		Interval: LostAttemptSweepInterval,
-		Runner:   LostAttemptSweep{Jobs: jobs},
+		Runner:   LostAttemptSweep{Jobs: jobs, Recorder: recorder},
 	}
 }

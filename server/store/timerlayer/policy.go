@@ -156,6 +156,7 @@ const (
 	methodClaimNext                                 methodName = "claim_next"
 	methodRecoverLostAttempts                       methodName = "recover_lost_attempts"
 	methodNextDue                                   methodName = "next_due"
+	methodQueueDepth                                methodName = "queue_depth"
 	methodCompleteResultReleaseBatch                methodName = "complete_result_release_batch"
 	methodClaimResultReleaseBatch                   methodName = "claim_result_release_batch"
 	methodFindCopy                                  methodName = "find_copy"

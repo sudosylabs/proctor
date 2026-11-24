@@ -63,6 +63,10 @@ func (*jobRunnerStoreFake) NextDue(_ context.Context, types []model.JobType) (ma
 	return due, nil
 }
 
+func (*jobRunnerStoreFake) QueueDepth(context.Context, []model.JobType) (map[model.JobType]store.JobQueueDepth, error) {
+	return map[model.JobType]store.JobQueueDepth{}, nil
+}
+
 func (s *jobRunnerStoreFake) ClaimNext(context.Context, *store.JobClaimRequest) (*store.JobClaim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

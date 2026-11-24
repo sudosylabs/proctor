@@ -15,7 +15,9 @@ import (
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/operational"
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // The application has no Prometheus dependency, so the module implements
@@ -42,6 +44,19 @@ func (r jobRecorder) Started(jobType model.JobType) {
 func (r jobRecorder) Finished(jobType model.JobType, result job.ExecutionOutcome, duration time.Duration) {
 	r.metrics.JobFinished(string(jobType), string(result), duration)
 }
+
+func (r jobRecorder) Woke(source job.WakeSource) { r.metrics.ObserveJobWake(string(source)) }
+
+func (r jobRecorder) Queued(depth map[model.JobType]store.JobQueueDepth) {
+	for jobType, count := range depth {
+		r.metrics.ObserveJobsQueued(string(jobType), count.Due, count.Scheduled)
+	}
+}
+
+func (r jobRecorder) LostAttemptsRecovered(count int) { r.metrics.ObserveLostAttemptsRecovered(count) }
+
+// ServingLeaseRecorder adapts m to the serving lease's recorder port.
+func (m *Module) ServingLeaseRecorder() cluster.LeaseRecorder { return m.ObserveServingLeaseRenewal }
 
 func (r jobRecorder) Record(activity job.Activity) {
 	r.metrics.ObserveJobActivity(activity.Kind, activity.Name, activity.Operation, activity.Outcome, activity.Duration, activity.QueueLatency)

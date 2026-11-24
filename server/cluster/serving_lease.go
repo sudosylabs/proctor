@@ -26,6 +26,10 @@ const (
 	servingNodeLeaseStopMargin      = 5 * time.Second
 )
 
+// LeaseRecorder observes each renewal attempt: its outcome ("renewed",
+// "failed" or "rejected") and how long it took.
+type LeaseRecorder func(outcome string, duration time.Duration)
+
 // ServingLease keeps this process's serving lease renewed. A transient renewal
 // failure is retried while the last lease still leaves room for one attempt
 // plus the stop margin. A rejected lease, invalid stored state or exhausted
@@ -39,6 +43,7 @@ type ServingLease struct {
 	operationLimit  time.Duration
 	retryInterval   time.Duration
 	stopMargin      time.Duration
+	recorder        LeaseRecorder
 
 	mu      sync.Mutex
 	cancel  context.CancelFunc
@@ -48,7 +53,8 @@ type ServingLease struct {
 	closed  bool
 }
 
-func NewServingLease(persistence store.ServingNodeLeaseStore, nodeID string) (*ServingLease, error) {
+// NewServingLease returns the lease runtime; recorder may be nil.
+func NewServingLease(persistence store.ServingNodeLeaseStore, nodeID string, recorder LeaseRecorder) (*ServingLease, error) {
 	if persistence == nil || nodeID == "" {
 		return nil, errors.New("serving node lease dependencies are invalid")
 	}
@@ -71,6 +77,7 @@ func NewServingLease(persistence store.ServingNodeLeaseStore, nodeID string) (*S
 		operationLimit:  servingNodeLeaseOperationLimit,
 		retryInterval:   servingNodeLeaseRetryInterval,
 		stopMargin:      servingNodeLeaseStopMargin,
+		recorder:        recorder,
 	}, nil
 }
 
@@ -221,6 +228,22 @@ func terminalServingNodeLeaseError(err error) bool {
 }
 
 func (r *ServingLease) renew(ctx context.Context) error {
+	startedAt := time.Now()
+	err := r.upsert(ctx)
+	if r.recorder != nil {
+		outcome := "renewed"
+		switch {
+		case terminalServingNodeLeaseError(err):
+			outcome = "rejected"
+		case err != nil:
+			outcome = "failed"
+		}
+		r.recorder(outcome, time.Since(startedAt))
+	}
+	return err
+}
+
+func (r *ServingLease) upsert(ctx context.Context) error {
 	lease, err := r.store.Upsert(ctx, &r.claim)
 	if err != nil {
 		return err

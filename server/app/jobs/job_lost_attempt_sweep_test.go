@@ -13,6 +13,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type recoveryFake struct {
@@ -54,4 +58,24 @@ func TestLostAttemptSweepDrainsInBoundedBatches(t *testing.T) {
 	failing := &recoveryFake{err: errors.New("database unavailable")}
 	require.Error(t, LostAttemptSweep{Jobs: failing}.Run(context.Background()))
 	require.Equal(t, 1, failing.calls)
+}
+
+type recoveredRecorderFake struct {
+	job.Recorder
+	recovered int
+}
+
+func (*recoveredRecorderFake) Woke(job.WakeSource)                          {}
+func (*recoveredRecorderFake) Queued(map[model.JobType]store.JobQueueDepth) {}
+func (r *recoveredRecorderFake) LostAttemptsRecovered(count int)            { r.recovered += count }
+
+func TestLostAttemptSweepCountsWhatItRecovers(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recoveredRecorderFake{}
+	sweep := LostAttemptSweep{Jobs: &recoveryFake{results: []int{100, 42}}, Recorder: recorder}
+	require.NoError(t, sweep.Run(context.Background()))
+	require.Equal(t, 142, recorder.recovered)
+
+	require.NoError(t, LostAttemptSweep{Jobs: &recoveryFake{results: []int{3}}}.Run(context.Background()), "no recorder is fine")
 }

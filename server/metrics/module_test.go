@@ -149,10 +149,13 @@ func TestModuleServesProfilesOnlyWhenEnabledAndAuthenticated(t *testing.T) {
 func TestModuleExportsDatabasePoolSaturation(t *testing.T) {
 	t.Parallel()
 
-	module, err := New(config.Default().Metrics, BuildInfo{}, Sources{Database: func() sql.DBStats {
-		return sql.DBStats{
-			MaxOpenConnections: 50, OpenConnections: 12, InUse: 9, Idle: 3,
-			WaitCount: 4, WaitDuration: 1500 * time.Millisecond,
+	module, err := New(config.Default().Metrics, BuildInfo{}, Sources{Database: func() []DatabasePool {
+		return []DatabasePool{
+			{Pool: "proctor", Opened: 17, Stats: sql.DBStats{
+				MaxOpenConnections: 50, OpenConnections: 12, InUse: 9, Idle: 3,
+				WaitCount: 4, WaitDuration: 1500 * time.Millisecond,
+			}},
+			{Pool: "proctor-control", Opened: 2, Stats: sql.DBStats{MaxOpenConnections: 2, OpenConnections: 2, Idle: 2}},
 		}
 	}})
 	require.NoError(t, err)
@@ -160,12 +163,15 @@ func TestModuleExportsDatabasePoolSaturation(t *testing.T) {
 	module.handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	require.Equal(t, http.StatusOK, response.Code)
 	for _, sample := range []string{
-		"proctor_database_in_use_connections 9",
-		"proctor_database_idle_connections 3",
-		"proctor_database_open_connections 12",
-		"proctor_database_max_open_connections 50",
-		"proctor_database_waits_total 4",
-		"proctor_database_wait_duration_seconds_total 1.5",
+		`proctor_database_in_use_connections{pool="proctor"} 9`,
+		`proctor_database_idle_connections{pool="proctor"} 3`,
+		`proctor_database_open_connections{pool="proctor"} 12`,
+		`proctor_database_max_open_connections{pool="proctor"} 50`,
+		`proctor_database_waits_total{pool="proctor"} 4`,
+		`proctor_database_wait_duration_seconds_total{pool="proctor"} 1.5`,
+		`proctor_database_connections_opened_total{pool="proctor"} 17`,
+		`proctor_database_open_connections{pool="proctor-control"} 2`,
+		`proctor_database_connections_opened_total{pool="proctor-control"} 2`,
 	} {
 		require.Contains(t, response.Body.String(), sample+"\n")
 	}

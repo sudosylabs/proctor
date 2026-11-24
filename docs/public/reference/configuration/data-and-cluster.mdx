@@ -18,10 +18,11 @@ you change anything on this page.
 | Path and default | What it does and accepted values |
 | --- | --- |
 | `Database.DataSource`<br />Default: `postgres://proctor:proctor@127.0.0.1:15432/proctor?sslmode=disable` | The PostgreSQL connection URL. It must use the `postgres` scheme and include both a host and a database name. Treat any credentials in it as secrets. The default is for development only. |
-| `Database.MaxOpenConnections`<br />Default: `50` | The most connections this node's pool keeps open. Must be at least `2`, because migrations hold a lock on their own connection while ordinary work continues. Multiply by the number of nodes before you compare it with what PostgreSQL can handle. |
-| `Database.MaxIdleConnections`<br />Default: `10` | The most idle connections this node keeps. Must be between `0` and `MaxOpenConnections`. |
-| `Database.ConnectionMaxLifetime`<br />Default: `1h` | The longest a pooled connection lives. Must be greater than zero. |
-| `Database.ConnectionMaxIdleTime`<br />Default: `5m` | The longest a pooled connection can stay idle. Must be greater than zero. |
+| `Database.MaxOpenConnections`<br />Default: `40` | The most connections this node's main pool keeps open. Must be at least `2`, because migrations hold a lock on their own connection while ordinary work continues. |
+| `Database.MaxIdleConnections`<br />Default: `40` | The most idle connections this node keeps. Must be between half of `MaxOpenConnections` and `MaxOpenConnections`. A lower limit makes the pool close and reopen connections on every burst of work, and each new connection costs PostgreSQL a backend start and an authentication. |
+| `Database.ConnectionMaxLifetime`<br />Default: `30m` | The longest a pooled connection lives. Must be greater than zero. |
+| `Database.ConnectionMaxIdleTime`<br />Default: `10m` | The longest a pooled connection can stay idle. Must be greater than zero. |
+| `Database.ControlConnections`<br />Default: `2` | The size of a second pool that stays open and serves only the serving-node lease, so ordinary load can't delay the renewal that keeps this node serving. Must be between `2` and `4`. |
 | `Database.QueryTimeout`<br />Default: `10s` | The default deadline for ordinary database operations, when the caller doesn't set a shorter one. Must be greater than zero. |
 | `Database.MigrationTimeout`<br />Default: `1m` | The deadline for migrations at startup, including waiting for their lock. Must be greater than zero. |
 | `Database.SlowOperationThreshold`<br />Default: `0s` | Logs a `slow store operation` warning for every store operation that takes at least this long. The warning records only the operation name and how long it took. `0s` turns the warning off. Negative values are rejected. |

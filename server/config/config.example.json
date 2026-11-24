@@ -53,10 +53,11 @@
   },
   "Database": {
     "DataSource": "postgres://proctor:proctor@127.0.0.1:15432/proctor?sslmode=disable",
-    "MaxOpenConnections": 50,
-    "MaxIdleConnections": 10,
-    "ConnectionMaxLifetime": "1h",
-    "ConnectionMaxIdleTime": "5m",
+    "MaxOpenConnections": 40,
+    "MaxIdleConnections": 40,
+    "ConnectionMaxLifetime": "30m",
+    "ConnectionMaxIdleTime": "10m",
+    "ControlConnections": 2,
     "QueryTimeout": "10s",
     "MigrationTimeout": "1m",
     "SlowOperationThreshold": "0s"

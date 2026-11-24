@@ -10,7 +10,6 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -231,9 +230,16 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 }
 
 func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Module, *tracing.Module, error) {
-	var databaseStats func() sql.DBStats
-	if source, ok := i.resources.Persistence.(interface{ Stats() sql.DBStats }); ok {
-		databaseStats = source.Stats
+	var databaseStats func() []metrics.DatabasePool
+	if source, ok := i.resources.Persistence.(interface{ PoolStats() []sqlstore.PoolStats }); ok {
+		databaseStats = func() []metrics.DatabasePool {
+			stats := source.PoolStats()
+			pools := make([]metrics.DatabasePool, 0, len(stats))
+			for _, pool := range stats {
+				pools = append(pools, metrics.DatabasePool{Pool: pool.Pool, Stats: pool.Stats, Opened: pool.Opened})
+			}
+			return pools
+		}
 	}
 
 	currentBuild := app.CurrentBuildInfo()

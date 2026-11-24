@@ -37,7 +37,7 @@ type LogStats struct {
 }
 
 type Sources struct {
-	Database func() sql.DBStats
+	Database func() []DatabasePool
 	Logging  func() LogStats
 	ErrorLog *log.Logger
 }
@@ -290,60 +290,77 @@ func operationDuration(subsystem, help string, labels []string) *prometheus.Hist
 	)
 }
 
-func registerDatabaseCollectors(registry *prometheus.Registry, stats func() sql.DBStats) {
-	values := []struct {
-		name, help string
-		value      func(sql.DBStats) float64
-	}{
-		{"open_connections", "Open database connections.", func(s sql.DBStats) float64 { return float64(s.OpenConnections) }},
-		{
-			"max_open_connections",
-			"Configured maximum open database connections.",
-			func(s sql.DBStats) float64 { return float64(s.MaxOpenConnections) },
-		},
-		{"in_use_connections", "Database connections currently in use.", func(s sql.DBStats) float64 { return float64(s.InUse) }},
-		{"idle_connections", "Idle database connections.", func(s sql.DBStats) float64 { return float64(s.Idle) }},
+// DatabasePool is one connection pool's statistics. Opened counts every
+// connection the pool has made since start, which database/sql itself does
+// not report; a rising Opened under steady load is connection churn.
+type DatabasePool struct {
+	Pool   string
+	Stats  sql.DBStats
+	Opened uint64
+}
+
+func registerDatabaseCollectors(registry *prometheus.Registry, pools func() []DatabasePool) {
+	registry.MustRegister(databaseCollector{pools: pools})
+}
+
+// databaseCollector reports every pool under a pool label, read once per
+// scrape so the values of one pool are consistent with each other.
+type databaseCollector struct {
+	pools func() []DatabasePool
+}
+
+type databaseMetric struct {
+	desc  *prometheus.Desc
+	kind  prometheus.ValueType
+	value func(DatabasePool) float64
+}
+
+var databaseMetrics = []databaseMetric{
+	databaseGauge("open_connections", "Open database connections.",
+		func(p DatabasePool) float64 { return float64(p.Stats.OpenConnections) }),
+	databaseGauge("max_open_connections", "Configured maximum open database connections.",
+		func(p DatabasePool) float64 { return float64(p.Stats.MaxOpenConnections) }),
+	databaseGauge("in_use_connections", "Database connections currently in use.",
+		func(p DatabasePool) float64 { return float64(p.Stats.InUse) }),
+	databaseGauge("idle_connections", "Idle database connections.",
+		func(p DatabasePool) float64 { return float64(p.Stats.Idle) }),
+	databaseCounter("connections_opened_total", "Database connections opened since start.",
+		func(p DatabasePool) float64 { return float64(p.Opened) }),
+	databaseCounter("waits_total", "Database connection waits.",
+		func(p DatabasePool) float64 { return float64(p.Stats.WaitCount) }),
+	databaseCounter("wait_duration_seconds_total", "Time spent waiting for database connections.",
+		func(p DatabasePool) float64 { return p.Stats.WaitDuration.Seconds() }),
+	databaseCounter("max_idle_closed_total", "Connections closed due to the idle pool limit.",
+		func(p DatabasePool) float64 { return float64(p.Stats.MaxIdleClosed) }),
+	databaseCounter("max_idle_time_closed_total", "Connections closed due to the idle timeout.",
+		func(p DatabasePool) float64 { return float64(p.Stats.MaxIdleTimeClosed) }),
+	databaseCounter("max_lifetime_closed_total", "Connections closed due to the lifetime limit.",
+		func(p DatabasePool) float64 { return float64(p.Stats.MaxLifetimeClosed) }),
+}
+
+func databaseGauge(name, help string, value func(DatabasePool) float64) databaseMetric {
+	return databaseMetric{desc: databaseDesc(name, help), kind: prometheus.GaugeValue, value: value}
+}
+
+func databaseCounter(name, help string, value func(DatabasePool) float64) databaseMetric {
+	return databaseMetric{desc: databaseDesc(name, help), kind: prometheus.CounterValue, value: value}
+}
+
+func databaseDesc(name, help string) *prometheus.Desc {
+	return prometheus.NewDesc(prometheus.BuildFQName("proctor", "database", name), help, []string{"pool"}, nil)
+}
+
+func (c databaseCollector) Describe(descs chan<- *prometheus.Desc) {
+	for _, metric := range databaseMetrics {
+		descs <- metric.desc
 	}
-	registry.MustRegister(
-		prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Namespace: "proctor",
-			Subsystem: "database",
-			Name:      "waits_total",
-			Help:      "Database connection waits.",
-		}, func() float64 { return float64(stats().WaitCount) }),
-		prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Namespace: "proctor",
-			Subsystem: "database",
-			Name:      "wait_duration_seconds_total",
-			Help:      "Time spent waiting for database connections.",
-		}, func() float64 { return stats().WaitDuration.Seconds() }),
-		prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Namespace: "proctor",
-			Subsystem: "database",
-			Name:      "max_idle_closed_total",
-			Help:      "Connections closed due to the idle pool limit.",
-		}, func() float64 { return float64(stats().MaxIdleClosed) }),
-		prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Namespace: "proctor",
-			Subsystem: "database",
-			Name:      "max_idle_time_closed_total",
-			Help:      "Connections closed due to the idle timeout.",
-		}, func() float64 { return float64(stats().MaxIdleTimeClosed) }),
-		prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Namespace: "proctor",
-			Subsystem: "database",
-			Name:      "max_lifetime_closed_total",
-			Help:      "Connections closed due to the lifetime limit.",
-		}, func() float64 { return float64(stats().MaxLifetimeClosed) }),
-	)
-	for _, item := range values {
-		item := item
-		registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace: "proctor",
-			Subsystem: "database",
-			Name:      item.name,
-			Help:      item.help,
-		}, func() float64 { return item.value(stats()) }))
+}
+
+func (c databaseCollector) Collect(metrics chan<- prometheus.Metric) {
+	for _, pool := range c.pools() {
+		for _, metric := range databaseMetrics {
+			metrics <- prometheus.MustNewConstMetric(metric.desc, metric.kind, metric.value(pool), pool.Pool)
+		}
 	}
 }
 

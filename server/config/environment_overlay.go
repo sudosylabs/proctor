@@ -580,6 +580,9 @@ var environmentOverrideCatalog = []environmentOverride{
 	intEnvironmentOverride("PROCTOR_DATABASE_MAX_IDLE_CONNECTIONS", func(cfg *Config) *int {
 		return &cfg.Database.MaxIdleConnections
 	}),
+	intEnvironmentOverride("PROCTOR_DATABASE_CONTROL_CONNECTIONS", func(cfg *Config) *int {
+		return &cfg.Database.ControlConnections
+	}),
 	durationEnvironmentOverride("PROCTOR_DATABASE_CONNECTION_MAX_LIFETIME", func(cfg *Config) *Duration {
 		return &cfg.Database.ConnectionMaxLifetime
 	}),

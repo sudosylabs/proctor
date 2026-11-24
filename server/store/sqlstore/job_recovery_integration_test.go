@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -92,7 +93,9 @@ func TestJobLostAttemptsAreRecoveredOnceAcrossSweepers(t *testing.T) {
 			defer wait.Done()
 			for {
 				count, err := persistence.Job().RecoverLostAttempts(ctx, 7)
-				require.NoError(t, err)
+				if !assert.NoError(t, err) {
+					return
+				}
 				mu.Lock()
 				recovered += count
 				done := recovered >= lostJobs

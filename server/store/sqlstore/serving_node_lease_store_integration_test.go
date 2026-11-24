@@ -69,8 +69,8 @@ func TestServingNodeLeaseRenewsWhileTheMainPoolIsExhausted(t *testing.T) {
 
 	held := make([]*sql.Conn, 0, settings.MaxOpenConnections)
 	for range settings.MaxOpenConnections {
-		conn, err := sqlStore.GetMaster().DB().Conn(ctx)
-		require.NoError(t, err)
+		conn, connErr := sqlStore.GetMaster().DB().Conn(ctx)
+		require.NoError(t, connErr)
 		held = append(held, conn)
 	}
 	t.Cleanup(func() {

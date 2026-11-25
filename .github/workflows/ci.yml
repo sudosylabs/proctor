@@ -140,6 +140,13 @@ jobs:
       - name: Run server race tests
         if: ${{ !cancelled() }}
         run: make -C server test-race
+      # Most flaky tests are flaky from their first commit, so each test a
+      # pull request adds or edits runs 20 times under the race detector.
+      - name: Stress new and changed tests
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node build/ci/changed-tests.mjs "$BASE"
       - name: Report runner resources and kernel kills
         if: ${{ always() }}
         run: |
@@ -174,11 +181,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The changed-test stress compares the change with its base.
+          fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
           token: ${{ github.token }}
       - name: Run server and reusable-adapter integration suites
         run: make integration
+      - name: Stress new and changed integration tests
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: make -C server integration-changed BASE="$BASE"
       - name: Retain integration test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

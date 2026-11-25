@@ -20,6 +20,7 @@ import (
 )
 
 func TestBrowserExhaustionSettlement(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"participation_records", "attempt_records", "participation_bytes", "attempt_bytes", "metadata", "intervals"} {
 		t.Run(mode, func(t *testing.T) {
 			s := openTestStore(t)

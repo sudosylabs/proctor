@@ -18,6 +18,7 @@ import (
 )
 
 func TestExternalSecondFactorStateStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
 	storetest.TestExternalSecondFactorStateStore(t, persistence, storetest.ExternalSecondFactorSQLProbe{

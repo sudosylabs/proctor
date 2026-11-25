@@ -26,6 +26,7 @@ import (
 // refuse or reach only through an ended Invitation-origin unit membership,
 // and checks the Role listing, its count and the holder count leave both out.
 func TestRoleHolderReadsExcludeArchivedBindings(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

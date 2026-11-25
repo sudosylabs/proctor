@@ -25,6 +25,7 @@ import (
 )
 
 func TestMFAPersonalAccessTokenCanonicalIDConstraints(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
@@ -86,6 +87,7 @@ func TestMFAPersonalAccessTokenCanonicalIDConstraints(t *testing.T) {
 }
 
 func TestMFAActivationRejectsCorruptionBeforeCommit(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

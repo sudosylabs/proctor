@@ -26,6 +26,7 @@ import (
 )
 
 func TestRetentionPolicyCurrentCredentialAndAssurancePreserveGrace(t *testing.T) {
+	t.Parallel()
 	for _, state := range []struct {
 		name  string
 		query string
@@ -139,6 +140,7 @@ func TestRetentionPolicyCurrentCredentialAndAssurancePreserveGrace(t *testing.T)
 }
 
 func TestRetentionPolicyExportCeilingDatabaseConstraint(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)
@@ -171,6 +173,7 @@ func TestRetentionPolicyExportCeilingDatabaseConstraint(t *testing.T) {
 }
 
 func TestRetentionPolicyReplacementKeepsMonotonicMetadata(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -227,6 +230,7 @@ func TestRetentionPolicyReplacementKeepsMonotonicMetadata(t *testing.T) {
 }
 
 func TestPolicyReplacementRechecksAdministratorAfterBindingEnd(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name      string
 		action    model.Action

@@ -21,6 +21,7 @@ import (
 )
 
 func TestDeliveryExpiryStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestDeliveryExpiryStore(t, s, func(t *testing.T, ctx context.Context, attempt model.ExamAttemptID) {
@@ -63,36 +64,42 @@ func TestDeliveryExpiryStore(t *testing.T) {
 }
 
 func TestDeliveryBudgetStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestDeliveryBudgetStore(t, s)
 }
 
 func TestBrowserIntegrityStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestBrowserIntegrityStore(t, s)
 }
 
 func TestBrowserReviewWaiverStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestBrowserReviewWaiverStore(t, s)
 }
 
 func TestBrowserSecurityWatermarks(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestBrowserSecurityWatermarks(t, s)
 }
 
 func TestBrowserIntegrityGroupCapacity(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestBrowserIntegrityGroupCapacity(t, s)
 }
 
 func TestBrowserIntegrityCopyBoundaries(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestBrowserIntegrityCopyBoundaries(t, s, func(t *testing.T, ctx context.Context, attempt model.ExamAttemptID, records, bytes int64) {

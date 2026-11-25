@@ -21,6 +21,7 @@ import (
 )
 
 func TestFilePurgeCandidatesRespectPurposeReferencesAndLegalHolds(t *testing.T) {
+	t.Parallel()
 	ss := openTestStore(t)
 	resetTestStore(t, ss)
 	ctx := context.Background()
@@ -70,6 +71,7 @@ func TestFilePurgeCandidatesRespectPurposeReferencesAndLegalHolds(t *testing.T) 
 }
 
 func TestFilePurgeClaimRevalidatesLegalHoldBeforeBytesCanBeRemoved(t *testing.T) {
+	t.Parallel()
 	ss := openTestStore(t)
 	resetTestStore(t, ss)
 	ctx := context.Background()

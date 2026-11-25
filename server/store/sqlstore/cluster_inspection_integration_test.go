@@ -23,6 +23,7 @@ import (
 )
 
 func TestInspectClusterListsLiveAndExpiredRowsWithoutWriting(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, func(t *testing.T, persistence store.Store) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

@@ -21,6 +21,7 @@ import (
 )
 
 func TestExamExportStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peer := openTestStore(t)
 	for _, test := range []struct {
@@ -61,6 +62,7 @@ func TestExamExportStore(t *testing.T) {
 }
 
 func TestExamExportRetention(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peer := openTestStore(t)
 	for _, test := range []struct {

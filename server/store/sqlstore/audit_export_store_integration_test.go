@@ -21,6 +21,7 @@ import (
 )
 
 func TestAuditExportStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	for _, test := range []struct {
 		name     string

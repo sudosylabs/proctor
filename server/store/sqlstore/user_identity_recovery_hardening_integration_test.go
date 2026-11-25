@@ -21,6 +21,7 @@ import (
 )
 
 func TestUserIdentityRecoveryCanonicalIDConstraints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)

@@ -60,6 +60,7 @@ func timeAuthorityAccessSession(t *testing.T, ctx context.Context, persistence *
 }
 
 func TestTimeAuthorityAccessPolicyReplacementAfterLeadingPolicyClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	f := mfaRecoveryFixture(t, ctx)
@@ -90,6 +91,7 @@ func TestTimeAuthorityAccessPolicyReplacementAfterLeadingPolicyClock(t *testing.
 }
 
 func TestTimeAuthorityAccessPasswordReauthenticationAfterLeadingSessionClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	f := mfaRecoveryFixture(t, ctx)
@@ -110,6 +112,7 @@ func TestTimeAuthorityAccessPasswordReauthenticationAfterLeadingSessionClock(t *
 }
 
 func TestTimeAuthorityAccessMFAUpgradeAfterLeadingSessionClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)
@@ -151,6 +154,7 @@ func TestTimeAuthorityAccessMFAUpgradeAfterLeadingSessionClock(t *testing.T) {
 }
 
 func TestTimeAuthorityAccessRecoveryCodeConsumptionAfterLeadingCodeClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)
@@ -168,6 +172,7 @@ func TestTimeAuthorityAccessRecoveryCodeConsumptionAfterLeadingCodeClock(t *test
 }
 
 func TestTimeAuthorityAccessMFAResetAfterLeadingNodeClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	f := mfaRecoveryFixture(t, ctx)
@@ -190,6 +195,7 @@ func TestTimeAuthorityAccessMFAResetAfterLeadingNodeClock(t *testing.T) {
 }
 
 func TestTimeAuthorityAccessExternalIdentityUnlinkAfterLeadingIdentityClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)
@@ -211,6 +217,7 @@ func TestTimeAuthorityAccessExternalIdentityUnlinkAfterLeadingIdentityClock(t *t
 }
 
 func TestTimeAuthorityAccessDesktopRegistrationRevocationAfterLeadingNodeClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)
@@ -242,6 +249,7 @@ func TestTimeAuthorityAccessDesktopRegistrationRevocationAfterLeadingNodeClock(t
 }
 
 func TestTimeAuthorityAccessRefreshReplayAfterLeadingSessionClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)
@@ -274,6 +282,7 @@ func TestTimeAuthorityAccessRefreshReplayAfterLeadingSessionClock(t *testing.T) 
 }
 
 func TestTimeAuthorityAccessSessionRevocationModelAfterLeadingSessionClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)
@@ -291,6 +300,7 @@ func TestTimeAuthorityAccessSessionRevocationModelAfterLeadingSessionClock(t *te
 }
 
 func TestTimeAuthorityAccessPersonalAccessTokenUseAfterLeadingTokenClock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s := openTestStore(t)

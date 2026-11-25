@@ -23,6 +23,7 @@ import (
 )
 
 func TestUserEmailChangePreservesLifecycleAcrossClockSkew(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name          string
 		futureCreated bool
@@ -186,6 +187,7 @@ func TestUserEmailChangePreservesLifecycleAcrossClockSkew(t *testing.T) {
 }
 
 func TestPasswordResetSerializesWithPasswordRemoval(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence, institution, user, password := passwordProofFixture(t, ctx)
@@ -253,6 +255,7 @@ func TestPasswordResetSerializesWithPasswordRemoval(t *testing.T) {
 }
 
 func TestPasswordResetSerializesWithResetTokenReissue(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence, institution, user, password := passwordProofFixture(t, ctx)
@@ -310,6 +313,7 @@ func TestPasswordResetSerializesWithResetTokenReissue(t *testing.T) {
 }
 
 func TestEmailVerificationConsumptionUsesPostgreSQLTime(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -335,6 +339,7 @@ func TestEmailVerificationConsumptionUsesPostgreSQLTime(t *testing.T) {
 }
 
 func TestPasswordResetConsumptionUsesPostgreSQLTime(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -381,6 +386,7 @@ func TestPasswordResetConsumptionUsesPostgreSQLTime(t *testing.T) {
 // validity, but the recorded transition never precedes those lifecycles and
 // stays one instant across the token, User, credential, Sessions, and audit.
 func TestUserTokenConsumptionPreservesLifecycleWhenNodeClockLeads(t *testing.T) {
+	t.Parallel()
 	lead := func(t *testing.T, ctx context.Context, persistence *SQLStore, query string, id string) {
 		t.Helper()
 		_, err := persistence.GetMaster().Exec(ctx, query, id)
@@ -505,6 +511,7 @@ func expireTokenAfterObservedNodeTime(t *testing.T, ctx context.Context, persist
 // owns the token-purpose fence; StartDelivery must wait behind that exact
 // transaction and therefore cannot start the superseded snapshot afterward.
 func TestUserTokenReissueFencesConcurrentDeliveryStart(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -593,6 +600,7 @@ func TestUserTokenReissueFencesConcurrentDeliveryStart(t *testing.T) {
 // purpose fence. Consumption is paused after it owns that fence; StartDelivery
 // must block and then suppress the now-consumed credential instead of sending.
 func TestUserTokenConsumptionFencesConcurrentDeliveryStart(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -671,6 +679,7 @@ func TestUserTokenConsumptionFencesConcurrentDeliveryStart(t *testing.T) {
 }
 
 func TestRecoveryDeliveryRelevanceUsesPostgreSQLTime(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -709,6 +718,7 @@ func TestRecoveryDeliveryRelevanceUsesPostgreSQLTime(t *testing.T) {
 // transition. The transition is paused after owning the fence; Issue must wait
 // and then reject its stale target without persisting token or delivery intent.
 func TestUserTokenIssueSerializesWithTargetChange(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -800,6 +810,7 @@ func TestUserTokenIssueSerializesWithTargetChange(t *testing.T) {
 // mail-eligibility singleton. Holding the User while both commands queue makes
 // an inverse singleton -> User path form a deterministic PostgreSQL deadlock.
 func TestUserDisableAndEmailChangeShareUserEligibilityLockOrder(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)

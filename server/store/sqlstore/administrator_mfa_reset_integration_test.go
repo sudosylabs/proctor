@@ -20,6 +20,7 @@ import (
 )
 
 func TestAdministratorMFAResetStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, func(t *testing.T, persistence store.Store) {
 		sqlStore := persistence.(*SQLStore)
 		storetest.TestAdministratorMFAResetStore(t, persistence, administratorMFAResetSQLProbe(sqlStore))
@@ -27,6 +28,7 @@ func TestAdministratorMFAResetStore(t *testing.T) {
 }
 
 func TestAdministratorMFAResetExternalStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.TestAdministratorMFAResetExternalStore)
 }
 

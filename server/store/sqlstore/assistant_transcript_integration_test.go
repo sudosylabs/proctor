@@ -20,6 +20,7 @@ import (
 )
 
 func TestAssistantTranscriptStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	for _, test := range []struct {
 		Name string

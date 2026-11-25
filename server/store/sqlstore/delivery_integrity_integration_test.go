@@ -20,6 +20,7 @@ import (
 )
 
 func TestDeliveryCorruptReads(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	ctx := context.Background()

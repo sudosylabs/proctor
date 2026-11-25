@@ -20,6 +20,7 @@ import (
 )
 
 func TestRetentionSubmissionPrivacy(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	base := retentionSQLProbe(s)
@@ -134,6 +135,7 @@ func TestRetentionSubmissionPrivacy(t *testing.T) {
 }
 
 func TestRetentionNativeOperationalIndependence(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	base := retentionSQLProbe(s)
@@ -161,6 +163,7 @@ func TestRetentionNativeOperationalIndependence(t *testing.T) {
 }
 
 func TestRetentionBrowserEvidenceIndependence(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	base := retentionSQLProbe(s)

@@ -30,6 +30,7 @@ import (
 // Once released, the old-key insertion commits before promotion and the
 // retirement proof necessarily observes its reference.
 func TestMailPrimaryKeyFenceSerializesEnqueueBeforeRekey(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)

@@ -25,3 +25,10 @@ func TestDatabaseNamesAreSafeDistinctAndShort(t *testing.T) {
 	require.Regexp(t, `^proctor_test_[a-z0-9_]+_[0-9a-f]{8}_7$`, odd)
 	require.LessOrEqual(t, len(odd), 63, "PostgreSQL identifiers stop at 63 bytes")
 }
+
+func TestCopyNamesFitPostgreSQLIdentifiers(t *testing.T) {
+	saved := packageName
+	t.Cleanup(func() { packageName = saved })
+	packageName = databaseName("/home/runner/work/proctor/proctor/server/"+strings.Repeat("long_package_", 6), 4_194_304)
+	require.LessOrEqual(t, len(cloneNamePrefix()+"_1000000"), 63, "PostgreSQL truncates longer identifiers, so two copies could collide")
+}

@@ -168,6 +168,7 @@ var baselineTables = []string{
 }
 
 func TestMigrationsRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	migrator, err := NewMigrator(ctx, testSettings(t))
 	require.NoError(t, err)

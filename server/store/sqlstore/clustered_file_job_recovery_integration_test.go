@@ -28,6 +28,7 @@ import (
 )
 
 func TestClusteredProfilePicturePublicationHasOneVisibleWinner(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	nodeA := openTestStore(t)
 	resetTestStore(t, nodeA)
@@ -78,6 +79,7 @@ func TestClusteredProfilePicturePublicationHasOneVisibleWinner(t *testing.T) {
 }
 
 func TestClusteredJobsDeduplicateOccurrencesAndClaimDistinctWork(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	nodeA := openTestStore(t)
 	resetTestStore(t, nodeA)
@@ -190,6 +192,7 @@ func TestClusteredJobsDeduplicateOccurrencesAndClaimDistinctWork(t *testing.T) {
 }
 
 func TestClusteredJobLeaseRecoveryFencesTheDeadNodeAndPreservesAttempts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	nodeA := openTestStore(t)
 	resetTestStore(t, nodeA)

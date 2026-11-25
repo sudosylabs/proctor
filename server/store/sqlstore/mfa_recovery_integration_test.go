@@ -76,6 +76,7 @@ func (f mfaRecoverySQLFixture) resetInput(t *testing.T, ctx context.Context) *st
 }
 
 func TestMFAAssistedResetAtomicRetirementAndRestrictedReenrollment(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	f := mfaRecoveryFixture(t, ctx)
@@ -219,6 +220,7 @@ func saveMFARecoveryExternalState(t *testing.T, ctx context.Context, s *SQLStore
 }
 
 func TestMFAAssistedResetRechecksLiveAuthority(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"self", "missing verification", "revoked actor", "weak actor", "stale actor", "lost role"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

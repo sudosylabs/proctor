@@ -101,6 +101,7 @@ func (s timeAuthorityManagerStore) AddManager(ctx context.Context, input *store.
 // lifecycle when the Exam row was stamped by a leading node clock (or inside
 // the same millisecond as the mutation's millisecond instant).
 func TestTimeAuthorityExamManagerMutationKeepsExamLifecycle(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	lead := &timeAuthorityLead{t: t, persistence: persistence}
@@ -127,6 +128,7 @@ func (s timeAuthorityResourceStore) Reorder(ctx context.Context, input *store.Ex
 // TestTimeAuthorityExamResourceReorderKeepsResourceLifecycle proves Resource
 // modification stamps never move before a Resource stamped by a leading node.
 func TestTimeAuthorityExamResourceReorderKeepsResourceLifecycle(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	lead := &timeAuthorityLead{t: t, persistence: persistence}
@@ -168,6 +170,7 @@ func (s timeAuthorityCorrectionStore) Apply(ctx context.Context, input *store.Ex
 // without recording consumption before the stage's readiness or the upload
 // lease's creation.
 func TestTimeAuthorityExamCorrectionConsumesStagesAfterTheirLifecycle(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	lead := &timeAuthorityLead{t: t, persistence: persistence}
@@ -234,6 +237,7 @@ func (s *timeAuthorityReviewStore) leadFinalizedReview(ctx context.Context, revi
 // node whose clock leads the database, and that the reserved release instant
 // remains accepted by the terminal release.
 func TestTimeAuthorityStudentResultReleaseFollowsFinalization(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -253,6 +257,7 @@ func TestTimeAuthorityStudentResultReleaseFollowsFinalization(t *testing.T) {
 // fan-out maintenance at transaction-start PostgreSQL time never records a
 // completion before a fan-out committed later by another transaction.
 func TestTimeAuthoritySittingMailFanoutTerminalizationFollowsCreation(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	fixture := storetest.PrepareExamSittingMailRecoveryFixture(t, persistence)

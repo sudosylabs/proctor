@@ -26,6 +26,7 @@ import (
 // the claim statement began. The lifecycle CHECK requires claimed_at to equal
 // updated_at, so the claim must record the same raised instant.
 func TestTimeAuthorityAttemptWorkspaceCleanupClaimFollowsLaterModification(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

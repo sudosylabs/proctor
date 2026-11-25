@@ -27,6 +27,7 @@ import (
 	"github.com/sudosylabs/proctor/packages/vfs"
 	memoryvfs "github.com/sudosylabs/proctor/packages/vfs/memory"
 	"github.com/sudosylabs/proctor/server/filecontent"
+	"github.com/sudosylabs/proctor/server/internal/testdb"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/localcachelayer"
@@ -40,8 +41,8 @@ import (
 // decorators only forward calls; generated-forwarding checks and their own
 // unit tests cover them, so they are not rerun against the full suite.
 func TestLocalCacheLayerConformance(t *testing.T) {
-	sqlStore := openTestStore(t)
-	runLayerConformance(t, sqlStore, newLocalCacheConformanceStore)
+	t.Parallel()
+	runLayerConformance(t, newLocalCacheConformanceStore)
 }
 
 func newLocalCacheConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store {
@@ -79,126 +80,129 @@ func newTimerConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store {
 	return storetest.Seeded{Store: timedStore, Seeder: sqlStore}
 }
 
+// runLayerConformance runs each store's tests through a decorated store, in
+// parallel, each on a database of its own.
 func runLayerConformance(
 	t *testing.T,
-	sqlStore *SQLStore,
 	decorate func(*testing.T, *SQLStore) store.Store,
 ) {
 	t.Helper()
 	tests := []struct {
 		name string
-		run  func(*testing.T, store.Store)
+		run  func(t *testing.T, decorated store.Store, sqlStore *SQLStore)
 	}{
-		{"Institution", storetest.TestInstitutionStore},
-		{"AssistantProfile", storetest.TestAssistantProfileStore},
-		{"AcademicUnit", storetest.TestAcademicUnitStore},
-		{"AcademicUnitSummary", storetest.TestAcademicUnitSummaryStore},
-		{"StructureCount", storetest.TestStructureCountStore},
-		{"ClassMemberListing", storetest.TestClassMemberListingStore},
-		{"AuditRepeat", storetest.TestAuditRepeatStore},
-		{"Programme", storetest.TestProgrammeStore},
-		{"ProgrammeLevel", storetest.TestProgrammeLevelStore},
-		{"AcademicPeriod", storetest.TestAcademicPeriodStore},
-		{"ExamAuthoring", storetest.TestExamAuthoringStore},
-		{"ExamRevision", storetest.TestExamRevisionStore},
-		{"ExamSitting", storetest.TestExamSittingStore},
-		{"ExamAttempt", func(t *testing.T, decorated store.Store) {
+		{"Institution", plain(storetest.TestInstitutionStore)},
+		{"AssistantProfile", plain(storetest.TestAssistantProfileStore)},
+		{"AcademicUnit", plain(storetest.TestAcademicUnitStore)},
+		{"AcademicUnitSummary", plain(storetest.TestAcademicUnitSummaryStore)},
+		{"StructureCount", plain(storetest.TestStructureCountStore)},
+		{"ClassMemberListing", plain(storetest.TestClassMemberListingStore)},
+		{"AuditRepeat", plain(storetest.TestAuditRepeatStore)},
+		{"Programme", plain(storetest.TestProgrammeStore)},
+		{"ProgrammeLevel", plain(storetest.TestProgrammeLevelStore)},
+		{"AcademicPeriod", plain(storetest.TestAcademicPeriodStore)},
+		{"ExamAuthoring", plain(storetest.TestExamAuthoringStore)},
+		{"ExamRevision", plain(storetest.TestExamRevisionStore)},
+		{"ExamSitting", plain(storetest.TestExamSittingStore)},
+		{"ExamAttempt", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestExamAttemptStore(t, decorated)
 		}},
-		{"BrowserActivity", func(t *testing.T, decorated store.Store) {
+		{"BrowserActivity", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestBrowserActivityStore(t, decorated, refillDeliveryRate(sqlStore))
 		}},
-		{"ExamAttemptWorkspace", func(t *testing.T, decorated store.Store) {
+		{"ExamAttemptWorkspace", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestExamAttemptWorkspaceStore(t, decorated, decorated.ExamAttemptWorkspace(),
 				examAttemptWorkspaceSQLProbe(t, sqlStore))
 		}},
-		{"ExamSubmission", func(t *testing.T, decorated store.Store) {
+		{"ExamSubmission", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			probe := examSubmissionSQLProbe(t, sqlStore)
 			probe.ConcurrentPeer = NewSQLExamSubmissionStore(sqlStore)
 			storetest.TestExamSubmissionStore(t, decorated, decorated.ExamSubmission(), probe)
 		}},
-		{"ExamIntegrityReview", func(t *testing.T, decorated store.Store) {
+		{"ExamIntegrityReview", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestExamIntegrityReviewStore(t, decorated, decorated.ExamIntegrityReview(),
 				storetest.ExamIntegrityReviewSQLProbe{ConcurrentPeer: NewSQLExamIntegrityReviewStore(sqlStore)})
 		}},
-		{"RetentionCleanupAuditExpiry", func(t *testing.T, decorated store.Store) {
+		{"RetentionCleanupAuditExpiry", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestRetentionCleanupAuditExpiryStore(t, decorated, retentionExpirySQLProbe(sqlStore))
 		}},
-		{"RetentionAuditUnfinishedExamScope", func(t *testing.T, decorated store.Store) {
+		{"RetentionAuditUnfinishedExamScope", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestRetentionAuditUnfinishedExamScope(t, decorated, retentionExpirySQLProbe(sqlStore))
 		}},
-		{"RetentionExpiry", func(t *testing.T, decorated store.Store) {
+		{"RetentionExpiry", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestRetentionExpiryStore(t, decorated, retentionExpirySQLProbe(sqlStore))
 		}},
-		{"RetentionReceiptExpiry", func(t *testing.T, decorated store.Store) {
+		{"RetentionReceiptExpiry", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestRetentionReceiptExpiryStore(t, decorated, retentionSQLProbe(sqlStore), retentionExpirySQLProbe(sqlStore))
 		}},
-		{"Retention", func(t *testing.T, decorated store.Store) {
+		{"Retention", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestRetentionStore(t, decorated, retentionSQLProbe(sqlStore))
 		}},
-		{"ExamRecords", func(t *testing.T, decorated store.Store) {
+		{"ExamRecords", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestExamRecordsStore(t, decorated, examRecordsSQLProbe(sqlStore, sqlStore))
 		}},
-		{"ExamResource", storetest.TestExamResourceStore},
-		{"ExamCorrection", func(t *testing.T, decorated store.Store) {
+		{"ExamResource", plain(storetest.TestExamResourceStore)},
+		{"ExamCorrection", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestExamCorrectionStore(t, decorated, examCorrectionSQLProbe(t, sqlStore))
 		}},
-		{"ExamStarterWorkspace", func(t *testing.T, decorated store.Store) {
+		{"ExamStarterWorkspace", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestExamStarterWorkspaceStore(t, decorated, starterWorkspaceSQLProbe(sqlStore))
 		}},
-		{"Class", storetest.TestClassStore},
-		{"User", func(t *testing.T, decorated store.Store) {
+		{"Class", plain(storetest.TestClassStore)},
+		{"User", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestUserStore(t, decorated, userRegistrationSQLProbe(sqlStore))
 		}},
-		{"UserSettings", storetest.TestUserSettingsStore},
-		{"File", storetest.TestFileStore},
-		{"Job", storetest.TestJobStore},
-		{"DomainEvent", storetest.TestDomainEventStore},
-		{"Mail", storetest.TestMailStore},
-		{"ExternalIdentity", storetest.TestExternalIdentityStore},
-		{"ExternalLoginState", func(t *testing.T, decorated store.Store) {
+		{"UserSettings", plain(storetest.TestUserSettingsStore)},
+		{"File", plain(storetest.TestFileStore)},
+		{"Job", plain(storetest.TestJobStore)},
+		{"DomainEvent", plain(storetest.TestDomainEventStore)},
+		{"Mail", plain(storetest.TestMailStore)},
+		{"ExternalIdentity", plain(storetest.TestExternalIdentityStore)},
+		{"ExternalLoginState", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestExternalLoginStateStore(t, decorated, externalLoginStateSQLProbe(sqlStore))
 		}},
-		{"DesktopAuthorization", func(t *testing.T, decorated store.Store) {
+		{"DesktopAuthorization", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestBrowserAuthenticationStore(t, decorated, browserAuthenticationSQLProbe(sqlStore))
 		}},
-		{"PasswordCredential", storetest.TestPasswordCredentialStore},
-		{"UserToken", storetest.TestUserTokenStore},
-		{"Invitation", func(t *testing.T, decorated store.Store) {
+		{"PasswordCredential", plain(storetest.TestPasswordCredentialStore)},
+		{"UserToken", plain(storetest.TestUserTokenStore)},
+		{"Invitation", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestInvitationStore(t, decorated)
 		}},
-		{"PersonalAccessToken", storetest.TestPersonalAccessTokenStore},
-		{"MFA", storetest.TestMFAStore},
-		{"Session", storetest.TestSessionStores},
-		{"DesktopRegistration", storetest.TestDesktopRegistrationStore},
-		{"ClusterDiscovery", storetest.TestClusterDiscoveryStore},
-		{"Affiliation", storetest.TestAffiliationStore},
-		{"AcademicUnitMember", storetest.TestAcademicUnitMemberStore},
-		{"ClassMember", storetest.TestClassMemberStore},
-		{"Role", storetest.TestRoleStore},
-		{"RoleBinding", storetest.TestRoleBindingStore},
-		{"Audit", storetest.TestAuditStore},
-		{"Installation", storetest.TestInstallationStore},
-		{"AdministratorMFAReset", func(t *testing.T, decorated store.Store) {
+		{"PersonalAccessToken", plain(storetest.TestPersonalAccessTokenStore)},
+		{"MFA", plain(storetest.TestMFAStore)},
+		{"Session", plain(storetest.TestSessionStores)},
+		{"DesktopRegistration", plain(storetest.TestDesktopRegistrationStore)},
+		{"ClusterDiscovery", plain(storetest.TestClusterDiscoveryStore)},
+		{"Affiliation", plain(storetest.TestAffiliationStore)},
+		{"AcademicUnitMember", plain(storetest.TestAcademicUnitMemberStore)},
+		{"ClassMember", plain(storetest.TestClassMemberStore)},
+		{"Role", plain(storetest.TestRoleStore)},
+		{"RoleBinding", plain(storetest.TestRoleBindingStore)},
+		{"Audit", plain(storetest.TestAuditStore)},
+		{"Installation", plain(storetest.TestInstallationStore)},
+		{"AdministratorMFAReset", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestAdministratorMFAResetStore(t, decorated, administratorMFAResetSQLProbe(sqlStore))
 		}},
-		{"AdministratorMFAResetExternal", storetest.TestAdministratorMFAResetExternalStore},
-		{"AccessPolicy", func(t *testing.T, decorated store.Store) {
+		{"AdministratorMFAResetExternal", plain(storetest.TestAdministratorMFAResetExternalStore)},
+		{"AccessPolicy", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestAccessPolicyStore(t, decorated)
 		}},
-		{"AttemptEnvironment", storetest.TestAttemptEnvironmentStore},
-		{"AccessPolicyRoleHolderMFA", storetest.TestAccessPolicyRoleHolderMFAStore},
-		{"AccessPolicySessionLength", func(t *testing.T, decorated store.Store) {
+		{"AttemptEnvironment", plain(storetest.TestAttemptEnvironmentStore)},
+		{"AccessPolicyRoleHolderMFA", plain(storetest.TestAccessPolicyRoleHolderMFAStore)},
+		{"AccessPolicySessionLength", func(t *testing.T, decorated store.Store, sqlStore *SQLStore) {
 			storetest.TestAccessPolicySessionLengthStore(t, decorated)
 		}},
-		{"DesktopCompatibilityPolicy", storetest.TestDesktopCompatibilityPolicyStore},
-		{"PluginSettings", storetest.TestPluginSettingsStore},
-		{"EnvironmentProfile", storetest.TestEnvironmentProfileStore},
-		{"RetentionPolicy", storetest.TestRetentionPolicyStore},
-		{"CommandOutcome", storetest.TestCommandOutcomeStore},
+		{"DesktopCompatibilityPolicy", plain(storetest.TestDesktopCompatibilityPolicyStore)},
+		{"PluginSettings", plain(storetest.TestPluginSettingsStore)},
+		{"EnvironmentProfile", plain(storetest.TestEnvironmentProfileStore)},
+		{"RetentionPolicy", plain(storetest.TestRetentionPolicyStore)},
+		{"CommandOutcome", plain(storetest.TestCommandOutcomeStore)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			sqlStore := openStore(t, testdb.Isolated(t, migrateTemplate))
 			switch test.name {
 			case "AssistantProfile", "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "EnvironmentProfile", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
 				resetPristineTestStore(t, sqlStore)
@@ -215,12 +219,18 @@ func runLayerConformance(
 			default:
 				resetTestStore(t, sqlStore)
 			}
-			test.run(t, decorate(t, sqlStore))
+			test.run(t, decorate(t, sqlStore), sqlStore)
 		})
 	}
 }
 
+// plain adapts a storetest entry point that needs no SQL probe.
+func plain(run func(*testing.T, store.Store)) func(*testing.T, store.Store, *SQLStore) {
+	return func(t *testing.T, decorated store.Store, _ *SQLStore) { run(t, decorated) }
+}
+
 func TestBrowserAuthenticationStore(t *testing.T) {
+	t.Parallel()
 	sqlStore := openTestStore(t)
 	resetTestStore(t, sqlStore)
 	peer := openTestStore(t)
@@ -237,46 +247,57 @@ func browserAuthenticationSQLProbe(sqlStore *SQLStore) storetest.BrowserAuthenti
 }
 
 func TestInstitutionStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestInstitutionStore)
 }
 
 func TestAcademicUnitStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAcademicUnitStore)
 }
 
 func TestAcademicUnitSummaryStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAcademicUnitSummaryStore)
 }
 
 func TestStructureCountStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestStructureCountStore)
 }
 
 func TestClassMemberListingStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestClassMemberListingStore)
 }
 
 func TestAuditRepeatStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAuditRepeatStore)
 }
 
 func TestProgrammeStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestProgrammeStore)
 }
 
 func TestProgrammeLevelStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestProgrammeLevelStore)
 }
 
 func TestAcademicPeriodStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAcademicPeriodStore)
 }
 
 func TestMailStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestMailStore)
 }
 
 func TestMailMaintenanceRetentionAndSharedRateLimit(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestMailStore(t, persistence)
@@ -341,6 +362,7 @@ func TestMailMaintenanceRetentionAndSharedRateLimit(t *testing.T) {
 }
 
 func TestExamAuthoringStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamAuthoringStore)
 	t.Run("bounded catalog plan", func(t *testing.T) {
 		persistence := openTestStore(t)
@@ -350,10 +372,12 @@ func TestExamAuthoringStore(t *testing.T) {
 }
 
 func TestExamRevisionStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamRevisionStore)
 }
 
 func TestExamAttemptStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -367,12 +391,14 @@ func TestExamAttemptStore(t *testing.T) {
 }
 
 func TestBrowserActivityStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, func(t *testing.T, ss store.Store) {
 		storetest.TestBrowserActivityStore(t, ss, refillDeliveryRate(ss.(*SQLStore)))
 	})
 }
 
 func TestExamAttemptWorkspaceStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -383,6 +409,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T) {
 }
 
 func TestExamSubmissionStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -392,6 +419,7 @@ func TestExamSubmissionStore(t *testing.T) {
 }
 
 func TestExamIntegrityReviewStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -400,6 +428,7 @@ func TestExamIntegrityReviewStore(t *testing.T) {
 }
 
 func TestExamCopyStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamCopyStore(t, persistence, func(t *testing.T, ctx context.Context, examID model.ExamID) {
@@ -418,6 +447,7 @@ func TestExamCopyStore(t *testing.T) {
 }
 
 func TestExamIntegrityReviewReopen(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamIntegrityReviewReopen(t, persistence)
@@ -439,6 +469,7 @@ func examRecordsSQLProbe(persistence, peer *SQLStore) storetest.ExamRecordsSQLPr
 }
 
 func TestExamRecordsStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -968,6 +999,7 @@ func examAttemptSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamAtte
 }
 
 func TestExamCorrectionStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamCorrectionStore(t, persistence, examCorrectionSQLProbe(t, persistence))
@@ -1088,6 +1120,7 @@ func examCorrectionSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamC
 }
 
 func TestExamRevisionPublishedBytesSurviveDraftReplacementAndCleanup(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	filesystem := memoryvfs.New()
@@ -1261,10 +1294,12 @@ func assertOpenedBytes(t *testing.T, open func() (io.ReadCloser, error), want []
 }
 
 func TestExamResourceStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamResourceStore)
 }
 
 func TestExamStarterWorkspaceStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, func(t *testing.T, persistence store.Store) {
 		storetest.TestExamStarterWorkspaceStore(t, persistence, starterWorkspaceSQLProbe(persistence.(*SQLStore)))
 	})
@@ -1273,18 +1308,23 @@ func TestExamStarterWorkspaceStore(t *testing.T) {
 func starterWorkspaceSQLProbe(persistence *SQLStore) storetest.StarterWorkspaceSQLProbe {
 	return storetest.StarterWorkspaceSQLProbe{MakeObjectCleanupDue: func(t *testing.T, ctx context.Context, id model.StarterWorkspaceObjectID) {
 		t.Helper()
+		// The row was created on this process's clock, which may lead the
+		// database's; move its creation back so the due time can't precede it.
 		_, err := persistence.GetMaster().Exec(ctx, `UPDATE exam_starter_workspace_objects
-			SET updated_at=GREATEST(updated_at,statement_timestamp()),reclaim_after=statement_timestamp()-INTERVAL '1 microsecond'
+			SET created_at=LEAST(created_at,statement_timestamp()-INTERVAL '1 minute'),
+				updated_at=GREATEST(updated_at,statement_timestamp()),reclaim_after=statement_timestamp()-INTERVAL '1 microsecond'
 			WHERE id=? AND state='reclaimable'`, id.String())
 		require.NoError(t, err)
 	}}
 }
 
 func TestClassStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestClassStore)
 }
 
 func TestUserStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, func(t *testing.T, persistence store.Store) {
 		storetest.TestUserStore(t, persistence, userRegistrationSQLProbe(persistence.(*SQLStore)))
 	})
@@ -1308,10 +1348,12 @@ func userRegistrationSQLProbe(persistence *SQLStore) storetest.UserStoreSQLProbe
 }
 
 func TestUserSettingsStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestUserSettingsStore)
 }
 
 func TestUserSettingsRequiredRowAndCascade(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
@@ -1348,20 +1390,24 @@ func TestUserSettingsRequiredRowAndCascade(t *testing.T) {
 }
 
 func TestFileStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestFileStore)
 }
 
 func TestJobStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestJobStore)
 }
 
 func TestExternalIdentityStore(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, map[string]model.ProviderAdmissionMode{
 		"campus-cas": model.ProviderAdmissionAutoProvision,
 	}, storetest.TestExternalIdentityStore)
 }
 
 func TestExternalIdentityAdmissionModes(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []model.ProviderAdmissionMode{
 		model.ProviderAdmissionLinkedOnly,
 		model.ProviderAdmissionInvitationRequired,
@@ -1385,6 +1431,7 @@ func TestExternalIdentityAdmissionModes(t *testing.T) {
 }
 
 func TestExternalLoginStateStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, func(t *testing.T, persistence store.Store) {
 		storetest.TestExternalLoginStateStore(t, persistence, externalLoginStateSQLProbe(persistence.(*SQLStore)))
 	})
@@ -1399,16 +1446,19 @@ func externalLoginStateSQLProbe(sqlStore *SQLStore) storetest.ExternalLoginState
 }
 
 func TestPasswordCredentialStore(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, map[string]model.ProviderAdmissionMode{
 		"campus-cas": model.ProviderAdmissionLinkedOnly,
 	}, storetest.TestPasswordCredentialStore)
 }
 
 func TestUserTokenStore(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestUserTokenStore)
 }
 
 func TestInvitationStore(t *testing.T) {
+	t.Parallel()
 	sqlStore := openTestStore(t)
 	resetPristineTestStore(t, sqlStore)
 	seedTestAuthenticationPolicy(t, sqlStore, nil)
@@ -1440,50 +1490,62 @@ func TestInvitationStore(t *testing.T) {
 }
 
 func TestPersonalAccessTokenStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestPersonalAccessTokenStore)
 }
 
 func TestMFAStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestMFAStore)
 }
 
 func TestSessionStores(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestSessionStores)
 }
 
 func TestDesktopRegistrationStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestDesktopRegistrationStore)
 }
 
 func TestClusterDiscoveryStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestClusterDiscoveryStore)
 }
 
 func TestAffiliationStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAffiliationStore)
 }
 
 func TestAcademicUnitMemberStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAcademicUnitMemberStore)
 }
 
 func TestClassMemberStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestClassMemberStore)
 }
 
 func TestRoleStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestRoleStore)
 }
 
 func TestRoleBindingStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestRoleBindingStore)
 }
 
 func TestAuditStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAuditStore)
 }
 
 func TestAuditStoreAcceptsGranularAcademicResources(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	for _, test := range []struct {
@@ -1514,42 +1576,52 @@ func TestAuditStoreAcceptsGranularAcademicResources(t *testing.T) {
 }
 
 func TestInstallationStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.TestInstallationStore)
 }
 
 func TestDesktopCompatibilityPolicyStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.TestDesktopCompatibilityPolicyStore)
 }
 
 func TestPluginSettingsStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.TestPluginSettingsStore)
 }
 
 func TestEnvironmentProfileStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.TestEnvironmentProfileStore)
 }
 
 func TestRetentionPolicyStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.TestRetentionPolicyStore)
 }
 
 func TestSessionRevocationAttemptFence(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestSessionRevocationAttemptFence)
 }
 
 func TestSessionExpiryAttemptFence(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestSessionExpiryAttemptFence)
 }
 
 func TestExamAttemptManualSuspensionStore(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestExamAttemptManualSuspensionStore)
 }
 
 func TestExamAttemptScreenClipStore(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestExamAttemptScreenClipStore)
 }
 
 func TestExamAttemptManagementLockAdmitsSittingRenewals(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, func(t *testing.T, ss store.Store) {
 		sqlStore, ok := ss.(*SQLStore)
 		require.True(t, ok)
@@ -1575,6 +1647,7 @@ func TestExamAttemptManagementLockAdmitsSittingRenewals(t *testing.T) {
 }
 
 func TestExamAttemptManualSuspensionBounds(t *testing.T) {
+	t.Parallel()
 	StoreTestWithAuthenticationPolicy(t, nil, func(t *testing.T, ss store.Store) {
 		sqlStore, ok := ss.(*SQLStore)
 		require.True(t, ok)
@@ -1595,6 +1668,7 @@ func TestExamAttemptManualSuspensionBounds(t *testing.T) {
 }
 
 func TestAdministratorRecoveryStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, func(t *testing.T, persistence store.Store) {
 		sqlPersistence := persistence.(*SQLStore)
 		storetest.TestAdministratorRecoveryStore(t, persistence, storetest.AdministratorRecoverySQLProbe{
@@ -1615,10 +1689,12 @@ func TestAdministratorRecoveryStore(t *testing.T) {
 }
 
 func TestCommandOutcomeStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestCommandOutcomeStore)
 }
 
 func TestSecurityPreflightStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
@@ -1641,6 +1717,7 @@ func TestSecurityPreflightStore(t *testing.T) {
 }
 
 func TestSecureConnectStore(t *testing.T) {
+	t.Parallel()
 	sqlStore := openTestStore(t)
 	resetTestStore(t, sqlStore)
 	mustExec := func(query string, args ...any) {
@@ -1713,6 +1790,7 @@ func TestSecureConnectStore(t *testing.T) {
 }
 
 func TestNativeDeliveryAppendStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestNativeDeliveryAppendStore(t, s, refillDeliveryRate(s), func(part model.AttemptParticipationID, records, flags int64) {
@@ -1738,18 +1816,21 @@ func TestNativeDeliveryAppendStore(t *testing.T) {
 }
 
 func TestNativeSuspensionStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestNativeSuspensionStore(t, s)
 }
 
 func TestNativeMaximumRecordStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestNativeMaximumRecordStore(t, persistence)
 }
 
 func TestAssistantProfileStore(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.TestAssistantProfileStore)
 }
 

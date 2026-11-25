@@ -24,6 +24,7 @@ import (
 // the same profile-name rule as model.User.Validate, so no persisted name can
 // later fail mail preparation for its recipient.
 func TestProfileNameConstraintsRejectControlCharacters(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

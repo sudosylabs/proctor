@@ -15,6 +15,10 @@
 // variable as before and migrate the database on first use. Advisory locks
 // and LISTEN/NOTIFY are per database in PostgreSQL, so packages don't
 // contend through them either.
+//
+// A package whose tests run in parallel calls Isolated instead: the package
+// database is migrated once and becomes a template, and each test gets a
+// copy of its own.
 package testdb
 
 import (
@@ -53,12 +57,12 @@ func Main(m *testing.M) int {
 		return 1
 	}
 	name := databaseName(working, os.Getpid())
-	packageURL, drop, err := create(server, name)
+	created, drop, err := create(server, name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "testdb: create %s: %v\n", name, err)
 		return 1
 	}
-	if err = os.Setenv(Variable, packageURL); err != nil {
+	if err = os.Setenv(Variable, created); err != nil {
 		fmt.Fprintf(os.Stderr, "testdb: %v\n", err)
 		return 1
 	}
@@ -110,16 +114,21 @@ func create(server, name string) (string, func() error, error) {
 		_ = admin.Close()
 		return "", nil, err
 	}
-	packageURL := *parsed
-	packageURL.Path = "/" + name
+	created := *parsed
+	created.Path = "/" + name
+	setIsolation(admin, &created, name)
 	drop := func() error {
 		defer func() { _ = admin.Close() }()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
+		// Copies a killed test never dropped go with the package database.
+		if dropErr := dropCopies(ctx, admin); dropErr != nil {
+			return dropErr
+		}
 		// FORCE ends connections a test leaked, which would otherwise keep
 		// the database alive.
 		_, dropErr := admin.ExecContext(ctx, `DROP DATABASE IF EXISTS `+quoted+` WITH (FORCE)`)
 		return dropErr
 	}
-	return packageURL.String(), drop, nil
+	return created.String(), drop, nil
 }

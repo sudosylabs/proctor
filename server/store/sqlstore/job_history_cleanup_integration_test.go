@@ -26,6 +26,7 @@ import (
 )
 
 func TestJobHistoryCleanupContinuesAcrossNodesPastOneDailyBatch(t *testing.T) {
+	t.Parallel()
 	ss := openTestStore(t)
 	resetTestStore(t, ss)
 	ctx := context.Background()
@@ -91,6 +92,7 @@ func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
 }
 
 func TestJobHistoryCleanupHonorsStateRetentionAndSelfPreservation(t *testing.T) {
+	t.Parallel()
 	ss := openTestStore(t)
 	resetTestStore(t, ss)
 	ctx := context.Background()
@@ -133,6 +135,7 @@ func TestJobHistoryCleanupHonorsStateRetentionAndSelfPreservation(t *testing.T) 
 // its NO ACTION foreign key would fail every page that reached it, and the
 // cleanup chain would retry forever without deleting any history.
 func TestJobHistoryCleanupSkipsReferencedJobs(t *testing.T) {
+	t.Parallel()
 	ss := openTestStore(t)
 	resetTestStore(t, ss)
 	ctx := context.Background()

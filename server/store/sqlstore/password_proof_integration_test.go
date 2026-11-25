@@ -23,6 +23,7 @@ import (
 )
 
 func TestPasswordProofResetPreservesNewPasswordAgainstStaleRehash(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence, institution, user, password := passwordProofFixture(t, ctx)
@@ -45,6 +46,7 @@ func TestPasswordProofResetPreservesNewPasswordAgainstStaleRehash(t *testing.T) 
 }
 
 func TestPasswordProofRehashPreservesOutstandingProof(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence, _, user, password := passwordProofFixture(t, ctx)
 	session, credentials := authenticationPolicyTestSession(user.ID, "password", "", "")
@@ -58,6 +60,7 @@ func TestPasswordProofRehashPreservesOutstandingProof(t *testing.T) {
 }
 
 func TestPasswordProofRehashSerializesWithReset(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence, institution, user, password := passwordProofFixture(t, ctx)
@@ -86,6 +89,7 @@ func TestPasswordProofRehashSerializesWithReset(t *testing.T) {
 }
 
 func TestPasswordProofResetSerializesWithSessionCreation(t *testing.T) {
+	t.Parallel()
 	for _, desktop := range []bool{false, true} {
 		for _, resetFirst := range []bool{false, true} {
 			name := "ordinary"
@@ -162,6 +166,7 @@ func TestPasswordProofResetSerializesWithSessionCreation(t *testing.T) {
 }
 
 func TestPasswordProofResetFencesEachDesktopTransition(t *testing.T) {
+	t.Parallel()
 	for _, stage := range []string{"authenticate", "issue", "exchange"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx := context.Background()
@@ -215,6 +220,7 @@ func TestPasswordProofResetFencesEachDesktopTransition(t *testing.T) {
 }
 
 func TestPasswordProofDesktopRejectsRevokedSourceSession(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence, institution, user, _ := passwordProofFixture(t, ctx)
 	session, credentials := authenticationPolicyTestSession(user.ID, "password", "", "")

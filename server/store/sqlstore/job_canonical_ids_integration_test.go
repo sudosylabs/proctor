@@ -21,6 +21,7 @@ import (
 )
 
 func TestJobCanonicalIDConstraintsRejectNoncanonicalValues(t *testing.T) {
+	t.Parallel()
 	ss := openTestStore(t)
 	resetTestStore(t, ss)
 	ctx := context.Background()

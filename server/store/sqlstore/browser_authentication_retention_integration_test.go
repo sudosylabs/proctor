@@ -26,6 +26,7 @@ import (
 )
 
 func TestBrowserAuthenticationMaintenanceIsBoundedAndMultiNodeSafe(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	first := openTestStore(t)
 	resetTestStore(t, first)
@@ -80,6 +81,7 @@ func TestBrowserAuthenticationMaintenanceIsBoundedAndMultiNodeSafe(t *testing.T)
 }
 
 func TestDesktopAuthorizationExchangeSerializesWithConcurrentUserDisable(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -166,6 +168,7 @@ func TestDesktopAuthorizationExchangeSerializesWithConcurrentUserDisable(t *test
 }
 
 func TestDesktopAuthorizationIssueCodeSerializesWithConcurrentUserDisableAcrossNodes(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	primary := openTestStore(t)
@@ -248,6 +251,7 @@ func TestDesktopAuthorizationIssueCodeSerializesWithConcurrentUserDisableAcrossN
 }
 
 func TestDesktopAuthorizationRejectsArchivedUsersWithoutConsumingProofsOrCodes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -299,6 +303,7 @@ func TestDesktopAuthorizationRejectsArchivedUsersWithoutConsumingProofsOrCodes(t
 }
 
 func TestDesktopAuthorizationRejectsMismatchedOrArchivedExternalIdentity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
@@ -360,6 +365,7 @@ func TestDesktopAuthorizationRejectsMismatchedOrArchivedExternalIdentity(t *test
 }
 
 func TestDesktopAuthorizationMaximumActiveSessionConflictDoesNotConsumeCode(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -397,6 +403,7 @@ func TestDesktopAuthorizationMaximumActiveSessionConflictDoesNotConsumeCode(t *t
 }
 
 func TestDesktopAuthorizationRevalidatesSourceWebSessionProof(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -536,6 +543,7 @@ func waitForSecondLockWaiter(t *testing.T, ctx context.Context, persistence *SQL
 }
 
 func TestDesktopAuthorizationRetentionTerminalizesEveryLiveStateAndPurgesSafeMetadata(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -614,6 +622,7 @@ func TestDesktopAuthorizationRetentionTerminalizesEveryLiveStateAndPurgesSafeMet
 }
 
 func TestDesktopAuthorizationCreatesAndRevokesBoundDesktopRegistration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)

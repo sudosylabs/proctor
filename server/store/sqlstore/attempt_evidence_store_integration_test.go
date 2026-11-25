@@ -23,6 +23,7 @@ import (
 )
 
 func TestAttemptEvidence(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	for _, test := range []struct {
 		name     string
@@ -63,6 +64,7 @@ func attemptEvidenceExportProbe(persistence *SQLStore) storetest.AttemptEvidence
 // inventory are immutable, and nothing is inserted once the Submission
 // exists.
 func TestAttemptEvidenceSchemaKeepsRecordsSealed(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

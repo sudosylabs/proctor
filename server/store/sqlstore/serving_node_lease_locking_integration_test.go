@@ -22,6 +22,7 @@ import (
 )
 
 func TestServingNodeLeaseWritesSerializeOnlyTheSameNode(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, func(t *testing.T, persistence store.Store) {
 		sqlStore := persistence.(*SQLStore)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

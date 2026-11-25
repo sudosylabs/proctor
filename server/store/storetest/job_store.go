@@ -144,7 +144,7 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Equal(t, model.JobStatusQueued, backedOff.Status)
 	require.False(t, backedOff.AvailableAt.Before(backedOff.UpdatedAt.Add(200*time.Millisecond)), "lease-expiry backoff = %s", backedOff.AvailableAt.Sub(backedOff.UpdatedAt))
-	time.Sleep(time.Until(backedOff.AvailableAt) + 50*time.Millisecond)
+	WaitUntilPassed(t, ctx, ss, backedOff.AvailableAt)
 	recoveredToken := mustClaimToken(t)
 	recovered, err := ss.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{crashed.Type}, NodeID: "live-node", ClaimToken: recoveredToken, LeaseDuration: time.Minute})
 	require.NoError(t, err)

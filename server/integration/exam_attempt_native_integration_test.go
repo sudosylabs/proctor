@@ -168,7 +168,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	sittingID := scheduled.Sitting.ID
-	time.Sleep(time.Until(startAt) + 100*time.Millisecond)
+	storetest.WaitUntilPassed(t, ctx, persistence, startAt)
 	opened, err := helper.App.Sittings.AdvanceDue(ctx, invocation.System{JobID: model.NewJobID(), AttemptID: model.NewJobAttemptID()}, sittingID)
 	require.NoError(t, err, "open the Sitting at its start")
 	require.NotNil(t, opened.Value)

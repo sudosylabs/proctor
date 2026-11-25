@@ -1638,7 +1638,7 @@ func testInvitationIssueStudentClassTerminalizesElapsedPendingInvitation(
 	require.True(t, claimed, "failed to claim elapsed Invitation delivery Job")
 	_, err = ss.Mail().StartDelivery(ctx, &store.MailDeliveryStart{ID: first.Delivery.ID, ExpectedRevision: first.Delivery.Revision, At: model.NowUTC()})
 	require.NoError(t, err)
-	time.Sleep(time.Until(first.Invitation.IntendedEndsAt.Time) + 20*time.Millisecond)
+	WaitUntilPassed(t, ctx, ss, first.Invitation.IntendedEndsAt.Time)
 	second := studentClassInvitationIssueFixture(t, ss, inviter, class, period, model.NowUTC())
 	second.Invitation.IntendedStartsAt = model.NowUTC()
 	second.Invitation.TargetEmail = first.Invitation.TargetEmail

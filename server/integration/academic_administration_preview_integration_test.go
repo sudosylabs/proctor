@@ -247,7 +247,9 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		}
 	})
 	t.Run("RecordsOneBatchEntryAndNamesItOnEveryRow", func(t *testing.T) {
-		batches, rows := 0, 0
+		// Jobs run at least once, so a retried row may leave an extra
+		// attempt; each row still succeeds exactly once.
+		batches, succeeded := 0, map[string]int{}
 		options := store.AuditListOptions{Actions: []string{string(model.ActionOnboardingBatchManage), string(model.ActionUserManage)},
 			ActorID: ownerID, Limit: 200, Visibility: store.AuditVisibilityScope{InstitutionWide: true}}
 		events, listErr := persistence.Audit().List(ctx, options)
@@ -263,12 +265,13 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 				require.Contains(t, parameters, `"user.disable"`)
 				require.NotContains(t, parameters, "preview-alpha", "the batch entry names no User")
 			}
-			if event.Action == string(model.ActionUserManage) && strings.Contains(parameters, `"onboarding_import_id"`) {
-				rows++
+			if event.Action == string(model.ActionUserManage) && strings.Contains(parameters, `"onboarding_import_id"`) &&
+				event.Status == model.AuditStatusSuccess {
+				succeeded[event.Resource.ID]++
 			}
 		}
 		require.Equal(t, 1, batches)
-		require.Equal(t, 2, rows)
+		require.Equal(t, map[string]int{alpha.ID.String(): 1, bravo.ID.String(): 1}, succeeded, "each frozen row succeeds exactly once")
 	})
 
 	t.Run("RefusesARowWhoseUserBecameASystemAdministrator", func(t *testing.T) {

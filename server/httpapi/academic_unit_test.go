@@ -83,7 +83,7 @@ func TestAcademicUnitHTTPReadMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	want, err := json.Marshal(academicUnitResponseFromModel(unit))
+	want, err := json.Marshal(academicUnitResponseFromModel(fixture.units.byID[unit.ID]))
 	require.NoError(t, err)
 	var got academicUnitResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &got))

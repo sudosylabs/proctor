@@ -104,7 +104,7 @@ func academicRevisionHTTPFixture(t *testing.T, kind string, principal model.Prin
 	case "academic_unit":
 		return academicRevisionSubject{
 			resource: academicUnitResource(fixture.service, nil), path: "/api/v1/academic-units/" + world.unit.ID.String(),
-			conflict: "academic_unit.conflict", setRevision: func(revision int64) { world.unit.Revision = revision },
+			conflict: "academic_unit.conflict", setRevision: func(revision int64) { fixture.units.byID[world.unit.ID].Revision = revision },
 			updates: func() int { return len(fixture.units.updates) },
 			archived: func() []int64 {
 				return academicArchivedRevisions(fixture.units.archives, func(input *store.AcademicUnitArchive) int64 { return input.ExpectedRevision })

@@ -144,7 +144,8 @@ func TestProgrammeLevelUpdateCannotMoveProgramme(t *testing.T) {
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The first get-level resolves the
 	// level's Programme for the decision.
-	require.Equal(t, []string{"get-level", "grants", "decision:programme_level.manage:success", "get-level", "audit-begin:programme_level.manage", "store-update"}, events)
+	accesstest.RequireContract(t, events, []string{"get-level"},
+		"grants", "decision:programme_level.manage:success", "audit-begin:programme_level.manage", "store-update")
 }
 
 func TestProgrammeLevelCreateAuthorizationDenialStopsBeforeAuditAndStore(t *testing.T) {

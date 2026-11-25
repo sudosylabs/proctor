@@ -181,7 +181,9 @@ labels it, and the daily `Flake report` workflow lists what flaked.
   share their inputs. A package that starts goroutines checks for leaks with
   `goleak.VerifyTestMain`.
 - **Assert the contract.** Check the ordering the use case promises, such as
-  "authorization before the read", rather than every internal call.
+  "authorization before the read", rather than every internal call. For a
+  write, `accesstest.RequireContract` keeps the decisions, audit steps,
+  writes and effects exact, and lets the named lookups vary.
 - **Stress new tests.** CI runs each test a change adds or edits 20 times
   under `-race`. Run the same before pushing:
   `node build/ci/changed-tests.mjs main`.

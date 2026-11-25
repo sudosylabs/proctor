@@ -149,7 +149,8 @@ func TestProgrammeUpdateCannotMoveOwnership(t *testing.T) {
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The first get resolves the Programme's
 	// owning unit for the decision.
-	require.Equal(t, []string{"get", "grants", "decision:programme.manage:success", "get", "audit-begin:programme.manage", "store-update"}, events)
+	accesstest.RequireContract(t, events, []string{"get"},
+		"grants", "decision:programme.manage:success", "audit-begin:programme.manage", "store-update")
 }
 
 func TestProgrammeArchiveUsesAtomicStoreSeam(t *testing.T) {

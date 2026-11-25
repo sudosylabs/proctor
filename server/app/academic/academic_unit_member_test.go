@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -124,7 +126,8 @@ func TestAcademicUnitMemberEndCarriesRevision(t *testing.T) {
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The first grants read is the preflight,
 	// which records no decision when the caller holds the action somewhere.
-	require.Equal(t, []string{"grants", "get-member", "grants", "decision:academic_unit.members.manage:success", "render-mail", "audit-begin:academic_unit.members.manage", "store-end"}, events)
+	accesstest.RequireContract(t, events, []string{"get-member"},
+		"grants", "grants", "decision:academic_unit.members.manage:success", "render-mail", "audit-begin:academic_unit.members.manage", "store-end")
 }
 
 func TestAcademicUnitMemberEndDenialDoesNotInspectOpaqueMemberID(t *testing.T) {

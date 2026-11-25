@@ -138,7 +138,8 @@ func TestClassMemberEnrollUsesDestinationPeriodAndAtomicStore(t *testing.T) {
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The first get-class resolves the
 	// Class's scope for the decision.
-	require.Equal(t, []string{"get-class", "grants", "decision:class.members.manage:success", "get-class", "list-active", "get-user", "render-mail", "audit-begin:class.members.manage", "store-enroll"}, events)
+	accesstest.RequireContract(t, events, []string{"get-class", "list-active", "get-user"},
+		"grants", "decision:class.members.manage:success", "render-mail", "audit-begin:class.members.manage", "store-enroll")
 	boardEvent, err := realtime.NewManagerSittingBoardChangedEvent(sitting.ExamID, sitting.SittingID)
 	require.NoError(t, err)
 	// The commit invalidates the candidate's socket permissions before
@@ -192,7 +193,8 @@ func TestClassMemberRetainedEnrollmentBypassesChangedMembershipAndMail(t *testin
 	require.NotNil(t, result, "retained enrollment")
 	require.Zero(t, rendered.Count(), "retained enrollment")
 	// The only Class read resolves the Class's scope for the decision.
-	require.Equal(t, []string{"get-class", "grants", "decision:class.members.manage:success", "audit-begin:class.members.manage", "store-enroll"}, events)
+	accesstest.RequireContract(t, events, []string{"get-class"},
+		"grants", "decision:class.members.manage:success", "audit-begin:class.members.manage", "store-enroll")
 	require.NotNil(t, persistence.enrollInput, "retained enrollment")
 	require.Nil(t, persistence.enrollInput.Notice, "retained enrollment")
 }
@@ -325,7 +327,8 @@ func TestClassMemberEndCarriesRevision(t *testing.T) {
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The first grants read is the preflight,
 	// which records no decision when the caller holds the action somewhere.
-	require.Equal(t, []string{"grants", "get-member", "get-class", "grants", "decision:class.members.manage:success", "get-class", "get-user", "render-mail", "audit-begin:class.members.manage", "store-end"}, events)
+	accesstest.RequireContract(t, events, []string{"get-member", "get-class", "get-user"},
+		"grants", "grants", "decision:class.members.manage:success", "render-mail", "audit-begin:class.members.manage", "store-end")
 }
 
 func TestClassMemberEndDenialDoesNotInspectOpaqueMemberID(t *testing.T) {

@@ -59,17 +59,21 @@ func (s SQLInstallationStore) Bootstrap(
 	ctx context.Context,
 	input *store.InstallationBootstrap,
 ) (*model.InstallationBootstrapResult, error) {
-	prepared, err := prepareInstallationBootstrap(input)
-	if err != nil {
-		return nil, err
-	}
-
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "installation bootstrap", func(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*model.InstallationBootstrapResult, error) {
 		if err := lockAdvisory(ctx, tx, installationBootstrapLock); err != nil {
 			return nil, fmt.Errorf("lock installation bootstrap: %w", err)
+		}
+
+		var databaseNow time.Time
+		if err := tx.Get(ctx, &databaseNow, `SELECT CURRENT_TIMESTAMP`); err != nil {
+			return nil, fmt.Errorf("read installation bootstrap time: %w", err)
+		}
+		prepared, err := prepareInstallationBootstrap(input, databaseNow)
+		if err != nil {
+			return nil, err
 		}
 
 		pristine, err := installationIsPristine(ctx, tx)
@@ -326,8 +330,14 @@ type preparedInstallationBootstrap struct {
 	DefaultProfilePictureJob *model.Job
 }
 
+// prepareInstallationBootstrap stamps the installation with the node's
+// instant, except the administrator's role binding: authority checks compare
+// its start with PostgreSQL time, so a node whose clock leads the database
+// would otherwise leave the first administrator without authority until the
+// database catches up.
 func prepareInstallationBootstrap(
 	input *store.InstallationBootstrap,
+	databaseNow time.Time,
 ) (*preparedInstallationBootstrap, error) {
 	if input == nil ||
 		input.Institution == nil ||
@@ -369,7 +379,11 @@ func prepareInstallationBootstrap(
 		return nil, err
 	}
 
-	binding, err := prepareBootstrapRoleBinding(input, administrator.ID, role.ID, institution.ID, at)
+	startsAt := at
+	if databaseNow = UTCTime(databaseNow); databaseNow.Before(startsAt) {
+		startsAt = databaseNow
+	}
+	binding, err := prepareBootstrapRoleBinding(input, administrator.ID, role.ID, institution.ID, at, startsAt)
 	if err != nil {
 		return nil, err
 	}
@@ -464,6 +478,7 @@ func prepareBootstrapRoleBinding(
 	roleID model.RoleID,
 	institutionID model.InstitutionID,
 	at time.Time,
+	startsAt time.Time,
 ) (*model.RoleBinding, error) {
 	binding := *input.RoleBinding
 	binding.ID = ""
@@ -477,6 +492,7 @@ func prepareBootstrapRoleBinding(
 	binding.ScopeID = institutionID.String()
 	binding.GrantedByUserID = ""
 	binding.GrantedVia = model.RoleBindingGrantedAtBootstrap
+	binding.StartsAt = startsAt
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
 	if err := binding.Validate(); err != nil {
 		return nil, err

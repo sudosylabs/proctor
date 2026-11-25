@@ -72,3 +72,7 @@ func TestTimeAuthorityUserLoginFollowsLeadingUser(t *testing.T) {
 	persistence := openTimeAuthorityIdentityStore(t)
 	storetest.RunTimeAuthorityUserLogin(t, persistence, timeAuthorityIdentityProbe(persistence))
 }
+
+func TestTimeAuthorityBootstrapAdministratorActsAtOnce(t *testing.T) {
+	PristineStoreTest(t, storetest.RunTimeAuthorityBootstrapAdministrator)
+}

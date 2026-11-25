@@ -99,8 +99,9 @@ func testMFALifecycleAndSessionAssurance(t *testing.T, ss store.Store) {
 	require.False(t, activated.Session.MFACompletedAt.Time.After(model.NowUTC()))
 	require.Len(t, activated.AccessTokenHashes, 1)
 	require.Equal(t, model.HashToken(raw.access), activated.AccessTokenHashes[0])
-	count, err := ss.MFA().CountRecoveryCodes(ctx, user.ID)
+	countSummary, err := ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
 	require.NoError(t, err)
+	count := countSummary.Remaining
 	require.Equal(t, 2, count, "CountRecoveryCodes()")
 	summary, err := ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
 	require.NoError(t, err)
@@ -124,8 +125,9 @@ func testMFALifecycleAndSessionAssurance(t *testing.T, ss store.Store) {
 	require.True(t, store.IsNotFound(ss.MFA().ConsumeSecondFactor(
 		ctx, &store.MFASecondFactorConsumption{UserID: user.ID, TimeStep: 0, RecoveryCodeHash: firstHash, Now: now.Add(4 * time.Millisecond)},
 	)), "replayed recovery code error")
-	count, err = ss.MFA().CountRecoveryCodes(ctx, user.ID)
+	countSummary, err = ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
 	require.NoError(t, err)
+	count = countSummary.Remaining
 	require.Equal(t, 1, count, "remaining recovery codes")
 	// A consumed code stays in the issued set.
 	summary, err = ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
@@ -141,8 +143,9 @@ func testMFALifecycleAndSessionAssurance(t *testing.T, ss store.Store) {
 	}))
 
 	requireMFATransitionCommitted(t, ctx, ss, user.ID, regenerationAudit, model.MailTemplateIdentityMFARecoveryCodesRegenerated, model.MailDeliveryQueued)
-	count, err = ss.MFA().CountRecoveryCodes(ctx, user.ID)
+	countSummary, err = ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
 	require.NoError(t, err)
+	count = countSummary.Remaining
 	require.Equal(t, 1, count, "replacement recovery codes")
 	// Regeneration archives the old set, so only the replacement is issued.
 	summary, err = ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
@@ -355,4 +358,19 @@ func mfaPrincipal(t *testing.T, ctx context.Context, ss store.Store, rawAccess s
 }
 func mfaSessionPrincipal(session *model.Session, credential *model.SessionCredential) model.Principal {
 	return model.Principal{UserID: session.UserID, SessionID: session.ID, CredentialID: model.PrincipalCredentialID(credential.ID), CredentialType: model.CredentialSessionAccess, AuthenticationGeneration: session.AuthenticationGeneration, MFARecoveryRequired: session.MFARecoveryRequired, ClientType: session.ClientType, AuthenticationMethod: session.AuthenticationMethod, AuthenticationProviderID: session.AuthenticationProviderID, ExternalIdentityID: session.ExternalIdentityID, AuthenticationStrength: session.AuthenticationStrength, AuthenticatedAt: session.AuthenticatedAt, ReauthenticatedAt: session.ReauthenticatedAt, MFACompletedAt: session.MFACompletedAt}
+}
+
+// challengeTestMFA proves the user's active second factor in principal's
+// session, as the second step of a sign-in does. It uses the time step after
+// the credential's last one, so it never replays.
+func challengeTestMFA(t *testing.T, ctx context.Context, ss store.Store, user *model.User, principal model.Principal, at time.Time) error {
+	t.Helper()
+	credential, err := ss.MFA().GetByUser(ctx, user.ID)
+	require.NoError(t, err)
+	audit, _ := mfaSecurityNoticeFixture(t, ctx, ss, user, model.MailTemplateIdentityMFAEnabled, at)
+	_, err = ss.MFA().Challenge(ctx, &store.MFAChallenge{
+		Principal: principal, CredentialID: credential.ID, TimeStep: credential.LastUsedTimeStep + 1,
+		VerifiedAt: at, AuditEventID: audit.ID,
+	})
+	return err
 }

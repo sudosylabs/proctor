@@ -268,8 +268,8 @@ func (s *mfaApplicationStoreFake) ConsumeSecondFactor(ctx context.Context, input
 	return nil
 }
 
-func (s *mfaApplicationStoreFake) UpgradeSession(_ context.Context, input *store.MFASessionUpgrade) ([]string, error) {
-	at := input.Now
+// upgrade records the session upgrade a challenge makes.
+func (s *mfaApplicationStoreFake) upgrade(at time.Time) ([]string, error) {
 	s.upgradeCalls++
 	s.upgradedAt = at
 	s.appendEvent("upgrade")
@@ -361,7 +361,7 @@ func (s *mfaApplicationStoreFake) Challenge(ctx context.Context, input *store.MF
 	if err := s.ConsumeSecondFactor(ctx, &store.MFASecondFactorConsumption{UserID: input.Principal.UserID, TimeStep: input.TimeStep, RecoveryCodeHash: input.RecoveryCodeHash, Now: input.VerifiedAt}); err != nil {
 		return nil, err
 	}
-	hashes, err := s.UpgradeSession(ctx, &store.MFASessionUpgrade{SessionID: input.Principal.SessionID, UserID: input.Principal.UserID, Now: input.VerifiedAt})
+	hashes, err := s.upgrade(input.VerifiedAt)
 	if err != nil {
 		return nil, err
 	}

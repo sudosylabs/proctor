@@ -169,7 +169,6 @@ PersonalAccessTokenStore.Get                               always
 PersonalAccessTokenStore.ListByUser                        always
 
 MFAStore.GetByUser                                         always
-MFAStore.CountRecoveryCodes                                always
 MFAStore.SummarizeRecoveryCodes                            always
 
 AffiliationStore.Get                                       always

@@ -87,9 +87,7 @@ type MFAStore interface {
 	GetByUser(context.Context, model.UserID) (*model.MFACredential, error)
 	Activate(context.Context, *MFAActivationMutation) (*MFAActivationResult, error)
 	ConsumeSecondFactor(context.Context, *MFASecondFactorConsumption) error
-	UpgradeSession(context.Context, *MFASessionUpgrade) ([]string, error)
 	ReplaceRecoveryCodes(context.Context, *MFARecoveryCodesRegeneration) error
-	CountRecoveryCodes(context.Context, model.UserID) (int, error)
 	SummarizeRecoveryCodes(context.Context, model.UserID) (*MFARecoveryCodeSummary, error)
 	// InspectKeyState returns the primary-key fence and, per key in ID order,
 	// how many unarchived credentials it seals. Startup uses it to prove the
@@ -120,13 +118,6 @@ type MFASecondFactorConsumption struct {
 	TimeStep         int64
 	RecoveryCodeHash string
 	Now              time.Time
-}
-
-// MFASessionUpgrade is the input to MFAStore.UpgradeSession.
-type MFASessionUpgrade struct {
-	SessionID model.SessionID
-	UserID    model.UserID
-	Now       time.Time
 }
 
 // MFARecoveryCodeSummary describes a user's unarchived recovery codes. Issued

@@ -129,8 +129,9 @@ func TestAdministratorMFAResetStore(t *testing.T, ss store.Store, probes ...Admi
 	require.Equal(t, int64(1), result.Recovery.Generation)
 	_, err = ss.MFA().GetByUser(ctx, userID)
 	require.True(t, store.IsNotFound(err), "reset retained MFA error")
-	count, err := ss.MFA().CountRecoveryCodes(ctx, userID)
+	countSummary, err := ss.MFA().SummarizeRecoveryCodes(ctx, userID)
 	require.NoError(t, err)
+	count := countSummary.Remaining
 	require.Equal(t, 0, count, "reset retained")
 	currentSession, err := ss.Session().Get(ctx, session.ID)
 	require.NoError(t, err)

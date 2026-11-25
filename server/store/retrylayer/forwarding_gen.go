@@ -2002,12 +2002,6 @@ func (s *mfaStore) GetByUser(ctx context.Context, arg1 model.UserID) (*model.MFA
 	})
 }
 
-func (s *mfaStore) CountRecoveryCodes(ctx context.Context, arg1 model.UserID) (int, error) {
-	return retryCall1(ctx, s.layer, func() (int, error) {
-		return s.MFAStore.CountRecoveryCodes(ctx, arg1)
-	})
-}
-
 func (s *mfaStore) SummarizeRecoveryCodes(ctx context.Context, arg1 model.UserID) (*store.MFARecoveryCodeSummary, error) {
 	return retryCall1(ctx, s.layer, func() (*store.MFARecoveryCodeSummary, error) {
 		return s.MFAStore.SummarizeRecoveryCodes(ctx, arg1)

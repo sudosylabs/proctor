@@ -146,7 +146,6 @@ type MailStore interface {
 	SuppressExpired(context.Context, int) (*MailMaintenanceResult, error)
 	CleanupTerminal(context.Context, int) (*MailMaintenanceResult, error)
 	QueueSnapshot(context.Context) (*MailQueueSnapshot, error)
-	ActivePayloadKeyIDs(context.Context) ([]string, error)
 	InspectKeyState(context.Context) (*MailKeyState, error)
 	StartRekey(context.Context, *MailRekeyStart) (*MailRekeyOperation, error)
 	ListRekeyTargets(context.Context, *MailRekeyTargetPageRequest) (*MailRekeyTargetPage, error)

@@ -217,10 +217,10 @@ func TestMailStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Empty(t, backoffSnapshot.Counts)
 	require.True(t, backoffSnapshot.OldestQueuedAt.IsZero())
-	keyIDs, err := ss.Mail().ActivePayloadKeyIDs(ctx)
+	keyState, err := ss.Mail().InspectKeyState(ctx)
 	require.NoError(t, err)
-	for _, keyID := range keyIDs {
-		require.Equal(t, strings.Repeat("1", 32), keyID, "ActivePayloadKeyIDs() = %#v", keyIDs)
+	for _, usage := range keyState.Active {
+		require.Equal(t, strings.Repeat("1", 32), usage.KeyID, "InspectKeyState().Active = %#v", keyState.Active)
 	}
 	testMailRekeyStore(t, ctx, ss, user, institution)
 }

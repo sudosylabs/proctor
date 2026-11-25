@@ -85,7 +85,7 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Equal(t, model.JobStatusSucceeded, succeeded.Status)
 	require.True(t, succeeded.CompletedAt.Valid)
-	attempts, err := ss.Job().ListAttempts(ctx, job.ID)
+	attempts, err := JobAttempts(t, ctx, ss.Job(), job.ID)
 	require.NoError(t, err)
 	require.Len(t, attempts, 2)
 	require.Equal(t, model.JobAttemptStatusFailed, attempts[0].Status)
@@ -113,7 +113,7 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	_, err = ss.Job().Complete(ctx, &store.JobCompletion{AttemptID: compatibleClaim.Attempt.ID, ClaimToken: compatibleToken,
 		Kind: store.JobCompletionSucceeded, Result: json.RawMessage(`{}`)})
 	require.NoError(t, err)
-	incompatibleAttempts, err := ss.Job().ListAttempts(ctx, relinquishable.ID)
+	incompatibleAttempts, err := JobAttempts(t, ctx, ss.Job(), relinquishable.ID)
 	require.NoError(t, err)
 	require.Len(t, incompatibleAttempts, 2)
 	require.Equal(t, model.JobAttemptStatusIncompatible, incompatibleAttempts[0].Status)
@@ -152,7 +152,7 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	require.Equal(t, 2, recovered.Attempt.Number)
 	_, err = ss.Job().Complete(ctx, &store.JobCompletion{AttemptID: dead.Attempt.ID, ClaimToken: deadToken, Kind: store.JobCompletionSucceeded, Result: json.RawMessage(`{}`)})
 	require.True(t, store.IsConflict(err), "expired worker completion error")
-	attempts, err = ss.Job().ListAttempts(ctx, crashed.ID)
+	attempts, err = JobAttempts(t, ctx, ss.Job(), crashed.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.JobAttemptStatusLeaseExpired, attempts[0].Status)
 	_, err = ss.Job().Complete(ctx, &store.JobCompletion{AttemptID: recovered.Attempt.ID, ClaimToken: recoveredToken, Kind: store.JobCompletionSucceeded, Result: json.RawMessage(`{}`)})
@@ -259,12 +259,12 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	failedJob, err = ss.Job().Complete(ctx, &store.JobCompletion{AttemptID: failedClaim.Attempt.ID, ClaimToken: failedToken, Kind: store.JobCompletionPermanentFailure, PublicErrorCode: "job.failed"})
 	require.NoError(t, err)
-	beforeAttempts, err := ss.Job().ListAttempts(ctx, failedJob.ID)
+	beforeAttempts, err := JobAttempts(t, ctx, ss.Job(), failedJob.ID)
 	require.NoError(t, err)
 	audit = saveJobMutationAudit(t, ctx, ss, failedJob.ID, "retry")
 	requeued, err := ss.Job().Retry(ctx, &store.JobMutation{ID: failedJob.ID, ExpectedRevision: failedJob.Revision, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
-	afterAttempts, err := ss.Job().ListAttempts(ctx, failedJob.ID)
+	afterAttempts, err := JobAttempts(t, ctx, ss.Job(), failedJob.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.JobStatusQueued, requeued.Status, "Retry() = %#v, attempts %d ->", requeued, len(beforeAttempts))
 	require.Len(t, afterAttempts, len(beforeAttempts), "Retry() = %#v, attempts %d ->", requeued, len(beforeAttempts))
@@ -395,4 +395,25 @@ func mustClaimToken(t *testing.T) model.JobClaimToken {
 	token, err := model.NewJobClaimToken()
 	require.NoError(t, err)
 	return token
+}
+
+// JobAttempts returns every attempt of a Job, oldest first, through the
+// paged read production uses.
+func JobAttempts(t *testing.T, ctx context.Context, jobs store.JobStore, jobID model.JobID) ([]model.JobAttempt, error) {
+	t.Helper()
+	var attempts []model.JobAttempt
+	before := 0
+	for {
+		page, err := jobs.ListAttemptsPage(ctx, store.JobAttemptListOptions{JobID: jobID, BeforeNumber: before, Limit: 200})
+		if err != nil {
+			return nil, err
+		}
+		attempts = append(attempts, page...)
+		if len(page) < 200 {
+			break
+		}
+		before = page[len(page)-1].Number
+	}
+	slices.Reverse(attempts)
+	return attempts, nil
 }

@@ -367,27 +367,6 @@ func (s SQLMFAStore) ConsumeSecondFactor(ctx context.Context, input *store.MFASe
 	return err
 }
 
-// UpgradeSession marks the unexpired session as multi-factor authenticated at
-// now and returns the hashes of its active access tokens.
-func (s SQLMFAStore) UpgradeSession(ctx context.Context, input *store.MFASessionUpgrade) ([]string, error) {
-	sessionID := input.SessionID
-	userID := input.UserID
-	now := input.Now
-	now = model.TimeUTC(now)
-	if !sessionID.IsValid() || !userID.IsValid() || !now.After(time.Unix(0, 0)) {
-		return nil, store.NewErrInvalidInput("session", "upgrade_mfa", nil)
-	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "session MFA upgrade", func(ctx context.Context, tx *sqlxTxWrapper) ([]string, error) {
-		if err := lockUserSessions(ctx, tx, userID.String()); err != nil {
-			return nil, err
-		}
-		if _, err := upgradeSessionAuthentication(ctx, tx, sessionID.String(), userID.String(), now); err != nil {
-			return nil, err
-		}
-		return selectActiveAccessTokenHashes(ctx, tx, sessionID.String())
-	})
-}
-
 func (s SQLMFAStore) ReplaceRecoveryCodes(
 	ctx context.Context,
 	input *store.MFARecoveryCodesRegeneration,
@@ -484,25 +463,6 @@ func (s SQLMFAStore) ReplaceRecoveryCodes(
 		return struct{}{}, nil
 	})
 	return err
-}
-
-// CountRecoveryCodes returns how many unconsumed recovery codes the user has.
-func (s SQLMFAStore) CountRecoveryCodes(ctx context.Context, userID model.UserID) (int, error) {
-	if !userID.IsValid() {
-		return 0, store.NewErrInvalidInput("mfa_recovery_code", "user_id", userID)
-	}
-	var count int
-	if err := s.GetMaster().Get(
-		ctx,
-		&count,
-		`
-		SELECT COUNT(*) FROM mfa_recovery_codes
-		 WHERE user_id = ? AND archived_at IS NULL AND consumed_at IS NULL`,
-		userID,
-	); err != nil {
-		return 0, fmt.Errorf("count MFA recovery codes: %w", err)
-	}
-	return count, nil
 }
 
 // SummarizeRecoveryCodes counts the user's live recovery codes, consumed or

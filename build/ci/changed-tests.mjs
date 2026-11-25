@@ -10,22 +10,33 @@
 //
 // Without --integration it stresses tests in files without an integration
 // build tag; with it, only tests in integration-tagged files.
+//
+// Most Store tests keep their body in server/store/storetest, a plain Go
+// package that each store's _test.go files call through a one-line wrapper. A
+// changed storetest entry point (an exported Test or Run function taking
+// *testing.T) stresses the wrapper tests that call it and nothing else.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// changedLines maps each changed _test.go file to the line numbers the change
-// added or edited, from a zero-context diff.
+const storetestDirectory = "server/store/storetest/";
+const isTestFile = (file) => file.endsWith("_test.go");
+const isStoretestFile = (file) => file.startsWith(storetestDirectory) && file.endsWith(".go") && !isTestFile(file);
+const testFunction = /^func (Test\w*)\(\w+ \*testing\.T\)/;
+const storetestEntry = /^func ((?:Test|Run)\w*)\(\w+ \*testing\.T[,)]/;
+
+// changedLines maps each changed _test.go or storetest file to the line
+// numbers the change added or edited, from a zero-context diff.
 export function changedLines(diff) {
   const files = new Map();
   let current;
   for (const line of diff.split("\n")) {
     if (line.startsWith("+++ ")) {
       current = line === "+++ /dev/null" ? undefined : line.slice(6);
-      if (current && current.endsWith("_test.go") && !files.has(current)) files.set(current, new Set());
-      if (current && !current.endsWith("_test.go")) current = undefined;
+      if (current && !isTestFile(current) && !isStoretestFile(current)) current = undefined;
+      if (current && !files.has(current)) files.set(current, new Set());
       continue;
     }
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
@@ -39,21 +50,48 @@ export function changedLines(diff) {
   return files;
 }
 
-// touchedTests returns the top-level test functions whose span holds a
-// changed line. A span runs from a top-level func to the next one.
-export function touchedTests(source, lines) {
+// spans lists the top-level functions matching pattern, each with the rows
+// from its func line to the next top-level func.
+function spans(source, pattern) {
   const rows = source.split("\n");
   const functions = [];
   rows.forEach((row, index) => {
-    if (/^func /.test(row)) functions.push({ line: index + 1, test: /^func (Test\w*)\(\w+ \*testing\.T\)/.exec(row)?.[1] });
+    if (/^func /.test(row)) functions.push({ line: index + 1, name: pattern.exec(row)?.[1] });
   });
-  const touched = new Set();
-  functions.forEach((fn, index) => {
-    if (!fn.test) return;
+  return functions.flatMap((fn, index) => {
+    if (!fn.name) return [];
     const end = index + 1 < functions.length ? functions[index + 1].line - 1 : rows.length;
-    for (const line of lines) if (line >= fn.line && line <= end) touched.add(fn.test);
+    return [{ name: fn.name, start: fn.line, end, body: rows.slice(fn.line - 1, end).join("\n") }];
   });
+}
+
+// touchedTests returns the top-level test functions whose span holds a
+// changed line. A span runs from a top-level func to the next one.
+export function touchedTests(source, lines, pattern = testFunction) {
+  const touched = new Set();
+  for (const fn of spans(source, pattern)) {
+    for (const line of lines) if (line >= fn.start && line <= fn.end) touched.add(fn.name);
+  }
   return [...touched].sort();
+}
+
+// wrappers returns the test functions in source that call exactly one
+// storetest entry point and that one is in entries. A test naming several,
+// such as a conformance table, runs far more than the change touched.
+export function wrappers(source, entries) {
+  return spans(source, testFunction)
+    .filter((fn) => {
+      const called = new Set([...fn.body.matchAll(/\bstoretest\.((?:Test|Run)\w*)\b/g)].map((match) => match[1]));
+      return called.size === 1 && entries.has([...called][0]);
+    })
+    .map((fn) => fn.name)
+    .sort();
+}
+
+function goTestFiles(directory) {
+  return readdirSync(directory, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && isTestFile(entry.name))
+    .map((entry) => join(entry.parentPath, entry.name));
 }
 
 const isIntegration = (source) => /^\/\/go:build .*\bintegration\b/m.test(source);
@@ -62,15 +100,28 @@ const isIntegration = (source) => /^\/\/go:build .*\bintegration\b/m.test(source
 // server module, keeping only the kind of file asked for.
 export function plan(root, diff, integration) {
   const packages = new Map();
+  const add = (path, tests) => {
+    if (tests.length === 0) return;
+    const directory = `./${relative(join(root, "server"), dirname(path))}`.replace(/\/$/, "");
+    packages.set(directory, [...new Set([...(packages.get(directory) ?? []), ...tests])].sort());
+  };
+  const entries = new Set();
   for (const [file, lines] of changedLines(diff)) {
     const path = join(root, file);
     if (!existsSync(path) || !file.startsWith("server/")) continue;
     const source = readFileSync(path, "utf8");
+    if (isStoretestFile(file)) {
+      for (const entry of touchedTests(source, lines, storetestEntry)) entries.add(entry);
+      continue;
+    }
     if (isIntegration(source) !== integration) continue;
-    const tests = touchedTests(source, lines);
-    if (tests.length === 0) continue;
-    const directory = `./${relative(join(root, "server"), dirname(path))}`.replace(/\/$/, "");
-    packages.set(directory, [...new Set([...(packages.get(directory) ?? []), ...tests])].sort());
+    add(path, touchedTests(source, lines));
+  }
+  if (entries.size > 0) {
+    for (const path of goTestFiles(join(root, "server"))) {
+      const source = readFileSync(path, "utf8");
+      if (isIntegration(source) === integration) add(path, wrappers(source, entries));
+    }
   }
   return packages;
 }
@@ -84,7 +135,7 @@ function main(argv) {
   const integration = argv.includes("--integration");
   const count = Number(argv.find((arg) => arg.startsWith("--count="))?.slice(8) ?? (integration ? 5 : 20));
   const root = resolve(dirname(new URL(import.meta.url).pathname), "../..");
-  const diff = spawnSync("git", ["diff", "-U0", "--no-color", `${base}...HEAD`, "--", "*_test.go"], { cwd: root, encoding: "utf8" });
+  const diff = spawnSync("git", ["diff", "-U0", "--no-color", `${base}...HEAD`, "--", "*_test.go", "server/store/storetest/*.go"], { cwd: root, encoding: "utf8" });
   if (diff.status !== 0) {
     console.error(diff.stderr);
     return 1;

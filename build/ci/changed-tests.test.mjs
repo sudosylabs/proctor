@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { changedLines, plan, touchedTests } from "./changed-tests.mjs";
+import { changedLines, plan, touchedTests, wrappers } from "./changed-tests.mjs";
 
 const source = `package example
 
@@ -57,4 +57,64 @@ test("tests are grouped by package and split by the integration tag", async (t) 
   const diff = ["unit_test.go", "db_test.go"].map((name) => `+++ b/server/pkg/${name}\n@@ -1,0 +${name === "db_test.go" ? 14 : 12} @@\n+x`).join("\n");
   assert.deepEqual([...plan(root, diff, false)], [["./pkg", ["TestEdited"]]]);
   assert.deepEqual([...plan(root, diff, true)], [["./pkg", ["TestEdited"]]]);
+});
+
+const storetestSource = `package storetest
+
+import "testing"
+
+func helper() {}
+
+func TestWidgetStore(t *testing.T, ss Store) {
+	helper()
+}
+
+func RunWidgetClock(t *testing.T, ss Store) {
+	helper()
+}
+`;
+
+const wrapperSource = `//go:build integration
+
+package sqlstore
+
+import (
+	"testing"
+
+	"example/storetest"
+)
+
+func TestWidgetStore(t *testing.T) {
+	PristineStoreTest(t, storetest.TestWidgetStore)
+}
+
+func TestWidgetClock(t *testing.T) {
+	storetest.RunWidgetClock(t, openStore(t))
+}
+
+func TestConformance(t *testing.T) {
+	for _, c := range []func(*testing.T, Store){storetest.TestWidgetStore, storetest.TestGadgetStore} {
+		c(t, openStore(t))
+	}
+}
+`;
+
+test("a wrapper is a test that calls one storetest entry point", () => {
+  assert.deepEqual(wrappers(wrapperSource, new Set(["TestWidgetStore"])), ["TestWidgetStore"], "the conformance table names two");
+  assert.deepEqual(wrappers(wrapperSource, new Set(["RunWidgetClock"])), ["TestWidgetClock"]);
+  assert.deepEqual(wrappers(wrapperSource, new Set(["TestGadgetStore"])), []);
+});
+
+test("a changed storetest entry point stresses its wrappers", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "proctor-changed-tests-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "server", "store", "storetest"), { recursive: true });
+  await mkdir(join(root, "server", "store", "sqlstore"), { recursive: true });
+  await writeFile(join(root, "server", "store", "storetest", "widget_store.go"), storetestSource);
+  await writeFile(join(root, "server", "store", "sqlstore", "widget_integration_test.go"), wrapperSource);
+  const diff = `+++ b/server/store/storetest/widget_store.go\n@@ -12,0 +13 @@\n+x\n+++ b/server/store/storetest/widget_store.go\n@@ -5,0 +6 @@\n+x`;
+  assert.deepEqual([...plan(root, diff, true)], [["./store/sqlstore", ["TestWidgetClock"]]], "a helper change maps to nothing");
+  assert.deepEqual([...plan(root, diff, false)], [], "the wrappers are integration tests");
+  const entry = "+++ b/server/store/storetest/widget_store.go\n@@ -8,0 +8 @@\n+x";
+  assert.deepEqual([...plan(root, entry, true)], [["./store/sqlstore", ["TestWidgetStore"]]]);
 });

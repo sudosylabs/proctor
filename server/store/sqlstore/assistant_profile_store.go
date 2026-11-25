@@ -123,7 +123,7 @@ func (s SQLAssistantProfileStore) Create(
 			encode: func(outcome assistantProfileOutcome) ([]byte, error) { return encodeOutcome(outcome) },
 			decode: decodeAssistantProfileOutcome,
 			completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, outcome assistantProfileOutcome, originalAuditID string) error {
-				if _, err := requireSystemAdministrator(ctx, tx, input.Profile.CreatedByUserID); err != nil {
+				if _, err := requireSystemAdministrator(ctx, tx, "assistant_profile", input.Profile.CreatedByUserID); err != nil {
 					return err
 				}
 				return completeAssistantProfileAudit(ctx, tx, "create", outcome, input.AuditEventID, input.AuditAt, true, originalAuditID)
@@ -140,7 +140,7 @@ func createAssistantProfile(
 	tx *sqlxTxWrapper,
 	input *store.AssistantProfileCreation,
 ) (assistantProfileOutcome, error) {
-	databaseNow, err := requireSystemAdministrator(ctx, tx, input.Profile.CreatedByUserID)
+	databaseNow, err := requireSystemAdministrator(ctx, tx, "assistant_profile", input.Profile.CreatedByUserID)
 	if err != nil {
 		return assistantProfileOutcome{}, err
 	}
@@ -195,7 +195,7 @@ func (s SQLAssistantProfileStore) Retire(
 			encode: func(outcome assistantProfileOutcome) ([]byte, error) { return encodeOutcome(outcome) },
 			decode: decodeAssistantProfileOutcome,
 			completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, outcome assistantProfileOutcome, originalAuditID string) error {
-				if _, err := requireSystemAdministrator(ctx, tx, input.ActorID); err != nil {
+				if _, err := requireSystemAdministrator(ctx, tx, "assistant_profile", input.ActorID); err != nil {
 					return err
 				}
 				return completeAssistantProfileAudit(ctx, tx, "retire", outcome, input.AuditEventID, input.AuditAt, true, originalAuditID)
@@ -212,7 +212,7 @@ func retireAssistantProfile(
 	tx *sqlxTxWrapper,
 	input *store.AssistantProfileRetirement,
 ) (assistantProfileOutcome, error) {
-	databaseNow, err := requireSystemAdministrator(ctx, tx, input.ActorID)
+	databaseNow, err := requireSystemAdministrator(ctx, tx, "assistant_profile", input.ActorID)
 	if err != nil {
 		return assistantProfileOutcome{}, err
 	}

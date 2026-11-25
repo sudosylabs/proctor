@@ -163,7 +163,7 @@ func createEnvironmentProfile(
 	tx *sqlxTxWrapper,
 	input *store.EnvironmentProfileCreation,
 ) (environmentProfileOutcome, error) {
-	databaseNow, err := requireSystemAdministrator(ctx, tx, input.Profile.CreatedByUserID)
+	databaseNow, err := requireSystemAdministrator(ctx, tx, "environment_profile", input.Profile.CreatedByUserID)
 	if err != nil {
 		return environmentProfileOutcome{}, err
 	}
@@ -230,7 +230,7 @@ func retireEnvironmentProfile(
 	tx *sqlxTxWrapper,
 	input *store.EnvironmentProfileRetirement,
 ) (environmentProfileOutcome, error) {
-	databaseNow, err := requireSystemAdministrator(ctx, tx, input.ActorID)
+	databaseNow, err := requireSystemAdministrator(ctx, tx, "environment_profile", input.ActorID)
 	if err != nil {
 		return environmentProfileOutcome{}, err
 	}
@@ -259,27 +259,6 @@ func retireEnvironmentProfile(
 		return environmentProfileOutcome{}, err
 	}
 	return outcome, nil
-}
-
-// requireSystemAdministrator serializes with system administrator changes
-// and returns PostgreSQL's time once actor is an active system administrator.
-func requireSystemAdministrator(ctx context.Context, tx *sqlxTxWrapper, actor model.UserID) (time.Time, error) {
-	if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
-		return time.Time{}, err
-	}
-	var databaseNow time.Time
-	if err := tx.Get(ctx, &databaseNow, `SELECT clock_timestamp()`); err != nil {
-		return time.Time{}, fmt.Errorf("read environment profile mutation time: %w", err)
-	}
-	databaseNow = databaseNow.UTC().Truncate(time.Microsecond)
-	administrator, err := isActiveSystemAdministrator(ctx, tx, actor.String(), databaseNow)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if !administrator {
-		return time.Time{}, store.NewErrConflict("environment_profile", "actor_not_system_administrator", nil)
-	}
-	return databaseNow, nil
 }
 
 func completeEnvironmentProfileAudit(

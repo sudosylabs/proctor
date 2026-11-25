@@ -66,6 +66,9 @@ func TestAssistantProfileStore(t *testing.T, stores store.Store) {
 	other.Name = "campus-agent"
 	_, err = create(t, other, ordinary.User.ID, "ordinary")
 	requireConflictConstraint(t, err, "actor_not_system_administrator")
+	var refused *store.ErrConflict
+	require.ErrorAs(t, err, &refused)
+	require.Equal(t, "assistant_profile", refused.Resource)
 
 	got, err := profiles.Get(ctx, created.Profile.ID)
 	require.NoError(t, err)

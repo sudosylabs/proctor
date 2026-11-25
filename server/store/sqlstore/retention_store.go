@@ -845,7 +845,7 @@ func (s *SQLRetentionStore) ListRecords(ctx context.Context, options store.Reten
 			}
 
 			var values []retentionRetirementRow
-			if err := tx.Select(
+			if err = tx.Select(
 				ctx,
 				&values,
 				retentionRetirementQuery+` WHERE r.state <> 'canceled' AND r.submission_id IN (`+strings.Join(placeholders, ",")+`)`,
@@ -855,9 +855,9 @@ func (s *SQLRetentionStore) ListRecords(ctx context.Context, options store.Reten
 			}
 
 			for _, row := range values {
-				value, err := row.retirement()
-				if err != nil {
-					return nil, err
+				value, retirementErr := row.retirement()
+				if retirementErr != nil {
+					return nil, retirementErr
 				}
 
 				retirements[row.SubmissionID+":"+row.Category] = value
@@ -868,9 +868,9 @@ func (s *SQLRetentionStore) ListRecords(ctx context.Context, options store.Reten
 		for _, row := range rows {
 			examIDs = append(examIDs, row.ExamID)
 			for _, record := range row.records() {
-				eligibility, err := record.Eligibility(policy, at)
-				if err != nil {
-					return nil, err
+				eligibility, eligibilityErr := record.Eligibility(policy, at)
+				if eligibilityErr != nil {
+					return nil, eligibilityErr
 				}
 
 				retirement := retirements[record.Scope.SubmissionID.String()+":"+string(record.Category)]

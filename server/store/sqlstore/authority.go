@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // The store repeats authority decisions from package access only where they
@@ -843,4 +844,26 @@ func lockExamManager(ctx context.Context, tx *sqlxTxWrapper, examID model.ExamID
 		examID.String(),
 		userID.String(),
 	)
+}
+
+// requireSystemAdministrator serializes with system administrator changes
+// and returns PostgreSQL's time once actor is an active system administrator.
+// A refusal is a conflict on resource, the record the actor tried to change.
+func requireSystemAdministrator(ctx context.Context, tx *sqlxTxWrapper, resource string, actor model.UserID) (time.Time, error) {
+	if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
+		return time.Time{}, err
+	}
+	var databaseNow time.Time
+	if err := tx.Get(ctx, &databaseNow, `SELECT clock_timestamp()`); err != nil {
+		return time.Time{}, fmt.Errorf("read %s mutation time: %w", resource, err)
+	}
+	databaseNow = databaseNow.UTC().Truncate(time.Microsecond)
+	administrator, err := isActiveSystemAdministrator(ctx, tx, actor.String(), databaseNow)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !administrator {
+		return time.Time{}, store.NewErrConflict(resource, "actor_not_system_administrator", nil)
+	}
+	return databaseNow, nil
 }

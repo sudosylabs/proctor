@@ -185,8 +185,11 @@ labels it, and the daily `Flake report` workflow lists what flaked.
   write, `accesstest.RequireContract` keeps the decisions, audit steps,
   writes and effects exact, and lets the named lookups vary.
 - **Stress new tests.** CI runs each test a change adds or edits 20 times
-  under `-race`. Run the same before pushing:
-  `node build/ci/changed-tests.mjs main`.
+  under `-race`, and each database test 5 times. A changed `storetest`
+  entry point stresses the store tests that call it. Run the same before
+  pushing, against the branch you will merge into:
+  `git fetch origin`, then `node build/ci/changed-tests.mjs origin/main`
+  and `make -C server integration-changed BASE=origin/main`.
 
 ## Good examples to read first
 

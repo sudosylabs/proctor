@@ -104,7 +104,9 @@ func runLayerConformance(
 		{"ExamAttempt", func(t *testing.T, decorated store.Store) {
 			storetest.TestExamAttemptStore(t, decorated)
 		}},
-		{"BrowserActivity", storetest.TestBrowserActivityStore},
+		{"BrowserActivity", func(t *testing.T, decorated store.Store) {
+			storetest.TestBrowserActivityStore(t, decorated, refillDeliveryRate(sqlStore))
+		}},
 		{"ExamAttemptWorkspace", func(t *testing.T, decorated store.Store) {
 			storetest.TestExamAttemptWorkspaceStore(t, decorated, decorated.ExamAttemptWorkspace(),
 				examAttemptWorkspaceSQLProbe(t, sqlStore))
@@ -364,7 +366,9 @@ func TestExamAttemptStore(t *testing.T) {
 }
 
 func TestBrowserActivityStore(t *testing.T) {
-	StoreTest(t, storetest.TestBrowserActivityStore)
+	StoreTest(t, func(t *testing.T, ss store.Store) {
+		storetest.TestBrowserActivityStore(t, ss, refillDeliveryRate(ss.(*SQLStore)))
+	})
 }
 
 func TestExamAttemptWorkspaceStore(t *testing.T) {
@@ -836,9 +840,36 @@ func examAttemptSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamAtte
 			if lockErr := tx.Get(ctx, &locked, `SELECT id FROM exam_attempt_participations WHERE id=? FOR UPDATE`, id.String()); lockErr != nil {
 				return struct{}{}, lockErr
 			}
+			// The new lease is uncommitted, so read it here: the polling
+			// connection below can't see it.
+			var holder struct {
+				PID          int       `db:"pid"`
+				LeaseExpires time.Time `db:"lease_expires_at"`
+			}
+			if pidErr := tx.Get(ctx, &holder, `SELECT pg_backend_pid() AS pid, lease_expires_at FROM exam_attempt_participations WHERE id=?`, id.String()); pidErr != nil {
+				return struct{}{}, pidErr
+			}
 			completed = make(chan error, 1)
 			go func() { completed <- contender() }()
-			time.Sleep(200 * time.Millisecond)
+			// Hold the row until the contender queues behind it and the lease
+			// has passed on PostgreSQL's clock; both are what the probe is for,
+			// and neither is guaranteed by a fixed sleep.
+			for ready := false; !ready; {
+				select {
+				case finished := <-completed:
+					completed <- finished
+					return struct{}{}, nil
+				case <-ctx.Done():
+					return struct{}{}, ctx.Err()
+				case <-time.After(5 * time.Millisecond):
+				}
+				if waitErr := persistence.GetMaster().DB().QueryRowContext(ctx, `SELECT
+					EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND $1 = ANY(pg_blocking_pids(pid)))
+					AND clock_timestamp() > $2`,
+					holder.PID, holder.LeaseExpires).Scan(&ready); waitErr != nil {
+					return struct{}{}, waitErr
+				}
+			}
 			return struct{}{}, nil
 		})
 		require.NoError(t, err)
@@ -1683,7 +1714,7 @@ func TestSecureConnectStore(t *testing.T) {
 func TestNativeDeliveryAppendStore(t *testing.T) {
 	s := openTestStore(t)
 	resetTestStore(t, s)
-	storetest.TestNativeDeliveryAppendStore(t, s, func(part model.AttemptParticipationID, records, flags int64) {
+	storetest.TestNativeDeliveryAppendStore(t, s, refillDeliveryRate(s), func(part model.AttemptParticipationID, records, flags int64) {
 		var row struct {
 			Records        int64  `db:"records"`
 			Pending        int64  `db:"pending"`
@@ -1719,4 +1750,19 @@ func TestNativeMaximumRecordStore(t *testing.T) {
 
 func TestAssistantProfileStore(t *testing.T) {
 	PristineStoreTest(t, storetest.TestAssistantProfileStore)
+}
+
+// refillDeliveryRate fills an Attempt's browser and native append allowances,
+// which otherwise refill on PostgreSQL's clock.
+func refillDeliveryRate(sqlStore *SQLStore) storetest.DeliveryRateRefill {
+	return func(t *testing.T, attempt model.ExamAttemptID) {
+		t.Helper()
+		result, err := sqlStore.GetMaster().Exec(t.Context(), `UPDATE exam_attempt_delivery_budgets
+			SET browser_rate_tokens = 8000, browser_rate_at = NULL, native_rate_tokens = 8000, native_rate_at = NULL
+			WHERE exam_attempt_id = ?`, attempt.String())
+		require.NoError(t, err)
+		refilled, err := result.RowsAffected()
+		require.NoError(t, err)
+		require.Equal(t, int64(1), refilled, "the Attempt has a delivery budget to refill")
+	}
 }

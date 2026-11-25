@@ -22,7 +22,7 @@ import (
 
 type NativeDeliveryAppendProbe func(model.AttemptParticipationID, int64, int64)
 
-func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...NativeDeliveryAppendProbe) {
+func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, refill DeliveryRateRefill, probes ...NativeDeliveryAppendProbe) {
 	ctx := context.Background()
 	fixture := newExamAttemptFixture(t, ctx, ss)
 	connect := &store.ExamAttemptConnect{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, AttemptID: model.NewExamAttemptID(), WorkspaceID: model.NewExamAttemptWorkspaceID(), ParticipationID: model.NewAttemptParticipationID(), ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken()), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
@@ -184,7 +184,7 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	require.NoError(t, err)
 	require.Equal(t, int64(7), before.NativeConditions.Records, "native finalization inventory is absent")
 	require.NoError(t, before.NativeConditions.Validate(), "native finalization inventory is absent")
-	time.Sleep(time.Second) // Allow the real shared append allowance to refill.
+	refill(t, connected.Attempt.ID)
 	// A fresh display state ends the gap: the rule is not met again, inside
 	// the occurrence already open, so no further flag evidence.
 	late, err := appendBatch(batch(6, secondDisplay(4, at.Add(5*time.Second))), "native-review-late")

@@ -35,9 +35,11 @@ type Grant struct {
 // Options describe the records the authorizer decides over.
 type Options struct {
 	Grants []Grant
-	// Units are the academic units grants and resources may name. A unit
-	// with no institution joins the fixture's, and a grant at an unlisted
-	// unit creates it as a root.
+	// Units are the academic units grants and resources may name. The
+	// fixture keeps its own copies, so parallel tests may share them: a copy
+	// with no institution joins the fixture's, and Fixture.Units returns the
+	// copies for the test's own Store. A grant at an unlisted unit creates it
+	// as a root.
 	Units []*model.AcademicUnit
 	// Users should be the test's own user store, so the authorizer and the
 	// service under test see the same users; nil means no user resolves.
@@ -71,6 +73,18 @@ type Fixture struct {
 	Authorizer  *access.Authorizer
 	Auditor     *access.Auditor
 	Audits      *Audits
+	units       *academicUnits
+}
+
+// Units returns the fixture's copies of Options.Units, in their institution.
+// A test whose Store also holds the units should hold these, so the Store and
+// the authorizer see one value.
+func (f *Fixture) Units(given []*model.AcademicUnit) []*model.AcademicUnit {
+	copies := make([]*model.AcademicUnit, 0, len(given))
+	for _, unit := range given {
+		copies = append(copies, f.units.units[unit.ID])
+	}
+	return copies
 }
 
 // New fails t on a setup error.
@@ -79,11 +93,14 @@ func New(t testing.TB, options Options) *Fixture {
 
 	institution := &model.Institution{ID: model.NewInstitutionID(), Name: "Test Institution"}
 	units := &academicUnits{units: map[model.AcademicUnitID]*model.AcademicUnit{}}
-	for _, unit := range options.Units {
+	// Each unit is copied: parallel tests share the units they pass in, and
+	// filling in the institution on the caller's value is a data race.
+	for _, given := range options.Units {
+		unit := *given
 		if unit.InstitutionID.IsZero() {
 			unit.InstitutionID = institution.ID
 		}
-		units.units[unit.ID] = unit
+		units.units[unit.ID] = &unit
 	}
 	for _, grant := range options.Grants {
 		id := model.AcademicUnitID(grant.ScopeID)
@@ -157,7 +174,7 @@ func New(t testing.TB, options Options) *Fixture {
 	})
 	require.NoError(t, err)
 
-	return &Fixture{Institution: institution, Authorizer: authorizer, Auditor: auditor, Audits: audits}
+	return &Fixture{Institution: institution, Authorizer: authorizer, Auditor: auditor, Audits: audits, units: units}
 }
 
 // Audits is an in-memory audit store that keeps every event it is given.

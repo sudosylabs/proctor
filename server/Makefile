@@ -145,16 +145,27 @@ mailpit-down:
 mailpit-logs:
 	$(COMPOSE) logs mailpit
 
+# Each database-backed test package creates its own database (internal/testdb),
+# so packages run in parallel. Two at a time keeps the 16 GB CI runner clear of
+# memory pressure. The dev seed reads Mailpit, which the mail certification
+# test clears, so it runs alone after the rest.
+INTEGRATION_PACKAGE_PARALLELISM ?= 2
+
 integration-all:
 	@set -eu; \
 	cleanup() { $(COMPOSE) down --remove-orphans; }; \
 	trap cleanup EXIT INT TERM; \
 	$(COMPOSE) up --detach --wait postgres redis mailpit; \
+	packages=$$(go list ./... | grep -v '/cmd/ptool/devseed$$'); \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 	PROCTOR_TEST_REDIS_ADDRESS='$(PROCTOR_TEST_REDIS_ADDRESS)' \
 	PROCTOR_TEST_MAIL_SMTP_ADDRESS='$(PROCTOR_TEST_MAIL_SMTP_ADDRESS)' \
 	PROCTOR_TEST_MAILPIT_HTTP_URL='$(PROCTOR_TEST_MAILPIT_HTTP_URL)' \
-		$(GO_TEST) -tags=integration -timeout=25m -p=1 ./... -count=1
+		$(GO_TEST) -tags=integration -timeout=25m -p=$(INTEGRATION_PACKAGE_PARALLELISM) $$packages -count=1; \
+	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
+	PROCTOR_TEST_MAIL_SMTP_ADDRESS='$(PROCTOR_TEST_MAIL_SMTP_ADDRESS)' \
+	PROCTOR_TEST_MAILPIT_HTTP_URL='$(PROCTOR_TEST_MAILPIT_HTTP_URL)' \
+		$(GO_TEST) -tags=integration -timeout=25m ./cmd/ptool/devseed -count=1
 
 # integration-postgres discovers every integration-tagged test in the
 # PostgreSQL-backed packages, so a new test runs without editing this file.
@@ -169,7 +180,7 @@ integration-postgres:
 	trap cleanup EXIT INT TERM; \
 	$(COMPOSE) up --detach --wait postgres; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
-		$(GO_TEST) -tags=integration -timeout=90m -p=1 $(INTEGRATION_POSTGRES_PACKAGES) -skip '$(INTEGRATION_POSTGRES_SKIP)' -count=1
+		$(GO_TEST) -tags=integration -timeout=90m -p=$(INTEGRATION_PACKAGE_PARALLELISM) $(INTEGRATION_POSTGRES_PACKAGES) -skip '$(INTEGRATION_POSTGRES_SKIP)' -count=1
 
 integration-redis:
 	$(MAKE) -C ../packages/cache \

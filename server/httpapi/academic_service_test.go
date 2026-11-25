@@ -86,9 +86,9 @@ func newAcademicFixture(t *testing.T, options academicOptions) *academicFixture 
 		Programmes:      fixture.programmes,
 		ProgrammeLevels: fixture.levels,
 	})
-	// accesstest places each unit in its Institution; the Store holds the
-	// same units afterwards so both sides agree.
-	for _, unit := range options.Units {
+	// accesstest places its copy of each unit in its Institution; the Store
+	// holds the same copies so both sides agree.
+	for _, unit := range fixture.access.Units(options.Units) {
 		fixture.units.byID[unit.ID] = unit
 	}
 

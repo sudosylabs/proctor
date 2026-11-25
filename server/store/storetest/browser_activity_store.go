@@ -19,16 +19,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func TestBrowserActivityStore(t *testing.T, ss store.Store) {
+// DeliveryRateRefill fills an Attempt's append rate allowance, as waiting
+// out its refill on PostgreSQL's clock would. Tests use it instead of a sleep,
+// which a slow host or a lagging clock can make too short.
+type DeliveryRateRefill func(t *testing.T, attempt model.ExamAttemptID)
+
+func TestBrowserActivityStore(t *testing.T, ss store.Store, refill DeliveryRateRefill) {
 	t.Helper()
-	t.Run("pending queue reserves head repair", func(t *testing.T) { testBrowserPendingRepairReservation(t, ss) })
+	t.Run("pending queue reserves head repair", func(t *testing.T) { testBrowserPendingRepairReservation(t, ss, refill) })
 	t.Run("permanent gaps advance the replay window", func(t *testing.T) { testBrowserDeliveryWindowAfterPermanentGaps(t, ss) })
 	t.Run("initial source reservations serialize", func(t *testing.T) { testBrowserSourceReservationRace(t, ss) })
 	t.Run("event receipts gaps and historical recovery", func(t *testing.T) { testBrowserDeliveryRecovery(t, ss) })
 	t.Run("independent correction capability gates", func(t *testing.T) { testCorrectionCapabilityGates(t, ss) })
 	t.Run("correction publication serializes Workspace mutations", func(t *testing.T) { testCorrectionPublicationWorkspaceRace(t, ss) })
 	t.Run("bounded append replay reset pagination and Submission accounting", func(t *testing.T) {
-		testBrowserActivityLifecycle(t, ss)
+		testBrowserActivityLifecycle(t, ss, refill)
 	})
 	t.Run("complete terminal source settles", func(t *testing.T) {
 		testCompleteBrowserActivitySubmission(t, ss)
@@ -38,7 +43,7 @@ func TestBrowserActivityStore(t *testing.T, ss store.Store) {
 	})
 }
 
-func testBrowserActivityLifecycle(t *testing.T, ss store.Store) {
+func testBrowserActivityLifecycle(t *testing.T, ss store.Store, refill DeliveryRateRefill) {
 	t.Helper()
 	ctx := context.Background()
 	fixture, connected, access := newBrowserActivityFixture(t, ctx, ss, "browser-activity-lifecycle")
@@ -203,9 +208,8 @@ func testBrowserActivityLifecycle(t *testing.T, ss store.Store) {
 		browserActivityEvent(1, model.BrowserActivityOpened, fixture.revisionID),
 		browserActivityEvent(2, model.BrowserActivityClosed, fixture.revisionID),
 	}
-	// Eight appends drained the attempt's burst allowance; one append refills in
-	// 500ms of PostgreSQL time, so a fast host would otherwise be rate limited.
-	time.Sleep(600 * time.Millisecond)
+	// Eight appends drained the attempt's burst allowance.
+	refill(t, connected.Attempt.ID)
 	_, err = appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{
 		Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		SourceSessionID: replacementID, Events: replacementEvents,

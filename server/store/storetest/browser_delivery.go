@@ -173,7 +173,7 @@ func testBrowserSourceReservationRace(t *testing.T, ss store.Store) {
 	require.Len(t, sources, 1, "concurrent start retained an extra source")
 }
 
-func testBrowserPendingRepairReservation(t *testing.T, ss store.Store) {
+func testBrowserPendingRepairReservation(t *testing.T, ss store.Store, refill DeliveryRateRefill) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	f, connected, access := newBrowserActivityFixture(t, ctx, ss, "browser-repair-reservation")
@@ -229,17 +229,17 @@ func testBrowserPendingRepairReservation(t *testing.T, ss store.Store) {
 		}
 		next += int64(len(events))
 		// Refilling the shared append bucket is separate from byte admission.
-		time.Sleep(150 * time.Millisecond)
+		refill(t, connected.Attempt.ID)
 	}
 	require.NotNil(t, refused, "bounded pending pool never refused out-of-order details")
-	time.Sleep(150 * time.Millisecond)
+	refill(t, connected.Attempt.ID)
 	renew()
 	repaired, err := appendEvents([]model.BrowserActivityEvent{event(1)})
 	require.NoError(t, err)
 	require.Equal(t, next-1, repaired.HighestContiguous, "head repair did not release the retained queue")
 	require.Equal(t, next-1, repaired.SettledThrough, "head repair did not release the retained queue")
 	require.Equal(t, int64(0), budget().Browser.PendingBytes, "head repair did not release the retained queue")
-	time.Sleep(150 * time.Millisecond)
+	refill(t, connected.Attempt.ID)
 	resumed, err := appendEvents(refused)
 	require.NoError(t, err)
 	require.Equal(t, next+int64(len(refused))-1, resumed.HighestContiguous, "pending backpressure prevented ordinary delivery after repair")

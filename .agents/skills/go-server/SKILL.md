@@ -158,6 +158,33 @@ small immutable policies.
   those packages. When the API might move, run `go run ./cmd/ptool openapi
   check`.
 - **Database tests** use `-tags integration`, with Postgres on port 25432.
+  Each package gets a database of its own from `internal/testdb`.
+
+### Deterministic tests
+
+A flaky test is a bug, often in the product, so find its cause. A rerun only
+labels it, and the daily `Flake report` workflow lists what flaked.
+
+- **Wait on a signal.** A test waits for something the code emits, such as a
+  channel, a notification, a hook, or PostgreSQL reporting a session blocked
+  in `pg_blocking_pids`.
+- **Move time yourself.** Use `testing/synctest` for in-process timers. For
+  database time, use a SQL probe that backdates or refills the row, like
+  `storetest.DeliveryRateRefill`. A sleep, or a poll with a guessed deadline,
+  fails on the first slow runner.
+- **One clock.** A value the database will compare comes from the database
+  (`clock_timestamp()`), or is backdated by far more than any clock skew.
+- **Plans on real volume.** A plan assertion seeds thousands of rows and runs
+  `ANALYZE` first, or drops the competing indexes inside a rolled-back
+  transaction. On a toy table, the planner's choice is arbitrary.
+- **Own your fixtures.** A fixture copies what it is given; parallel tests
+  share their inputs. A package that starts goroutines checks for leaks with
+  `goleak.VerifyTestMain`.
+- **Assert the contract.** Check the ordering the use case promises, such as
+  "authorization before the read", rather than every internal call.
+- **Stress new tests.** CI runs each test a change adds or edits 20 times
+  under `-race`. Run the same before pushing:
+  `node build/ci/changed-tests.mjs main`.
 
 ## Good examples to read first
 

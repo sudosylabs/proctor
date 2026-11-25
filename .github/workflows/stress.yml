@@ -1,0 +1,47 @@
+name: Nightly test stress
+
+# Runs the hermetic server suite repeatedly, in shuffled order, under the race
+# detector and at two CPU counts, so flakes that a single CI run rarely hits
+# show up in the flake report before they reach a pull request. It reports
+# through the same test reports as CI.
+on:
+  schedule:
+    - cron: '13 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOFLAGS: -buildvcs=false -mod=readonly
+  GOPRIVATE: github.com/sudosylabs/proctor
+  GO_TEST: node ${{ github.workspace }}/build/ci/go-test.mjs
+  PROCTOR_TEST_REPORT_DIR: ${{ github.workspace }}/.build/ci
+
+jobs:
+  stress:
+    name: Server suite, 3 runs at 1 and 4 CPUs under -race
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      # The same memory cap and skip as the CI race job.
+      GO_TEST_RACE_FLAGS: -p 2 -count=3 -cpu=1,4 -skip '^TestRouteErrorTablesMatchReachableCodes$$'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          token: ${{ github.token }}
+      - name: Stress the server suite
+        run: make -C server test-race
+      # The flake report reads artifacts by these names.
+      - name: Retain test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hermetic-test-reports
+          path: .build/ci/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn

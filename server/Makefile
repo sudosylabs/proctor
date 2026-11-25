@@ -182,6 +182,20 @@ integration-postgres:
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 		$(GO_TEST) -tags=integration -timeout=90m -p=$(INTEGRATION_PACKAGE_PARALLELISM) $(INTEGRATION_POSTGRES_PACKAGES) -skip '$(INTEGRATION_POSTGRES_SKIP)' -count=1
 
+# integration-changed stresses the integration tests a change adds or edits,
+# against the base revision BASE, with every service they may need.
+integration-changed:
+	@test -n "$(BASE)" || { echo 'BASE is required: the revision the change is compared with' >&2; exit 2; }
+	@set -eu; \
+	cleanup() { $(COMPOSE) down --remove-orphans; }; \
+	trap cleanup EXIT INT TERM; \
+	$(COMPOSE) up --detach --wait postgres redis mailpit; \
+	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
+	PROCTOR_TEST_REDIS_ADDRESS='$(PROCTOR_TEST_REDIS_ADDRESS)' \
+	PROCTOR_TEST_MAIL_SMTP_ADDRESS='$(PROCTOR_TEST_MAIL_SMTP_ADDRESS)' \
+	PROCTOR_TEST_MAILPIT_HTTP_URL='$(PROCTOR_TEST_MAILPIT_HTTP_URL)' \
+		node ../build/ci/changed-tests.mjs '$(BASE)' --integration
+
 integration-redis:
 	$(MAKE) -C ../packages/cache \
 		CACHE_REDIS_PORT='$(PROCTOR_REDIS_PORT)' \

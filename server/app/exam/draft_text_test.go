@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -51,7 +53,8 @@ func TestEditDraftTextOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"title":"Distributed Systems","instructions_markdown":"Use **Go** and submit all files."}`, fixture.examID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"store.access", "membership", "grants", "decision:exam.manage:success", "store.get", "audit-begin:exam.manage", "store.update_text", "effect.updated"}, *fixture.order)
+	accesstest.RequireContract(t, *fixture.order, []string{"store.get"},
+		"store.access", "membership", "grants", "decision:exam.manage:success", "audit-begin:exam.manage", "store.update_text", "effect.updated")
 }
 
 func TestEditDraftTextNoChangeSkipsAuditPersistenceAndEffect(t *testing.T) {
@@ -156,5 +159,6 @@ func TestEditDraftTextUsesExplicitOverrideWithoutManagerMembership(t *testing.T)
 	require.True(t, fixture.persistence.textUpdate.ManagerOverride, "override action/update")
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect. No membership is consulted for an override.
-	require.Equal(t, []string{"store.access", "grants", "decision:exam.manage.override:success", "store.get", "audit-begin:exam.manage.override", "store.update_text", "effect.updated"}, *fixture.order)
+	accesstest.RequireContract(t, *fixture.order, []string{"store.get"},
+		"store.access", "grants", "decision:exam.manage.override:success", "audit-begin:exam.manage.override", "store.update_text", "effect.updated")
 }

@@ -169,7 +169,8 @@ func TestRoleUpdateCommitsBeforeInvalidation(t *testing.T) {
 	require.Equal(t, inv.Principal().UserID, persistence.updateInput.Role.UpdatedByUserID, "the caller becomes the Role's last editor")
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-update", "invalidate-authorization"}, events)
+	accesstest.RequireContract(t, events, []string{"get-role"},
+		"grants", "decision:role.manage:success", "audit-begin:role.manage", "store-update", "invalidate-authorization")
 	// Contract: the realtime effects drop every User's cached authorization,
 	// then tell role.view holders the Role changed.
 	institutionID := service.institutions.(*institutionStoreFake).institution.ID
@@ -186,7 +187,8 @@ func TestRoleUpdateFailurePublishesNoInvalidation(t *testing.T) {
 	require.True(t, apperror.Is(err, "role.conflict"), "error = %v", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
-	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-update", "audit-fail"}, events)
+	accesstest.RequireContract(t, events, []string{"get-role"},
+		"grants", "decision:role.manage:success", "audit-begin:role.manage", "store-update", "audit-fail")
 }
 
 func TestRoleUpdateRejectsBuiltIn(t *testing.T) {
@@ -211,7 +213,8 @@ func TestRoleArchiveCommitsBeforeInvalidation(t *testing.T) {
 	require.Equal(t, inv.Principal().UserID, persistence.archiveInput.ArchivedBy, "the archiver is the Role's last editor")
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-archive", "invalidate-authorization"}, events)
+	accesstest.RequireContract(t, events, []string{"get-role"},
+		"grants", "decision:role.manage:success", "audit-begin:role.manage", "store-archive", "invalidate-authorization")
 	// Contract: the realtime effects drop every User's cached authorization,
 	// then tell role.view holders the Role changed.
 	institutionID := service.institutions.(*institutionStoreFake).institution.ID

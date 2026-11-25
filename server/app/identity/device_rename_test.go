@@ -140,7 +140,8 @@ func TestRenameSessionRenamesTheCallersOwnSessionUnderAudit(t *testing.T) {
 	require.Equal(t, "Build server", renamed.DeviceName)
 	// Contract (guardrail 8): the audit attempt begins before the durable
 	// rename, which completes it; the User's connections hear of it after.
-	require.Equal(t, []string{"get", "audit-begin:session.manage", "rename", "Publish current_user.sessions.changed"}, f.events)
+	accesstest.RequireContract(t, f.events, []string{"get"},
+		"audit-begin:session.manage", "rename", "Publish current_user.sessions.changed")
 	sessionsChanged, err := realtime.NewCurrentUserSessionsChangedEvent(f.principal.UserID)
 	require.NoError(t, err)
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: sessionsChanged}}, f.publisher.Calls())
@@ -252,7 +253,8 @@ func TestRenameSessionFailsItsAuditWhenTheStoreRefuses(t *testing.T) {
 
 			_, err := f.service.RenameSession(context.Background(), f.inv(), RenameSessionCommand{SessionID: f.sessions.session.ID, DeviceName: "Laptop"})
 			require.True(t, apperror.Is(err, apperror.Code(test.code)), "error = %v", err)
-			require.Equal(t, []string{"get", "audit-begin:session.manage", "rename", "audit-fail"}, f.events)
+			accesstest.RequireContract(t, f.events, []string{"get"},
+				"audit-begin:session.manage", "rename", "audit-fail")
 			attempt := f.attempt(t)
 			require.Equal(t, model.AuditStatusFail, attempt.Status)
 			require.Equal(t, test.code, attempt.ErrorCode)

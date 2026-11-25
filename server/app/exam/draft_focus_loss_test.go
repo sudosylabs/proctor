@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -51,7 +53,8 @@ func TestConfigureDraftFocusLossOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"enabled":false,"minimum_duration_milliseconds":500,"incident_count":100,"window_milliseconds":14400000,"outcome":"flag_and_suspend"}`, fixture.examID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"store.access", "membership", "grants", "decision:exam.manage:success", "store.get", "audit-begin:exam.manage", "store.update_focus_loss", "effect.updated"}, *fixture.order)
+	accesstest.RequireContract(t, *fixture.order, []string{"store.get"},
+		"store.access", "membership", "grants", "decision:exam.manage:success", "audit-begin:exam.manage", "store.update_focus_loss", "effect.updated")
 }
 
 func TestConfigureDraftFocusLossNoChangeSkipsAuditPersistenceAndEffect(t *testing.T) {

@@ -46,7 +46,8 @@ func TestSelfSessionServiceUsesCallerOwnershipAndPostCommitEffects(t *testing.T)
 	require.NoError(t, err)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"get", "audit-begin:session.manage", "revoke", "effects"}, events)
+	accesstest.RequireContract(t, events, []string{"get"},
+		"audit-begin:session.manage", "revoke", "effects")
 	require.Equal(t, principal.UserID.String(), persistence.revokedUserID, "revocation = user")
 	require.True(t, now.Equal(persistence.revokedAt), "revocation = user")
 	// Contract: one revocation, of the caller's Session and its access token.

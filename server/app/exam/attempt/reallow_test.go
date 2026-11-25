@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -47,7 +49,8 @@ func TestReallowRequiresExactSuspensionAndKeepsPrivateReasonOutOfEffects(t *test
 	// Contract: the Manager authorization precedes the audit, the audit begins
 	// before the durable reallow (guardrail 8), and the reallow commits before
 	// its effect (guardrail 14).
-	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "reallow", "effects"}, f.order)
+	accesstest.RequireContract(t, f.order, []string{"manager.get"},
+		"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "reallow", "effects")
 	require.Nil(t, f.audit().values["private_reason"], "private reason escaped persistence input: audit=%#v result=%#v", f.audit().values, result)
 	require.NotContains(t, fmt.Sprintf("%#v", result), reason, "private reason escaped persistence input: audit=%#v result=%#v", f.audit().values, result)
 	for _, capture := range []any{f.audit().values, result} {

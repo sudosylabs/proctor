@@ -167,7 +167,8 @@ func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
 	require.Equal(t, attempts[0].ID, persistence.input.AuditEventID)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "publish-revocation", "publish-user-changed"}, events)
+	accesstest.RequireContract(t, events, []string{"get-user"},
+		"grants", "decision:user.manage:success", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "publish-revocation", "publish-user-changed")
 	// Contract: one revocation, published for the disabled User, naming each
 	// revoked Session and carrying the revoked access-token hashes; then the
 	// User's viewers are told to refetch them.
@@ -320,7 +321,8 @@ func TestAccountDisableFailurePublishesNoRevocation(t *testing.T) {
 	require.True(t, apperror.Is(err, "user.conflict"), "error = %v", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
-	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "audit-fail"}, events)
+	accesstest.RequireContract(t, events, []string{"get-user"},
+		"grants", "decision:user.manage:success", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "audit-fail")
 }
 
 func TestAccountEnablePublishesNoRevocation(t *testing.T) {
@@ -351,7 +353,8 @@ func TestAccountEnablePublishesNoRevocation(t *testing.T) {
 	require.Equal(t, model.MailTemplateIdentityAccountEnabled, persistence.input.Delivery.TemplateKey)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
-	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "publish-user-changed"}, events)
+	accesstest.RequireContract(t, events, []string{"get-user"},
+		"grants", "decision:user.manage:success", "prepare-mail", "audit-begin:user.manage", "store-set-disabled", "publish-user-changed")
 }
 
 func TestAccountSelfDisableIsRejectedAfterAuthorization(t *testing.T) {

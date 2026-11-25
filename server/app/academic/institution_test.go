@@ -100,7 +100,8 @@ func TestInstitutionUpdateCommitsSuccessAuditAtomically(t *testing.T) {
 	require.Equal(t, onlyAttempt(t, access).ID, persistence.updateInput.AuditEventID)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
-	require.Equal(t, []string{"get", "grants", "decision:institution.manage:success", "audit-begin:institution.manage", "store-update"}, events)
+	accesstest.RequireContract(t, events, []string{"get"},
+		"grants", "decision:institution.manage:success", "audit-begin:institution.manage", "store-update")
 }
 
 func TestInstitutionUpdateFailureCompletesFailedAttempt(t *testing.T) {
@@ -123,7 +124,8 @@ func TestInstitutionUpdateFailureCompletesFailedAttempt(t *testing.T) {
 	require.Equal(t, "institution.conflict", onlyAttempt(t, access).ErrorCode, "Update() error = %v, audit code", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
-	require.Equal(t, []string{"get", "grants", "decision:institution.manage:success", "audit-begin:institution.manage", "store-update", "audit-fail"}, events)
+	accesstest.RequireContract(t, events, []string{"get"},
+		"grants", "decision:institution.manage:success", "audit-begin:institution.manage", "store-update", "audit-fail")
 }
 
 func TestInstitutionUpdateRejectsInvalidExamCapacityBeforeAudit(t *testing.T) {

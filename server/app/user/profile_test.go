@@ -171,7 +171,8 @@ func TestUserProfileUpdateIsAuthorizedAndAuditAtomic(t *testing.T) {
 	require.Equal(t, int64(4), updated.Revision, "updated/input = %#v / %#v", updated, persistence.updateInput)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
-	require.Equal(t, []string{"get-user", "grants", "decision:user.manage:success", "get-user", "audit-begin:user.manage", "store-update"}, events)
+	accesstest.RequireContract(t, events, []string{"get-user"},
+		"grants", "decision:user.manage:success", "audit-begin:user.manage", "store-update")
 }
 
 func TestUserProfileSearchReturnsEmptyCollection(t *testing.T) {

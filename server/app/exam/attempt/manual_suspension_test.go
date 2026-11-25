@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -70,7 +72,8 @@ func TestSuspendByManagerAuthorizesFirstAndKeepsPrivateReasonOutOfAuditAndEffect
 	// Contract: the Manager authorization precedes the audit, the audit begins
 	// before the durable suspension (guardrail 8), and the suspension commits
 	// before the kick (guardrail 14).
-	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "suspend", "effects"}, f.order)
+	accesstest.RequireContract(t, f.order, []string{"manager.get"},
+		"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "suspend", "effects")
 	require.Equal(t, model.ActionExamSittingManage, f.audit().action, "audit=%#v result=%#v", f.audit(), result)
 	require.Equal(t, store.ExamAttemptSuspendOperation, f.audit().operation, "audit=%#v result=%#v", f.audit(), result)
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit().values), reason, "audit=%#v result=%#v", f.audit(), result)
@@ -189,7 +192,8 @@ func TestSuspendByManagerRecordsLapsedLeaseAsConnectionLossInsteadOfKick(t *test
 	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), true), f.publisher.Calls(), "error=%v order=%v", err, f.order)
 	// Contract (guardrails 8 and 14): the refused kick stays audited as
 	// failed, and the expiry audit begins before its commit and effect.
-	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "suspend", "expiry.resolve", "audit-begin:exam.sitting.manage", "expiry.commit", "effects", "audit-fail"}, f.order)
+	accesstest.RequireContract(t, f.order, []string{"manager.get"},
+		"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "suspend", "expiry.resolve", "audit-begin:exam.sitting.manage", "expiry.commit", "effects", "audit-fail")
 	// The expiry is the system's own decision, so its attempt names no actor.
 	attempts := f.control.Audits.Attempts()
 	require.Len(t, attempts, 2)

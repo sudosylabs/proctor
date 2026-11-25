@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -147,7 +149,8 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	require.Equal(t, model.MailTemplateAuthorizationInstitutionRoleAssigned, notice.Delivery.TemplateKey)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
+	accesstest.RequireContract(t, events, []string{"get-role"},
+		"grants", "decision:role_binding.manage:success", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization")
 	// Contract: the realtime effects drop the bound User's cached authorization,
 	// then tell the binding's scope it was granted.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)},
@@ -193,7 +196,8 @@ func TestRoleBindingRetainedCreateUsesArchivedRoleForCurrentDelegation(t *testin
 	// begins before the durable write, and the write commits before its effect.
 	// The grants read after the archived Role is the delegation check of its
 	// class.members.manage.
-	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role-including-archived", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
+	accesstest.RequireContract(t, events, []string{"get-role-including-archived"},
+		"grants", "decision:role_binding.manage:success", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization")
 	// Contract: the realtime effects drop the bound User's cached authorization,
 	// then tell the binding's scope it was granted.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: userID},
@@ -226,7 +230,8 @@ func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
 	// before the durable write, and the audit outcome follows the write. The
 	// first grants read is the preflight, which records no decision when the
 	// caller holds the action somewhere.
-	require.Equal(t, []string{"grants", "get-binding", "grants", "decision:role_binding.manage:success", "audit-begin:role_binding.manage", "store-end", "audit-fail"}, events)
+	accesstest.RequireContract(t, events, []string{"get-binding"},
+		"grants", "grants", "decision:role_binding.manage:success", "audit-begin:role_binding.manage", "store-end", "audit-fail")
 	attempt := onlyAttempt(t, fixture)
 	require.Equal(t, binding.UserID, attempt.SubjectUserID, "the end names the bound User as its subject")
 	require.Equal(t, model.AuditStatusFail, attempt.Status, "the refused end fails its attempt")

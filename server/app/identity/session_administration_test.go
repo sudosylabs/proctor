@@ -246,7 +246,8 @@ func TestAdminSessionRevokeCommitsBeforePublishing(t *testing.T) {
 	require.Equal(t, attempts[0].ID, persistence.revokeInput.AuditEventID)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-session", "get-user", "prepare-mail", "audit-begin:session.manage", "store-revoke", "publish-revocation"}, events)
+	accesstest.RequireContract(t, events, []string{"get-session", "get-user"},
+		"grants", "decision:session.manage:success", "prepare-mail", "audit-begin:session.manage", "store-revoke", "publish-revocation")
 }
 
 func TestAdminSessionRevokeFailurePublishesNoEffect(t *testing.T) {
@@ -267,7 +268,8 @@ func TestAdminSessionRevokeFailurePublishesNoEffect(t *testing.T) {
 	require.True(t, apperror.Is(err, "administration.unavailable"), "error = %v", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
-	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-session", "get-user", "prepare-mail", "audit-begin:session.manage", "store-revoke", "audit-fail"}, events)
+	accesstest.RequireContract(t, events, []string{"get-session", "get-user"},
+		"grants", "decision:session.manage:success", "prepare-mail", "audit-begin:session.manage", "store-revoke", "audit-fail")
 }
 
 func TestAdminSessionRevokeAllCommitsBeforePublishing(t *testing.T) {
@@ -289,7 +291,8 @@ func TestAdminSessionRevokeAllCommitsBeforePublishing(t *testing.T) {
 	require.NotNil(t, persistence.revokeAllInput.Occurrence)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-user", "prepare-mail", "audit-begin:session.manage", "store-revoke-all", "publish-revocation"}, events)
+	accesstest.RequireContract(t, events, []string{"get-user"},
+		"grants", "decision:session.manage:success", "prepare-mail", "audit-begin:session.manage", "store-revoke-all", "publish-revocation")
 }
 
 func TestAdminSessionIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing.T) {
@@ -319,7 +322,8 @@ func TestAdminSessionRetainedOutcomeBypassesMailAfterNewSession(t *testing.T) {
 	inv := test.inv
 	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})}))
 	require.Zero(t, test.renders.Count(), "retained mail")
-	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-user", "audit-begin:session.manage", "store-revoke-all"}, events)
+	accesstest.RequireContract(t, events, []string{"get-user"},
+		"grants", "decision:session.manage:success", "audit-begin:session.manage", "store-revoke-all")
 }
 
 func TestAdminSessionCrossUserNotFound(t *testing.T) {

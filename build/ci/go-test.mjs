@@ -34,6 +34,66 @@ export function testReport(events, exitCode) {
   };
 }
 
+// go test flags that take their value as the next argument. Anything else
+// that doesn't start with "-" is a package pattern.
+const valueFlags = new Set(["-run", "-skip", "-timeout", "-p", "-parallel", "-cpu", "-count",
+  "-tags", "-shuffle", "-bench", "-benchtime", "-coverpkg", "-exec", "-covermode", "-coverprofile"]);
+
+// rerunArgs keeps the build and run flags of an invocation and drops its
+// package patterns and test selection, so one rerun can name its own.
+export function rerunArgs(args) {
+  const kept = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg.startsWith("-")) continue;
+    const name = arg.split("=", 1)[0];
+    const takesNext = valueFlags.has(name) && !arg.includes("=");
+    if (!["-run", "-skip", "-count", "-shuffle", "-covermode", "-coverprofile", "-coverpkg"].includes(name)) {
+      kept.push(arg);
+      if (takesNext && i + 1 < args.length) kept.push(args[i + 1]);
+    }
+    if (takesNext) i++;
+  }
+  return kept;
+}
+
+// failedTopLevelTests groups the failed top-level tests by package. A package
+// that failed without a test (a build or TestMain failure) is left out: a
+// rerun can't tell a flake from a real break there.
+export function failedTopLevelTests(results) {
+  const byPackage = new Map();
+  for (const item of results.values()) {
+    if (item.action !== "fail" || item.name === "package" || item.name.includes("/")) continue;
+    if (!byPackage.has(item.package)) byPackage.set(item.package, []);
+    byPackage.get(item.package).push(item.name);
+  }
+  return byPackage;
+}
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// rerunFailures runs each failed test once more. A test that passes on the
+// rerun is flaky. The caller's exit code doesn't change: a rerun only labels a
+// flake, it never turns a run green.
+async function rerunFailures(args, failed, { env, cwd, command }) {
+  const flaky = [];
+  for (const [packageName, tests] of failed) {
+    const pattern = `^(${tests.map(escapeRegExp).join("|")})$`;
+    const outcomes = new Map();
+    const child = spawn(command, ["test", "-json", "-count=1", ...rerunArgs(args), "-run", pattern, packageName],
+      { cwd, env, stdio: ["ignore", "pipe", "ignore"] });
+    const lines = createInterface({ input: child.stdout });
+    lines.on("line", (line) => {
+      let event;
+      try { event = JSON.parse(line); } catch { return; }
+      if (event.Test && !event.Test.includes("/") && ["pass", "fail"].includes(event.Action)) outcomes.set(event.Test, event.Action);
+    });
+    await new Promise((done) => { child.on("error", done); child.on("close", done); });
+    for (const name of tests) if (outcomes.get(name) === "pass") flaky.push({ package: packageName, name });
+  }
+  return flaky;
+}
+
 export async function runGoTests(args, { env = process.env, cwd = process.cwd(), command = "go" } = {}) {
   if (!env.PROCTOR_TEST_REPORT_DIR) throw new Error("PROCTOR_TEST_REPORT_DIR is required");
   const root = resolve(env.PROCTOR_TEST_REPORT_DIR);
@@ -41,7 +101,9 @@ export async function runGoTests(args, { env = process.env, cwd = process.cwd(),
   const directory = await mkdtemp(join(root, `${basename(cwd)}-`));
   const commandArgs = ["test", "-json", "-count=1", "-shuffle=on",
     "-covermode=atomic", `-coverprofile=${join(directory, "coverage.out")}`, ...args];
-  await writeFile(join(directory, "command.json"), JSON.stringify({ cwd, args: commandArgs }, null, 2));
+  // The commit and run let a flake report match reruns of the same code.
+  const ci = { sha: env.GITHUB_SHA, run: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT, ref: env.GITHUB_REF_NAME, job: env.GITHUB_JOB };
+  await writeFile(join(directory, "command.json"), JSON.stringify({ cwd, args: commandArgs, ci }, null, 2));
 
   const raw = createWriteStream(join(directory, "events.jsonl"));
   const errors = createWriteStream(join(directory, "stderr.log"));
@@ -81,6 +143,9 @@ export async function runGoTests(args, { env = process.env, cwd = process.cwd(),
   await Promise.all([finished(raw), finished(errors)]);
   const report = testReport(results, reportError ? 1 : exitCode);
   await writeFile(join(directory, "junit.xml"), report.junit);
+  const failed = exitCode !== 0 && !reportError ? failedTopLevelTests(results) : new Map();
+  const flaky = failed.size > 0 ? await rerunFailures(args, failed, { env, cwd, command }) : [];
+  await writeFile(join(directory, "flaky.json"), `${JSON.stringify(flaky, null, 2)}\n`);
   const coverage = spawn("go", ["tool", "cover", `-func=${join(directory, "coverage.out")}`], { cwd, env });
   const coverageFile = createWriteStream(join(directory, "coverage.txt"));
   coverage.stdout.pipe(coverageFile);
@@ -90,7 +155,8 @@ export async function runGoTests(args, { env = process.env, cwd = process.cwd(),
   await finished(coverageFile);
   const coverageText = await readFile(join(directory, "coverage.txt"), "utf8");
   const total = /^total:.*?(\d+(?:\.\d+)?%)$/m.exec(coverageText)?.[1] ?? "unavailable";
-  const summary = `### Go tests: ${basename(directory)}\n\nTests: ${report.tests}; failures: ${report.failures}; skipped: ${report.skipped}; exit: ${exitCode}; statement coverage: ${total}.\n\nSee this invocation's JUnit, raw events, stderr, and coverage artifacts.\n`;
+  const flakyLines = flaky.length === 0 ? "" : `\n**Flaky** (failed, then passed when rerun once; the run still fails):\n\n${flaky.map((item) => `- \`${item.package}\` ${item.name}`).join("\n")}\n`;
+  const summary = `### Go tests: ${basename(directory)}\n\nTests: ${report.tests}; failures: ${report.failures}; skipped: ${report.skipped}; exit: ${exitCode}; statement coverage: ${total}.\n${flakyLines}\nSee this invocation's JUnit, raw events, stderr, and coverage artifacts.\n`;
   await writeFile(join(directory, "summary.md"), summary);
   if (env.GITHUB_STEP_SUMMARY) await appendFile(env.GITHUB_STEP_SUMMARY, `${summary}\n`);
   if (reportError) throw reportError;

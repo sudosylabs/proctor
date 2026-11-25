@@ -1,0 +1,50 @@
+name: Flake report
+
+# Reads the Go test reports CI keeps for 14 days and summarizes which tests
+# failed and which were flaky. It only reads artifacts and writes the job
+# summary; it changes nothing.
+on:
+  schedule:
+    - cron: '37 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  report:
+    name: Go test flakes over the last 14 days
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: webapp/.nvmrc
+      # Each artifact goes in its own directory with its commit beside it, so
+      # reports from before they recorded their own commit still count.
+      - name: Download retained test reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORTS: ${{ runner.temp }}/reports
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORTS"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired | not) | select(.name == "hermetic-test-reports" or .name == "integration-test-reports") | [.id, .workflow_run.head_sha] | @tsv' |
+          while IFS=$'\t' read -r id sha; do
+            directory="$REPORTS/$id"
+            mkdir -p "$directory"
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$directory.zip"
+            unzip -qq -o "$directory.zip" '*junit.xml' '*command.json' '*flaky.json' -d "$directory" || true
+            rm -f "$directory.zip"
+            printf '{"sha":"%s"}\n' "$sha" > "$directory/artifact.json"
+          done
+      - name: Summarize flakes
+        env:
+          REPORTS: ${{ runner.temp }}/reports
+        run: node build/ci/flake-report.mjs "$REPORTS" | tee -a "$GITHUB_STEP_SUMMARY"

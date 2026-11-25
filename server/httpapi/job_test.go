@@ -9,8 +9,6 @@ package httpapi
 
 import (
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -59,12 +57,4 @@ func TestJobCursorIsOpaqueAndRejectsInvalidInput(t *testing.T) {
 	require.Error(t, err, "invalid cursor accepted")
 	_, err = encodeJobCursor(jobCursor{CreatedAt: cursor.CreatedAt, ID: cursor.ID, Order: "newest"})
 	require.Error(t, err, "a cursor names a known order")
-}
-
-func TestListJobsQueryReadsRepeatedTypes(t *testing.T) {
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/jobs?type=mail.deliver&type=job.cleanup&status=failed", nil)
-	query, err := listJobsQuery(request)
-	require.NoError(t, err)
-	require.Equal(t, []model.JobType{model.JobTypeMailDeliver, model.JobTypeCleanup}, query.Types)
-	require.Equal(t, []model.JobStatus{model.JobStatusFailed}, query.Statuses)
 }

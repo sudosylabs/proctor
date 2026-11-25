@@ -28,7 +28,7 @@ func testExamCatalogListAndArchive(t *testing.T, ss store.Store) {
 	creator := saveUser(t, ctx, ss)
 	firstAt := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
 	membershipBase := model.NowUTC()
-	membership, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	membership, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: creator.ID, StartsAt: membershipBase.Add(-time.Minute),
 	})
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func testExamCatalogListAndArchive(t *testing.T, ss store.Store) {
 	revokedMembership, err := ss.ExamAuthoring().List(ctx, store.ExamListOptions{AcademicUnitID: unit.ID, ArchiveFilter: store.ExamArchiveAll, Limit: 50, Visibility: visibility})
 	require.NoError(t, err)
 	require.Empty(t, revokedMembership)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: creator.ID, StartsAt: membershipBase.Add(6 * time.Minute),
 	})
 	require.NoError(t, err)

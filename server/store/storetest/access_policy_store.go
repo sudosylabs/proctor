@@ -49,7 +49,7 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 	require.NoError(t, err)
 	require.True(t, hasAccessPolicyBlocker(blocked.Blockers, store.AccessPolicyBlockerLastAdministratorPath, ""), "local lockout blockers = %#v", blocked)
 
-	_, err = ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: bootstrap.Administrator.ID,
+	_, err = seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: bootstrap.Administrator.ID,
 		Provider: "campus", Subject: "admin-subject", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
 	require.NoError(t, err)
 	localOnlyResult, err := ss.User().Create(ctx, testUserCreation(newUser(), &model.PasswordCredential{PasswordHash: "encoded-password"}))
@@ -145,7 +145,7 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 		require.False(t, preserved.RevokedAt.Valid, "revoke_existing_sessions=false revoked %s", id)
 	}
 	campusCandidate, campusCredentials, _ := newSession(bootstrap.Administrator.ID.String())
-	campusIdentity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: bootstrap.Administrator.ID,
+	campusIdentity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: bootstrap.Administrator.ID,
 		Provider: "campus", Subject: "access-policy-session-" + model.NewID(), LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
 	require.NoError(t, err)
 	campusCandidate.AuthenticationMethod = "oidc"

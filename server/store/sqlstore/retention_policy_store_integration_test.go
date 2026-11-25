@@ -143,7 +143,7 @@ func TestRetentionPolicyExportCeilingDatabaseConstraint(t *testing.T) {
 	defer cancel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
-	institution, err := s.Institution().Save(ctx, &model.Institution{Name: "export-ceiling", DisplayName: "Export Ceiling"})
+	institution, err := s.SeedInstitution(ctx, &model.Institution{Name: "export-ceiling", DisplayName: "Export Ceiling"})
 	require.NoError(t, err)
 	lastAccepted := 0
 	for _, days := range []int{0, 1, 7, -1, 8, 36500} {
@@ -175,7 +175,7 @@ func TestRetentionPolicyReplacementKeepsMonotonicMetadata(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "retention-clock", DisplayName: "Retention Clock Institution"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "retention-clock", DisplayName: "Retention Clock Institution"})
 	require.NoError(t, err)
 	actor := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "retention-administrator",
 		Email: "retention-administrator@example.test", DisplayName: "Administrator"})
@@ -270,7 +270,7 @@ func TestPolicyReplacementRechecksAdministratorAfterBindingEnd(t *testing.T) {
 			defer cancel()
 			persistence := openTestStore(t)
 			resetTestStore(t, persistence)
-			institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "policy-clock", DisplayName: "Policy Clock Institution"})
+			institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "policy-clock", DisplayName: "Policy Clock Institution"})
 			require.NoError(t, err)
 			role, err := storetest.SaveRole(ctx, persistence, &model.Role{Name: model.SystemAdministratorRoleName,
 				DisplayName: "System Administrator", Permissions: model.AllActions(), BuiltIn: true})

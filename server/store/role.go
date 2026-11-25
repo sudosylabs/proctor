@@ -47,12 +47,6 @@ type RoleStore interface {
 	List(context.Context) ([]*model.Role, error)
 	Update(context.Context, *RoleUpdate) (*model.Role, error)
 	Archive(context.Context, *RoleArchive) (*model.Role, error)
-	// SeedBuiltIn inserts the built-in role for test fixtures only; production
-	// creates it through InstallationStore.Bootstrap.
-	SeedBuiltIn(context.Context, *model.Role) (*model.Role, error)
-	// SeedUpdate is an unaudited test fixture write; production code never
-	// calls it.
-	SeedUpdate(context.Context, *model.Role) (*model.Role, error)
 }
 
 // RoleBindingCreation creates a binding and completes its recorded audit

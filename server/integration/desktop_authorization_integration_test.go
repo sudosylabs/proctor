@@ -74,7 +74,7 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 	secondary := testlib.Setup(t, testlib.WithConfig(publicOrigin), testlib.WithStore(secondaryStore), behavior)
 
 	ctx := context.Background()
-	institution, err := primaryStore.Institution().Save(ctx, &model.Institution{
+	institution, err := primaryStore.SeedInstitution(ctx, &model.Institution{
 		Name: "desktop-auth", DisplayName: "Desktop Authorization",
 	})
 	require.NoError(t, err, "save institution")

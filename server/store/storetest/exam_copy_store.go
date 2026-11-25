@@ -32,7 +32,7 @@ func TestExamCopyStore(t *testing.T, ss store.Store, lapse ExamCopyLapse) {
 	institution := saveInstitution(t, ctx, ss)
 	unit := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "exam-copy-unit")
 	manager := saveUser(t, ctx, ss)
-	_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: manager.ID, StartsAt: model.NowUTC().Add(-time.Hour),
 	})
 	require.NoError(t, err)

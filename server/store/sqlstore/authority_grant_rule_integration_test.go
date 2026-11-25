@@ -31,7 +31,7 @@ func TestActionGrantRuleUnderTokenCeiling(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "grant-rule", DisplayName: "Grant Rule"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "grant-rule", DisplayName: "Grant Rule"})
 	require.NoError(t, err)
 	saveUnit := func(name string, parent model.AcademicUnitID) *model.AcademicUnit {
 		unit, saveErr := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institution.ID,

@@ -86,16 +86,16 @@ func testInstitutionStoreSave(t *testing.T, ss store.Store) {
 		DisplayName: "Northbridge University",
 		Description: "Primary institution",
 	}
-	saved, err := ss.Institution().Save(ctx, institution)
+	saved, err := seeder(ss).SeedInstitution(ctx, institution)
 	require.NoError(t, err)
 	require.True(t, saved.ID.IsValid(), "Save() id = %q", saved.ID.String())
 	require.True(t, institution.ID.IsZero(), "Save() mutated input id to %q", institution.ID.String())
 
-	_, err = ss.Institution().Save(ctx, saved)
+	_, err = seeder(ss).SeedInstitution(ctx, saved)
 	var invalid *store.ErrInvalidInput
 	require.ErrorAs(t, err, &invalid, "second Save(saved) error")
 
-	_, err = ss.Institution().Save(ctx, &model.Institution{
+	_, err = seeder(ss).SeedInstitution(ctx, &model.Institution{
 		Name:        "second",
 		DisplayName: "Second University",
 	})
@@ -158,7 +158,7 @@ func testInstitutionStoreArchive(t *testing.T, ss store.Store) {
 	_, err := ss.Institution().Get(ctx, institution.ID)
 	require.True(t, store.IsNotFound(err), "Get(archived) error")
 	require.True(t, store.IsNotFound(ss.Institution().Archive(ctx, &store.InstitutionArchive{ID: institution.ID, ArchiveAt: model.NowUTC()})), "second Archive() error")
-	_, err = ss.Institution().Save(ctx, &model.Institution{
+	_, err = seeder(ss).SeedInstitution(ctx, &model.Institution{
 		Name:        "replacement",
 		DisplayName: "Replacement University",
 	})
@@ -168,7 +168,7 @@ func testInstitutionStoreArchive(t *testing.T, ss store.Store) {
 func saveInstitution(t *testing.T, ctx context.Context, ss store.Store) *model.Institution {
 	t.Helper()
 	cleanupInstitution(t, ctx, ss)
-	institution, err := ss.Institution().Save(ctx, &model.Institution{
+	institution, err := seeder(ss).SeedInstitution(ctx, &model.Institution{
 		Name:        "institution-" + model.NewID(),
 		DisplayName: "Northbridge University",
 	})

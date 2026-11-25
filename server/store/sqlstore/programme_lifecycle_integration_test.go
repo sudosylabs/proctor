@@ -26,7 +26,7 @@ func TestProgrammeArchiveSerializesWithLevelCreation(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "northbridge", DisplayName: "Northbridge"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "northbridge", DisplayName: "Northbridge"})
 	require.NoError(t, err)
 	unit, err := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institution.ID, Name: "computing", DisplayName: "Computing"})
 	require.NoError(t, err)

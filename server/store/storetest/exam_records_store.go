@@ -39,7 +39,7 @@ func TestExamRecordsStore(t *testing.T, ss store.Store, probes ...ExamRecordsSQL
 	require.NoError(t, err)
 	binding, err := SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: f.manager.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: f.unitID.String(), StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
-	membership, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{UserID: f.manager.ID, AcademicUnitID: f.unitID, StartsAt: model.NowUTC().Add(-time.Minute)})
+	membership, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{UserID: f.manager.ID, AcademicUnitID: f.unitID, StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
 	principal := saveRecordsPrincipal(t, ctx, ss, f.manager.ID, false)
 	mutation := func(scope model.RetentionHoldScope, principal model.Principal, action model.Action) store.ExamRecordsMutation {

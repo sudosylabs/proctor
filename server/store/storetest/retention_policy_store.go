@@ -200,7 +200,7 @@ func testRetentionPolicyReplacementInstitution(t *testing.T, ctx context.Context
 	policy, err := stores.RetentionPolicy().Get(ctx)
 	require.True(t, store.IsNotFound(err), "Get without an active Institution")
 	require.Nil(t, policy, "Get without an active Institution")
-	replacement, err := stores.Institution().Save(ctx, &model.Institution{Name: "replacement-retention-institution", DisplayName: "Replacement Institution"})
+	replacement, err := seeder(stores).SeedInstitution(ctx, &model.Institution{Name: "replacement-retention-institution", DisplayName: "Replacement Institution"})
 	require.NoError(t, err)
 	policy, err = stores.RetentionPolicy().Get(ctx)
 	require.NoError(t, err)

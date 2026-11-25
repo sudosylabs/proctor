@@ -30,7 +30,6 @@ type AcademicPeriodCommandResult struct {
 
 // InstitutionStore persists the installation's one institution.
 type InstitutionStore interface {
-	Save(context.Context, *model.Institution) (*model.Institution, error)
 	Get(context.Context, model.InstitutionID) (*model.Institution, error)
 	GetSingleton(context.Context) (*model.Institution, error)
 	Update(context.Context, *InstitutionUpdate) (*model.Institution, error)
@@ -162,9 +161,6 @@ type ProgrammeStore interface {
 	// every page, ignoring the continuation, order and limit, capped at
 	// maximum (see MaximumListCount).
 	CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options AcademicNameListOptions, maximum int) (int, error)
-	// SeedUpdate is an unaudited test fixture write; production code never
-	// calls it.
-	SeedUpdate(context.Context, *model.Programme) (*model.Programme, error)
 }
 
 type ProgrammeLevelCreation struct {
@@ -210,9 +206,6 @@ type ProgrammeLevelStore interface {
 	// CountByProgrammes counts each listed programme's unarchived levels in
 	// one read, capped at maximum; every listed programme has an entry.
 	CountByProgrammes(ctx context.Context, programmeIDs []model.ProgrammeID, maximum int) ([]ProgrammeLevelCount, error)
-	// SeedUpdate is an unaudited test fixture write; production code never
-	// calls it.
-	SeedUpdate(context.Context, *model.ProgrammeLevel) (*model.ProgrammeLevel, error)
 }
 
 // AcademicPeriodVisibilityScope limits a listing to institution periods plus

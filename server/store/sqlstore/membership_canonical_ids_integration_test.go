@@ -25,7 +25,7 @@ func TestMembershipCanonicalIDConstraintsRejectNoncanonicalValues(t *testing.T) 
 	resetTestStore(t, persistence)
 	ctx := context.Background()
 
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "membership-constraint", DisplayName: "Membership Constraint",
 	})
 	require.NoError(t, err)
@@ -53,15 +53,15 @@ func TestMembershipCanonicalIDConstraintsRejectNoncanonicalValues(t *testing.T) 
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{
 		Username: "membership-constraint-user", Email: "membership-constraint@example.edu", DisplayName: "User",
 	})
-	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = persistence.SeedAffiliation(ctx, &model.Affiliation{
 		UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(1),
 	})
 	require.NoError(t, err)
-	unitMember, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	unitMember, err := persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(1),
 	})
 	require.NoError(t, err)
-	enrollment, err := persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	enrollment, err := persistence.SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: class.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(model.GetMillis()),
 	})
 	require.NoError(t, err)

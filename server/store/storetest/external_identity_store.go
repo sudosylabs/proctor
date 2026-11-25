@@ -26,9 +26,9 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 	t.Run("ConcurrentSessionIssuanceCannotSurviveExactIdentityUnlink", func(t *testing.T) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
-		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$concurrent-fallback"}) //nolint:gosec // G101: a fixture hash of no real password.
+		_, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$concurrent-fallback"}) //nolint:gosec // G101: a fixture hash of no real password.
 		require.NoError(t, err)
-		identity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
+		identity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
 			Subject: "concurrent-session-" + model.NewID(), LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis())})
 		require.NoError(t, err)
 		candidate, credentials, _ := newSession(user.ID.String())
@@ -117,9 +117,9 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 	t.Run("UnlinkRevokesOnlyExactIdentitySessions", func(t *testing.T) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
-		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$another-method"})
+		_, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$another-method"})
 		require.NoError(t, err)
-		otherIdentity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID,
+		otherIdentity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID,
 			Provider: "campus-cas", Subject: "other-revocation-subject-" + model.NewID(),
 			LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis())})
 		require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 	t.Run("SaveGetAndList", func(t *testing.T) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
-		identity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+		identity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{
 			UserID: user.ID, Provider: "campus-cas",
 			Subject: "Opaque-Subject/123", LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis()),
 		})
@@ -194,7 +194,7 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 		require.NoError(t, err)
 		require.Len(t, list, 1)
 		require.Equal(t, identity.ID, list[0].ID)
-		_, err = ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+		_, err = seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{
 			UserID: saveUser(t, ctx, ss).ID, Provider: "campus-cas",
 			Subject: identity.Subject, LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis()),
 		})
@@ -363,7 +363,7 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 	t.Run("ConfiguredProviderRemovalPreservesDurableLink", func(t *testing.T) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
-		identity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+		identity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{
 			UserID: user.ID, Provider: "campus-cas", Subject: "removed-provider-" + model.NewID(),
 			LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis()),
 		})
@@ -410,7 +410,7 @@ func TestExternalIdentityAdmissionMode(t *testing.T, ss store.Store, mode model.
 		institution = saveInstitution(t, ctx, ss)
 	}
 	existingUser := saveUser(t, ctx, ss)
-	existingIdentity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+	existingIdentity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{
 		UserID: existingUser.ID, Provider: "campus-cas", Subject: "existing-" + model.NewID(),
 		LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis()),
 	})
@@ -614,7 +614,7 @@ func establishExternalAdmissionPolicyAdministrator(
 	institutionID model.InstitutionID,
 ) {
 	t.Helper()
-	_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{ //nolint:gosec // G101: a fixture hash of no real password.
+	_, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{ //nolint:gosec // G101: a fixture hash of no real password.
 		UserID: userID, PasswordHash: "$argon2id$external-admission-policy-test",
 	})
 	require.NoError(t, err)

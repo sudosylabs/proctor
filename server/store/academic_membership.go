@@ -151,7 +151,6 @@ type AffiliationEnd struct {
 type AffiliationStore interface {
 	Create(context.Context, *AffiliationCreation) (*model.Affiliation, error)
 	End(context.Context, *AffiliationEnd) (*model.Affiliation, error)
-	Save(context.Context, *model.Affiliation) (*model.Affiliation, error)
 	Get(context.Context, model.AffiliationID) (*model.Affiliation, error)
 	ListByUser(context.Context, model.UserID) ([]*model.Affiliation, error)
 	ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.Affiliation, error)
@@ -190,7 +189,6 @@ type AcademicUnitMemberEnd struct {
 type AcademicUnitMemberStore interface {
 	Create(context.Context, *AcademicUnitMemberCreation) (*model.AcademicUnitMember, error)
 	End(context.Context, *AcademicUnitMemberEnd) (*model.AcademicUnitMember, error)
-	Save(context.Context, *model.AcademicUnitMember) (*model.AcademicUnitMember, error)
 	Get(context.Context, model.AcademicUnitMemberID) (*model.AcademicUnitMember, error)
 	ListByUser(context.Context, model.UserID) ([]*model.AcademicUnitMember, error)
 	ListByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, at time.Time) ([]*model.AcademicUnitMember, error)
@@ -271,13 +269,9 @@ type ClassMemberStore interface {
 	// entry. At most MaximumClassStudentCountClasses memberships are read.
 	ListTransfers(ctx context.Context, memberIDs []model.ClassMemberID, visibility ClassVisibilityScope) ([]ClassMemberTransfer, error)
 	ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.ClassMember, error)
-	// SeedEnroll and SeedEnd are unaudited fixture writes for conformance and
-	// integration tests; production code never calls a Seed operation.
-	SeedEnroll(context.Context, *model.ClassMember) (*ClassEnrollmentResult, error)
-	SeedEnd(context.Context, *ClassMemberSeedEnd) (*model.ClassMember, error)
 }
 
-// ClassMemberSeedEnd is the input of ClassMemberStore.SeedEnd, a test-only write.
+// ClassMemberSeedEnd is the input of the SQL store's SeedClassEnrollmentEnd, a test fixture write.
 type ClassMemberSeedEnd struct {
 	ID               model.ClassMemberID
 	ExpectedRevision int64

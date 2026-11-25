@@ -169,7 +169,7 @@ func TestAdministratorRecoveryStore(t *testing.T, ss store.Store, probes ...Admi
 	})
 	require.True(t, store.IsConflict(err), "wrong-target recovery error")
 
-	_, err = ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+	_, err = seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{
 		UserID: installed.Administrator.ID, Provider: "recovery-provider", Subject: "recovery-admin",
 		LastSeenAt: model.OptionalTimeFrom(model.NowUTC()),
 	})

@@ -32,12 +32,12 @@ func TestClassMemberStore(t *testing.T, ss store.Store) {
 	nextClass := saveClass(t, ctx, ss, fixture.level.ID.String(), nextPeriod.ID.String(), "class-member-next")
 	user := saveUser(t, ctx, ss)
 	start := model.NowUTC().Add(1000 * time.Millisecond)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond)),
 	})
 	require.NoError(t, err)
 
-	first, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	first, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID:          firstClass.ID,
 		AcademicPeriodID: model.NewAcademicPeriodID(),
 		UserID:           user.ID,
@@ -47,12 +47,12 @@ func TestClassMemberStore(t *testing.T, ss store.Store) {
 	require.Nil(t, first.Previous)
 	require.Equal(t, fixture.period.ID, first.Membership.AcademicPeriodID)
 	require.Equal(t, int64(1), first.Membership.Revision, "first enrollment revision")
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: firstClass.ID, UserID: user.ID, StartsAt: model.TimeUTC(start.Add(1 * time.Millisecond)),
 	})
 	var conflict *store.ErrConflict
 	require.ErrorAs(t, err, &conflict)
-	transfer, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	transfer, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: secondClass.ID, UserID: user.ID, StartsAt: model.TimeUTC(start.Add(10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
@@ -67,12 +67,12 @@ func TestClassMemberStore(t *testing.T, ss store.Store) {
 	history, err := ss.ClassMember().ListByUser(ctx, user.ID)
 	require.NoError(t, err)
 	require.Len(t, history, 2)
-	ended, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: transfer.Membership.ID, ExpectedRevision: transfer.Membership.Revision, EndAt: start.Add(20 * time.Millisecond)})
+	ended, err := seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: transfer.Membership.ID, ExpectedRevision: transfer.Membership.Revision, EndAt: start.Add(20 * time.Millisecond)})
 	require.NoError(t, err)
 	require.True(t, start.Add(20*time.Millisecond).Equal(ended.EndsAt.Time))
-	_, err = ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: transfer.Membership.ID, ExpectedRevision: transfer.Membership.Revision, EndAt: start.Add(21 * time.Millisecond)})
+	_, err = seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: transfer.Membership.ID, ExpectedRevision: transfer.Membership.Revision, EndAt: start.Add(21 * time.Millisecond)})
 	require.True(t, store.IsConflict(err), "stale End() error")
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: firstClass.ID, UserID: user.ID, StartsAt: model.TimeUTC(start.Add(5 * time.Millisecond)),
 	})
 	require.ErrorAs(t, err, &conflict)
@@ -103,16 +103,16 @@ func testClassMemberEndBeforeModification(t *testing.T, ss store.Store) {
 	period := saveAcademicPeriod(t, ctx, ss, fixture.institution.ID.String(), "class-member-backdated-"+model.NewID(), model.MillisFromTime(now)-3_600_000)
 	class := saveClass(t, ctx, ss, fixture.level.ID.String(), period.ID.String(), "class-member-backdated")
 	user := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: now.Add(-3_000_000 * time.Millisecond),
 	})
 	require.NoError(t, err)
-	enrolled, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	enrolled, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: class.ID, UserID: user.ID, StartsAt: now.Add(-2_000_000 * time.Millisecond),
 	})
 	require.NoError(t, err)
 	endAt := now.Add(-1_000_000 * time.Millisecond)
-	ended, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: enrolled.Membership.ID, ExpectedRevision: enrolled.Membership.Revision, EndAt: endAt})
+	ended, err := seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: enrolled.Membership.ID, ExpectedRevision: enrolled.Membership.Revision, EndAt: endAt})
 	require.NoError(t, err)
 	require.True(t, endAt.Equal(ended.EndsAt.Time), "End(before creation) = %#v, created %#v", ended, enrolled.Membership)
 	require.True(t, ended.UpdatedAt.Equal(enrolled.Membership.UpdatedAt), "End(before creation) = %#v, created %#v", ended, enrolled.Membership)
@@ -131,7 +131,7 @@ func testAuditedClassMemberLifecycle(
 	t.Helper()
 	ctx := context.Background()
 	user := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond)),
 	})
 	require.NoError(t, err)
@@ -258,7 +258,7 @@ func testAuditedClassMemberLifecycle(
 	require.True(t, store.IsConflict(err), "stale End() error")
 
 	rollbackUser := saveUser(t, ctx, ss)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: rollbackUser.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond)),
 	})
 	require.NoError(t, err)
@@ -275,7 +275,7 @@ func testAuditedClassMemberLifecycle(
 	require.True(t, store.IsNotFound(err), "enrollment survived audit rollback")
 
 	disabledMailUser := saveUser(t, ctx, ss)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: disabledMailUser.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond)),
 	})
 	require.NoError(t, err)
@@ -296,7 +296,7 @@ func testAuditedClassMemberLifecycle(
 	require.Empty(t, disabledDelivery.EncryptedPayload)
 
 	ineligibleUser := saveUser(t, ctx, ss)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: ineligibleUser.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: ineligibleUser.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond))})
 	require.NoError(t, err)
 	activeRecipient := new(*ineligibleUser)
@@ -401,11 +401,11 @@ func testDistinctPeriodClassMemberEnrollment(t *testing.T, ss store.Store, first
 	t.Helper()
 	ctx := context.Background()
 	user := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond))})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond))})
 	require.NoError(t, err)
-	first, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: firstClass.ID, UserID: user.ID, StartsAt: model.TimeUTC(start)})
+	first, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: firstClass.ID, UserID: user.ID, StartsAt: model.TimeUTC(start)})
 	require.NoError(t, err)
-	next, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: nextClass.ID, UserID: user.ID, StartsAt: model.TimeUTC(start)})
+	next, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: nextClass.ID, UserID: user.ID, StartsAt: model.TimeUTC(start)})
 	require.NoError(t, err)
 	require.Nil(t, next.Previous)
 	active, err := ss.ClassMember().ListActiveByUser(ctx, user.ID, start.Add(1*time.Millisecond))
@@ -418,12 +418,12 @@ func testFiniteAffiliationCannotBackOpenEnrollment(t *testing.T, ss store.Store,
 	t.Helper()
 	ctx := context.Background()
 	user := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: user.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.TimeFromMillis(start - 1), EndsAt: model.OptionalTimeFromMillis(start + 100),
 	})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(start)})
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(start)})
 	require.True(t, store.IsConflict(err), "open enrollment with finite affiliation error")
 }
 
@@ -437,7 +437,7 @@ func testConcurrentClassMemberEnrollment(
 	t.Helper()
 	ctx := context.Background()
 	user := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start.Add(-1 * time.Millisecond)),
 	})
 	require.NoError(t, err)

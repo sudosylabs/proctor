@@ -438,7 +438,7 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 	me, administrator, other := saveUser(t, ctx, ss), saveUser(t, ctx, ss), saveUser(t, ctx, ss)
 	memberUnit := saveAcademicUnit(t, ctx, ss, institutionID, "", "self-history-member-unit")
 	foreignUnit := saveAcademicUnit(t, ctx, ss, institutionID, "", "self-history-foreign-unit")
-	_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: memberUnit.ID, UserID: me.ID, StartsAt: model.NowUTC()})
+	_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: memberUnit.ID, UserID: me.ID, StartsAt: model.NowUTC()})
 	require.NoError(t, err)
 	institution := model.Resource{Type: model.ResourceInstitution, ID: institutionID}
 	userResource := func(user *model.User) model.Resource {
@@ -619,7 +619,7 @@ func testAuditNames(t *testing.T, ctx context.Context, ss store.Store, instituti
 	}
 	member, outsider, disabledMember := named("Unit Member", false), named("Outsider", false), named("Disabled Member", true)
 	for _, user := range []*model.User{member, disabledMember} {
-		_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+		_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 			AcademicUnitID: child.ID, UserID: user.ID, StartsAt: model.NowUTC().Add(-time.Minute),
 		})
 		require.NoError(t, err)

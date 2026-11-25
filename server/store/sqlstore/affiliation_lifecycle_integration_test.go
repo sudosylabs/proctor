@@ -26,7 +26,7 @@ func TestStudentAffiliationEndSerializesWithEnrollment(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "affiliation-race", DisplayName: "Affiliation Race"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "affiliation-race", DisplayName: "Affiliation Race"})
 	require.NoError(t, err)
 	unit, err := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institution.ID, Name: "unit", DisplayName: "Unit"})
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestStudentAffiliationEndSerializesWithEnrollment(t *testing.T) {
 	for iteration := 0; iteration < 20; iteration++ {
 		userID := model.NewID()
 		user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "affiliation-" + userID, Email: userID + "@example.edu", DisplayName: "User"})
-		affiliation, err := persistence.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(1)})
+		affiliation, err := persistence.SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(1)})
 		require.NoError(t, err)
 		attempt, err := persistence.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionUserManage), Resource: model.Resource{Type: model.ResourceUser, ID: user.ID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), Status: model.AuditStatusAttempt, NodeID: "test-node"})
 		require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestStudentAffiliationEndSerializesWithEnrollment(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			_, enrollErr = persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(model.GetMillis())})
+			_, enrollErr = persistence.SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(model.GetMillis())})
 		}()
 		close(start)
 		wait.Wait()

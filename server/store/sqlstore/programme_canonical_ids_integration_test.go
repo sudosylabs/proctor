@@ -25,7 +25,7 @@ func TestProgrammeCanonicalIDConstraintsRejectNoncanonicalValues(t *testing.T) {
 	resetTestStore(t, persistence)
 	ctx := context.Background()
 
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "programme-constraint", DisplayName: "Programme Constraint",
 	})
 	require.NoError(t, err)

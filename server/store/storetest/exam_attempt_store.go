@@ -419,7 +419,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.True(t, reconnectedClosed.ConsistentWith(input.AttemptID, fixture.sitting.ID, reconnected.Connection.ID), "CloseConnection returned a result inconsistent with its request")
 
 	endedAt := model.NowUTC()
-	endedMembership, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID, ExpectedRevision: fixture.membership.Revision, EndAt: endedAt})
+	endedMembership, err := seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID, ExpectedRevision: fixture.membership.Revision, EndAt: endedAt})
 	require.NoError(t, err)
 	// Membership timestamps have millisecond precision while PostgreSQL decides
 	// current eligibility with a higher-precision clock. Cross the millisecond
@@ -435,7 +435,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	_, err = ss.ExamAttempt().Connect(ctx, &revokedFreshInput,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "attempt-revoked", "attempt-revoked"))
 	require.True(t, store.IsNotFound(err), "Connect(fresh after membership revoke) error")
-	restored, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: fixture.candidate.ID,
+	restored, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: fixture.candidate.ID,
 		StartsAt: model.TimeUTC(endedAt)})
 	require.NoError(t, err)
 	fixture.membership = restored.Membership
@@ -696,10 +696,10 @@ func TestSessionExpiryAttemptFence(t *testing.T, ss store.Store) {
 func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture, probe ExamAttemptSQLProbe) *store.ExamAttemptParticipationExpiryResult {
 	t.Helper()
 	candidate := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.NowUTC().Add(-time.Hour)})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
 		StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
 	session := saveRegisteredDesktopSession(t, ctx, ss, candidate.ID, fixture.institutionID)
@@ -1297,9 +1297,9 @@ func newExamAttemptFixtureWithAssistantOptions(t *testing.T, ctx context.Context
 	require.NoError(t, err)
 	require.Equal(t, model.ExamSittingOpen, opened.Value.Sitting.State)
 	candidate := saveUser(t, ctx, ss)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: now.Add(-time.Hour)})
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: now.Add(-time.Hour)})
 	require.NoError(t, err)
-	enrollment, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: candidate.ID, StartsAt: now.Add(-time.Minute)})
+	enrollment, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: candidate.ID, StartsAt: now.Add(-time.Minute)})
 	require.NoError(t, err)
 	session := saveRegisteredDesktopSession(t, ctx, ss, candidate.ID, unit.InstitutionID)
 	return examAttemptFixture{candidate: candidate, manager: manager, session: session, sitting: opened.Value.Sitting, class: class,
@@ -1336,9 +1336,9 @@ func saveRegisteredDesktopSession(t *testing.T, ctx context.Context, ss store.St
 func testConcurrentExamAttemptAdmission(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture) {
 	t.Helper()
 	candidate := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: model.NowUTC().Add(-time.Hour)})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: model.NowUTC().Add(-time.Hour)})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID, StartsAt: model.NowUTC().Add(-time.Minute)})
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID, StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
 	session := saveRegisteredDesktopSession(t, ctx, ss, candidate.ID, fixture.institutionID)
 	concurrentFixture := fixture

@@ -338,7 +338,7 @@ func savePendingMFA(
 ) *model.MFACredential {
 	t.Helper()
 	now := model.NowUTC()
-	credential, err := ss.MFA().SeedPending(ctx, &model.MFACredential{
+	credential, err := seeder(ss).SeedPendingMFA(ctx, &model.MFACredential{
 		UserID:           userID,
 		State:            model.MFAStatePending,
 		EncryptedSecret:  "encrypted-secret",

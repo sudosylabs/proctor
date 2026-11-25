@@ -81,7 +81,7 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 	primary := testlib.Setup(t, testlib.WithStore(primaryStore), testlib.WithCluster(primaryCluster))
 	secondary := testlib.Setup(t, testlib.WithStore(secondaryStore), testlib.WithCluster(secondaryCluster))
 	ctx := context.Background()
-	_, err := primaryStore.Institution().Save(ctx, &model.Institution{
+	_, err := primaryStore.SeedInstitution(ctx, &model.Institution{
 		Name: "settings-two-node", DisplayName: "Settings Two Node",
 	})
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestUserSettingsUnknownOutcomeReconcilesByReadWithoutContentLeak(t *testing
 	uncertain := &userSettingsUnknownOutcomeStore{Store: persistence}
 	helper := testlib.Setup(t, testlib.WithStore(uncertain))
 	ctx := context.Background()
-	_, err := persistence.Institution().Save(ctx, &model.Institution{
+	_, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "settings-unknown-outcome", DisplayName: "Settings Unknown Outcome",
 	})
 	require.NoError(t, err)

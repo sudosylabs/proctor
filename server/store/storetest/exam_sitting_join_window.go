@@ -105,9 +105,9 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 	require.Equal(t, store.CandidateExamAccessNotOpen, activityItem(fixture.candidate, fixture.session).AccessState, "before the window the sitting is not open")
 
 	late := saveUser(t, ctx, ss)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: late.ID, Kind: model.AffiliationStudent, StartsAt: model.NowUTC().Add(-time.Hour)})
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: late.ID, Kind: model.AffiliationStudent, StartsAt: model.NowUTC().Add(-time.Hour)})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: late.ID, StartsAt: model.NowUTC().Add(-time.Minute)})
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: late.ID, StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
 	lateSession := saveRegisteredDesktopSession(t, ctx, ss, late.ID, fixture.institutionID)
 
@@ -174,7 +174,7 @@ func TestExamSittingJoinWindowUpdate(t *testing.T, ss store.Store) {
 	candidateInput.EmailVerified = true
 	candidate, err := createUser(t, ctx, ss, candidateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: fixture.period.StartsAt})
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	member := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID, AcademicPeriodID: fixture.period.ID, StartsAt: fixture.period.StartsAt}
 	member.PrepareCreate(model.NewClassMemberID(), model.NowUTC())

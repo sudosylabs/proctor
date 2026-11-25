@@ -1105,12 +1105,6 @@ func (l *Layer) Close() error {
 	})
 }
 
-func (s *timedInstitutionStore) Save(arg0 context.Context, arg1 *model.Institution) (*model.Institution, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateInstitution, methodSave), func(callCtx context.Context) (*model.Institution, error) {
-		return s.next.Save(callCtx, arg1)
-	})
-}
-
 func (s *timedInstitutionStore) Get(arg0 context.Context, arg1 model.InstitutionID) (*model.Institution, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateInstitution, methodGet), func(callCtx context.Context) (*model.Institution, error) {
 		return s.next.Get(callCtx, arg1)
@@ -1243,12 +1237,6 @@ func (s *timedProgrammeStore) CountByAcademicUnit(ctx context.Context, academicU
 	})
 }
 
-func (s *timedProgrammeStore) SeedUpdate(arg0 context.Context, arg1 *model.Programme) (*model.Programme, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateProgramme, methodSeedUpdate), func(callCtx context.Context) (*model.Programme, error) {
-		return s.next.SeedUpdate(callCtx, arg1)
-	})
-}
-
 func (s *timedProgrammeLevelStore) Create(arg0 context.Context, arg1 *store.ProgrammeLevelCreation) (*model.ProgrammeLevel, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateProgrammeLevel, methodCreate), func(callCtx context.Context) (*model.ProgrammeLevel, error) {
 		return s.next.Create(callCtx, arg1)
@@ -1300,12 +1288,6 @@ func (s *timedProgrammeLevelStore) CountByProgramme(ctx context.Context, program
 func (s *timedProgrammeLevelStore) CountByProgrammes(ctx context.Context, programmeIDs []model.ProgrammeID, maximum int) ([]store.ProgrammeLevelCount, error) {
 	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateProgrammeLevel, methodCountByProgrammes), func(callCtx context.Context) ([]store.ProgrammeLevelCount, error) {
 		return s.next.CountByProgrammes(callCtx, programmeIDs, maximum)
-	})
-}
-
-func (s *timedProgrammeLevelStore) SeedUpdate(arg0 context.Context, arg1 *model.ProgrammeLevel) (*model.ProgrammeLevel, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateProgrammeLevel, methodSeedUpdate), func(callCtx context.Context) (*model.ProgrammeLevel, error) {
-		return s.next.SeedUpdate(callCtx, arg1)
 	})
 }
 
@@ -2821,12 +2803,6 @@ func (s *timedUserStore) SetDisabled(arg0 context.Context, arg1 *store.UserDisab
 	})
 }
 
-func (s *timedUserStore) UpdateLastLogin(arg0 context.Context, arg1 *store.UserLastLoginUpdate) error {
-	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateUser, methodUpdateLastLogin), func(callCtx context.Context) error {
-		return s.next.UpdateLastLogin(callCtx, arg1)
-	})
-}
-
 func (s *timedUserStore) ListDisplayNames(arg0 context.Context, arg1 []model.UserID) ([]store.UserDisplayName, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListDisplayNames), func(callCtx context.Context) ([]store.UserDisplayName, error) {
 		return s.next.ListDisplayNames(callCtx, arg1)
@@ -3142,12 +3118,6 @@ func (s *timedMailStore) ReplaceRekeyTarget(arg0 context.Context, arg1 *store.Ma
 func (s *timedMailStore) ProveRekey(arg0 context.Context, arg1 *store.MailRekeyProofRequest) (*store.MailRekeyProof, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMail, methodProveRekey), func(callCtx context.Context) (*store.MailRekeyProof, error) {
 		return s.next.ProveRekey(callCtx, arg1)
-	})
-}
-
-func (s *timedExternalIdentityStore) Save(arg0 context.Context, arg1 *model.ExternalIdentity) (*model.ExternalIdentity, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExternalIdentity, methodSave), func(callCtx context.Context) (*model.ExternalIdentity, error) {
-		return s.next.Save(callCtx, arg1)
 	})
 }
 
@@ -3841,12 +3811,6 @@ func (s *timedMFAStore) Disable(arg0 context.Context, arg1 *store.MFADisablement
 	})
 }
 
-func (s *timedMFAStore) SeedPending(arg0 context.Context, arg1 *model.MFACredential) (*model.MFACredential, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMFA, methodSeedPending), func(callCtx context.Context) (*model.MFACredential, error) {
-		return s.next.SeedPending(callCtx, arg1)
-	})
-}
-
 func (s *timedAffiliationStore) Create(arg0 context.Context, arg1 *store.AffiliationCreation) (*model.Affiliation, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAffiliation, methodCreate), func(callCtx context.Context) (*model.Affiliation, error) {
 		return s.next.Create(callCtx, arg1)
@@ -3856,12 +3820,6 @@ func (s *timedAffiliationStore) Create(arg0 context.Context, arg1 *store.Affilia
 func (s *timedAffiliationStore) End(arg0 context.Context, arg1 *store.AffiliationEnd) (*model.Affiliation, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAffiliation, methodEnd), func(callCtx context.Context) (*model.Affiliation, error) {
 		return s.next.End(callCtx, arg1)
-	})
-}
-
-func (s *timedAffiliationStore) Save(arg0 context.Context, arg1 *model.Affiliation) (*model.Affiliation, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAffiliation, methodSave), func(callCtx context.Context) (*model.Affiliation, error) {
-		return s.next.Save(callCtx, arg1)
 	})
 }
 
@@ -3892,12 +3850,6 @@ func (s *timedAcademicUnitMemberStore) Create(arg0 context.Context, arg1 *store.
 func (s *timedAcademicUnitMemberStore) End(arg0 context.Context, arg1 *store.AcademicUnitMemberEnd) (*model.AcademicUnitMember, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAcademicUnitMember, methodEnd), func(callCtx context.Context) (*model.AcademicUnitMember, error) {
 		return s.next.End(callCtx, arg1)
-	})
-}
-
-func (s *timedAcademicUnitMemberStore) Save(arg0 context.Context, arg1 *model.AcademicUnitMember) (*model.AcademicUnitMember, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAcademicUnitMember, methodSave), func(callCtx context.Context) (*model.AcademicUnitMember, error) {
-		return s.next.Save(callCtx, arg1)
 	})
 }
 
@@ -4000,24 +3952,6 @@ func (s *timedClassMemberStore) ListTransfers(ctx context.Context, memberIDs []m
 func (s *timedClassMemberStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.ClassMember, error) {
 	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateClassMember, methodListActiveByUser), func(callCtx context.Context) ([]*model.ClassMember, error) {
 		return s.next.ListActiveByUser(callCtx, userID, at)
-	})
-}
-
-func (s *timedClassMemberStore) SeedEnroll(arg0 context.Context, arg1 *model.ClassMember) (*store.ClassEnrollmentResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClassMember, methodSeedEnroll), func(callCtx context.Context) (*store.ClassEnrollmentResult, error) {
-		return s.next.SeedEnroll(callCtx, arg1)
-	})
-}
-
-func (s *timedClassMemberStore) SeedEnd(arg0 context.Context, arg1 *store.ClassMemberSeedEnd) (*model.ClassMember, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClassMember, methodSeedEnd), func(callCtx context.Context) (*model.ClassMember, error) {
-		return s.next.SeedEnd(callCtx, arg1)
-	})
-}
-
-func (s *timedPasswordCredentialStore) Save(arg0 context.Context, arg1 *model.PasswordCredential) (*model.PasswordCredential, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregatePasswordCredential, methodSave), func(callCtx context.Context) (*model.PasswordCredential, error) {
-		return s.next.Save(callCtx, arg1)
 	})
 }
 
@@ -4192,18 +4126,6 @@ func (s *timedRoleStore) Update(arg0 context.Context, arg1 *store.RoleUpdate) (*
 func (s *timedRoleStore) Archive(arg0 context.Context, arg1 *store.RoleArchive) (*model.Role, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRole, methodArchive), func(callCtx context.Context) (*model.Role, error) {
 		return s.next.Archive(callCtx, arg1)
-	})
-}
-
-func (s *timedRoleStore) SeedBuiltIn(arg0 context.Context, arg1 *model.Role) (*model.Role, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRole, methodSeedBuiltIn), func(callCtx context.Context) (*model.Role, error) {
-		return s.next.SeedBuiltIn(callCtx, arg1)
-	})
-}
-
-func (s *timedRoleStore) SeedUpdate(arg0 context.Context, arg1 *model.Role) (*model.Role, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRole, methodSeedUpdate), func(callCtx context.Context) (*model.Role, error) {
-		return s.next.SeedUpdate(callCtx, arg1)
 	})
 }
 

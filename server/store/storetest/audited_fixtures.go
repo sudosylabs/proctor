@@ -286,7 +286,7 @@ func EndAcademicUnitMember(ctx context.Context, ss store.Store, id model.Academi
 // bootstrap, so a built-in fixture uses the dedicated seed operation.
 func SaveRole(ctx context.Context, ss store.Store, role *model.Role) (*model.Role, error) {
 	if role != nil && role.BuiltIn {
-		return ss.Role().SeedBuiltIn(ctx, role)
+		return seeder(ss).SeedBuiltInRole(ctx, role)
 	}
 	auditID, at, err := beginFixtureAudit(ctx, ss)
 	if err != nil {
@@ -376,7 +376,7 @@ func ensureClassUnitMember(ctx context.Context, ss store.Store, binding *model.R
 			return nil
 		}
 	}
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unitID, UserID: binding.UserID, StartsAt: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
 	})
 	return err

@@ -219,7 +219,7 @@ func TestAdministratorMFAResetExternalStore(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	installed, err := ss.Installation().Bootstrap(ctx, testInstallationBootstrap(493))
 	require.NoError(t, err)
-	identity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: installed.Administrator.ID, Provider: "recovery-provider", Subject: "exact-existing-subject", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
+	identity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: installed.Administrator.ID, Provider: "recovery-provider", Subject: "exact-existing-subject", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
 	require.NoError(t, err)
 	snapshot, err := ss.AccessPolicy().Get(ctx, model.AccessPolicyTransitionHistoryLimit)
 	require.NoError(t, err)

@@ -38,7 +38,7 @@ func TestUserEmailChangePreservesLifecycleAcrossClockSkew(t *testing.T) {
 			defer cancel()
 			persistence := openTestStore(t)
 			resetTestStore(t, persistence)
-			institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "email-clock", DisplayName: "Email Clock"})
+			institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "email-clock", DisplayName: "Email Clock"})
 			require.NoError(t, err)
 			databaseNow := func() time.Time {
 				t.Helper()
@@ -192,7 +192,7 @@ func TestPasswordResetSerializesWithPasswordRemoval(t *testing.T) {
 	_, err := persistence.GetMaster().Exec(ctx, `UPDATE access_policies
 		SET provider_admissions=jsonb_build_object('campus-cas', ?::text) WHERE singleton=1`, string(model.ProviderAdmissionLinkedOnly))
 	require.NoError(t, err)
-	_, err = persistence.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+	_, err = persistence.SeedExternalIdentity(ctx, &model.ExternalIdentity{
 		UserID: user.ID, Provider: "campus-cas", Subject: "password-reset-removal",
 		LastSeenAt: model.OptionalTimeFrom(model.NowUTC()),
 	})
@@ -314,7 +314,7 @@ func TestEmailVerificationConsumptionUsesPostgreSQLTime(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "verification-consume-time", DisplayName: "Verification Consume Time"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "verification-consume-time", DisplayName: "Verification Consume Time"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "verification-consume-time", Email: "verification-consume-time@example.edu"})
 	token := &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailVerification,
@@ -339,10 +339,10 @@ func TestPasswordResetConsumptionUsesPostgreSQLTime(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "reset-consume-time", DisplayName: "Reset Consume Time"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "reset-consume-time", DisplayName: "Reset Consume Time"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "reset-consume-time", Email: "reset-consume-time@example.edu"})
-	credential, err := persistence.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "encoded-original-password"})
+	credential, err := persistence.SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "encoded-original-password"})
 	require.NoError(t, err)
 	session, sessionCredentials := authenticationPolicyTestSession(user.ID, "password", "", "")
 	session, _, err = storetest.SaveSession(ctx, persistence, sessionCreationForSQLTest(t, ctx, persistence, session, sessionCredentials, 10))
@@ -388,11 +388,11 @@ func TestUserTokenConsumptionPreservesLifecycleWhenNodeClockLeads(t *testing.T) 
 	}
 	setup := func(t *testing.T, ctx context.Context, persistence *SQLStore, purpose model.UserTokenPurpose, name string) (*model.Institution, *model.User, *model.UserToken) {
 		t.Helper()
-		institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: name, DisplayName: name})
+		institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: name, DisplayName: name})
 		require.NoError(t, err)
 		user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: name, Email: name + "@example.edu"})
 		if purpose == model.UserTokenPasswordReset {
-			credential, saveErr := persistence.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "encoded-original-password"})
+			credential, saveErr := persistence.SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "encoded-original-password"})
 			require.NoError(t, saveErr)
 			lead(t, ctx, persistence, `UPDATE password_credentials SET created_at=created_at+INTERVAL '1 minute',
 				updated_at=updated_at+INTERVAL '1 minute', password_changed_at=password_changed_at+INTERVAL '1 minute' WHERE id=?`, credential.ID.String())
@@ -509,7 +509,7 @@ func TestUserTokenReissueFencesConcurrentDeliveryStart(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "token-mail-fence", DisplayName: "Token Mail Fence"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "token-mail-fence", DisplayName: "Token Mail Fence"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "token-mail-fence", Email: "token-mail-fence@example.edu"})
 	first := &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailVerification,
@@ -597,7 +597,7 @@ func TestUserTokenConsumptionFencesConcurrentDeliveryStart(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "token-consume-fence", DisplayName: "Token Consume Fence"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "token-consume-fence", DisplayName: "Token Consume Fence"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "token-consume-fence", Email: "token-consume-fence@example.edu"})
 	token := &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailVerification,
@@ -675,7 +675,7 @@ func TestRecoveryDeliveryRelevanceUsesPostgreSQLTime(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "token-database-time", DisplayName: "Token Database Time"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "token-database-time", DisplayName: "Token Database Time"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "token-database-time", Email: "token-database-time@example.edu"})
 	token := &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailVerification,
@@ -713,7 +713,7 @@ func TestUserTokenIssueSerializesWithTargetChange(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "token-target-fence", DisplayName: "Token Target Fence"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "token-target-fence", DisplayName: "Token Target Fence"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "token-target-fence", Email: "token-target-fence@example.edu"})
 	staleEmail := user.Email
@@ -804,7 +804,7 @@ func TestUserDisableAndEmailChangeShareUserEligibilityLockOrder(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "disable-email-order", DisplayName: "Disable Email Order",
 	})
 	require.NoError(t, err)

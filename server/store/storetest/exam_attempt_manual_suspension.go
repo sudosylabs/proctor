@@ -285,10 +285,10 @@ func TestExamAttemptManagementLockAdmitsSittingRenewals(t *testing.T, ss store.S
 	require.NoError(t, err)
 
 	candidate := saveUser(t, ctx, ss)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.NowUTC().Add(-time.Hour)})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
 		StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
 	session := saveRegisteredDesktopSession(t, ctx, ss, candidate.ID, fixture.institutionID)

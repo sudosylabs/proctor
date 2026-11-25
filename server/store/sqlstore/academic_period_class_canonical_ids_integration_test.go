@@ -25,7 +25,7 @@ func TestAcademicPeriodClassCanonicalIDConstraintsRejectNoncanonicalValues(t *te
 	resetTestStore(t, persistence)
 	ctx := context.Background()
 
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "period-class-constraint", DisplayName: "Period Class Constraint",
 	})
 	require.NoError(t, err)

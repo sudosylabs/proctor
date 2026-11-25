@@ -39,9 +39,9 @@ func testClassTally(t *testing.T, ss store.Store) {
 	student, transferred := saveUser(t, ctx, ss), saveUser(t, ctx, ss)
 	saveSummaryAffiliation(t, ctx, ss, student.ID, model.AffiliationStudent, now.Add(-2*time.Hour))
 	saveSummaryAffiliation(t, ctx, ss, transferred.ID, model.AffiliationStudent, now.Add(-2*time.Hour))
-	_, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: first.ID, UserID: student.ID, StartsAt: now.Add(-time.Hour)})
+	_, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: first.ID, UserID: student.ID, StartsAt: now.Add(-time.Hour)})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: second.ID, UserID: transferred.ID, StartsAt: now.Add(-time.Hour)})
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: second.ID, UserID: transferred.ID, StartsAt: now.Add(-time.Hour)})
 	require.NoError(t, err)
 
 	tally := func(by store.ClassTallyContainer, visibility store.ClassVisibilityScope, students bool, ids ...string) map[string]int {

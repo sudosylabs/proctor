@@ -223,7 +223,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 		StartsAt: model.TimeFromMillis(model.GetMillis() - 100),
 	})
 	require.NoError(t, err)
-	_, err = primaryStore.ExternalIdentity().Save(context.Background(), &model.ExternalIdentity{
+	_, err = primaryStore.SeedExternalIdentity(context.Background(), &model.ExternalIdentity{
 		UserID: externalAdmin.ID, Provider: "campus", Subject: "policy-external-admin-subject",
 		LastSeenAt: model.OptionalTimeFrom(model.NowUTC()),
 	})

@@ -216,7 +216,7 @@ func testProgrammeStoreUpdate(t *testing.T, ss store.Store) {
 	programme.AcademicUnitID = engineering.ID
 	programme.Name = "computing-engineering"
 	programme.DisplayName = "Computing Engineering"
-	updated, err := ss.Programme().SeedUpdate(ctx, programme)
+	updated, err := seeder(ss).SeedProgrammeUpdate(ctx, programme)
 	require.NoError(t, err)
 	require.Equal(t, engineering.ID, updated.AcademicUnitID)
 	require.Equal(t, "computing-engineering", updated.Name)

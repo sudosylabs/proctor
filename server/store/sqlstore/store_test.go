@@ -25,6 +25,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
+	"github.com/sudosylabs/proctor/server/store/storetest"
 )
 
 func saveIntegrationUser(t *testing.T, ctx context.Context, persistence store.Store, user *model.User) *model.User {
@@ -56,7 +57,7 @@ func passwordProofForSQLTest(t *testing.T, ctx context.Context, persistence stor
 	t.Helper()
 	credential, err := persistence.PasswordCredential().GetByUser(ctx, userID)
 	if store.IsNotFound(err) {
-		credential, err = persistence.PasswordCredential().Save(ctx, &model.PasswordCredential{
+		credential, err = persistence.(storetest.Seeder).SeedPasswordCredential(ctx, &model.PasswordCredential{
 			UserID: userID, PasswordHash: "encoded-session-fixture-password",
 		})
 	}

@@ -24,7 +24,7 @@ func TestInstallationCanonicalIDConstraints(t *testing.T) {
 	resetPristineTestStore(t, persistence)
 	ctx := context.Background()
 
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "installation-constraint", DisplayName: "Installation Constraint",
 	})
 	require.NoError(t, err)

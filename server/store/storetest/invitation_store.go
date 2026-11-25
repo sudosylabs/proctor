@@ -154,9 +154,9 @@ func testStudentProgressionCrossPeriod(t *testing.T, ss store.Store) {
 	destinationClass := saveClass(t, ctx, ss, fixture.level.ID.String(), destinationPeriod.ID.String(), "progression-destination-"+model.NewID())
 	actor, student := saveUser(t, ctx, ss), saveUser(t, ctx, ss)
 	effectiveAt := destinationPeriod.StartsAt.Add(time.Second)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: student.ID, Kind: model.AffiliationStudent, StartsAt: fixture.period.StartsAt.Add(-time.Second)})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: student.ID, Kind: model.AffiliationStudent, StartsAt: fixture.period.StartsAt.Add(-time.Second)})
 	require.NoError(t, err)
-	source, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: sourceClass.ID, UserID: student.ID, StartsAt: fixture.period.StartsAt})
+	source, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: sourceClass.ID, UserID: student.ID, StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	authorityRole, err := SaveRole(ctx, ss, &model.Role{Name: "progression-authority-" + model.NewID(), DisplayName: "Progression Authority",
 		Permissions: []string{string(model.ActionAcademicProgressionManage), string(model.ActionClassMembersManage)}})
@@ -1919,9 +1919,9 @@ func testInvitationAcceptStudentClassRejectsConflictingMembershipAtomically(t *t
 	fixture, class, inviter, _, _, issuedAt := invitationAcceptanceStoreFixture(t, ctx, ss, "conflict-target")
 	otherClass := saveClass(t, ctx, ss, fixture.level.ID.String(), fixture.period.ID.String(), "conflict-existing")
 	existing := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: existing.ID, Kind: model.AffiliationStudent, StartsAt: issuedAt})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: existing.ID, Kind: model.AffiliationStudent, StartsAt: issuedAt})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: otherClass.ID, UserID: existing.ID, StartsAt: fixture.period.StartsAt})
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: otherClass.ID, UserID: existing.ID, StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	issue := studentClassInvitationIssueFixture(t, ss, inviter, class, fixture.period, issuedAt)
 	issue.Invitation.TargetEmail = existing.Email
@@ -2096,11 +2096,11 @@ func testInvitationAcceptStudentClassAtomicAndReplaySafe(t *testing.T, ss store.
 	require.Equal(t, model.MailDeliveryObsoleteCode, obsolete.PublicFailureCode)
 	require.Empty(t, obsolete.EncryptedPayload)
 	progressedAt := accepted.ClassMember.StartsAt.Add(24 * time.Hour)
-	ended, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: accepted.ClassMember.ID, ExpectedRevision: accepted.ClassMember.Revision, EndAt: progressedAt})
+	ended, err := seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: accepted.ClassMember.ID, ExpectedRevision: accepted.ClassMember.Revision, EndAt: progressedAt})
 	require.NoError(t, err)
 	newMembership := &model.ClassMember{ClassID: class.ID, AcademicPeriodID: fixture.period.ID, UserID: accepted.User.ID,
 		StartsAt: progressedAt, EndsAt: accepted.ClassMember.EndsAt}
-	enrollment, err := ss.ClassMember().SeedEnroll(ctx, newMembership)
+	enrollment, err := seeder(ss).SeedClassEnrollment(ctx, newMembership)
 	require.NoError(t, err)
 	newMembership = enrollment.Membership
 

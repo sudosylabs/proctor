@@ -103,7 +103,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 		}),
 		testlib.WithStore(persistence),
 	)
-	institution, err := persistence.Institution().Save(
+	institution, err := persistence.SeedInstitution(
 		context.Background(),
 		&model.Institution{
 			Name:        "external-auth-university",

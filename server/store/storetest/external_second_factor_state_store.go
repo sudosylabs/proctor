@@ -134,7 +134,7 @@ func createWebSecondFactor(
 	const provider = "campus-cas"
 	identity, err := ss.ExternalIdentity().GetByProviderSubject(ctx, provider, user.ID.String())
 	if store.IsNotFound(err) {
-		identity, err = ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+		identity, err = seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{
 			UserID: user.ID, Provider: provider, Subject: user.ID.String(),
 		})
 	}

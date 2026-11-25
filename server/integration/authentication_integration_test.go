@@ -168,7 +168,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 		t,
 		testlib.WithStore(persistence),
 	)
-	institution, err := persistence.Institution().Save(
+	institution, err := persistence.SeedInstitution(
 		context.Background(),
 		&model.Institution{
 			Name: "northbridge", DisplayName: "Northbridge University",
@@ -1266,7 +1266,7 @@ func seedAuthenticationAccessPolicy(
 // still need the installation singleton that owns their durable audit scope.
 func seedAuthenticationAuditInstitution(t *testing.T, persistence *sqlstore.SQLStore) {
 	t.Helper()
-	_, err := persistence.Institution().Save(context.Background(), &model.Institution{
+	_, err := persistence.SeedInstitution(context.Background(), &model.Institution{
 		Name: "authentication-university", DisplayName: "Authentication University",
 	})
 	require.NoError(t, err)

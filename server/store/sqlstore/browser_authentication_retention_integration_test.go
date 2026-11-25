@@ -30,7 +30,7 @@ func TestBrowserAuthenticationMaintenanceIsBoundedAndMultiNodeSafe(t *testing.T)
 	first := openTestStore(t)
 	resetTestStore(t, first)
 	second := openTestStore(t)
-	institution, err := first.Institution().Save(ctx, &model.Institution{Name: "desktop-maintenance", DisplayName: "Desktop Maintenance"})
+	institution, err := first.SeedInstitution(ctx, &model.Institution{Name: "desktop-maintenance", DisplayName: "Desktop Maintenance"})
 	require.NoError(t, err)
 	const total = 24
 	for index := 0; index < total; index++ {
@@ -84,7 +84,7 @@ func TestDesktopAuthorizationExchangeSerializesWithConcurrentUserDisable(t *test
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-disable-race", DisplayName: "Desktop Disable Race"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-disable-race", DisplayName: "Desktop Disable Race"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "desktop-disable-race", Email: "desktop-disable-race@example.edu"})
 	_, code, state, verifier := issueDesktopAuthorizationForSQLTest(t, ctx, persistence, institution.ID, user.ID)
@@ -171,7 +171,7 @@ func TestDesktopAuthorizationIssueCodeSerializesWithConcurrentUserDisableAcrossN
 	primary := openTestStore(t)
 	resetTestStore(t, primary)
 	secondary := openTestStore(t)
-	institution, err := primary.Institution().Save(ctx, &model.Institution{Name: "desktop-issue-disable-race", DisplayName: "Desktop Issue Disable Race"})
+	institution, err := primary.SeedInstitution(ctx, &model.Institution{Name: "desktop-issue-disable-race", DisplayName: "Desktop Issue Disable Race"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, primary, &model.User{Username: "desktop-issue-disable-race", Email: "desktop-issue-disable-race@example.edu"})
 	transaction, handle, proof, state, _ := desktopAuthorizationTransactionForSQLTest(model.NowUTC(), institution.ID)
@@ -251,7 +251,7 @@ func TestDesktopAuthorizationRejectsArchivedUsersWithoutConsumingProofsOrCodes(t
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-archived-user", DisplayName: "Desktop Archived User"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-archived-user", DisplayName: "Desktop Archived User"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "desktop-archived-user", Email: "desktop-archived-user@example.edu"})
 	transaction, handle, proof, state, verifier := desktopAuthorizationTransactionForSQLTest(model.NowUTC(), institution.ID)
@@ -303,14 +303,14 @@ func TestDesktopAuthorizationRejectsMismatchedOrArchivedExternalIdentity(t *test
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
 	seedTestAuthenticationPolicy(t, persistence, map[string]model.ProviderAdmissionMode{"campus-cas": model.ProviderAdmissionLinkedOnly})
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-external-fence", DisplayName: "Desktop External Fence"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-external-fence", DisplayName: "Desktop External Fence"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "desktop-external-user", Email: "desktop-external-user@example.edu"})
 	other := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "desktop-external-other", Email: "desktop-external-other@example.edu"})
-	identity, err := persistence.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
+	identity, err := persistence.SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
 		Subject: "desktop-external-user", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
 	require.NoError(t, err)
-	otherIdentity, err := persistence.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: other.ID, Provider: "campus-cas",
+	otherIdentity, err := persistence.SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: other.ID, Provider: "campus-cas",
 		Subject: "desktop-external-other", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
 	require.NoError(t, err)
 	transaction, handle, proof, state, verifier := desktopAuthorizationTransactionForSQLTest(model.NowUTC(), institution.ID)
@@ -363,7 +363,7 @@ func TestDesktopAuthorizationMaximumActiveSessionConflictDoesNotConsumeCode(t *t
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-session-limit", DisplayName: "Desktop Session Limit"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-session-limit", DisplayName: "Desktop Session Limit"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "desktop-session-limit", Email: "desktop-session-limit@example.edu"})
 	created, code, state, verifier := issueDesktopAuthorizationForSQLTest(t, ctx, persistence, institution.ID, user.ID)
@@ -400,7 +400,7 @@ func TestDesktopAuthorizationRevalidatesSourceWebSessionProof(t *testing.T) {
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-source-proof", DisplayName: "Desktop Source Proof"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-source-proof", DisplayName: "Desktop Source Proof"})
 	require.NoError(t, err)
 	for _, name := range []string{"live", "future authentication", "revoked session", "expired session", "idle expired session", "revoked credential", "expired credential", "rotated credential", "other Session credential", "refresh credential"} {
 		t.Run(name, func(t *testing.T) {
@@ -539,7 +539,7 @@ func TestDesktopAuthorizationRetentionTerminalizesEveryLiveStateAndPurgesSafeMet
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-retention", DisplayName: "Desktop Retention"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-retention", DisplayName: "Desktop Retention"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "desktop-retention", Email: "desktop-retention@example.edu"})
 
@@ -617,7 +617,7 @@ func TestDesktopAuthorizationCreatesAndRevokesBoundDesktopRegistration(t *testin
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "desktop-registration", DisplayName: "Desktop Registration",
 	})
 	require.NoError(t, err)

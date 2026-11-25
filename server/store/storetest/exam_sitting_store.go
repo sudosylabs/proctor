@@ -59,7 +59,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 	candidateInput.EmailVerified = true
 	candidate, err := createUser(t, ctx, ss, candidateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	membership := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
@@ -129,7 +129,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 	lateInput.EmailVerified = true
 	lateCandidate, err := createUser(t, ctx, ss, lateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: lateCandidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: lateCandidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	lateMembership := &model.ClassMember{ClassID: fixture.class.ID, UserID: lateCandidate.ID,
@@ -326,7 +326,7 @@ func TestExamSittingMailReconciliationAfterObsoleteSuppression(t *testing.T, ss 
 	candidateInput.EmailVerified = true
 	candidate, err := createUser(t, ctx, ss, candidateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	membership := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
@@ -441,7 +441,7 @@ func PrepareExamSittingInvitationLockOrderFixture(t *testing.T, ss store.Store) 
 	lateInput.EmailVerified = true
 	late, err := createUser(t, ctx, ss, lateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: late.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: late.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	membership := &model.ClassMember{ClassID: fixture.class.ID, UserID: late.ID,
@@ -468,7 +468,7 @@ func PrepareExamSittingDisabledEligibilityRaceFixture(t *testing.T, ss store.Sto
 	fixture := newExamSittingFixture(t, ctx, ss)
 	candidate, err := createUser(t, ctx, ss, newUser())
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	membership := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
@@ -516,7 +516,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 	candidateInput.EmailVerified = true
 	candidate, err := createUser(t, ctx, ss, candidateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	membership := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
@@ -532,7 +532,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 		input.EmailVerified = emailVerified
 		user, createErr := createUser(t, ctx, ss, input)
 		require.NoError(t, createErr)
-		_, createErr = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent,
+		_, createErr = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent,
 			StartsAt: fixture.period.StartsAt})
 		require.NoError(t, createErr)
 		member := &model.ClassMember{ClassID: fixture.class.ID, UserID: user.ID,
@@ -712,7 +712,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 	newCandidateInput.EmailVerified = true
 	newCandidate, err := createUser(t, ctx, ss, newCandidateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: newCandidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: newCandidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	newMembership := &model.ClassMember{ClassID: fixture.class.ID, UserID: newCandidate.ID,
@@ -823,7 +823,7 @@ func TestExamSittingClassTransferMailReconciliation(t *testing.T, ss store.Store
 	candidateInput.EmailVerified = true
 	candidate, err := createUser(t, ctx, ss, candidateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	sourceMember := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
@@ -976,7 +976,7 @@ func TestExamSittingMailExpansionMaintenance(t *testing.T, ss store.Store) {
 	candidateInput.EmailVerified = true
 	candidate, err := createUser(t, ctx, ss, candidateInput)
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent,
 		StartsAt: fixture.period.StartsAt})
 	require.NoError(t, err)
 	membership := &model.ClassMember{ClassID: fixture.class.ID, UserID: candidate.ID,
@@ -1113,7 +1113,7 @@ func TestExamSittingMailRetentionCleanup(t *testing.T, ss store.Store, probe Exa
 		input.EmailVerified = true
 		users[index], err = createUser(t, ctx, ss, input)
 		require.NoError(t, err)
-		_, err = ss.Affiliation().Save(ctx, &model.Affiliation{UserID: users[index].ID,
+		_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: users[index].ID,
 			Kind: model.AffiliationStudent, StartsAt: fixture.period.StartsAt})
 		require.NoError(t, err)
 		membership := &model.ClassMember{ClassID: fixture.class.ID, UserID: users[index].ID,
@@ -1625,7 +1625,7 @@ func TestExamSittingStoreSQLGuards(t *testing.T, ss store.Store, probe ExamSitti
 
 	// Manager eligibility is rechecked inside the scheduling transaction.
 	removedManager := saveUser(t, ctx, ss)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: fixture.unitID,
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: fixture.unitID,
 		UserID: removedManager.ID, StartsAt: model.NowUTC().Add(-time.Hour)})
 	require.NoError(t, err)
 	exam, err := ss.ExamAuthoring().Resolve(ctx, fixture.examID)

@@ -32,15 +32,15 @@ func TestAuthenticationTerminalCommitsRecheckCurrentAccessPolicy(t *testing.T) {
 		"oidc":     model.ProviderAdmissionLinkedOnly,
 		"password": model.ProviderAdmissionLinkedOnly,
 	})
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "policy-fence", DisplayName: "Policy Fence"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "policy-fence", DisplayName: "Policy Fence"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "policy-fence-user", Email: "policy-fence@example.edu"})
-	credential, err := persistence.PasswordCredential().Save(ctx, &model.PasswordCredential{
+	credential, err := persistence.SeedPasswordCredential(ctx, &model.PasswordCredential{
 		UserID: user.ID, PasswordHash: "encoded-original-password",
 	})
 	require.NoError(t, err)
 
-	identity, err := persistence.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus",
+	identity, err := persistence.SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus",
 		Subject: "policy-fence-subject", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
 	require.NoError(t, err)
 	localSession, localCredentials := authenticationPolicyTestSession(user.ID, "password", "", "")
@@ -100,7 +100,7 @@ func TestAuthenticationTerminalCommitsRecheckCurrentAccessPolicy(t *testing.T) {
 		require.False(t, retained.RevokedAt.Valid, "policy fence changed existing session %s: %#v", sessionID, retained)
 	}
 
-	disabledIdentity, err := persistence.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus",
+	disabledIdentity, err := persistence.SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus",
 		Subject: "subject", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
 	require.NoError(t, err)
 	_, err = persistence.ExternalIdentity().ResolveOrProvision(ctx, &store.ExternalIdentityResolutionRequest{Identity: &model.ExternalIdentity{

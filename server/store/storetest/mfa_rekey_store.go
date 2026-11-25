@@ -59,7 +59,7 @@ func testMFARekeyStore(t *testing.T, ss store.Store) {
 	require.True(t, store.IsConflict(err), "a second rekey while one is queued: error = %v", err)
 	assertRekeyAttemptPending(t, ctx, ss, concurrent.AuditEventID)
 
-	_, err = ss.MFA().SeedPending(ctx, mfaCredentialSealedWith(saveUser(t, ctx, ss).ID, mfaRekeyFixtureRetiring))
+	_, err = seeder(ss).SeedPendingMFA(ctx, mfaCredentialSealedWith(saveUser(t, ctx, ss).ID, mfaRekeyFixtureRetiring))
 	require.True(t, store.IsConflict(err), "a secret sealed with the old primary after the fence: error = %v", err)
 
 	page, err := ss.MFA().ListRekeyTargets(ctx, &store.MFARekeyTargetPageRequest{JobID: first.Job.ID, PrimaryKeyID: first.PrimaryKeyID, Limit: 500})
@@ -131,7 +131,7 @@ func testMFARekeyStore(t *testing.T, ss store.Store) {
 
 func seedMFACredentialSealedWith(t *testing.T, ctx context.Context, ss store.Store, userID model.UserID, keyID string) *model.MFACredential {
 	t.Helper()
-	credential, err := ss.MFA().SeedPending(ctx, mfaCredentialSealedWith(userID, keyID))
+	credential, err := seeder(ss).SeedPendingMFA(ctx, mfaCredentialSealedWith(userID, keyID))
 	require.NoError(t, err)
 	return credential
 }

@@ -125,7 +125,7 @@ func invitationHierarchySQLProbe(t *testing.T, primary *SQLStore) storetest.Invi
 			return runInvitationAuthorityMutationFirst(t, ctx, primary, "invitation_programme_move", "programmes", "UPDATE programmes", 8154700260825, func() error {
 				candidate := *programme
 				candidate.AcademicUnitID = targetUnitID
-				_, err := secondary.Programme().SeedUpdate(ctx, &candidate)
+				_, err := secondary.SeedProgrammeUpdate(ctx, &candidate)
 				return err
 			}, operation)
 		},
@@ -133,7 +133,7 @@ func invitationHierarchySQLProbe(t *testing.T, primary *SQLStore) storetest.Invi
 			return runInvitationAuthorityMutationFirst(t, ctx, primary, "invitation_level_move", "programme_levels", "UPDATE programme_levels", 8154700260826, func() error {
 				candidate := *level
 				candidate.ProgrammeID = targetProgrammeID
-				_, err := secondary.ProgrammeLevel().SeedUpdate(ctx, &candidate)
+				_, err := secondary.SeedProgrammeLevelUpdate(ctx, &candidate)
 				return err
 			}, operation)
 		},

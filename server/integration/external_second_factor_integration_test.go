@@ -84,7 +84,7 @@ func TestExternalSecondFactorAllowsDesktopAccessPolicyReplacement(t *testing.T) 
 
 	admin, err := persistence.User().GetByUsername(ctx, username)
 	require.NoError(t, err)
-	_, err = persistence.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: admin.ID, Provider: providerID, Subject: subject})
+	_, err = persistence.SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: admin.ID, Provider: providerID, Subject: subject})
 	require.NoError(t, err)
 	_, err = persistence.GetMaster().Exec(ctx, `UPDATE access_policies SET local_login_enabled = FALSE,
         invitation_admission_enabled = FALSE, invitation_local_credential_enabled = FALSE,

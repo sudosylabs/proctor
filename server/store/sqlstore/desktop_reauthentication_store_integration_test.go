@@ -31,7 +31,7 @@ type desktopReauthenticationFixture struct {
 
 func newDesktopReauthenticationFixture(t *testing.T, ctx context.Context, persistence *SQLStore, name string) desktopReauthenticationFixture {
 	t.Helper()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: name, DisplayName: "Desktop Reauthentication"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: name, DisplayName: "Desktop Reauthentication"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: name, Email: name + "@example.edu"})
 	_, code, state, verifier := issueDesktopAuthorizationForSQLTest(t, ctx, persistence, institution.ID, user.ID)

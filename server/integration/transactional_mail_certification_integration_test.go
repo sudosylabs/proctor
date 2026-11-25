@@ -141,11 +141,11 @@ func TestTransactionalMailPhaseCertification(t *testing.T) {
 		Name: "mail-cert-class", DisplayName: "Mail Certification Class",
 	})
 	require.NoError(t, err)
-	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = persistence.SeedAffiliation(ctx, &model.Affiliation{
 		UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: now.Add(-time.Hour),
 	})
 	require.NoError(t, err)
-	_, err = persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	_, err = persistence.SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: class.ID, UserID: candidate.ID, StartsAt: now.Add(-time.Hour),
 	})
 	require.NoError(t, err)

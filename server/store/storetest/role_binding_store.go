@@ -327,7 +327,7 @@ func testRoleBindingClassScopeNeedsUnitMember(t *testing.T, ss store.Store) {
 	}
 	member := func(user *model.User, unitID model.AcademicUnitID, startsAt time.Time) {
 		t.Helper()
-		_, saveErr := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: startsAt})
+		_, saveErr := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: startsAt})
 		require.NoError(t, saveErr)
 	}
 	requireRefused := func(err error, message string) {

@@ -140,7 +140,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 		}),
 		testlib.WithStore(persistence),
 	)
-	institution, err := persistence.Institution().Save(
+	institution, err := persistence.SeedInstitution(
 		context.Background(),
 		&model.Institution{
 			Name:        "oidc-auth-university",

@@ -32,7 +32,7 @@ func TestInstitutionAcademicUnitCanonicalIDConstraints(t *testing.T) {
 		return err
 	})
 
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "canonical-ids", DisplayName: "Canonical IDs",
 	})
 	require.NoError(t, err)

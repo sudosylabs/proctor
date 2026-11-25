@@ -454,7 +454,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 func revokeIntegrityReviewManager(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture) {
 	t.Helper()
 	replacement := saveUser(t, ctx, ss)
-	_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: fixture.unitID, UserID: replacement.ID, StartsAt: model.NowUTC().Add(-time.Hour),
 	})
 	require.NoError(t, err)

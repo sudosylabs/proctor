@@ -93,7 +93,7 @@ func testMFANativeExpiry(t *testing.T, ss store.Store) {
 			session, savedCredentials, err := SaveSession(ctx, ss, testSessionCreation(t, ctx, ss, candidate, credentials, 10))
 			require.NoError(t, err)
 			at := deadline.Add(point.offset).In(time.FixedZone("test", 2*60*60))
-			pending, saveErr := ss.MFA().SeedPending(ctx, &model.MFACredential{
+			pending, saveErr := seeder(ss).SeedPendingMFA(ctx, &model.MFACredential{
 				UserID: user.ID, State: model.MFAStatePending,
 				EncryptedSecret: "encrypted-secret", EncryptionKeyID: "0123456789abcdef0123456789abcdef",
 				CreatedAt: model.NowUTC(), PendingExpiresAt: model.OptionalTimeFrom(deadline),

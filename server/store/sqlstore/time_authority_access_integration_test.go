@@ -115,7 +115,7 @@ func TestTimeAuthorityAccessMFAUpgradeAfterLeadingSessionClock(t *testing.T) {
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	user, enrolling, enrollingCredentials := timeAuthorityAccessSession(t, ctx, s, "time-authority-mfa-upgrade")
-	pending, err := s.MFA().SeedPending(ctx, &model.MFACredential{
+	pending, err := s.SeedPendingMFA(ctx, &model.MFACredential{
 		UserID: user.ID, State: model.MFAStatePending,
 		EncryptedSecret: "encrypted-secret", EncryptionKeyID: "0123456789abcdef0123456789abcdef",
 		CreatedAt: model.NowUTC(), PendingExpiresAt: model.OptionalTimeFrom(model.NowUTC().Add(time.Hour)),
@@ -196,7 +196,7 @@ func TestTimeAuthorityAccessExternalIdentityUnlinkAfterLeadingIdentityClock(t *t
 	resetTestStore(t, s)
 	user := saveIntegrationUser(t, ctx, s, &model.User{Username: "time-authority-unlink", Email: "time-authority-unlink@example.edu"})
 	passwordProofForSQLTest(t, ctx, s, user.ID)
-	identity, err := s.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus", Subject: "time-authority-unlink"})
+	identity, err := s.SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus", Subject: "time-authority-unlink"})
 	require.NoError(t, err)
 	timeAuthorityAccessLead(t, ctx, s, `UPDATE external_identities SET created_at=created_at+INTERVAL '1 minute', updated_at=updated_at+INTERVAL '1 minute' WHERE id=?`, identity.ID.String())
 	audit := timeAuthorityAccessAttempt(t, ctx, s, user.ID, "authentication.external_identity.unlink")
@@ -215,7 +215,7 @@ func TestTimeAuthorityAccessDesktopRegistrationRevocationAfterLeadingNodeClock(t
 	defer cancel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
-	institution, err := s.Institution().Save(ctx, &model.Institution{Name: "time-authority-desktop", DisplayName: "Time Authority Desktop"})
+	institution, err := s.SeedInstitution(ctx, &model.Institution{Name: "time-authority-desktop", DisplayName: "Time Authority Desktop"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, s, &model.User{Username: "time-authority-desktop", Email: "time-authority-desktop@example.edu"})
 	_, code, state, verifier := issueDesktopAuthorizationForSQLTest(t, ctx, s, institution.ID, user.ID)

@@ -556,7 +556,7 @@ writesComplete:
 	}
 
 	endedAt := model.NowUTC()
-	ended, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID, ExpectedRevision: fixture.membership.Revision, EndAt: endedAt})
+	ended, err := seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID, ExpectedRevision: fixture.membership.Revision, EndAt: endedAt})
 	require.NoError(t, err)
 	// Membership timestamps have millisecond precision while PostgreSQL decides
 	// current eligibility with a higher-precision clock. Cross the millisecond
@@ -567,7 +567,7 @@ writesComplete:
 	_, err = apply("after-membership-revoke", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
 		EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "after-revoke"})
 	require.True(t, store.IsNotFound(err), "ApplyBatch(after membership revoke) error")
-	restored, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID,
+	restored, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: fixture.class.ID,
 		UserID: fixture.candidate.ID, StartsAt: model.TimeUTC(endedAt)})
 	require.NoError(t, err)
 	target, err = workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
@@ -1251,7 +1251,7 @@ func testAssistantWorkspaceProof(t *testing.T, ctx context.Context, ss store.Sto
 	}
 	objects := stageAttemptWorkspaceObjects(t, ctx, workspace, assistant,
 		model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 4, SHA256: strings.Repeat("b", 64)})
-	_, err = ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID,
+	_, err = seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID,
 		ExpectedRevision: fixture.membership.Revision, EndAt: model.NowUTC()})
 	require.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)

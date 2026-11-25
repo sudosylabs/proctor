@@ -128,8 +128,9 @@ func TestMFAActivationRejectsCorruptionBeforeCommit(t *testing.T) {
 	var state string
 	require.NoError(t, persistence.GetMaster().Get(ctx, &state, "SELECT state FROM mfa_credentials WHERE id = ?", pending.ID.String()))
 	require.Equal(t, string(model.MFAStatePending), state, "credential state")
-	count, countErr := persistence.MFA().CountRecoveryCodes(ctx, user.ID)
+	countSummary, countErr := persistence.MFA().SummarizeRecoveryCodes(ctx, user.ID)
 	require.NoError(t, countErr, "recovery codes after rollback")
+	count := countSummary.Remaining
 	require.Equal(t, 0, count, "recovery codes after rollback")
 	gotSession, err := persistence.Session().Get(ctx, session.ID)
 	require.NoError(t, err)

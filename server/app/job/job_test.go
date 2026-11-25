@@ -122,10 +122,6 @@ func (s *jobRunnerStoreFake) Complete(_ context.Context, completion *store.JobCo
 
 func (*jobRunnerStoreFake) Get(context.Context, model.JobID) (*model.Job, error) { return nil, nil }
 
-func (*jobRunnerStoreFake) ListAttempts(context.Context, model.JobID) ([]model.JobAttempt, error) {
-	return nil, nil
-}
-
 func (*jobRunnerStoreFake) Count(context.Context, store.JobListOptions, int) (int, error) {
 	return 0, nil
 }

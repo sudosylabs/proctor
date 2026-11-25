@@ -24,6 +24,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
+	"github.com/sudosylabs/proctor/server/store/storetest"
 )
 
 func TestClusteredProfilePicturePublicationHasOneVisibleWinner(t *testing.T) {
@@ -181,7 +182,7 @@ func TestClusteredJobsDeduplicateOccurrencesAndClaimDistinctWork(t *testing.T) {
 	}
 	require.Len(t, claimed, workCount, "distinct claimed jobs")
 	for id := range jobIDs {
-		attempts, err := nodeB.Job().ListAttempts(ctx, id)
+		attempts, err := storetest.JobAttempts(t, ctx, nodeB.Job(), id)
 		require.NoError(t, err)
 		require.Len(t, attempts, 1, "job %s attempts", id)
 		require.Equal(t, model.JobAttemptStatusSucceeded, attempts[0].Status, "job %s attempts", id)
@@ -215,7 +216,7 @@ func TestClusteredJobLeaseRecoveryFencesTheDeadNodeAndPreservesAttempts(t *testi
 	require.True(t, store.IsConflict(err), "dead-node completion error")
 	_, err = nodeB.Job().Complete(ctx, &store.JobCompletion{AttemptID: live.Attempt.ID, ClaimToken: liveToken, Kind: store.JobCompletionSucceeded, Result: json.RawMessage(`{}`)})
 	require.NoError(t, err)
-	attempts, err := nodeA.Job().ListAttempts(ctx, job.ID)
+	attempts, err := storetest.JobAttempts(t, ctx, nodeA.Job(), job.ID)
 	require.NoError(t, err)
 	require.Len(t, attempts, 2)
 	require.Equal(t, model.JobAttemptStatusLeaseExpired, attempts[0].Status)

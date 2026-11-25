@@ -166,7 +166,6 @@ type JobStore interface {
 	// queued retry. An expired token cannot complete.
 	Complete(context.Context, *JobCompletion) (*model.Job, error)
 	Get(context.Context, model.JobID) (*model.Job, error)
-	ListAttempts(context.Context, model.JobID) ([]model.JobAttempt, error)
 	List(context.Context, JobListOptions) ([]*model.Job, error)
 	// Count counts what List would return across every page, ignoring the
 	// keyset and limit, capped at maximum (see MaximumListCount).

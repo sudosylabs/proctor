@@ -440,25 +440,6 @@ func (s SQLMailStore) QueueSnapshot(ctx context.Context) (*store.MailQueueSnapsh
 	return result, nil
 }
 
-func (s SQLMailStore) ActivePayloadKeyIDs(ctx context.Context) ([]string, error) {
-	var keyIDs []string
-	if err := s.GetMaster().Select(ctx, &keyIDs, `SELECT key_id
-		FROM mail_payload_keys
-		ORDER BY key_id
-		LIMIT 10`); err != nil {
-		return nil, fmt.Errorf("read active mail payload key ids: %w", err)
-	}
-	if len(keyIDs) > 9 {
-		return nil, invalidPersistedState("mail_delivery", "encrypted_payload", fmt.Errorf("active payload key ring exceeds bound"))
-	}
-	for _, keyID := range keyIDs {
-		if len(keyID) != 32 {
-			return nil, invalidPersistedState("mail_delivery", "encrypted_payload", fmt.Errorf("active payload key id is invalid"))
-		}
-	}
-	return keyIDs, nil
-}
-
 func validMailMaintenanceLimit(limit int) bool {
 	return limit > 0 && limit <= mailMaintenanceMaximumBatch
 }

@@ -71,72 +71,60 @@ func testMFANativeExpiry(t *testing.T, ss store.Store) {
 			require.ErrorAs(t, err, &invalid, "Activate(%s)", at)
 			require.Equal(t, "mfa_credential", invalid.Entity, "Activate(%s)", at)
 			require.Equal(t, "activate", invalid.Field, "Activate(%s)", at)
-			_, err = ss.MFA().UpgradeSession(ctx, &store.MFASessionUpgrade{SessionID: sessionID, UserID: userID, Now: at})
-			require.ErrorAs(t, err, &invalid, "UpgradeSession(%s)", at)
-			require.Equal(t, "session", invalid.Entity, "UpgradeSession(%s)", at)
-			require.Equal(t, "upgrade_mfa", invalid.Field, "UpgradeSession(%s)", at)
 		}
 	})
-	for _, operation := range []string{"activation", "Session upgrade"} {
-		for _, point := range []struct {
-			name   string
-			offset time.Duration
-			valid  bool
-		}{
-			{name: "before", offset: -time.Microsecond, valid: true},
-			{name: "nanosecond normalization", offset: -time.Nanosecond, valid: true},
-			{name: "at deadline"},
-			{name: "after", offset: time.Microsecond},
-		} {
-			t.Run(operation+"/"+point.name, func(t *testing.T) {
-				ctx := context.Background()
-				user := saveUser(t, ctx, ss)
-				deadline := model.NowUTC().Truncate(time.Millisecond).Add(time.Minute + 700*time.Microsecond)
-				candidate, credentials, _ := newSession(user.ID.String())
-				if operation == "Session upgrade" {
-					candidate.IdleExpiresAt = deadline
-				}
-				session, savedCredentials, err := SaveSession(ctx, ss, testSessionCreation(t, ctx, ss, candidate, credentials, 10))
-				require.NoError(t, err)
-				at := deadline.Add(point.offset).In(time.FixedZone("test", 2*60*60))
-				if operation == "Session upgrade" {
-					_, err = ss.MFA().UpgradeSession(ctx, &store.MFASessionUpgrade{SessionID: session.ID, UserID: user.ID, Now: at})
-				} else {
-					pending, saveErr := ss.MFA().SeedPending(ctx, &model.MFACredential{
-						UserID: user.ID, State: model.MFAStatePending,
-						EncryptedSecret: "encrypted-secret", EncryptionKeyID: "0123456789abcdef0123456789abcdef",
-						CreatedAt: model.NowUTC(), PendingExpiresAt: model.OptionalTimeFrom(deadline),
-					})
-					require.NoError(t, saveErr)
-					audit, notice := mfaSecurityNoticeFixture(t, ctx, ss, user, model.MailTemplateIdentityMFAEnabled, at)
-					_, err = ss.MFA().Activate(ctx, &store.MFAActivationMutation{
-						Principal: mfaSessionPrincipal(session, savedCredentials[0]), RecentAuthenticationTTL: time.Hour,
-						CredentialID: pending.ID, UserID: user.ID, TimeStep: time.Now().Unix() / 30,
-						RecoveryCodes: []*model.MFARecoveryCode{{CodeHash: model.HashToken(model.NewCredentialToken())}},
-						SessionID:     session.ID, At: at, AuditEventID: audit.ID, AuditAt: at, Notice: notice,
-					})
-					if !point.valid {
-						current, getErr := ss.MFA().GetByUser(ctx, user.ID)
-						require.NoError(t, getErr)
-						require.Equal(t, model.MFAStatePending, current.State, "expired activation changed the pending credential")
-					}
-				}
-				if !point.valid {
-					require.True(t, store.IsNotFound(err), "expired MFA operation")
-				} else {
-					require.NoError(t, err)
-				}
-				current, getErr := ss.Session().Get(ctx, session.ID)
-				require.NoError(t, getErr)
-				if point.valid {
-					require.Equal(t, model.AuthenticationMultiFactor, current.AuthenticationStrength, "MFA upgrade lost its native decision instant")
-					require.False(t, operation == "Session upgrade" && !current.MFACompletedAt.Time.Equal(model.TimeUTC(at)), "MFA upgrade lost its native decision instant")
-					require.False(t, operation == "activation" && (current.MFACompletedAt.Time.Before(session.CreatedAt) || current.MFACompletedAt.Time.After(model.NowUTC())), "MFA upgrade lost its native decision instant")
-				} else {
-					require.Equal(t, session.AuthenticationStrength, current.AuthenticationStrength, "expired MFA operation changed Session assurance")
-					require.False(t, current.MFACompletedAt.Valid, "expired MFA operation recorded MFA completion")
-				}
+	// Activation decides at the instant it is given. A challenge decides on
+	// PostgreSQL's clock, so its boundary isn't the caller's to set.
+	for _, point := range []struct {
+		name   string
+		offset time.Duration
+		valid  bool
+	}{
+		{name: "before", offset: -time.Microsecond, valid: true},
+		{name: "nanosecond normalization", offset: -time.Nanosecond, valid: true},
+		{name: "at deadline"},
+		{name: "after", offset: time.Microsecond},
+	} {
+		t.Run("activation/"+point.name, func(t *testing.T) {
+			ctx := context.Background()
+			user := saveUser(t, ctx, ss)
+			deadline := model.NowUTC().Truncate(time.Millisecond).Add(time.Minute + 700*time.Microsecond)
+			candidate, credentials, _ := newSession(user.ID.String())
+			session, savedCredentials, err := SaveSession(ctx, ss, testSessionCreation(t, ctx, ss, candidate, credentials, 10))
+			require.NoError(t, err)
+			at := deadline.Add(point.offset).In(time.FixedZone("test", 2*60*60))
+			pending, saveErr := ss.MFA().SeedPending(ctx, &model.MFACredential{
+				UserID: user.ID, State: model.MFAStatePending,
+				EncryptedSecret: "encrypted-secret", EncryptionKeyID: "0123456789abcdef0123456789abcdef",
+				CreatedAt: model.NowUTC(), PendingExpiresAt: model.OptionalTimeFrom(deadline),
 			})
-		}
+			require.NoError(t, saveErr)
+			audit, notice := mfaSecurityNoticeFixture(t, ctx, ss, user, model.MailTemplateIdentityMFAEnabled, at)
+			_, err = ss.MFA().Activate(ctx, &store.MFAActivationMutation{
+				Principal: mfaSessionPrincipal(session, savedCredentials[0]), RecentAuthenticationTTL: time.Hour,
+				CredentialID: pending.ID, UserID: user.ID, TimeStep: time.Now().Unix() / 30,
+				RecoveryCodes: []*model.MFARecoveryCode{{CodeHash: model.HashToken(model.NewCredentialToken())}},
+				SessionID:     session.ID, At: at, AuditEventID: audit.ID, AuditAt: at, Notice: notice,
+			})
+			if !point.valid {
+				current, getErr := ss.MFA().GetByUser(ctx, user.ID)
+				require.NoError(t, getErr)
+				require.Equal(t, model.MFAStatePending, current.State, "expired activation changed the pending credential")
+			}
+			if !point.valid {
+				require.True(t, store.IsNotFound(err), "expired MFA operation: %v", err)
+			} else {
+				require.NoError(t, err)
+			}
+			current, getErr := ss.Session().Get(ctx, session.ID)
+			require.NoError(t, getErr)
+			if point.valid {
+				require.Equal(t, model.AuthenticationMultiFactor, current.AuthenticationStrength, "MFA upgrade lost its native decision instant")
+				require.False(t, current.MFACompletedAt.Time.Before(session.CreatedAt) || current.MFACompletedAt.Time.After(model.NowUTC()), "MFA upgrade lost its native decision instant")
+			} else {
+				require.Equal(t, session.AuthenticationStrength, current.AuthenticationStrength, "expired MFA operation changed Session assurance")
+				require.False(t, current.MFACompletedAt.Valid, "expired MFA operation recorded MFA completion")
+			}
+		})
 	}
 }

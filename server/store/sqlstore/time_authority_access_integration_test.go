@@ -114,9 +114,34 @@ func TestTimeAuthorityAccessMFAUpgradeAfterLeadingSessionClock(t *testing.T) {
 	defer cancel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
-	user, session, _ := timeAuthorityAccessSession(t, ctx, s, "time-authority-mfa-upgrade")
+	user, enrolling, enrollingCredentials := timeAuthorityAccessSession(t, ctx, s, "time-authority-mfa-upgrade")
+	pending, err := s.MFA().SeedPending(ctx, &model.MFACredential{
+		UserID: user.ID, State: model.MFAStatePending,
+		EncryptedSecret: "encrypted-secret", EncryptionKeyID: "0123456789abcdef0123456789abcdef",
+		CreatedAt: model.NowUTC(), PendingExpiresAt: model.OptionalTimeFrom(model.NowUTC().Add(time.Hour)),
+	})
+	require.NoError(t, err)
+	at := model.NowUTC()
+	audit, notice := mfaSQLSecurityNoticeFixture(t, ctx, s, user, model.MailTemplateIdentityMFAEnabled, at)
+	activation, err := s.MFA().Activate(ctx, &store.MFAActivationMutation{
+		Principal: mfaSQLPrincipal(enrolling, enrollingCredentials[0]), RecentAuthenticationTTL: time.Hour,
+		CredentialID: pending.ID, UserID: user.ID, TimeStep: time.Now().Unix() / 30,
+		RecoveryCodes: []*model.MFARecoveryCode{{CodeHash: model.HashToken(model.NewCredentialToken())}},
+		SessionID:     enrolling.ID, At: at, AuditEventID: audit.ID, AuditAt: at, Notice: notice,
+	})
+	require.NoError(t, err)
+
+	// A later sign-in written by a node whose clock leads proves the factor.
+	candidate, credentials := authenticationPolicyTestSession(user.ID, "password", "", "")
+	session, savedCredentials, err := storetest.SaveSession(ctx, s, sessionCreationForSQLTest(t, ctx, s, candidate, credentials, 10))
+	require.NoError(t, err)
 	leadSessionDatabaseClock(t, ctx, s, session.ID)
-	_, err := s.MFA().UpgradeSession(ctx, &store.MFASessionUpgrade{SessionID: session.ID, UserID: user.ID, Now: model.NowUTC()})
+	session, err = s.Session().Get(ctx, session.ID)
+	require.NoError(t, err)
+	challengeAudit, _ := mfaSQLSecurityNoticeFixture(t, ctx, s, user, model.MailTemplateIdentityMFAEnabled, model.NowUTC())
+	_, err = s.MFA().Challenge(ctx, &store.MFAChallenge{Principal: mfaSQLPrincipal(session, savedCredentials[0]),
+		CredentialID: activation.Credential.ID, TimeStep: activation.Credential.LastUsedTimeStep + 1,
+		VerifiedAt: model.NowUTC(), AuditEventID: challengeAudit.ID})
 	require.NoError(t, err)
 	stored, err := s.Session().Get(ctx, session.ID)
 	require.NoError(t, err, "upgraded Session = %#v", stored)

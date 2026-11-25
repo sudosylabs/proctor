@@ -2983,12 +2983,6 @@ func (s *timedJobStore) Get(arg0 context.Context, arg1 model.JobID) (*model.Job,
 	})
 }
 
-func (s *timedJobStore) ListAttempts(arg0 context.Context, arg1 model.JobID) ([]model.JobAttempt, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateJob, methodListAttempts), func(callCtx context.Context) ([]model.JobAttempt, error) {
-		return s.next.ListAttempts(callCtx, arg1)
-	})
-}
-
 func (s *timedJobStore) List(arg0 context.Context, arg1 store.JobListOptions) ([]*model.Job, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateJob, methodList), func(callCtx context.Context) ([]*model.Job, error) {
 		return s.next.List(callCtx, arg1)
@@ -3118,12 +3112,6 @@ func (s *timedMailStore) CleanupTerminal(arg0 context.Context, arg1 int) (*store
 func (s *timedMailStore) QueueSnapshot(arg0 context.Context) (*store.MailQueueSnapshot, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMail, methodQueueSnapshot), func(callCtx context.Context) (*store.MailQueueSnapshot, error) {
 		return s.next.QueueSnapshot(callCtx)
-	})
-}
-
-func (s *timedMailStore) ActivePayloadKeyIDs(arg0 context.Context) ([]string, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMail, methodActivePayloadKeyIDs), func(callCtx context.Context) ([]string, error) {
-		return s.next.ActivePayloadKeyIDs(callCtx)
 	})
 }
 
@@ -3805,21 +3793,9 @@ func (s *timedMFAStore) ConsumeSecondFactor(arg0 context.Context, arg1 *store.MF
 	})
 }
 
-func (s *timedMFAStore) UpgradeSession(arg0 context.Context, arg1 *store.MFASessionUpgrade) ([]string, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMFA, methodUpgradeSession), func(callCtx context.Context) ([]string, error) {
-		return s.next.UpgradeSession(callCtx, arg1)
-	})
-}
-
 func (s *timedMFAStore) ReplaceRecoveryCodes(arg0 context.Context, arg1 *store.MFARecoveryCodesRegeneration) error {
 	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateMFA, methodReplaceRecoveryCodes), func(callCtx context.Context) error {
 		return s.next.ReplaceRecoveryCodes(callCtx, arg1)
-	})
-}
-
-func (s *timedMFAStore) CountRecoveryCodes(arg0 context.Context, arg1 model.UserID) (int, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMFA, methodCountRecoveryCodes), func(callCtx context.Context) (int, error) {
-		return s.next.CountRecoveryCodes(callCtx, arg1)
 	})
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
+	"github.com/sudosylabs/proctor/server/store/storetest"
 )
 
 func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T) {
@@ -76,7 +77,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	// Wait beyond the persisted retry delay: the same stable incompatible node
 	// must not reclaim and hot-loop when no capable peer is present.
 	time.Sleep(40 * time.Millisecond)
-	attempts, err := persistence.Job().ListAttempts(ctx, rekeyJob.ID)
+	attempts, err := storetest.JobAttempts(t, ctx, persistence.Job(), rekeyJob.ID)
 	require.NoError(t, err, "no-compatible-node attempts")
 	require.Len(t, attempts, 1, "no-compatible-node attempts")
 	require.Equal(t, "old-primary-node", attempts[0].NodeID, "no-compatible-node attempts")
@@ -122,7 +123,7 @@ func waitForMailRekeyJob(t *testing.T, jobStore store.JobStore, jobID model.JobI
 	for {
 		job, err := jobStore.Get(context.Background(), jobID)
 		require.NoError(t, err)
-		attempts, err := jobStore.ListAttempts(context.Background(), jobID)
+		attempts, err := storetest.JobAttempts(t, context.Background(), jobStore, jobID)
 		require.NoError(t, err)
 		if ready(job, attempts) {
 			return

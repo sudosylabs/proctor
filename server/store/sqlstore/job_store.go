@@ -797,30 +797,6 @@ func (s SQLJobStore) Get(ctx context.Context, id model.JobID) (*model.Job, error
 	return getJob(ctx, s.GetMaster(), id, false)
 }
 
-func (s SQLJobStore) ListAttempts(ctx context.Context, jobID model.JobID) ([]model.JobAttempt, error) {
-	if !jobID.IsValid() {
-		return nil, store.NewErrInvalidInput("job", "id", nil)
-	}
-	var rows []jobAttemptRow
-	if err := s.GetMaster().Select(
-		ctx,
-		&rows,
-		`SELECT `+jobAttemptColumns+` FROM job_attempts WHERE job_id = ? ORDER BY number`,
-		jobID.String(),
-	); err != nil {
-		return nil, err
-	}
-	result := make([]model.JobAttempt, 0, len(rows))
-	for _, row := range rows {
-		attempt, err := row.model()
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, *attempt)
-	}
-	return result, nil
-}
-
 func (s SQLJobStore) List(ctx context.Context, options store.JobListOptions) ([]*model.Job, error) {
 	if !validJobListOptions(options) {
 		return nil, store.NewErrInvalidInput("job", "list", nil)

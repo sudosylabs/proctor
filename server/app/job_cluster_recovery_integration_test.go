@@ -32,6 +32,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
+	"github.com/sudosylabs/proctor/server/store/storetest"
 )
 
 func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
@@ -156,7 +157,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 1, availableDefaults, "available default publications")
 			require.Equal(t, int64(2), handler.calls.Load(), "handler calls")
-			attempts, err := persistence.Job().ListAttempts(context.Background(), record.ID)
+			attempts, err := storetest.JobAttempts(t, context.Background(), persistence.Job(), record.ID)
 			require.NoError(t, err)
 			require.Len(t, attempts, 2)
 			require.Equal(t, model.JobAttemptStatusLeaseExpired, attempts[0].Status)

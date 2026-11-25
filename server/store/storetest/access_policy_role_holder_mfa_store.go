@@ -119,29 +119,38 @@ func TestAccessPolicyRoleHolderMFAStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.True(t, coveredLater, "a binding covers its User once it starts")
 
+	// The directory reads two-step state before the administrator enrols below.
+	testRoleHolderDirectoryMatchesPreflight(t, ctx, ss, bootstrap.Role.ID, bootstrap.Institution.ID)
+
 	restrictable, _, restrictableRaw := saveSession(t, ctx, ss, administrator.String(), 10)
-	rotation, err := ss.SessionCredential().RotateRefresh(ctx, roleHolderMFARotation(restrictableRaw.refresh, restrictable, true))
+	// The refresh replaces the access token; keep the new one to act as the
+	// restricted Session afterwards.
+	restrictedAccess := model.NewCredentialToken()
+	restriction := roleHolderMFARotation(restrictableRaw.refresh, restrictable, true)
+	restriction.Access.TokenHash = model.HashToken(restrictedAccess)
+	rotation, err := ss.SessionCredential().RotateRefresh(ctx, restriction)
 	require.NoError(t, err)
 	require.True(t, rotation.Session.MFAEnrollmentRequired)
 	stored, err := ss.Session().Get(ctx, restrictable.ID)
 	require.NoError(t, err)
 	require.True(t, stored.MFAEnrollmentRequired, "the restriction is durable")
 
-	_, err = ss.MFA().UpgradeSession(ctx, &store.MFASessionUpgrade{SessionID: restrictable.ID, UserID: administrator, Now: model.NowUTC()})
+	// Enrolling a second factor from the restricted Session lifts the
+	// restriction, as the enrolment flow does in production.
+	administratorUser, err := ss.User().Get(ctx, administrator)
 	require.NoError(t, err)
+	activateTestMFAInSession(t, ctx, ss, administratorUser, restrictable, restrictedAccess)
 	upgraded, err := ss.Session().Get(ctx, restrictable.ID)
 	require.NoError(t, err)
 	require.False(t, upgraded.MFAEnrollmentRequired, "a proved second factor lifts the restriction")
 	require.Equal(t, model.AuthenticationMultiFactor, upgraded.AuthenticationStrength)
 
 	multiFactorSession, _, multiFactorRaw := saveSession(t, ctx, ss, administrator.String(), 10)
-	_, err = ss.MFA().UpgradeSession(ctx, &store.MFASessionUpgrade{SessionID: multiFactorSession.ID, UserID: administrator, Now: model.NowUTC()})
-	require.NoError(t, err)
+	require.NoError(t, challengeTestMFA(t, ctx, ss, administratorUser, mfaPrincipal(t, ctx, ss, multiFactorRaw.access), model.NowUTC()))
 	rotation, err = ss.SessionCredential().RotateRefresh(ctx, roleHolderMFARotation(multiFactorRaw.refresh, multiFactorSession, true))
 	require.NoError(t, err)
 	require.False(t, rotation.Session.MFAEnrollmentRequired, "a multi-factor Session is never restricted")
 
-	testRoleHolderDirectoryMatchesPreflight(t, ctx, ss, bootstrap.Role.ID, bootstrap.Institution.ID)
 }
 
 // testRoleHolderDirectoryMatchesPreflight proves the user directory's
@@ -210,11 +219,19 @@ func testRoleHolderDirectoryMatchesPreflight(
 func activateTestMFA(t *testing.T, ctx context.Context, ss store.Store, user *model.User) {
 	t.Helper()
 	session, _, raw := saveSession(t, ctx, ss, user.ID.String(), 10)
+	activateTestMFAInSession(t, ctx, ss, user, session, raw.access)
+}
+
+// activateTestMFAInSession turns on two-step verification from the session
+// whose access token is rawAccess, which also completes the session's second
+// factor.
+func activateTestMFAInSession(t *testing.T, ctx context.Context, ss store.Store, user *model.User, session *model.Session, rawAccess string) {
+	t.Helper()
 	pending := savePendingMFA(t, ctx, ss, user.ID)
 	now := model.TimeUTC(pending.CreatedAt).Add(time.Millisecond)
 	audit, notice := mfaSecurityNoticeFixture(t, ctx, ss, user, model.MailTemplateIdentityMFAEnabled, now)
 	_, err := ss.MFA().Activate(ctx, &store.MFAActivationMutation{
-		Principal: mfaPrincipal(t, ctx, ss, raw.access), RecentAuthenticationTTL: time.Hour,
+		Principal: mfaPrincipal(t, ctx, ss, rawAccess), RecentAuthenticationTTL: time.Hour,
 		CredentialID: pending.ID, UserID: user.ID, TimeStep: time.Now().Unix() / 30,
 		RecoveryCodes: []*model.MFARecoveryCode{{CodeHash: model.HashToken(model.NewCredentialToken())}},
 		SessionID:     session.ID, At: now, AuditEventID: audit.ID, AuditAt: now, Notice: notice,

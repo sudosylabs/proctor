@@ -357,7 +357,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		require.True(t, store.IsNotFound(err), "RecordFocusLoss(foreign Session) error")
 
 		endedAt := model.NowUTC()
-		_, err = ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID, ExpectedRevision: fixture.membership.Revision, EndAt: endedAt})
+		_, err = seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID, ExpectedRevision: fixture.membership.Revision, EndAt: endedAt})
 		require.NoError(t, err)
 		time.Sleep(100 * time.Millisecond)
 		accepted := recordFocusLoss(t, ctx, ss, fixture, access, 1, 500, "")

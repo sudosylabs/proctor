@@ -62,7 +62,6 @@ type AuthenticationMethodMutationResult struct {
 // either finds the link or creates a user and link; it never merges accounts
 // by email.
 type ExternalIdentityStore interface {
-	Save(context.Context, *model.ExternalIdentity) (*model.ExternalIdentity, error)
 	Get(context.Context, model.ExternalIdentityID) (*model.ExternalIdentity, error)
 	GetByProviderSubject(context.Context, string, string) (*model.ExternalIdentity, error)
 	ListByUser(context.Context, model.UserID) ([]*model.ExternalIdentity, error)

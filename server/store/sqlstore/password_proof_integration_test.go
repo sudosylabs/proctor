@@ -245,10 +245,10 @@ func passwordProofFixture(t *testing.T, ctx context.Context) (*SQLStore, *model.
 	t.Helper()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "password-proof", DisplayName: "Password Proof"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "password-proof", DisplayName: "Password Proof"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "password-proof", Email: "password-proof@example.edu"})
-	password, err := persistence.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "encoded-original-password"})
+	password, err := persistence.SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "encoded-original-password"})
 	require.NoError(t, err)
 	return persistence, institution, user, password
 }

@@ -26,7 +26,7 @@ func TestClassArchiveSerializesWithDependentCreation(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "northbridge", DisplayName: "Northbridge"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "northbridge", DisplayName: "Northbridge"})
 	require.NoError(t, err)
 	unit, err := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institution.ID, Name: "computing", DisplayName: "Computing"})
 	require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestClassArchiveSerializesWithDependentCreation(t *testing.T) {
 	require.NoError(t, err)
 	userID := model.NewID()
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "user-" + userID, Email: userID + "@example.edu", DisplayName: "User"})
-	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(1)})
+	_, err = persistence.SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(1)})
 	require.NoError(t, err)
 	role, err := storetest.SaveRole(ctx, persistence, &model.Role{Name: "class-reader", DisplayName: "Class Reader", Permissions: []string{string(model.ActionClassView)}})
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestClassArchiveSerializesWithDependentCreation(t *testing.T) {
 			go func() {
 				defer wait.Done()
 				<-start
-				_, dependentErr = persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(baseStart + int64(iteration*10))})
+				_, dependentErr = persistence.SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(baseStart + int64(iteration*10))})
 			}()
 			close(start)
 			wait.Wait()

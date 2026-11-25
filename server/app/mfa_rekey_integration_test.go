@@ -32,7 +32,7 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 	persistence := openClusteredJobIntegrationStore(t)
 	ctx := context.Background()
 	at := model.NowUTC().Add(-time.Second)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "mfa-rekey", DisplayName: "MFA Rekey"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "mfa-rekey", DisplayName: "MFA Rekey"})
 	require.NoError(t, err)
 	operator := createMFARekeyIntegrationUser(t, ctx, persistence, "mfa-rekey-operator", at)
 
@@ -50,7 +50,7 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 		require.NoError(t, sealErr)
 		encoded, encodeErr := json.Marshal(envelope)
 		require.NoError(t, encodeErr)
-		_, err = persistence.MFA().SeedPending(ctx, &model.MFACredential{UserID: user.ID, State: model.MFAStatePending,
+		_, err = persistence.SeedPendingMFA(ctx, &model.MFACredential{UserID: user.ID, State: model.MFAStatePending,
 			EncryptedSecret: string(encoded), EncryptionKeyID: envelope.KeyID, CreatedAt: model.NowUTC(),
 			PendingExpiresAt: model.OptionalTimeFrom(model.NowUTC().Add(10 * time.Minute))})
 		require.NoError(t, err)

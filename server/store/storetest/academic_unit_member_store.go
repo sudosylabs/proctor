@@ -27,7 +27,7 @@ func TestAcademicUnitMemberStore(t *testing.T, ss store.Store) {
 	unit := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "member-unit")
 	user := saveUser(t, ctx, ss)
 	start := model.NowUTC().Add(1000 * time.Millisecond)
-	saved, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	saved, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: model.TimeUTC(start),
 	})
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestAcademicUnitMemberStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Len(t, byUser, 1)
 	require.Equal(t, unit.ID, byUser[0].AcademicUnitID)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: model.TimeUTC(start.Add(2 * time.Millisecond)),
 	})
 	var conflict *store.ErrConflict
@@ -51,7 +51,7 @@ func TestAcademicUnitMemberStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Len(t, history, 1)
 	require.True(t, history[0].EndsAt.Valid)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: model.TimeUTC(start.Add(10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
@@ -96,7 +96,7 @@ func testAcademicUnitMemberActiveIntervalPrecision(t *testing.T, ss store.Store)
 	user := saveUser(t, ctx, ss)
 	start := time.Date(2026, 9, 5, 12, 0, 0, 123200000, time.FixedZone("offset", 3600))
 	end := start.Add(time.Second + 500*time.Microsecond)
-	member, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	member, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: start, EndsAt: model.OptionalTimeFrom(end),
 	})
 	require.NoError(t, err)
@@ -134,7 +134,7 @@ func testAcademicUnitMemberEndBeforeModification(t *testing.T, ss store.Store) {
 	unit := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "member-backdated-"+model.NewID())
 	user := saveUser(t, ctx, ss)
 	now := model.NowUTC()
-	saved, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	saved, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: now.Add(-2_000_000 * time.Millisecond),
 	})
 	require.NoError(t, err)

@@ -52,20 +52,20 @@ func testUserMemberships(t *testing.T, ss store.Store) {
 	computingClass, physicsClass := classIn(computing, period, "computing", "Computing"), classIn(physics, laboratoryPeriod, "physics", "Physics")
 
 	user := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start)})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(start)})
 	require.NoError(t, err)
-	computingMember, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: computing.ID, UserID: user.ID, StartsAt: model.TimeUTC(start)})
+	computingMember, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: computing.ID, UserID: user.ID, StartsAt: model.TimeUTC(start)})
 	require.NoError(t, err)
-	physicsMember, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: physics.ID, UserID: user.ID,
+	physicsMember, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: physics.ID, UserID: user.ID,
 		StartsAt: model.TimeUTC(start.Add(time.Minute))})
 	require.NoError(t, err)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit("history", "History").ID, UserID: user.ID,
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit("history", "History").ID, UserID: user.ID,
 		StartsAt: model.NowUTC().Add(time.Hour)})
 	require.NoError(t, err, "a membership that has not started is not current")
-	computingEnrolment, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: computingClass.ID, UserID: user.ID,
+	computingEnrolment, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: computingClass.ID, UserID: user.ID,
 		StartsAt: model.TimeUTC(start.Add(2 * time.Minute)), EndsAt: model.OptionalTimeFrom(model.NowUTC().Add(30 * 24 * time.Hour))})
 	require.NoError(t, err)
-	physicsEnrolment, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: physicsClass.ID, UserID: user.ID,
+	physicsEnrolment, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: physicsClass.ID, UserID: user.ID,
 		StartsAt: model.TimeUTC(start.Add(3 * time.Minute))})
 	require.NoError(t, err)
 

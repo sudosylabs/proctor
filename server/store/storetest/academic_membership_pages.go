@@ -34,18 +34,18 @@ func testAcademicUnitMemberPaging(t *testing.T, ss store.Store) {
 			startsAt = at.Add(100 * time.Millisecond)
 		}
 		candidate := &model.AcademicUnitMember{AcademicUnitID: scope.ID, UserID: user.ID, StartsAt: model.TimeUTC(startsAt)}
-		member, err := ss.AcademicUnitMember().Save(ctx, candidate)
+		member, err := seeder(ss).SeedAcademicUnitMember(ctx, candidate)
 		require.NoError(t, err)
 		if i == 0 {
 			_, err := EndAcademicUnitMember(ctx, ss, member.ID, member.Revision, at.Add(10*time.Millisecond))
 			require.NoError(t, err)
 			next := &model.AcademicUnitMember{AcademicUnitID: scope.ID, UserID: user.ID, StartsAt: model.TimeUTC(at.Add(10 * time.Millisecond))}
-			_, err = ss.AcademicUnitMember().Save(ctx, next)
+			_, err = seeder(ss).SeedAcademicUnitMember(ctx, next)
 			require.NoError(t, err)
 		}
 	}
 	outsideUser := saveUser(t, ctx, ss)
-	_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: parents.programme.AcademicUnitID, UserID: outsideUser.ID, StartsAt: model.TimeUTC(at)})
+	_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: parents.programme.AcademicUnitID, UserID: outsideUser.ID, StartsAt: model.TimeUTC(at)})
 	require.NoError(t, err)
 
 	for _, activeAt := range []time.Time{{}, at, at.Add(10 * time.Millisecond), at.Add(200 * time.Millisecond)} {
@@ -115,29 +115,29 @@ func testClassMemberPaging(t *testing.T, ss store.Store) {
 	for i := range 5 {
 		user := saveMembershipPageUser(t, ctx, ss, i)
 		names[user.ID] = membershipPageNames[i]
-		_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(at.Add(-1 * time.Millisecond))})
+		_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(at.Add(-1 * time.Millisecond))})
 		require.NoError(t, err)
 		startsAt := at
 		if i == 4 {
 			startsAt = at.Add(100 * time.Millisecond)
 		}
 		candidate := &model.ClassMember{ClassID: scope.ID, UserID: user.ID, StartsAt: model.TimeUTC(startsAt)}
-		enrolled, err := ss.ClassMember().SeedEnroll(ctx, candidate)
+		enrolled, err := seeder(ss).SeedClassEnrollment(ctx, candidate)
 		require.NoError(t, err)
 		member := enrolled.Membership
 		if i == 0 {
-			_, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: member.ID, ExpectedRevision: member.Revision, EndAt: at.Add(10 * time.Millisecond)})
+			_, err := seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: member.ID, ExpectedRevision: member.Revision, EndAt: at.Add(10 * time.Millisecond)})
 			require.NoError(t, err)
 			next := &model.ClassMember{ClassID: scope.ID, UserID: user.ID, StartsAt: model.TimeUTC(at.Add(10 * time.Millisecond))}
-			_, err = ss.ClassMember().SeedEnroll(ctx, next)
+			_, err = seeder(ss).SeedClassEnrollment(ctx, next)
 			require.NoError(t, err)
 		}
 	}
 	outsideClass := saveClass(t, ctx, ss, parents.level.ID.String(), parents.period.ID.String(), "paging-other-class")
 	outsideUser := saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: outsideUser.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(at.Add(-1 * time.Millisecond))})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: outsideUser.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeUTC(at.Add(-1 * time.Millisecond))})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: outsideClass.ID, UserID: outsideUser.ID, StartsAt: model.TimeUTC(at)})
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: outsideClass.ID, UserID: outsideUser.ID, StartsAt: model.TimeUTC(at)})
 	require.NoError(t, err)
 
 	for _, activeAt := range []time.Time{{}, at, at.Add(10 * time.Millisecond), at.Add(200 * time.Millisecond)} {

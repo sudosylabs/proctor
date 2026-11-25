@@ -37,7 +37,7 @@ func (s *institutionStub) Get(context.Context, model.InstitutionID) (*model.Inst
 	return s.get()
 }
 
-func (s *institutionStub) Save(context.Context, *model.Institution) (*model.Institution, error) {
+func (s *institutionStub) Update(context.Context, *store.InstitutionUpdate) (*model.Institution, error) {
 	s.saveAttempts++
 	return nil, s.saveErr
 }
@@ -327,9 +327,9 @@ func TestRetryNeverRetriesUnsafeMutation(t *testing.T) {
 	}, nil)
 	require.NoError(t, err)
 
-	_, gotErr := layer.Institution().Save(context.Background(), &model.Institution{})
-	require.Equal(t, transientErr, gotErr, "Save() error")
-	require.Equal(t, 1, stub.saveAttempts, "Save() attempts")
+	_, gotErr := layer.Institution().Update(context.Background(), &store.InstitutionUpdate{})
+	require.Equal(t, transientErr, gotErr, "Update() error")
+	require.Equal(t, 1, stub.saveAttempts, "Update() attempts")
 }
 
 func TestRetryNeverRetriesPasswordRehashWithUnknownCommitOutcome(t *testing.T) {

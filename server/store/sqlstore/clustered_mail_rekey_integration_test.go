@@ -29,7 +29,7 @@ func TestClusteredMailRekeyRecoversCheckpointAndRotatesFanoutBundle(t *testing.T
 	resetTestStore(t, nodeA)
 	nodeB := openPeerTestStore(t)
 	at := model.NowUTC().Add(-time.Second)
-	institution, err := nodeA.Institution().Save(ctx, &model.Institution{Name: "mail-rekey", DisplayName: "Mail Rekey"})
+	institution, err := nodeA.SeedInstitution(ctx, &model.Institution{Name: "mail-rekey", DisplayName: "Mail Rekey"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, nodeA, &model.User{Username: "mail-rekey", Email: "mail-rekey@example.edu"})
 	oldKey := base64.StdEncoding.EncodeToString([]byte("old-mail-rekey-key-material-0001"))

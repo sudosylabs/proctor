@@ -88,7 +88,7 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 		return user, invocation.New(*principal, model.RequestMetadata{RequestID: username + "-search"})
 	}
 	teach := func(user *model.User, unit *model.AcademicUnit) {
-		_, saveErr := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: startedAt})
+		_, saveErr := persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: startedAt})
 		require.NoError(t, saveErr)
 		_, saveErr = storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), StartsAt: startedAt})
 		require.NoError(t, saveErr)

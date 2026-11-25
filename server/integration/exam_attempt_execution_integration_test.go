@@ -169,9 +169,9 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 		EmailVerified: true, Locale: "en", Timezone: "UTC",
 	}, Password: password})
 	require.NoError(t, err)
-	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: period.StartsAt})
+	_, err = persistence.SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: period.StartsAt})
 	require.NoError(t, err)
-	_, err = persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: candidate.ID, StartsAt: period.StartsAt})
+	_, err = persistence.SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: candidate.ID, StartsAt: period.StartsAt})
 	require.NoError(t, err)
 	manager, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "execution-flow-manager", Email: "execution-flow-manager@example.edu", DisplayName: "Execution Flow Manager",
@@ -185,7 +185,7 @@ func runAttemptEnvironmentEndToEnd(t *testing.T, disconnect bool) {
 	managerPrincipal, err := helper.App.Identity.AuthenticateAccess(ctx, managerLogin.Tokens.AccessToken)
 	require.NoError(t, err)
 	managerInv := invocation.New(*managerPrincipal, model.RequestMetadata{RequestID: "execution-flow-manager"})
-	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: manager.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000),
 	})
 	require.NoError(t, err)

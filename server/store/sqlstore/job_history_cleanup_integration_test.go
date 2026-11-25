@@ -136,7 +136,7 @@ func TestJobHistoryCleanupSkipsReferencedJobs(t *testing.T) {
 	ss := openTestStore(t)
 	resetTestStore(t, ss)
 	ctx := context.Background()
-	institution, err := ss.Institution().Save(ctx, &model.Institution{Name: "history-reference", DisplayName: "History Reference"})
+	institution, err := ss.SeedInstitution(ctx, &model.Institution{Name: "history-reference", DisplayName: "History Reference"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, ss, &model.User{Username: "history-reference", Email: "history-reference@example.edu", DisplayName: "History Reference"})
 	enqueue := storetest.MailTestEnqueueFixtureForSQLTest(t, user, institution, model.NowUTC())

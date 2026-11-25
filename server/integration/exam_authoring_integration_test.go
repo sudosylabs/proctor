@@ -51,7 +51,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	login := loginIntegrationUser(t, helper.Handler(), teacher.Username, password, model.SessionClientCLI, "exam-teacher-cli")
 	principal, appErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, appErr)
-	membership, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: teacher.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
+	membership, err := persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: teacher.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
 	require.NoError(t, err)
 	role, err := storetest.SaveRole(ctx, persistence, &model.Role{Name: "exam-author", DisplayName: "Exam Author", Permissions: []string{string(model.ActionExamCreate), string(model.ActionExamView), string(model.ActionExamManage)}})
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Equal(t, 1, active.Items[0].ManagerCount)
 	managerUser, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{Username: "exam-manager", Email: "exam-manager@example.edu", DisplayName: "Exam Manager"}, Password: password})
 	require.NoError(t, appErr)
-	managerMembership, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: managerUser.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
+	managerMembership, err := persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: managerUser.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
 	require.NoError(t, err)
 	managerAdded, appErr := helper.App.ExamAuthoring.AddExamManager(ctx, call, exam.ManagerChangeCommand{
 		ExamID: created.Exam.ID, UserID: managerUser.ID, ExpectedExamRevision: 1, IdempotencyKey: "exam-manager-add",
@@ -161,7 +161,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, appErr = helper.App.ExamAuthoring.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "Manager after membership loss error = %v", appErr)
-	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: managerUser.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 50)})
+	_, err = persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: managerUser.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 50)})
 	require.NoError(t, err)
 	accountManagerRole, err := storetest.SaveRole(ctx, persistence, &model.Role{Name: "exam-account-manager", DisplayName: "Exam Account Manager", Permissions: []string{string(model.ActionUserManage)}})
 	require.NoError(t, err)
@@ -212,7 +212,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	withoutMembership, appErr := helper.App.ExamAuthoring.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
 	require.NoError(t, appErr, "catalog after exact membership ended = %#v", withoutMembership)
 	require.Empty(t, withoutMembership.Items, "catalog after exact membership ended = %#v", withoutMembership)
-	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: teacher.ID, StartsAt: model.TimeUTC(membershipEndedAt),
 	})
 	require.NoError(t, err)

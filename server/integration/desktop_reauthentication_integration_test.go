@@ -51,7 +51,7 @@ func TestDesktopReauthenticationRestoresRecencyWithoutMFA(t *testing.T) {
 	node := testlib.Setup(t, testlib.WithConfig(func(cfg *config.Config) { cfg.Server.PublicURL = origin }),
 		testlib.WithStore(persistence), testlib.WithDesktopBuildCatalog(build))
 	ctx := context.Background()
-	_, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-reauth", DisplayName: "Desktop Reauthentication"})
+	_, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-reauth", DisplayName: "Desktop Reauthentication"})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
 	user, err := node.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{

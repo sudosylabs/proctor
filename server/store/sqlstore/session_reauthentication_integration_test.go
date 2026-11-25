@@ -81,7 +81,7 @@ func TestExternalReauthenticationRechecksExactIdentityAndLiveBoundSession(t *tes
 			resetPristineTestStore(t, s)
 			seedTestAuthenticationPolicy(t, s, map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionLinkedOnly})
 			user := saveIntegrationUser(t, ctx, s, &model.User{Username: "fresh-provider", Email: "provider@example.edu"})
-			identity, err := s.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus", Subject: "exact-subject"})
+			identity, err := s.SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus", Subject: "exact-subject"})
 			require.NoError(t, err)
 			candidate, credentials := authenticationPolicyTestSession(user.ID, "oidc", "campus", identity.ID)
 			session, savedCredentials, err := storetest.SaveSession(ctx, s, sessionCreationForSQLTest(t, ctx, s, candidate, credentials, 10))

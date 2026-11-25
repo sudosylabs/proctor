@@ -41,7 +41,7 @@ func TestPrivilegedAuditListingIsScopedAndDurablyAudited(t *testing.T) {
 		testlib.WithStore(persistence),
 	)
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "northbridge", DisplayName: "Northbridge University",
 	})
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func TestAuthorizationResolvesCurrentAcademicHierarchy(t *testing.T) {
 	)
 	authorizer := accessControl(t, persistence, helper.Cluster.NodeID())
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "northbridge", DisplayName: "Northbridge University",
 	})
 	require.NoError(t, err)
@@ -180,7 +180,7 @@ func TestAuthorizationResolvesCurrentAcademicHierarchy(t *testing.T) {
 	)
 	principal, err := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
-	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: root.ID,
 		UserID:         user.ID,
 		StartsAt:       model.TimeFromMillis(model.GetMillis() - 1_000),
@@ -260,7 +260,7 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 	)
 	authorizer := accessControl(t, persistence, helper.Cluster.NodeID())
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "northbridge", DisplayName: "Northbridge University",
 	})
 	require.NoError(t, err)
@@ -377,7 +377,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	ctx := context.Background()
 	now := model.GetMillis()
 
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "northbridge", DisplayName: "Northbridge University",
 	})
 	require.NoError(t, err)
@@ -442,15 +442,15 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 		{AcademicUnitID: sibling.ID, UserID: siblingUser.ID, StartsAt: model.TimeFromMillis(now - 10_000)},
 		{AcademicUnitID: child.ID, UserID: historicalUser.ID, StartsAt: model.TimeFromMillis(now - 20_000), EndsAt: model.OptionalTimeFromMillis(now - 10_000)},
 	} {
-		_, saveErr := persistence.AcademicUnitMember().Save(ctx, membership)
+		_, saveErr := persistence.SeedAcademicUnitMember(ctx, membership)
 		require.NoError(t, saveErr)
 	}
-	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = persistence.SeedAffiliation(ctx, &model.Affiliation{
 		UserID: classUser.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.TimeFromMillis(now - 10_000),
 	})
 	require.NoError(t, err)
-	_, err = persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	_, err = persistence.SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: class.ID, UserID: classUser.ID, StartsAt: model.TimeFromMillis(now - 10_000),
 	})
 	require.NoError(t, err)

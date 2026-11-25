@@ -34,7 +34,7 @@ func TestMailPrimaryKeyFenceSerializesEnqueueBeforeRekey(t *testing.T) {
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "mail-fence", DisplayName: "Mail Fence"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "mail-fence", DisplayName: "Mail Fence"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "mail-fence", Email: "mail-fence@example.edu"})
 

@@ -27,11 +27,11 @@ func TestDesktopAuthorizationAuthenticationClock(t *testing.T) {
 	seedTestAuthenticationPolicy(t, persistence, map[string]model.ProviderAdmissionMode{
 		"campus-oidc": model.ProviderAdmissionLinkedOnly,
 	})
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-clock", DisplayName: "Desktop Clock"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-clock", DisplayName: "Desktop Clock"})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "desktop-clock", Email: "desktop-clock@example.edu"})
 	password := passwordProofForSQLTest(t, ctx, persistence, user.ID)
-	identity, err := persistence.ExternalIdentity().Save(ctx, &model.ExternalIdentity{
+	identity, err := persistence.SeedExternalIdentity(ctx, &model.ExternalIdentity{
 		UserID: user.ID, Provider: "campus-oidc", Subject: "desktop-clock",
 	})
 	require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestDesktopAuthorizationContextReportsAuthoritativeRequestTime(t *testing.T
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-requested", DisplayName: "Desktop Requested"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "desktop-requested", DisplayName: "Desktop Requested"})
 	require.NoError(t, err)
 	transaction, handle, proof, state, _ := desktopAuthorizationTransactionForSQLTest(model.NowUTC(), institution.ID)
 	created, err := persistence.BrowserAuthentication().CreateDesktopAuthorization(ctx, transaction)

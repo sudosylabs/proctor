@@ -337,7 +337,6 @@ type UserStore interface {
 	MatchVisibility(context.Context, model.UserID, UserVisibilityScope) (UserVisibilityMatch, error)
 	UpdateProfile(context.Context, *UserProfileUpdate) (*model.User, error)
 	SetDisabled(context.Context, *UserDisabledStateChange) (*UserDisabledStateResult, error)
-	UpdateLastLogin(context.Context, *UserLastLoginUpdate) error
 	// ListDisplayNames returns each unarchived user's display name, or the
 	// username when it is empty, for up to MaximumUserDisplayNames distinct
 	// users; archived or missing users are absent. It grants no authority.
@@ -411,7 +410,7 @@ func (c *CurrentUserContext) ConsistentWith(userID model.UserID) bool {
 		len(c.ManagementScopes) > 20)
 }
 
-// UserLastLoginUpdate is the input to UserStore.UpdateLastLogin.
+// UserLastLoginUpdate is the input of the SQL store's SeedLastLogin fixture.
 type UserLastLoginUpdate struct {
 	ID model.UserID
 	At time.Time

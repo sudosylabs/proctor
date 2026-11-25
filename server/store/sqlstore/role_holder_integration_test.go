@@ -29,7 +29,7 @@ func TestRoleHolderReadsExcludeArchivedBindings(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "holder-archive", DisplayName: "Holder Archive"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "holder-archive", DisplayName: "Holder Archive"})
 	require.NoError(t, err)
 	role, err := storetest.SaveRole(ctx, persistence, &model.Role{Name: "holder-archive-reader", DisplayName: "Reader",
 		Permissions: []string{string(model.ActionClassView)}})

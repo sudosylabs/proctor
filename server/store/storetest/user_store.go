@@ -388,36 +388,36 @@ func testUserStoreListAndDisable(t *testing.T, ss store.Store) {
 	siblingProgramme := saveProgramme(t, ctx, ss, siblingUnit.ID.String(), "visibility-sibling-programme-"+model.NewID())
 	siblingLevel := saveProgrammeLevel(t, ctx, ss, siblingProgramme.ID.String(), "visibility-sibling-level-"+model.NewID())
 	siblingClass := saveClass(t, ctx, ss, siblingLevel.ID.String(), fixture.period.ID.String(), "visibility-sibling-class-"+model.NewID())
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: first.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.TimeUTC(activeAt.Add(-10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
-	firstMembership, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	firstMembership, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: visibleClass.ID, UserID: first.ID, StartsAt: model.TimeUTC(activeAt.Add(-10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: firstMembership.Membership.ID, ExpectedRevision: firstMembership.Membership.Revision, EndAt: activeAt.Add(100 * time.Millisecond)})
+	_, err = seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: firstMembership.Membership.ID, ExpectedRevision: firstMembership.Membership.Revision, EndAt: activeAt.Add(100 * time.Millisecond)})
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: second.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.TimeUTC(activeAt.Add(-10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: visibleClass.ID, UserID: second.ID, StartsAt: model.TimeUTC(activeAt.Add(10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
-	_, err = ss.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 		UserID: otherClassMember.ID, Kind: model.AffiliationStudent,
 		StartsAt: model.TimeUTC(activeAt.Add(-10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: siblingClass.ID, UserID: otherClassMember.ID, StartsAt: model.TimeUTC(activeAt.Add(-10 * time.Millisecond)),
 	})
 	require.NoError(t, err)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: fixture.programme.AcademicUnitID, UserID: unitMember.ID,
 		StartsAt: model.TimeUTC(activeAt.Add(-10 * time.Millisecond)),
 	})
@@ -676,11 +676,11 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 		return user
 	}
 	affiliate := func(user *model.User, kind model.AffiliationKind, endsAt model.OptionalTime) {
-		_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: kind, StartsAt: before, EndsAt: endsAt})
+		_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: kind, StartsAt: before, EndsAt: endsAt})
 		require.NoError(t, err)
 	}
 	member := func(user *model.User, unitID model.AcademicUnitID, endsAt model.OptionalTime) {
-		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before, EndsAt: endsAt})
+		_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before, EndsAt: endsAt})
 		require.NoError(t, err)
 	}
 	childTeacher := named("child-teacher")
@@ -696,7 +696,7 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 	affiliate(siblingStaff, model.AffiliationStaff, model.OptionalTime{})
 	affiliate(siblingStaff, model.AffiliationStudent, model.OptionalTime{})
 	member(siblingStaff, sibling.ID, model.OptionalTime{})
-	_, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: rootClass.ID, UserID: siblingStaff.ID, StartsAt: before})
+	_, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: rootClass.ID, UserID: siblingStaff.ID, StartsAt: before})
 	require.NoError(t, err)
 	formerTeacher := named("former-teacher")
 	affiliate(formerTeacher, model.AffiliationTeacher, ended)
@@ -815,14 +815,14 @@ func testUserListStateActivityAndRoleFilters(t *testing.T, ss store.Store) {
 		user, err := createUser(t, ctx, ss, user)
 		require.NoError(t, err)
 		if unitID != "" {
-			_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before})
+			_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before})
 			require.NoError(t, err)
 		}
 		return user
 	}
 	signIn := func(user *model.User, at time.Time) {
 		t.Helper()
-		require.NoError(t, ss.User().UpdateLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
+		require.NoError(t, seeder(ss).SeedLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
 	}
 	role := func(name string) *model.Role {
 		t.Helper()
@@ -970,11 +970,11 @@ func testUserDirectorySummaries(t *testing.T, ss store.Store) {
 	sibling := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "c-sibling-"+token)
 	former := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "d-former-"+token)
 	affiliate := func(user *model.User, kind model.AffiliationKind, startsAt time.Time, endsAt model.OptionalTime) {
-		_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: kind, StartsAt: startsAt, EndsAt: endsAt})
+		_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: user.ID, Kind: kind, StartsAt: startsAt, EndsAt: endsAt})
 		require.NoError(t, err)
 	}
 	member := func(user *model.User, unitID model.AcademicUnitID, endsAt model.OptionalTime) {
-		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before, EndsAt: endsAt})
+		_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before, EndsAt: endsAt})
 		require.NoError(t, err)
 	}
 	busy := saveUser(t, ctx, ss)
@@ -1076,16 +1076,16 @@ func testUserVisibilityIntervalPrecision(t *testing.T, ss store.Store) {
 			wantMatch := store.UserVisibilityMatch{ScopeType: model.RoleScopeAcademicUnit, ScopeID: fixture.programme.AcademicUnitID.String()}
 			switch anchor {
 			case "academic unit member":
-				_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+				_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 					AcademicUnitID: fixture.programme.AcademicUnitID, UserID: user.ID, StartsAt: start, EndsAt: model.OptionalTimeFrom(end),
 				})
 				require.NoError(t, err)
 			case "class member":
-				_, err := ss.Affiliation().Save(ctx, &model.Affiliation{
+				_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 					UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: start.Add(-time.Hour),
 				})
 				require.NoError(t, err)
-				_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+				_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{
 					ClassID: class.ID, UserID: user.ID, StartsAt: start, EndsAt: model.OptionalTimeFrom(end),
 				})
 				require.NoError(t, err)
@@ -1311,7 +1311,7 @@ func testUserStoreUpdate(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 
 	activityAt := model.NowUTC().Add(100 * time.Millisecond)
-	require.NoError(t, ss.User().UpdateLastLogin(ctx, &store.UserLastLoginUpdate{ID: updated.ID, At: activityAt}))
+	require.NoError(t, seeder(ss).SeedLastLogin(ctx, &store.UserLastLoginUpdate{ID: updated.ID, At: activityAt}))
 	displayName := "Audited User"
 	auditAttempt := saveUserProfileAuditAttempt(t, ctx, ss, updated.ID.String())
 	audited, err := ss.User().UpdateProfile(ctx, &store.UserProfileUpdate{
@@ -1379,7 +1379,7 @@ func testUserStoreUpdateLastLogin(t *testing.T, ss store.Store) {
 	user := saveUser(t, ctx, ss)
 	revision := user.Revision
 	at := model.NowUTC().Add(100 * time.Millisecond)
-	require.NoError(t, ss.User().UpdateLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
+	require.NoError(t, seeder(ss).SeedLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
 	got, err := ss.User().Get(ctx, user.ID)
 	require.NoError(t, err)
 	require.True(t, at.Equal(got.LastLoginAt.Time))
@@ -1435,7 +1435,7 @@ func testUserStoreListVisibleDisplayNames(t *testing.T, ss store.Store) {
 		}
 		saved, err := createUser(t, ctx, ss, user)
 		require.NoError(t, err)
-		_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+		_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 			AcademicUnitID: unit.ID, UserID: saved.ID, StartsAt: model.NowUTC().Add(-time.Minute),
 		})
 		require.NoError(t, err)
@@ -1584,7 +1584,7 @@ func testUserStoreListOrders(t *testing.T, ss store.Store) {
 		require.NoError(t, err)
 		if index < 2 {
 			at := user.CreatedAt.Add(time.Duration(index+1) * time.Second)
-			require.NoError(t, ss.User().UpdateLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
+			require.NoError(t, seeder(ss).SeedLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
 		}
 		user, err = ss.User().Get(ctx, user.ID)
 		require.NoError(t, err)

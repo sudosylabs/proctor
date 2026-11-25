@@ -211,7 +211,7 @@ func testProgrammeLevelStoreUpdate(t *testing.T, ss store.Store) {
 	level.ProgrammeID = engineering.ID
 	level.Name = "foundation"
 	level.DisplayName = "Foundation"
-	updated, err := ss.ProgrammeLevel().SeedUpdate(ctx, level)
+	updated, err := seeder(ss).SeedProgrammeLevelUpdate(ctx, level)
 	require.NoError(t, err)
 	require.Equal(t, engineering.ID, updated.ProgrammeID)
 	require.Equal(t, "foundation", updated.Name)

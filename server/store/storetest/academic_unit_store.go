@@ -405,7 +405,7 @@ func testAcademicUnitStoreRejectCrossInstitutionParent(t *testing.T, ss store.St
 	parent := saveAcademicUnit(t, ctx, ss, first.ID.String(), "", "engineering")
 	require.NoError(t, ss.Institution().Archive(ctx, &store.InstitutionArchive{ID: first.ID, ArchiveAt: model.NowUTC()}))
 
-	second, err := ss.Institution().Save(ctx, &model.Institution{
+	second, err := seeder(ss).SeedInstitution(ctx, &model.Institution{
 		Name:        "second-" + model.NewID(),
 		DisplayName: "Second University",
 	})

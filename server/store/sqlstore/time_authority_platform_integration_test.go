@@ -182,7 +182,7 @@ func TestTimeAuthorityPlatformJobOperatorCancelAfterLeadingEnqueue(t *testing.T)
 
 func enqueuePlatformMail(t *testing.T, ctx context.Context, persistence *SQLStore, name string) *model.MailDelivery {
 	t.Helper()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: name, DisplayName: name})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: name, DisplayName: name})
 	require.NoError(t, err)
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: name, Email: name + "@example.edu"})
 	delivery, err := persistence.Mail().EnqueueTest(ctx, storetest.MailTestEnqueueFixtureForSQLTest(t, user, institution, model.NowUTC()))
@@ -277,7 +277,7 @@ func TestTimeAuthorityPlatformAcademicArchiveKeepsModificationMonotonic(t *testi
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "archive-leads", DisplayName: "Archive leads"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "archive-leads", DisplayName: "Archive leads"})
 	require.NoError(t, err)
 	unit, err := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institution.ID, Name: "archive-leads", DisplayName: "Archive leads"})
 	require.NoError(t, err)

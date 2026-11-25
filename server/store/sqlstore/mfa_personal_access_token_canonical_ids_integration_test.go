@@ -28,13 +28,13 @@ func TestMFAPersonalAccessTokenCanonicalIDConstraints(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "credential-constraints", DisplayName: "Credential Constraints"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "credential-constraints", DisplayName: "Credential Constraints"})
 	require.NoError(t, err)
 
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{
 		Username: "credential-constraints", Email: "credential-constraints@example.edu", DisplayName: "Credential Constraints",
 	})
-	credential, err := persistence.MFA().SeedPending(ctx, &model.MFACredential{
+	credential, err := persistence.SeedPendingMFA(ctx, &model.MFACredential{
 		UserID: user.ID, State: model.MFAStatePending, EncryptedSecret: "ciphertext",
 		EncryptionKeyID: "0123456789abcdef0123456789abcdef", PendingExpiresAt: model.OptionalTimeFromMillis(model.GetMillis() + 60_000),
 	})
@@ -103,7 +103,7 @@ func TestMFAActivationRejectsCorruptionBeforeCommit(t *testing.T) {
 		{Kind: model.SessionCredentialRefresh, TokenHash: model.HashToken("mfa-corruption-refresh"), ExpiresAt: now.Add(2 * time.Hour)},
 	}, 10))
 	require.NoError(t, err)
-	pending, err := persistence.MFA().SeedPending(ctx, &model.MFACredential{
+	pending, err := persistence.SeedPendingMFA(ctx, &model.MFACredential{
 		UserID: user.ID, State: model.MFAStatePending, EncryptedSecret: "ciphertext",
 		EncryptionKeyID: "0123456789abcdef0123456789abcdef", PendingExpiresAt: model.OptionalTimeFrom(now.Add(time.Hour)),
 	})

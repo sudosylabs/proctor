@@ -107,9 +107,6 @@ type MFAStore interface {
 	// and with the retiring key.
 	ProveRekey(context.Context, *MFARekeyProofRequest) (*MFARekeyProof, error)
 	Disable(context.Context, *MFADisablement) (*MFADisableResult, error)
-	// SeedPending is an unaudited test fixture write; production code never
-	// calls it.
-	SeedPending(context.Context, *model.MFACredential) (*model.MFACredential, error)
 }
 
 // MFASecondFactorConsumption is the input to MFAStore.ConsumeSecondFactor.

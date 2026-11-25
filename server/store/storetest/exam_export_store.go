@@ -41,7 +41,7 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 	require.NoError(t, err)
 	binding, err := SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: f.manager.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: f.unitID.String(), StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{UserID: f.manager.ID, AcademicUnitID: f.unitID, StartsAt: model.NowUTC().Add(-time.Minute)})
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{UserID: f.manager.ID, AcademicUnitID: f.unitID, StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
 	exports := ss.ExamExport()
 	selected, err := exports.ListScope(ctx, scope)
@@ -109,11 +109,11 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 	withoutPermission := func(action model.Action, check func()) {
 		changed := *role
 		changed.Permissions = slices.DeleteFunc(slices.Clone(permissions), func(p string) bool { return p == string(action) })
-		_, err = ss.Role().SeedUpdate(ctx, &changed)
+		_, err = seeder(ss).SeedRoleUpdate(ctx, &changed)
 		require.NoError(t, err)
 		check()
 		changed.Permissions = slices.Clone(permissions)
-		role, err = ss.Role().SeedUpdate(ctx, &changed)
+		role, err = seeder(ss).SeedRoleUpdate(ctx, &changed)
 		require.NoError(t, err)
 	}
 	for _, action := range []model.Action{model.ActionExamRecordsExport, model.ActionSubmissionView} {
@@ -257,7 +257,7 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 	_, err = SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: nonmanager.ID, RoleID: role.ID,
 		ScopeType: model.RoleScopeAcademicUnit, ScopeID: f.unitID.String(), StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{UserID: nonmanager.ID, AcademicUnitID: f.unitID, StartsAt: model.NowUTC().Add(-time.Minute)})
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{UserID: nonmanager.ID, AcademicUnitID: f.unitID, StartsAt: model.NowUTC().Add(-time.Minute)})
 	require.NoError(t, err)
 	for _, categories := range [][]model.RetentionCategory{{model.RetentionCategoryBrowserActivity}} {
 		denied := makeInput(categories...)

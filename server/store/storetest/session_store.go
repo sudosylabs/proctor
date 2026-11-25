@@ -927,7 +927,7 @@ func testPasswordProof(t *testing.T, ctx context.Context, ss store.Store, userID
 	t.Helper()
 	credential, err := ss.PasswordCredential().GetByUser(ctx, userID)
 	if store.IsNotFound(err) {
-		credential, err = ss.PasswordCredential().Save(ctx, &model.PasswordCredential{
+		credential, err = seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{
 			UserID: userID, PasswordHash: "encoded-session-fixture-password",
 		})
 	}

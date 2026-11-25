@@ -33,7 +33,7 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 	seedInitialAuthenticationAccessPolicy(t, persistence)
 	helper := testlib.Setup(t, testlib.WithStore(persistence))
 	ctx := context.Background()
-	_, err := persistence.Institution().Save(ctx, &model.Institution{
+	_, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "settings-institution", DisplayName: "Settings Institution",
 	})
 	require.NoError(t, err)

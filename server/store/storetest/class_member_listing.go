@@ -37,7 +37,7 @@ func testClassMemberSearch(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	for _, user := range []*model.User{named, byEmail} {
 		saveSummaryAffiliation(t, ctx, ss, user.ID, model.AffiliationStudent, now.Add(-2*time.Hour))
-		_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: now.Add(-time.Hour)})
+		_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: user.ID, StartsAt: now.Add(-time.Hour)})
 		require.NoError(t, err)
 	}
 
@@ -69,17 +69,17 @@ func testClassMemberTransfers(t *testing.T, ss store.Store) {
 	for _, user := range []*model.User{moving, leaving, staying} {
 		saveSummaryAffiliation(t, ctx, ss, user.ID, model.AffiliationStudent, now.Add(-2*time.Hour))
 	}
-	first, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: from.ID, UserID: moving.ID, StartsAt: now.Add(-time.Hour)})
+	first, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: from.ID, UserID: moving.ID, StartsAt: now.Add(-time.Hour)})
 	require.NoError(t, err)
 	at := model.TimeUTC(now.Add(24 * time.Hour))
-	moved, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: to.ID, UserID: moving.ID, StartsAt: at})
+	moved, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: to.ID, UserID: moving.ID, StartsAt: at})
 	require.NoError(t, err)
 	require.NotNil(t, moved.Previous, "a scheduled transfer ends the first membership")
-	left, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: from.ID, UserID: leaving.ID, StartsAt: now.Add(-time.Hour)})
+	left, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: from.ID, UserID: leaving.ID, StartsAt: now.Add(-time.Hour)})
 	require.NoError(t, err)
-	ended, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: left.Membership.ID, ExpectedRevision: left.Membership.Revision, EndAt: at})
+	ended, err := seeder(ss).SeedClassEnrollmentEnd(ctx, &store.ClassMemberSeedEnd{ID: left.Membership.ID, ExpectedRevision: left.Membership.Revision, EndAt: at})
 	require.NoError(t, err)
-	stay, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: from.ID, UserID: staying.ID, StartsAt: now.Add(-time.Hour)})
+	stay, err := seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: from.ID, UserID: staying.ID, StartsAt: now.Add(-time.Hour)})
 	require.NoError(t, err)
 
 	transfers, err := ss.ClassMember().ListTransfers(ctx, []model.ClassMemberID{first.Membership.ID, ended.ID, stay.Membership.ID}, store.ClassVisibilityScope{InstitutionWide: true})

@@ -40,7 +40,7 @@ type examCatalogPlanNode struct {
 func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 	t.Helper()
 	ctx := context.Background()
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "catalog-plan", DisplayName: "Catalog Plan"})
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{Name: "catalog-plan", DisplayName: "Catalog Plan"})
 	require.NoError(t, err)
 	unit, err := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institution.ID, Name: "catalog-plan-unit", DisplayName: "Catalog Plan Unit"})
 	require.NoError(t, err)
@@ -48,7 +48,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 	require.NoError(t, err)
 	actor := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "catalog-plan-actor", Email: "catalog-plan@example.edu", DisplayName: "Catalog Plan Actor"})
 	membershipAt := model.TimeUTC(time.Date(2026, 8, 14, 7, 0, 0, 0, time.UTC))
-	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: actor.ID, StartsAt: membershipAt.Add(-time.Hour),
 	})
 	require.NoError(t, err)

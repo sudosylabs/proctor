@@ -61,21 +61,22 @@ func newLocalCacheConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store
 		localcachelayer.NopInvalidationFanout{},
 	)
 	require.NoError(t, err)
-	return cachedStore
+	// Fixtures seed beneath the layer, as they would without it.
+	return storetest.Seeded{Store: cachedStore, Seeder: sqlStore}
 }
 
 func newRetryConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store {
 	t.Helper()
 	retriedStore, err := retrylayer.NewWithRecorder(sqlStore, retrylayer.DefaultPolicy(IsTransientError), nil)
 	require.NoError(t, err)
-	return retriedStore
+	return storetest.Seeded{Store: retriedStore, Seeder: sqlStore}
 }
 
 func newTimerConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store {
 	t.Helper()
 	timedStore, err := timerlayer.New(sqlStore, timerlayer.NopRecorder{}, timerlayer.Options{})
 	require.NoError(t, err)
-	return timedStore
+	return storetest.Seeded{Store: timedStore, Seeder: sqlStore}
 }
 
 func runLayerConformance(

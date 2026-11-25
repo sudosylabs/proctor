@@ -28,7 +28,7 @@ func testExamManagersAndOwnership(t *testing.T, ss store.Store) {
 	creator, target, later := saveUser(t, ctx, ss), saveUser(t, ctx, ss), saveUser(t, ctx, ss)
 	at := model.NowUTC()
 	for _, user := range []*model.User{creator, target, later} {
-		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: at.Add(-time.Hour)})
+		_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: at.Add(-time.Hour)})
 		require.NoError(t, err)
 	}
 	created := createCatalogExam(t, ctx, ss, unit.ID, creator.ID, at, "manager-create")
@@ -116,7 +116,7 @@ func testExamManagersAndOwnership(t *testing.T, ss store.Store) {
 	require.Equal(t, int64(5), current.Exam.Revision)
 
 	rollbackTarget := saveUser(t, ctx, ss)
-	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: rollbackTarget.ID, StartsAt: at.Add(-time.Hour)})
+	_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: rollbackTarget.ID, StartsAt: at.Add(-time.Hour)})
 	require.NoError(t, err)
 	rollbackExam := createCatalogExam(t, ctx, ss, unit.ID, creator.ID, at.Add(10*time.Minute), "manager-mail-rollback")
 	_, err = ss.ExamAuthoring().AddManager(ctx,
@@ -136,7 +136,7 @@ func testConcurrentExamManagerAdditions(t *testing.T, ctx context.Context, ss st
 	t.Helper()
 	firstTarget, secondTarget := saveUser(t, ctx, ss), saveUser(t, ctx, ss)
 	for _, target := range []*model.User{firstTarget, secondTarget} {
-		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: target.ID, StartsAt: model.NowUTC().Add(-time.Hour)})
+		_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: target.ID, StartsAt: model.NowUTC().Add(-time.Hour)})
 		require.NoError(t, err)
 	}
 	created := createCatalogExam(t, ctx, ss, unitID, creatorID, at, "manager-race-create")

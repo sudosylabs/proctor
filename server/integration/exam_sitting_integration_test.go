@@ -83,11 +83,11 @@ func TestExamSittingIntegration(t *testing.T) {
 		EmailVerified: true, Locale: "en", Timezone: "UTC",
 	}, Password: password})
 	require.NoError(t, appErr)
-	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{
+	_, err = persistence.SeedAffiliation(ctx, &model.Affiliation{
 		UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: period.StartsAt,
 	})
 	require.NoError(t, err)
-	_, err = persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{
+	_, err = persistence.SeedClassEnrollment(ctx, &model.ClassMember{
 		ClassID: class.ID, UserID: candidate.ID, StartsAt: period.StartsAt,
 	})
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	managerPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, managerLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	managerInvocation := invocation.New(*managerPrincipal, model.RequestMetadata{RequestID: "exam-sitting-manager-integration"})
-	managerMembership, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	managerMembership, err := persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: manager.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000),
 	})
 	require.NoError(t, err)
@@ -270,7 +270,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	appErr = helper.App.RealtimeAdmission.AuthorizeWebSocketSubscription(ctx, invocation.New(*managerPrincipal, model.RequestMetadata{}),
 		model.ActionExamSittingView, model.Resource{Type: model.ResourceExamSitting, ID: scheduled.Sitting.ID.String()})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "subscription after membership revocation error = %v", appErr)
-	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: manager.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 50),
 	})
 	require.NoError(t, err)

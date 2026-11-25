@@ -168,13 +168,13 @@ func testAcademicUnitAdministrators(t *testing.T, ss store.Store) {
 
 func saveSummaryAffiliation(t *testing.T, ctx context.Context, ss store.Store, userID model.UserID, kind model.AffiliationKind, start time.Time) {
 	t.Helper()
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: userID, Kind: kind, StartsAt: start})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: userID, Kind: kind, StartsAt: start})
 	require.NoError(t, err)
 }
 
 func saveSummaryUnitMember(t *testing.T, ctx context.Context, ss store.Store, unitID model.AcademicUnitID, userID model.UserID, start time.Time) *model.AcademicUnitMember {
 	t.Helper()
-	member, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: userID, StartsAt: start})
+	member, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: userID, StartsAt: start})
 	require.NoError(t, err)
 	return member
 }

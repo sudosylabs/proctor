@@ -30,9 +30,9 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		user, err := createUser(t, ctx, ss, candidate)
 		require.NoError(t, err)
 		// #nosec G101 -- Nonfunctional password hash used only to exercise Store removal.
-		credential, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$remove-me"})
+		credential, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$remove-me"})
 		require.NoError(t, err)
-		identity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
+		identity, err := seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
 			Subject: "password-removal-subject-" + model.NewID(), LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis())})
 		require.NoError(t, err)
 
@@ -66,7 +66,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 			ExpectedHash: credential.PasswordHash, ExpectedRevision: credential.Revision, PasswordHash: "must-not-resurrect"}
 		err = ss.PasswordCredential().Rehash(ctx, oldRehash)
 		require.ErrorIs(t, err, store.ErrPasswordCredentialChanged)
-		replacement, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{
+		replacement, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{
 			UserID: user.ID, PasswordHash: "encoded-reenrolled-password",
 		})
 		require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
 		// #nosec G101 -- Nonfunctional password hashes used only to exercise the Store change.
-		credential, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$before-change"})
+		credential, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$before-change"})
 		require.NoError(t, err)
 		kept, keptCredentials, _ := newSession(user.ID.String())
 		kept, _, err = SaveSession(ctx, ss, testSessionCreation(t, ctx, ss, kept, keptCredentials, 10))
@@ -171,7 +171,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
 		// #nosec G101 -- Nonfunctional password hash used only to exercise password history.
-		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$history-0"})
+		_, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$history-0"})
 		require.NoError(t, err)
 		kept := model.NewSessionID()
 		change := func(hash string, limit int) error {
@@ -203,9 +203,9 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		user, err := createUser(t, ctx, ss, candidate)
 		require.NoError(t, err)
 		// #nosec G101 -- Nonfunctional password hash used only to exercise reuse after removal.
-		_, err = ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$removed"})
+		_, err = seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$removed"})
 		require.NoError(t, err)
-		_, err = ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
+		_, err = seeder(ss).SeedExternalIdentity(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
 			Subject: "history-subject-" + model.NewID(), LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis())})
 		require.NoError(t, err)
 		capabilities := store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{"campus-cas": {}}}
@@ -245,7 +245,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
 		input := &model.PasswordCredential{UserID: user.ID, PasswordHash: "encoded-original-password"}
-		saved, err := ss.PasswordCredential().Save(ctx, input)
+		saved, err := seeder(ss).SeedPasswordCredential(ctx, input)
 		require.NoError(t, err)
 		require.True(t, saved.ID.IsValid(), "Save() identity/revision = %s", saved.ID)
 		require.True(t, input.ID.IsZero(), "Save() identity/revision = %s", saved.ID)
@@ -288,7 +288,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 
 	t.Run("ReferencesAndUniqueness", func(t *testing.T) {
 		ctx := context.Background()
-		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{ //nolint:gosec // G101: a fixture hash of no real password.
+		_, err := seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{ //nolint:gosec // G101: a fixture hash of no real password.
 			UserID:       model.UserID(model.NewID()),
 			PasswordHash: "$argon2id$missing",
 		})
@@ -297,9 +297,9 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		require.Equal(t, "password_credentials_user_id_fkey", reference.Constraint)
 		user := saveUser(t, ctx, ss)
 		first := &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$first"} //nolint:gosec // G101: a fixture hash of no real password.
-		_, err = ss.PasswordCredential().Save(ctx, first)
+		_, err = seeder(ss).SeedPasswordCredential(ctx, first)
 		require.NoError(t, err)
-		_, err = ss.PasswordCredential().Save(ctx, &model.PasswordCredential{
+		_, err = seeder(ss).SeedPasswordCredential(ctx, &model.PasswordCredential{
 			UserID:       user.ID,
 			PasswordHash: "$argon2id$second",
 		})

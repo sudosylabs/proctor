@@ -27,7 +27,7 @@ func TestDesktopAuthorizationRejectsSourceCredentialExpiringDuringUserLockWait(t
 	defer cancel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
-	institution, err := persistence.Institution().Save(ctx, &model.Institution{
+	institution, err := persistence.SeedInstitution(ctx, &model.Institution{
 		Name: "desktop-expiry-lock", DisplayName: "Desktop Expiry Lock",
 	})
 	require.NoError(t, err)

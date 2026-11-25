@@ -39,9 +39,9 @@ func testAcademicAdministrationFilterPreview(t *testing.T, ss store.Store) {
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		MFACompletedAt: model.OptionalTimeFrom(session.AuthenticatedAt), ClientType: session.ClientType, AuthenticatedAt: session.AuthenticatedAt}
 	changing, unchanged := saveUser(t, ctx, ss), saveUser(t, ctx, ss)
-	_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: unchanged.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(1)})
+	_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: unchanged.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(1)})
 	require.NoError(t, err)
-	_, err = ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: unchanged.ID, StartsAt: model.NowUTC().Add(-time.Hour)})
+	_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: unchanged.ID, StartsAt: model.NowUTC().Add(-time.Hour)})
 	require.NoError(t, err)
 
 	filter := &store.AcademicAdministrationFilter{

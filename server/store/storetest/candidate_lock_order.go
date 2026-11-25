@@ -65,7 +65,7 @@ func TestExamManagerAddCandidateLockOrder(t *testing.T, ss store.Store, probe Ca
 	creator, target := saveUser(t, ctx, ss), saveUser(t, ctx, ss)
 	at := model.NowUTC()
 	for _, user := range []*model.User{creator, target} {
-		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: at.Add(-time.Hour)})
+		_, err := seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: at.Add(-time.Hour)})
 		require.NoError(t, err)
 	}
 	created := createCatalogExam(t, ctx, ss, unit.ID, creator.ID, at, "manager-lock-order")
@@ -138,7 +138,7 @@ func TestClassEnrollmentCandidateLockOrder(t *testing.T, ss store.Store, probe C
 	} {
 		t.Run(string(fence.Kind), func(t *testing.T) {
 			user := saveUser(t, ctx, ss)
-			_, err := ss.Affiliation().Save(ctx, &model.Affiliation{
+			_, err := seeder(ss).SeedAffiliation(ctx, &model.Affiliation{
 				UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: model.TimeFromMillis(start - 1),
 			})
 			require.NoError(t, err)

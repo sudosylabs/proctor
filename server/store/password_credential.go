@@ -16,7 +16,6 @@ import (
 
 // PasswordCredentialStore persists one encoded password hash per local user.
 type PasswordCredentialStore interface {
-	Save(context.Context, *model.PasswordCredential) (*model.PasswordCredential, error)
 	GetByUser(context.Context, model.UserID) (*model.PasswordCredential, error)
 	Rehash(context.Context, *PasswordCredentialRehash) error
 	Enroll(context.Context, *PasswordCredentialEnrollment) (*AuthenticationMethodMutationResult, error)

@@ -103,9 +103,9 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 		EmailVerified: true, Locale: "en", Timezone: "UTC",
 	}, Password: password})
 	require.NoError(t, err)
-	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: period.StartsAt})
+	_, err = persistence.SeedAffiliation(ctx, &model.Affiliation{UserID: candidate.ID, Kind: model.AffiliationStudent, StartsAt: period.StartsAt})
 	require.NoError(t, err)
-	_, err = persistence.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: class.ID, UserID: candidate.ID, StartsAt: period.StartsAt})
+	_, err = persistence.SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: candidate.ID, StartsAt: period.StartsAt})
 	require.NoError(t, err)
 	manager, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "native-flow-manager", Email: "native-flow-manager@example.edu", DisplayName: "Native Flow Manager",
@@ -119,7 +119,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	managerPrincipal, err := helper.App.Identity.AuthenticateAccess(ctx, managerLogin.Tokens.AccessToken)
 	require.NoError(t, err)
 	managerInv := invocation.New(*managerPrincipal, model.RequestMetadata{RequestID: "native-flow-manager"})
-	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+	_, err = persistence.SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: unit.ID, UserID: manager.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000),
 	})
 	require.NoError(t, err)

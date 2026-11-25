@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -139,7 +140,19 @@ func TestJobClaimReadsOnlyItsOwnType(t *testing.T) {
 	tx, err := persistence.GetMaster().Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback() }()
-	_, err = tx.Exec(ctx, `SET LOCAL enable_seqscan = off`)
+	// The planner chooses by statistics, so give it a queue shaped like a busy
+	// one: many due Jobs spread over every type. On a near-empty table either
+	// index costs the same and the choice is arbitrary.
+	types := make([]string, 0, len(model.JobTypes()))
+	for _, jobType := range model.JobTypes() {
+		types = append(types, string(jobType))
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO jobs (id, type, status, created_at, updated_at, available_at, command, dedupe_key, maximum_attempts)
+		SELECT translate(lpad(n::text, 26, '0'), '0123456789', 'ybndrfg8ej'), (?::text[])[1 + n % cardinality(?::text[])], 'queued',
+			now() - interval '1 hour', now() - interval '1 hour', now() - interval '1 hour', '{}', 'plan-' || n, 3
+		FROM generate_series(1, 20000) AS n`, pq.Array(types), pq.Array(types))
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `ANALYZE jobs`)
 	require.NoError(t, err)
 	var plan []string
 	require.NoError(t, tx.Select(ctx, &plan, `EXPLAIN SELECT id FROM jobs

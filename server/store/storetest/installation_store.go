@@ -293,6 +293,11 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 }
 
 func testInstallationBootstrap(index int) *store.InstallationBootstrap {
+	return testInstallationBootstrapAt(index, model.NowUTC())
+}
+
+// testInstallationBootstrapAt prepares the administrator at a node instant.
+func testInstallationBootstrapAt(index int, at time.Time) *store.InstallationBootstrap {
 	institution := &model.Institution{
 		Name: "northbridge", DisplayName: "Northbridge University",
 	}
@@ -302,6 +307,7 @@ func testInstallationBootstrap(index int) *store.InstallationBootstrap {
 		DisplayName:   "Administrator",
 		EmailVerified: true, DisabledAt: model.OptionalTimeFromMillis(1),
 	}
+	user.PrepareCreate(model.NewUserID(), at)
 	creation := testUserCreation(user, nil)
 	parameters, appErr := model.EncodeAuditData(map[string]any{"attempt": index})
 	if appErr != nil {

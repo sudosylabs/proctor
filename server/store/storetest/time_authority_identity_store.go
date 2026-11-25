@@ -227,3 +227,26 @@ func RunTimeAuthorityUserLogin(t *testing.T, ss store.Store, probe TimeAuthority
 	require.False(t, persisted.LastLoginAt.Time.Before(led.CreatedAt), "last login %s precedes creation %s", persisted.LastLoginAt.Time, led.CreatedAt)
 	require.False(t, persisted.LastActivityAt.Time.Before(led.CreatedAt), "last activity %s precedes creation %s", persisted.LastActivityAt.Time, led.CreatedAt)
 }
+
+// RunTimeAuthorityBootstrapAdministrator bootstraps from a node whose clock
+// leads PostgreSQL. The first administrator must act as system administrator
+// at once, because authority checks compare the binding's start with
+// PostgreSQL time.
+func RunTimeAuthorityBootstrapAdministrator(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	bootstrap, err := ss.Installation().Bootstrap(ctx, testInstallationBootstrapAt(815, model.NowUTC().Add(timeAuthorityNodeLead)))
+	require.NoError(t, err)
+	require.True(t, bootstrap.Administrator.CreatedAt.After(model.NowUTC()), "the administrator was not created by a leading node")
+
+	administrator, institutionID := bootstrap.Administrator.ID, bootstrap.Institution.ID
+	profile, err := model.NewAssistantProfile(model.NewAssistantProfileID(), model.AssistantProfileSpecification{
+		Name: "leading-tutor", DisplayName: "Leading tutor", Provider: "campus", Model: "teaching-model",
+		MaxLevel: model.AssistantLevelTutor, DataHandling: "self_hosted", Pseudonymize: true,
+		Budgets: model.AssistantBudgets{Turns: 10, InputTokens: 1000, OutputTokens: 100, CommandTimeoutSeconds: 60},
+	}, administrator, model.NowUTC())
+	require.NoError(t, err)
+	input := &store.AssistantProfileCreation{Profile: profile}
+	input.AuditEventID, input.AuditAt = saveAssistantProfileAudit(t, ctx, ss, institutionID, administrator)
+	_, err = ss.AssistantProfile().Create(ctx, input, assistantProfileCommand(administrator, store.AssistantProfileCreateOperation, "leading-bootstrap"))
+	require.NoError(t, err, "the bootstrap administrator must hold authority before the node's clock is reached")
+}

@@ -30,6 +30,7 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 	t.Run("ActiveIntervalPrecision", func(t *testing.T) { testRoleBindingActiveIntervalPrecision(t, ss) })
 	t.Run("VisibleSummariesByUsers", func(t *testing.T) { testRoleBindingVisibleSummariesByUsers(t, ss) })
 	t.Run("TeachersByClasses", func(t *testing.T) { testRoleBindingTeachersByClasses(t, ss) })
+	t.Run("ClassScopeNeedsUnitMember", func(t *testing.T) { testRoleBindingClassScopeNeedsUnitMember(t, ss) })
 	t.Run("CurrentByRoles", func(t *testing.T) { testRoleBindingCurrentByRoles(t, ss) })
 	t.Run("HoldersByRoles", func(t *testing.T) { testRoleBindingHoldersByRoles(t, ss) })
 	t.Run("AuditedMutations", func(t *testing.T) {
@@ -297,6 +298,62 @@ func testRoleBindingActiveIntervalPrecision(t *testing.T, ss store.Store) {
 // testRoleBindingTeachersByClasses pins that a Class's teachers are the
 // distinct current holders of an unarchived role bound at the Class itself,
 // by name, counted past the limit, for a whole page in one read.
+func testRoleBindingClassScopeNeedsUnitMember(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := model.NewID()[:12]
+	institution := saveInstitution(t, ctx, ss)
+	unit := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "member-unit-"+token)
+	otherUnit := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "member-other-"+token)
+	programme := saveProgramme(t, ctx, ss, unit.ID.String(), "member-programme-"+token)
+	level := saveProgrammeLevel(t, ctx, ss, programme.ID.String(), "member-level-"+token)
+	period := saveAcademicPeriod(t, ctx, ss, institution.ID.String(), "member-period-"+token, 1_800_000_000_000)
+	class := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "member-class-"+token)
+	role, err := SaveRole(ctx, ss, &model.Role{Name: "member-teaching-" + strings.ToLower(token), DisplayName: "Teaching", Permissions: []string{string(model.ActionExamManage)}})
+	require.NoError(t, err)
+	start := model.TimeUTC(model.NowUTC().Add(-time.Second))
+	grant := func(user *model.User, startsAt time.Time) error {
+		t.Helper()
+		auditID, at, auditErr := beginFixtureAudit(ctx, ss)
+		require.NoError(t, auditErr)
+		_, saveErr := ss.RoleBinding().Save(ctx, &store.RoleBindingCreation{
+			Binding: &model.RoleBinding{
+				UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeClass, ScopeID: class.ID.String(), StartsAt: startsAt,
+				GrantedByUserID: user.ID, GrantedVia: model.RoleBindingGrantedManually,
+			},
+			ExpectedRoleUpdatedAt: role.UpdatedAt, ExpectedRolePermissions: role.Permissions,
+			AuditEventID: auditID, AuditAt: at,
+		})
+		return saveErr
+	}
+	member := func(user *model.User, unitID model.AcademicUnitID, startsAt time.Time) {
+		t.Helper()
+		_, saveErr := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: startsAt})
+		require.NoError(t, saveErr)
+	}
+	requireRefused := func(err error, message string) {
+		t.Helper()
+		var conflict *store.ErrConflict
+		require.ErrorAs(t, err, &conflict, message)
+		require.Equal(t, "role_bindings_class_scope_member", conflict.Constraint, message)
+	}
+
+	stranger := saveUser(t, ctx, ss)
+	requireRefused(grant(stranger, start), "an account outside the unit")
+
+	elsewhere := saveUser(t, ctx, ss)
+	member(elsewhere, otherUnit.ID, start)
+	requireRefused(grant(elsewhere, start), "a member of another unit")
+
+	later := saveUser(t, ctx, ss)
+	member(later, unit.ID, start.Add(time.Hour))
+	requireRefused(grant(later, start), "a member whose membership starts after the binding")
+	require.NoError(t, grant(later, start.Add(time.Hour)), "a binding that starts with the membership")
+
+	teacher := saveUser(t, ctx, ss)
+	member(teacher, unit.ID, start)
+	require.NoError(t, grant(teacher, start), "a current member of the class's unit")
+}
+
 func testRoleBindingTeachersByClasses(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	token := model.NewID()[:12]

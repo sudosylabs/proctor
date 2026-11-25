@@ -29,9 +29,14 @@ type ListAcademicPeriodsQuery struct {
 	OwnerType string
 	OwnerID   string
 	// ActiveAt, when set, keeps the periods covering that instant.
-	ActiveAt   time.Time
-	Order      store.AcademicPeriodOrder
-	Descending bool
+	ActiveAt time.Time
+	// OverlapsFrom and OverlapsUntil, either or both, keep the periods that
+	// share an instant with [OverlapsFrom, OverlapsUntil). A calendar or
+	// academic year is a range the caller chooses.
+	OverlapsFrom  time.Time
+	OverlapsUntil time.Time
+	Order         store.AcademicPeriodOrder
+	Descending    bool
 	// AfterStartAt, AfterName and AfterID are the last period of the previous
 	// page, all set or all empty; a name-order page leaves AfterStartAt zero.
 	AfterStartAt time.Time
@@ -111,6 +116,9 @@ func (s *Service) ListAcademicPeriods(
 		ownerType == model.ResourceAcademicUnit && query.OwnerID != "" && !model.AcademicUnitID(query.OwnerID).IsValid():
 		return AcademicPeriodPage{}, apperror.New("request.invalid").WithField("field", "owner_id")
 	}
+	if !query.OverlapsFrom.IsZero() && !query.OverlapsUntil.IsZero() && !query.OverlapsFrom.Before(query.OverlapsUntil) {
+		return AcademicPeriodPage{}, apperror.New("request.invalid").WithField("field", "overlaps_until")
+	}
 	if query.Order != "" && query.Order != store.AcademicPeriodOrderStart && query.Order != store.AcademicPeriodOrderName {
 		return AcademicPeriodPage{}, apperror.New("request.invalid").WithField("field", "sort")
 	}
@@ -121,16 +129,18 @@ func (s *Service) ListAcademicPeriods(
 	}
 
 	periods, err := s.academicPeriods.ListVisible(ctx, visibility, store.AcademicPeriodListOptions{
-		Term:         strings.TrimSpace(query.Query),
-		OwnerType:    ownerType,
-		OwnerID:      query.OwnerID,
-		ActiveAt:     query.ActiveAt,
-		Order:        query.Order,
-		Descending:   query.Descending,
-		AfterStartAt: query.AfterStartAt,
-		AfterName:    query.AfterName,
-		AfterID:      query.AfterID,
-		Limit:        probe,
+		Term:          strings.TrimSpace(query.Query),
+		OwnerType:     ownerType,
+		OwnerID:       query.OwnerID,
+		ActiveAt:      query.ActiveAt,
+		OverlapsFrom:  query.OverlapsFrom,
+		OverlapsUntil: query.OverlapsUntil,
+		Order:         query.Order,
+		Descending:    query.Descending,
+		AfterStartAt:  query.AfterStartAt,
+		AfterName:     query.AfterName,
+		AfterID:       query.AfterID,
+		Limit:         probe,
 	})
 	if err != nil {
 		return AcademicPeriodPage{}, academicPeriodStoreErrors.Translate(err)

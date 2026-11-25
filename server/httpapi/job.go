@@ -292,6 +292,9 @@ func listJobsQuery(r *http.Request) (job.ListQuery, error) {
 	for _, raw := range r.URL.Query()["status"] {
 		query.Statuses = append(query.Statuses, model.JobStatus(raw))
 	}
+	for _, raw := range r.URL.Query()["type"] {
+		query.Types = append(query.Types, model.JobType(raw))
+	}
 	return query, nil
 }
 func attemptPagination(r *http.Request) (int, int, error) {

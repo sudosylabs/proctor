@@ -45,6 +45,11 @@ module when a change is not server-only. No module has been released yet.
     `mail_delivery.changed`, `desktop_compatibility_policy.changed`,
     `exam.counts.changed`, `exam_sitting.submissions.changed`,
     `exam_attempt.screen_clip.changed` and `exam_attempt.evidence.changed`.
+  - A second Administration batch filters Jobs by `type` and Academic Periods
+    by `overlaps_from` and `overlaps_until`, and gives each Role its
+    `grantable_scope_types`. Administrators with Institution-wide visibility
+    can read a disabled account's affiliations and sessions. Every change to a
+    disabled account is still refused.
 
 - Server: web and Desktop sign-in can use a Proctor authenticator or recovery code as the second factor after sign-in through an external provider. Desktop reauthentication can also raise the strength of an existing Session.
 
@@ -154,6 +159,10 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server (**breaking**): a Class-scope Role Binding needs a User who is a
+  member of the Class's Academic Unit when the Binding starts. Otherwise the
+  grant is refused with `role_binding.scope_member_required`. Existing
+  Bindings are kept.
 - Server: the job engine no longer polls. One dispatcher per node reads when
   each job type next has work, and PostgreSQL `LISTEN`/`NOTIFY` wakes every
   node when a job is queued. A 30-second backstop, with jitter, bounds a lost

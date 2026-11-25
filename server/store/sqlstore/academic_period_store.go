@@ -362,6 +362,12 @@ func (s SQLAcademicPeriodStore) ListVisible(
 		at := model.TimeUTC(options.ActiveAt)
 		query = query.Where(sq.LtOrEq{"academic_periods.start_at": at}).Where(sq.Gt{"academic_periods.end_at": at})
 	}
+	if !options.OverlapsFrom.IsZero() {
+		query = query.Where(sq.Gt{"academic_periods.end_at": model.TimeUTC(options.OverlapsFrom)})
+	}
+	if !options.OverlapsUntil.IsZero() {
+		query = query.Where(sq.Lt{"academic_periods.start_at": model.TimeUTC(options.OverlapsUntil)})
+	}
 
 	comparison, direction := ">", ""
 	if options.Descending {

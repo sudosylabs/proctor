@@ -32,6 +32,7 @@ func TestAcademicPeriodStore(t *testing.T, ss store.Store) {
 	t.Run("Get", func(t *testing.T) { testAcademicPeriodStoreGet(t, ss) })
 	t.Run("GetByOwnerName", func(t *testing.T) { testAcademicPeriodStoreGetByOwnerName(t, ss) })
 	t.Run("ListVisible", func(t *testing.T) { testAcademicPeriodStoreListVisible(t, ss) })
+	t.Run("ListOverlapping", func(t *testing.T) { testAcademicPeriodStoreListOverlapping(t, ss) })
 	t.Run("Update", func(t *testing.T) { testAcademicPeriodStoreUpdate(t, ss) })
 	t.Run("RejectUnknownInstitution", func(t *testing.T) {
 		testAcademicPeriodStoreRejectUnknownInstitution(t, ss)
@@ -178,6 +179,33 @@ func testAcademicPeriodStoreAllowsInstitutionDefinedOverlap(t *testing.T, ss sto
 	adjacent := saveAcademicPeriod(t, ctx, ss, institution.ID.String(), "next", model.MillisFromTime(first.EndsAt))
 	require.False(t, overlapping.ID.IsZero(), "overlap/adjacency not persisted: %#v %#v", overlapping, adjacent)
 	require.False(t, adjacent.ID.IsZero(), "overlap/adjacency not persisted: %#v %#v", overlapping, adjacent)
+}
+
+func testAcademicPeriodStoreListOverlapping(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	institution := saveInstitution(t, ctx, ss)
+	// Each period lasts 30,000,000,000 ms; the second starts as the first ends.
+	first := saveAcademicPeriod(t, ctx, ss, institution.ID.String(), "first", 1_000_000_000_000)
+	second := saveAcademicPeriod(t, ctx, ss, institution.ID.String(), "second", model.MillisFromTime(first.EndsAt))
+	visibility := store.AcademicPeriodVisibilityScope{InstitutionID: institution.ID, InstitutionWide: true}
+	list := func(from, until time.Time) []model.AcademicPeriodID {
+		t.Helper()
+		found, err := ss.AcademicPeriod().ListVisible(ctx, visibility, store.AcademicPeriodListOptions{
+			OverlapsFrom: from, OverlapsUntil: until, Limit: 10,
+		})
+		require.NoError(t, err)
+		ids := make([]model.AcademicPeriodID, 0, len(found))
+		for _, period := range found {
+			ids = append(ids, period.ID)
+		}
+		return ids
+	}
+
+	require.Equal(t, []model.AcademicPeriodID{first.ID}, list(first.StartsAt, first.EndsAt), "a range ending where the next period starts excludes it")
+	require.Equal(t, []model.AcademicPeriodID{first.ID, second.ID}, list(first.EndsAt.Add(-time.Millisecond), first.EndsAt.Add(time.Millisecond)))
+	require.Equal(t, []model.AcademicPeriodID{second.ID}, list(first.EndsAt, time.Time{}), "an open end keeps every later period")
+	require.Equal(t, []model.AcademicPeriodID{first.ID}, list(time.Time{}, first.EndsAt), "an open start keeps every earlier period")
+	require.Empty(t, list(second.EndsAt, second.EndsAt.Add(time.Hour)))
 }
 
 func testAcademicPeriodStoreSearchAndArchive(t *testing.T, ss store.Store) {

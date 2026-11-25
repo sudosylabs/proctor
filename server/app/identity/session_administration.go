@@ -58,12 +58,9 @@ func (s *Service) ListUserSessions(
 		return paging.Page[*model.Session]{}, apperror.Invalid("request.invalid", "cursor")
 	}
 
-	if err := s.authorizer.Authorize(
-		ctx,
-		inv,
-		model.ActionSessionView,
-		model.Resource{Type: model.ResourceUser, ID: userID.String()},
-	); err != nil {
+	// A disabled account's sessions stay readable, so an administrator can
+	// see that disabling it revoked them.
+	if err := s.authorizer.AuthorizeUserActionIncludingDisabled(ctx, inv, model.ActionSessionView, userID); err != nil {
 		return paging.Page[*model.Session]{}, err
 	}
 

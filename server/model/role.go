@@ -45,6 +45,16 @@ type Role struct {
 	UpdatedByUserID UserID
 }
 
+// GrantableScopeTypes returns, in a stable order, the scopes a binding of r
+// may name. The system administrator role covers the whole institution, so it
+// is granted only there.
+func (r *Role) GrantableScopeTypes() []RoleScopeType {
+	if r.Name == SystemAdministratorRoleName {
+		return []RoleScopeType{RoleScopeInstitution}
+	}
+	return []RoleScopeType{RoleScopeInstitution, RoleScopeAcademicUnit, RoleScopeClass}
+}
+
 // RolePatch holds the mutable fields of a custom role. Names are stable IDs,
 // and server code manages built-in roles.
 type RolePatch struct {

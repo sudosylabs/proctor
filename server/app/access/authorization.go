@@ -345,6 +345,27 @@ func (s *Authorizer) AuthorizeUserRead(ctx context.Context, inv invocation.Invoc
 	return err
 }
 
+// AuthorizeUserReadIncludingDisabled is AuthorizeUserRead that also admits a
+// disabled account, so an administrator can still see what the account holds.
+// Only reads use it: every change to a disabled account goes through a check
+// that refuses one.
+func (s *Authorizer) AuthorizeUserReadIncludingDisabled(ctx context.Context, inv invocation.Invocation, userID model.UserID) error {
+	_, err := s.authorizeUserRead(ctx, inv, userID, true)
+	return err
+}
+
+// AuthorizeUserActionIncludingDisabled authorizes an institution-scoped
+// action on a user, admitting a disabled account. Like
+// AuthorizeUserReadIncludingDisabled it is for reads only.
+func (s *Authorizer) AuthorizeUserActionIncludingDisabled(
+	ctx context.Context,
+	inv invocation.Invocation,
+	action model.Action,
+	userID model.UserID,
+) error {
+	return s.authorizeInstitutionUser(ctx, inv, userID, action)
+}
+
 // RecordDenial records a denial without evaluating policy, for use cases that
 // refuse by a domain rule such as self-review. The caller still returns its
 // own concealing error.

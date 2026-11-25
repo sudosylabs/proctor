@@ -175,3 +175,30 @@ func TestEngineProjectsSafeAttemptsAndPreservesCursor(t *testing.T) {
 	require.Len(t, page.Items, 1)
 	require.True(t, page.HasMore)
 }
+
+func TestEngineListFiltersByJobType(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
+	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "typed", at, at, 8)
+	require.NoError(t, err)
+	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}, total: 1}
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
+		NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{BackstopInterval: time.Second}})
+	require.NoError(t, err)
+
+	page, err := engine.List(context.Background(), ListQuery{Types: []model.JobType{record.Type, model.JobTypeMailDeliver}, Limit: 20})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Equal(t, []model.JobType{record.Type}, persistence.listOptions.Types, "the store reads only requested operator-visible types")
+
+	persistence.listOptions = store.JobListOptions{}
+	page, err = engine.List(context.Background(), ListQuery{Types: []model.JobType{model.JobTypeMailDeliver}, Limit: 20})
+	require.NoError(t, err)
+	require.Empty(t, page.Items, "a type that is not operator-visible matches nothing")
+	require.True(t, page.Counted)
+	require.Zero(t, page.Total)
+	require.Empty(t, persistence.listOptions.Types, "a filter that matches no visible type reads nothing")
+
+	_, err = engine.List(context.Background(), ListQuery{Types: []model.JobType{"no.such.type"}, Limit: 20})
+	require.ErrorIs(t, err, ErrQueryInvalid)
+}

@@ -51,6 +51,9 @@ type roleResponse struct {
 	Description string   `json:"description"`
 	Permissions []string `json:"permissions"`
 	BuiltIn     bool     `json:"built_in"`
+	// GrantableScopeTypes are the scopes a role binding of this role may
+	// name, the same rule a grant enforces.
+	GrantableScopeTypes []model.RoleScopeType `json:"grantable_scope_types"`
 	// UpdatedBy is who last created or changed a custom role.
 	UpdatedBy *personRefResponse `json:"updated_by,omitempty"`
 	// Holders is present only on reads, and only for a caller holding
@@ -109,6 +112,8 @@ func roleResponseFromModel(request *http.Request, role *model.Role, refs people.
 		Description: description,
 		Permissions: append([]string(nil), permissions...),
 		BuiltIn:     role.BuiltIn,
+
+		GrantableScopeTypes: role.GrantableScopeTypes(),
 	}
 }
 

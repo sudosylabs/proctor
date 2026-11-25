@@ -138,6 +138,7 @@ func roleBindingResource(app *administration.Service) route.Resource {
 				"resource.not_found",
 				"role_binding.invalid",
 				"role_binding.conflict",
+				"role_binding.scope_member_required",
 				"role_binding.system_admin_scope_invalid",
 				"administration.unavailable",
 				"mail.unavailable",

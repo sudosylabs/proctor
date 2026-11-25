@@ -49,7 +49,7 @@ func (s *Service) ListAffiliations(
 	if !userID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	if err := s.authorizer.AuthorizeUserRead(ctx, inv, userID); err != nil {
+	if err := s.authorizer.AuthorizeUserReadIncludingDisabled(ctx, inv, userID); err != nil {
 		return nil, err
 	}
 

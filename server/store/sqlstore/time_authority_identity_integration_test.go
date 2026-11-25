@@ -78,5 +78,6 @@ func TestTimeAuthorityUserLoginFollowsLeadingUser(t *testing.T) {
 }
 
 func TestTimeAuthorityBootstrapAdministratorActsAtOnce(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.RunTimeAuthorityBootstrapAdministrator)
 }

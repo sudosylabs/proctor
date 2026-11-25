@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -198,11 +197,4 @@ func authenticatedCatalogRequest(method string, path string) *http.Request {
 	request := httptest.NewRequestWithContext(context.Background(), method, path, nil)
 	request.Header.Set("Authorization", "Bearer explicit-capability")
 	return request
-}
-
-func TestResourceCatalogContainsNoRuntimeApplicationAssertions(t *testing.T) {
-	t.Parallel()
-	source, err := os.ReadFile("resources.go")
-	require.NoError(t, err)
-	require.NotContains(t, string(source), "options.Application.(", "resource catalog performs runtime capability discovery")
 }

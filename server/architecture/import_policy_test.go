@@ -67,6 +67,15 @@ var importRules = []importRule{
 		},
 	},
 	{
+		reason: "gossip membership reaches discovery through its port and never opens a database itself",
+		from:   []string{srv("cluster/memberlist/...")},
+		deny: []string{
+			"database/sql/...", "github.com/jmoiron/sqlx/...",
+			"github.com/lib/pq/...", "github.com/jackc/pgx/...",
+			"github.com/go-sql-driver/mysql/...", "modernc.org/sqlite/...",
+		},
+	},
+	{
 		reason: "the Store contract knows no implementation and no application code",
 		from:   []string{srv("store")},
 		deny:   []string{srv("store/..."), srv("app/...")},

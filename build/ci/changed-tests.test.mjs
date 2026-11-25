@@ -118,3 +118,16 @@ test("a changed storetest entry point stresses its wrappers", async (t) => {
   const entry = "+++ b/server/store/storetest/widget_store.go\n@@ -8,0 +8 @@\n+x";
   assert.deepEqual([...plan(root, entry, true)], [["./store/sqlstore", ["TestWidgetStore"]]]);
 });
+
+test("a line that only adds t.Parallel() edits no test", () => {
+  const files = changedLines(`+++ b/server/x_test.go
+@@ -7,0 +8 @@ func TestUnchanged(t *testing.T) {
++	t.Parallel()
+@@ -11,0 +13,2 @@ func TestEdited(t *testing.T) {
++	t.Parallel()
++	t.Log("edited")
+@@ -20 +22,0 @@
+-	t.Log("removed")
+`);
+  assert.deepEqual([...files.get("server/x_test.go")].sort((a, b) => a - b), [14, 22]);
+});

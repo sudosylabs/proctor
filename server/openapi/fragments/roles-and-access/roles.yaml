@@ -312,6 +312,10 @@ components:
                   - class.view
                   - submission.review
                 built_in: false
+                grantable_scope_types:
+                  - institution
+                  - academic_unit
+                  - class
                 holders:
                   bindings: 12
                   users: 9
@@ -336,6 +340,10 @@ components:
             permissions:
               - class.view
             built_in: false
+            grantable_scope_types:
+              - institution
+              - academic_unit
+              - class
             holders:
               bindings: 12
               users: 9
@@ -359,6 +367,10 @@ components:
             permissions:
               - class.view
             built_in: false
+            grantable_scope_types:
+              - institution
+              - academic_unit
+              - class
     RoleDeleted:
       description: Role deleted
   schemas:

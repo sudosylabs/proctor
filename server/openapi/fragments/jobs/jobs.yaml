@@ -58,6 +58,15 @@ paths:
             items:
               $ref: '#/components/schemas/JobStatus'
           description: Return only Jobs in these states. Repeat the parameter to include several. Omit it to include every state.
+        - name: type
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/JobType'
+          description: >-
+            Return only Jobs of these types. Repeat the parameter to include several. Omit it to include every type.
+            A type the operator view doesn't show matches nothing.
         - name: order
           in: query
           required: false

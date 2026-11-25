@@ -59,6 +59,11 @@ func testCommandAuthorityFollowsActionInheritance(t *testing.T, ss store.Store) 
 	}
 	delegate := func(key string, role *model.Role, scopeType model.RoleScopeType, scopeID string) error {
 		grantee := saveUser(t, ctx, ss)
+		if scopeType == model.RoleScopeClass {
+			// A class grantee must belong to the class's unit.
+			_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: child.ID, UserID: grantee.ID, StartsAt: at.Add(-time.Second)})
+			require.NoError(t, err)
+		}
 		audit, err := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRoleBindingManage),
 			Resource: model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}, ScopeType: scopeType, ScopeID: scopeID,
 			Status: model.AuditStatusAttempt, NodeID: "test-node"})

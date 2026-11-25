@@ -332,8 +332,7 @@ func (s *Service) authorizeRoleDelegation(
 		return nil, nil, RoleBindingStoreErrors.Translate(err)
 	}
 
-	if role.Name == model.SystemAdministratorRoleName &&
-		candidate.ScopeType != model.RoleScopeInstitution {
+	if !slices.Contains(role.GrantableScopeTypes(), candidate.ScopeType) {
 		return nil, nil, apperror.New("role_binding.system_admin_scope_invalid")
 	}
 
@@ -571,5 +570,6 @@ var RoleBindingStoreErrors = apperror.AdministrationStoreTable(
 	map[string]apperror.Code{
 		"role_bindings_last_system_admin":              "role_binding.last_system_admin",
 		"role_bindings_system_admin_institution_scope": "role_binding.system_admin_scope_invalid",
+		"role_bindings_class_scope_member":             "role_binding.scope_member_required",
 	},
 )

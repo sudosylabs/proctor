@@ -863,6 +863,8 @@ codes:
     description: "A Role Binding field or reference is invalid."
   - code: role_binding.last_system_admin
     description: "The change would remove the last System Administrator."
+  - code: role_binding.scope_member_required
+    description: "A Class-scope Role Binding needs a User who is a member of the Class's Academic Unit when the Binding starts."
   - code: role_binding.system_admin_scope_invalid
     description: "The System Administrator Role can only be bound at Institution scope."
   - code: route.method_not_allowed

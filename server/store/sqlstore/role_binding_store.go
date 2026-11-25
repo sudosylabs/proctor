@@ -268,6 +268,12 @@ func insertRoleBinding(ctx context.Context, tx *sqlxTxWrapper, candidate *model.
 	if err := validateSystemAdministratorScope(ctx, tx, candidate); err != nil {
 		return err
 	}
+	if candidate.ScopeType == model.RoleScopeClass {
+		// After the reference checks, so an unknown class is reported as one.
+		if err := requireClassUnitMember(ctx, tx, candidate); err != nil {
+			return err
+		}
+	}
 
 	startAt := candidate.StartsAt
 	endAt := NullTimeFromOptional(candidate.EndsAt)
@@ -355,6 +361,38 @@ func lockRoleBindingGrantTuple(ctx context.Context, tx *sqlxTxWrapper, candidate
 	)
 	if err := lockAdvisory(ctx, tx, lockKey); err != nil {
 		return fmt.Errorf("lock role binding grant: %w", err)
+	}
+	return nil
+}
+
+// requireClassUnitMember admits a class-scope binding only for a member of the
+// class's academic unit at the binding's start. Sharing the membership row
+// keeps it from ending before the binding commits.
+func requireClassUnitMember(ctx context.Context, tx *sqlxTxWrapper, candidate *model.RoleBinding) error {
+	var member bool
+	err := tx.Get(ctx, &member, `
+		SELECT true
+		FROM classes c
+		JOIN programme_levels pl ON pl.id = c.programme_level_id
+		JOIN programmes p ON p.id = pl.programme_id
+		JOIN academic_unit_members m ON m.academic_unit_id = p.academic_unit_id
+		WHERE c.id = ?
+			AND m.user_id = ?
+			AND m.archived_at IS NULL
+			AND m.start_at <= ?
+			AND (m.end_at IS NULL OR m.end_at > ?)
+		LIMIT 1
+		FOR SHARE OF m`,
+		candidate.ScopeID,
+		candidate.UserID.String(),
+		candidate.StartsAt,
+		candidate.StartsAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.NewErrConflict("role_binding", "role_bindings_class_scope_member", nil)
+	}
+	if err != nil {
+		return fmt.Errorf("check class unit membership: %w", err)
 	}
 	return nil
 }

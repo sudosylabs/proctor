@@ -8100,6 +8100,9 @@
                 "created_at": "2026-08-01T09:00:00Z",
                 "description": "Protected administrator role for this Proctor installation.",
                 "display_name": "System Administrator",
+                "grantable_scope_types": [
+                  "institution"
+                ],
                 "id": "hmyjmj68dw6gdxctnghbrhwcth",
                 "name": "system_admin",
                 "permissions": [
@@ -10492,6 +10495,11 @@
               "created_at": "2026-08-01T09:30:00Z",
               "description": "Reviews examination integrity records.",
               "display_name": "Assessment Reviewer",
+              "grantable_scope_types": [
+                "institution",
+                "academic_unit",
+                "class"
+              ],
               "id": "1asb7sk89dp1ex339fkh3te5t4",
               "name": "assessment-reviewer",
               "permissions": [
@@ -10519,6 +10527,11 @@
                   "created_at": "2026-03-02T10:00:00Z",
                   "description": "Reviews examination integrity records.",
                   "display_name": "Assessment Reviewer",
+                  "grantable_scope_types": [
+                    "institution",
+                    "academic_unit",
+                    "class"
+                  ],
                   "holders": {
                     "bindings": 12,
                     "bindings_is_lower_bound": false,
@@ -10553,6 +10566,11 @@
               "created_at": "2026-03-02T10:00:00Z",
               "description": "Reviews examination and integrity records.",
               "display_name": "Senior Assessment Reviewer",
+              "grantable_scope_types": [
+                "institution",
+                "academic_unit",
+                "class"
+              ],
               "holders": {
                 "bindings": 12,
                 "bindings_is_lower_bound": false,
@@ -11749,6 +11767,7 @@
           "role_binding.invalid",
           "role_binding.conflict",
           "role_binding.last_system_admin",
+          "role_binding.scope_member_required",
           "role_binding.system_admin_scope_invalid",
           "user.invalid",
           "user.conflict",
@@ -23352,6 +23371,7 @@
           "role_binding.conflict",
           "role_binding.invalid",
           "role_binding.last_system_admin",
+          "role_binding.scope_member_required",
           "role_binding.system_admin_scope_invalid",
           "route.method_not_allowed",
           "route.not_found",
@@ -32992,6 +33012,7 @@
           "role_binding.conflict",
           "role_binding.invalid",
           "role_binding.last_system_admin",
+          "role_binding.scope_member_required",
           "role_binding.system_admin_scope_invalid",
           "session.not_found",
           "student_progression.conflict",
@@ -36247,6 +36268,20 @@
             "description": "Name shown to people.",
             "type": "string"
           },
+          "grantable_scope_types": {
+            "description": "The kinds of scope a Role Binding of this Role can name, in a stable order. The system administrator Role is granted only at the institution. Every other Role can be granted at the institution, an Academic Unit or a Class.",
+            "items": {
+              "enum": [
+                "institution",
+                "academic_unit",
+                "class"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
           "holders": {
             "$ref": "#/components/schemas/RoleHolders",
             "description": "Who holds the Role now. Present only if you hold role_binding.view somewhere."
@@ -36283,7 +36318,8 @@
           "display_name",
           "description",
           "permissions",
-          "built_in"
+          "built_in",
+          "grantable_scope_types"
         ],
         "type": "object"
       },
@@ -61619,6 +61655,17 @@
             }
           },
           {
+            "description": "Return only Jobs of these types. Repeat the parameter to include several. Omit it to include every type. A type the operator view doesn't show matches nothing.",
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/JobType"
+              },
+              "type": "array"
+            }
+          },
+          {
             "description": "Read newest first by creation (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it.",
             "in": "query",
             "name": "order",
@@ -65492,6 +65539,7 @@
           "resource.not_found",
           "role_binding.invalid",
           "role_binding.conflict",
+          "role_binding.scope_member_required",
           "role_binding.system_admin_scope_invalid",
           "administration.unavailable",
           "mail.unavailable",

@@ -334,6 +334,11 @@ func SaveRoleBinding(ctx context.Context, ss store.Store, binding *model.RoleBin
 	if err != nil {
 		return nil, err
 	}
+	if binding.ScopeType == model.RoleScopeClass {
+		if err = ensureClassUnitMember(ctx, ss, binding); err != nil {
+			return nil, err
+		}
+	}
 	auditID, at, err := beginFixtureAudit(ctx, ss)
 	if err != nil {
 		return nil, err
@@ -342,6 +347,39 @@ func SaveRoleBinding(ctx context.Context, ss store.Store, binding *model.RoleBin
 		Binding: binding, ExpectedRoleUpdatedAt: role.UpdatedAt, ExpectedRolePermissions: role.Permissions,
 		AuditEventID: auditID, AuditAt: at,
 	})
+}
+
+// ensureClassUnitMember makes a fixture class grantee a member of the class's
+// academic unit, as a class-scope binding requires, unless a membership
+// already covers the binding's start. The membership starts in 2000, so one
+// covers every later fixture grant at that unit. An unknown class is left
+// for the store to report.
+func ensureClassUnitMember(ctx context.Context, ss store.Store, binding *model.RoleBinding) error {
+	unitID, err := ss.Class().GetAcademicUnitID(ctx, model.ClassID(binding.ScopeID))
+	if store.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	startsAt := binding.StartsAt
+	if startsAt.IsZero() {
+		startsAt = model.NowUTC()
+	}
+	memberships, err := ss.AcademicUnitMember().ListByUser(ctx, binding.UserID)
+	if err != nil {
+		return err
+	}
+	for _, membership := range memberships {
+		if membership.AcademicUnitID == unitID && !membership.ArchivedAt.Valid && !membership.StartsAt.After(startsAt) &&
+			(!membership.EndsAt.Valid || membership.EndsAt.Time.After(startsAt)) {
+			return nil
+		}
+	}
+	_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+		AcademicUnitID: unitID, UserID: binding.UserID, StartsAt: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
+	})
+	return err
 }
 
 // EndRoleBinding ends a fixture role binding through the audited store operation.

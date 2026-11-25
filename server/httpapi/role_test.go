@@ -72,11 +72,16 @@ func TestRoleResponsePreservesExistingWireShape(t *testing.T) {
 		ID: role.ID.String(), CreatedAt: "1970-01-01T00:00:00.01Z", UpdatedAt: "1970-01-01T00:00:00.02Z",
 		Name: "teacher", DisplayName: "Teacher", Description: "desc",
 		Permissions: []string{string(model.ActionClassView)}, BuiltIn: false,
+		GrantableScopeTypes: []model.RoleScopeType{model.RoleScopeInstitution, model.RoleScopeAcademicUnit, model.RoleScopeClass},
 	})
 	require.NoError(t, err)
 	got, err := json.Marshal(roleResponseFromModel(nil, role, nil))
 	require.NoError(t, err)
 	require.Equal(t, string(want), string(got), "response")
+
+	administrator := &model.Role{ID: model.NewRoleID(), Name: model.SystemAdministratorRoleName, BuiltIn: true}
+	require.Equal(t, []model.RoleScopeType{model.RoleScopeInstitution}, roleResponseFromModel(nil, administrator, nil).GrantableScopeTypes,
+		"the system administrator role is granted only at the institution")
 }
 
 func TestRoleOpenAPIDocument(t *testing.T) {

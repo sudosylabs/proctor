@@ -497,6 +497,7 @@ func AcademicAdministrationBatchErrorCodes() []string {
 		"role_binding.invalid",
 		"role_binding.conflict",
 		"role_binding.last_system_admin",
+		"role_binding.scope_member_required",
 		"role_binding.system_admin_scope_invalid",
 		"user.invalid",
 		"user.conflict",

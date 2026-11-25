@@ -367,6 +367,7 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"role_binding.conflict":                                       {status: http.StatusConflict},
 	"role_binding.invalid":                                        {status: http.StatusBadRequest},
 	"role_binding.last_system_admin":                              {status: http.StatusConflict},
+	"role_binding.scope_member_required":                          {status: http.StatusConflict},
 	"role_binding.system_admin_scope_invalid":                     {status: http.StatusBadRequest},
 	"search.query.invalid":                                        {status: http.StatusBadRequest},
 	"service.busy":                                                {status: http.StatusServiceUnavailable, retryAfter: 1},

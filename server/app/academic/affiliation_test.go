@@ -170,3 +170,36 @@ func TestAffiliationEndCarriesExpectedRevision(t *testing.T) {
 	require.Equal(t, current.Revision, persistence.endInput.ExpectedRevision, "end input/result = %#v / %#v", persistence.endInput, ended)
 	require.Equal(t, current.Revision+1, ended.Revision, "end input/result = %#v / %#v", persistence.endInput, ended)
 }
+
+// disabledUserStoreTestFake resolves every user as a disabled account.
+type disabledUserStoreTestFake struct{ relationshipUserStoreTestFake }
+
+func (s disabledUserStoreTestFake) Get(ctx context.Context, id model.UserID) (*model.User, error) {
+	user, err := s.relationshipUserStoreTestFake.Get(ctx, id)
+	if user != nil {
+		user.DisabledAt = model.OptionalTimeFromMillis(600)
+	}
+	return user, err
+}
+
+func TestAffiliationListReadsADisabledAccount(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	userID := model.NewUserID()
+	listed := &model.Affiliation{ID: model.NewAffiliationID(), UserID: userID, Kind: model.AffiliationStudent}
+	persistence := &affiliationStoreFake{events: &events, values: []*model.Affiliation{listed}}
+	principal, caller := newCaller()
+	access := accessWith(t, &events, accesstest.Options{
+		Grants: []accesstest.Grant{institutionGrant(principal.UserID, model.ActionUserView, model.ActionUserManage)},
+		Users:  disabledUserStoreTestFake{},
+	})
+	service := mustNew(Dependencies{Store: &catalogFake{affiliation: persistence, classMember: &affiliationEnrollmentFake{events: &events}},
+		Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: &realtimetest.Publisher{}})
+
+	affiliations, err := service.ListAffiliations(context.Background(), caller, userID)
+	require.NoError(t, err, "an administrator still reads a disabled account's affiliations")
+	require.Equal(t, []*model.Affiliation{listed}, affiliations)
+
+	_, err = service.CreateAffiliation(context.Background(), caller, CreateAffiliationCommand{UserID: userID, Kind: model.AffiliationTeacher, StartAt: 100})
+	require.Error(t, err, "changes to a disabled account stay refused")
+}

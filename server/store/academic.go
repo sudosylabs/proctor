@@ -86,17 +86,21 @@ type AcademicNameListOptions struct {
 //
 // OwnerType keeps the periods of one kind of owner, and OwnerID, when set, of
 // that owner; a non-zero ActiveAt keeps the periods covering that instant.
+// A non-zero OverlapsFrom or OverlapsUntil keeps the periods whose
+// [start, end) shares an instant with [OverlapsFrom, OverlapsUntil).
 type AcademicPeriodListOptions struct {
-	Term         string
-	OwnerType    model.ResourceType
-	OwnerID      string
-	ActiveAt     time.Time
-	Order        AcademicPeriodOrder
-	Descending   bool
-	AfterStartAt time.Time
-	AfterName    string
-	AfterID      model.AcademicPeriodID
-	Limit        int
+	Term          string
+	OwnerType     model.ResourceType
+	OwnerID       string
+	ActiveAt      time.Time
+	OverlapsFrom  time.Time
+	OverlapsUntil time.Time
+	Order         AcademicPeriodOrder
+	Descending    bool
+	AfterStartAt  time.Time
+	AfterName     string
+	AfterID       model.AcademicPeriodID
+	Limit         int
 }
 
 // AcademicPeriodOrder is the order of a period page; the zero value is start.

@@ -10,6 +10,7 @@ package job
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -17,6 +18,10 @@ import (
 )
 
 type ListQuery struct {
+	// Types, when set, keeps only these job types. A type that is not
+	// operator-visible matches nothing rather than failing, so the answer is
+	// the same as for a type with no Jobs.
+	Types    []model.JobType
 	Statuses []model.JobStatus
 	// Ascending reads oldest first; the default is newest first.
 	Ascending       bool
@@ -50,8 +55,23 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 		}
 	}
 
+	for _, jobType := range query.Types {
+		if !jobType.IsValid() {
+			return Page{}, ErrQueryInvalid
+		}
+	}
+	types := r.operatorTypes()
+	if len(query.Types) > 0 {
+		types = slices.DeleteFunc(types, func(jobType model.JobType) bool {
+			return !slices.Contains(query.Types, jobType)
+		})
+		if len(types) == 0 {
+			return Page{Items: []View{}, Counted: query.BeforeID.IsZero()}, nil
+		}
+	}
+
 	options := store.JobListOptions{
-		Types:           r.operatorTypes(),
+		Types:           types,
 		Statuses:        query.Statuses,
 		Ascending:       query.Ascending,
 		BeforeCreatedAt: query.BeforeCreatedAt,

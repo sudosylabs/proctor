@@ -149,6 +149,36 @@ func TestAdminSessionListAuthorizesThenReads(t *testing.T) {
 	require.Same(t, time.UTC, persistence.listedPage.ActiveAt.Location(), "active Session listing time = %v", persistence.listedPage.ActiveAt)
 }
 
+// disabledResolvedUsers resolves every user as a disabled account.
+type disabledResolvedUsers struct{ store.UserStore }
+
+func (disabledResolvedUsers) Get(ctx context.Context, id model.UserID) (*model.User, error) {
+	user, err := accountStateResolvedUsers{}.Get(ctx, id)
+	user.DisabledAt = model.OptionalTimeFromMillis(2)
+	return user, err
+}
+
+func TestAdminSessionListReadsADisabledAccount(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	userID := model.NewUserID()
+	persistence := &sessionAdministrationStoreFake{events: &events, list: []*model.Session{{ID: model.NewSessionID(), UserID: userID}}}
+	principal := userSettingsSessionPrincipal(time.Now())
+	fixture := accessWith(t, &events, accesstest.Options{
+		Grants: []accesstest.Grant{institutionGrant(principal.UserID, model.ActionSessionView, model.ActionSessionManage)},
+		Users:  disabledResolvedUsers{},
+	})
+	service := withAccess(&Service{sessions: persistence, now: time.Now}, fixture)
+	inv := invocation.New(principal, model.RequestMetadata{})
+
+	page, err := service.ListUserSessions(context.Background(), inv, ListUserSessionsQuery{UserID: userID, Limit: 50})
+	require.NoError(t, err, "an administrator still reads a disabled account's sessions")
+	require.Len(t, page.Items, 1)
+
+	err = fixture.Authorizer.Authorize(context.Background(), inv, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: userID.String()})
+	require.Error(t, err, "changes to a disabled account stay refused")
+}
+
 func TestAdminSessionHistoryIsPaged(t *testing.T) {
 	t.Parallel()
 	events := []string{}

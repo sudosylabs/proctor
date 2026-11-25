@@ -10,6 +10,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -147,14 +148,21 @@ func (h academicPeriodHandlers) list(request route.Request) (route.Result, error
 		}
 		*target = raw
 	}
-	if raw, has, valueErr := singleQueryValue(values, "active_at"); valueErr != nil {
-		return route.Result{}, valueErr
-	} else if has {
-		activeAt, parseErr := model.ParseRFC3339(raw)
-		if parseErr != nil || activeAt.IsZero() {
-			return route.Result{}, apperror.Invalid("request.invalid", "active_at")
+	for name, target := range map[string]*time.Time{
+		"active_at": &query.ActiveAt, "overlaps_from": &query.OverlapsFrom, "overlaps_until": &query.OverlapsUntil,
+	} {
+		raw, has, valueErr := singleQueryValue(values, name)
+		if valueErr != nil {
+			return route.Result{}, valueErr
 		}
-		query.ActiveAt = activeAt
+		if !has {
+			continue
+		}
+		instant, parseErr := model.ParseRFC3339(raw)
+		if parseErr != nil || instant.IsZero() {
+			return route.Result{}, apperror.Invalid("request.invalid", name)
+		}
+		*target = instant
 	}
 	if present {
 		if !order.continues(cursor.Sort, cursor.Dir) {

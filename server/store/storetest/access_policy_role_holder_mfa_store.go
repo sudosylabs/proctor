@@ -119,7 +119,7 @@ func TestAccessPolicyRoleHolderMFAStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.True(t, coveredLater, "a binding covers its User once it starts")
 
-	// The directory reads two-step state before the administrator enrols below.
+	// The directory reads two-step state before the administrator enrolls below.
 	testRoleHolderDirectoryMatchesPreflight(t, ctx, ss, bootstrap.Role.ID, bootstrap.Institution.ID)
 
 	restrictable, _, restrictableRaw := saveSession(t, ctx, ss, administrator.String(), 10)

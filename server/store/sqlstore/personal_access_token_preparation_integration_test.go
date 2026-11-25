@@ -22,6 +22,7 @@ import (
 )
 
 func TestPersonalAccessTokenPreparationMaintenanceIsBoundedAndAppendOnly(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
@@ -64,6 +65,7 @@ func TestPersonalAccessTokenPreparationMaintenanceIsBoundedAndAppendOnly(t *test
 // a terminal mutation cannot validate a preparation against time sampled
 // before waiting behind the canonical per-user PAT fence.
 func TestPersonalAccessTokenPreparationExpiryIsCheckedAfterUserFence(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)

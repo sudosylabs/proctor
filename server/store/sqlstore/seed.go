@@ -9,6 +9,7 @@ package sqlstore
 
 import (
 	"context"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -110,4 +111,12 @@ func (ss *SQLStore) SeedLastLogin(ctx context.Context, update *store.UserLastLog
 	return ss.stores.user.(interface {
 		UpdateLastLogin(context.Context, *store.UserLastLoginUpdate) error
 	}).UpdateLastLogin(ctx, update)
+}
+
+// DatabaseNow reads PostgreSQL's clock, so a test can wait for the instant
+// the database will use to decide a deadline.
+func (ss *SQLStore) DatabaseNow(ctx context.Context) (time.Time, error) {
+	var now time.Time
+	err := ss.GetMaster().Get(ctx, &now, `SELECT clock_timestamp()`)
+	return now.UTC(), err
 }

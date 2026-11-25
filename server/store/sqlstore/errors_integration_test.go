@@ -23,6 +23,7 @@ import (
 )
 
 func TestTranslateErrorClassifiesPostgreSQLRejectedValues(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
@@ -55,6 +56,7 @@ func TestTranslateErrorClassifiesPostgreSQLRejectedValues(t *testing.T) {
 // translateError themselves: the executors still report a Store error naming
 // the violated table and constraint, and keep the driver error wrapped.
 func TestExecutorsTranslateIntegrityViolations(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

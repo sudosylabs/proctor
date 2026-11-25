@@ -21,6 +21,7 @@ import (
 )
 
 func TestDesktopAuthorizationAuthenticationClock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
@@ -123,6 +124,7 @@ func TestDesktopAuthorizationAuthenticationClock(t *testing.T) {
 }
 
 func TestDesktopAuthorizationContextReportsAuthoritativeRequestTime(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)

@@ -22,6 +22,7 @@ import (
 )
 
 func TestMFAEnrollmentRechecksDeadlinesAfterSessionRowLock(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"primary proof", "Session", "access credential"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

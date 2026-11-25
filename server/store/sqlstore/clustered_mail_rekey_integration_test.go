@@ -24,6 +24,7 @@ import (
 )
 
 func TestClusteredMailRekeyRecoversCheckpointAndRotatesFanoutBundle(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	nodeA := openTestStore(t)
 	resetTestStore(t, nodeA)

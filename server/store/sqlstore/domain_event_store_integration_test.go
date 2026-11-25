@@ -23,6 +23,7 @@ import (
 )
 
 func TestDomainEventStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	for _, test := range []struct {
 		name     string
@@ -39,6 +40,7 @@ func TestDomainEventStore(t *testing.T) {
 }
 
 func TestExamSubmissionSealWritesOneDomainEvent(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamSubmissionDomainEvents(t, persistence, func(t *testing.T, ctx context.Context) (int, int) {
@@ -57,6 +59,7 @@ func TestExamSubmissionSealWritesOneDomainEvent(t *testing.T) {
 }
 
 func TestLifecycleTriggersWriteDomainEvents(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestLifecycleDomainEvents(t, persistence, func(t *testing.T, ctx context.Context, topic model.DomainEventTopic,
@@ -86,6 +89,7 @@ func TestLifecycleTriggersWriteDomainEvents(t *testing.T) {
 // TestNewOpaqueIDMatchesTheModel holds the schema's identifier minting to
 // model.NewID's form and randomness.
 func TestNewOpaqueIDMatchesTheModel(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	var ids []string
 	require.NoError(t, persistence.GetMaster().Select(context.Background(), &ids,
@@ -101,6 +105,7 @@ func TestNewOpaqueIDMatchesTheModel(t *testing.T) {
 }
 
 func TestDomainEventSchemaRejectsInvalidRows(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

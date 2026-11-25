@@ -46,6 +46,7 @@ func newRecoveryClaimToken(t *testing.T) model.JobClaimToken {
 // TestJobClaimWithNothingDueWritesNothing pins that a claim finding nothing
 // due leaves a lost attempt alone: recovery is the sweep's job alone.
 func TestJobClaimWithNothingDueWritesNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
@@ -70,6 +71,7 @@ func TestJobClaimWithNothingDueWritesNothing(t *testing.T) {
 // once, as three nodes would: every lost attempt is ended exactly once, and
 // no sweep waits on another's locks.
 func TestJobLostAttemptsAreRecoveredOnceAcrossSweepers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
@@ -133,6 +135,7 @@ func TestJobLostAttemptsAreRecoveredOnceAcrossSweepers(t *testing.T) {
 // TestJobClaimReadsOnlyItsOwnType pins the type-first claim index: a backlog
 // of one type is not scanned by another type's claim.
 func TestJobClaimReadsOnlyItsOwnType(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
@@ -170,6 +173,7 @@ func TestJobClaimReadsOnlyItsOwnType(t *testing.T) {
 // TestJobQueueDepthSplitsDueFromScheduled pins the metrics count: only queued
 // Jobs of the listed types count, split at the database's now.
 func TestJobQueueDepthSplitsDueFromScheduled(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)

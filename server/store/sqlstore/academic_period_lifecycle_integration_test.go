@@ -23,6 +23,7 @@ import (
 )
 
 func TestAcademicPeriodArchiveSerializesWithClassCreation(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

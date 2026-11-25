@@ -1292,7 +1292,7 @@ func newExamAttemptFixtureWithAssistantOptions(t *testing.T, ctx context.Context
 		require.NoError(t, err)
 		break
 	}
-	time.Sleep(time.Until(start) + 100*time.Millisecond)
+	WaitUntilPassed(t, ctx, ss, start)
 	opened, err := ss.ExamSitting().AdvanceDue(ctx, &store.ExamSittingDueAdvance{SittingID: sitting.ID, AuditEventID: saveExamSittingSystemAudit(t, ctx, ss, sitting.ID, programme.AcademicUnitID).ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 	require.Equal(t, model.ExamSittingOpen, opened.Value.Sitting.State)

@@ -24,6 +24,7 @@ import (
 )
 
 func TestAuthenticationTerminalCommitsRecheckCurrentAccessPolicy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)

@@ -48,7 +48,7 @@ func TestInvitationTerminalizationSuppressesCredentialDelivery(t *testing.T, ss 
 		issue.Invitation.IntendedEndsAt = model.OptionalTimeFrom(model.NowUTC().Add(500 * time.Millisecond))
 		invitation, err := ss.Invitation().IssueStudentClass(ctx, issue)
 		require.NoError(t, err)
-		time.Sleep(time.Until(issue.Invitation.IntendedEndsAt.Time) + 20*time.Millisecond)
+		WaitUntilPassed(t, ctx, ss, issue.Invitation.IntendedEndsAt.Time)
 		result, err := ss.Invitation().Maintain(ctx, 1)
 		require.NoError(t, err)
 		require.Equal(t, 1, result.Expired)

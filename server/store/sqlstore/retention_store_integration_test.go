@@ -20,6 +20,7 @@ import (
 )
 
 func TestRetentionStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestRetentionStore(t, persistence, retentionSQLProbe(persistence))

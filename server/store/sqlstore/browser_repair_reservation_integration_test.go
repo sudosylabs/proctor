@@ -18,6 +18,7 @@ import (
 )
 
 func TestBrowserRetainedRepairReservation(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestBrowserRetainedRepairReservation(t, persistence, func(ctx context.Context, attempt model.ExamAttemptID, participation model.AttemptParticipationID, partBytes, attemptBytes int64) error {

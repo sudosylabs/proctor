@@ -9,6 +9,10 @@ package storetest
 
 import (
 	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -32,6 +36,8 @@ type Seeder interface {
 	SeedPasswordCredential(context.Context, *model.PasswordCredential) (*model.PasswordCredential, error)
 	SeedExternalIdentity(context.Context, *model.ExternalIdentity) (*model.ExternalIdentity, error)
 	SeedLastLogin(context.Context, *store.UserLastLoginUpdate) error
+	// DatabaseNow reads PostgreSQL's clock, which decides every deadline.
+	DatabaseNow(context.Context) (time.Time, error)
 }
 
 // Seeded is a store under test that also seeds through the store beneath its
@@ -49,4 +55,21 @@ func seeder(ss store.Store) Seeder {
 		panic("the store under test can't seed fixtures: pass a storetest.Seeded")
 	}
 	return seeder
+}
+
+// WaitUntilPassed returns once both this process's clock and PostgreSQL's
+// have passed at. A test that sleeps on its own clock and then lets the
+// database decide whether at has passed fails whenever the database's clock
+// lags, as Docker's often does.
+func WaitUntilPassed(t *testing.T, ctx context.Context, ss store.Store, at time.Time) {
+	t.Helper()
+	time.Sleep(time.Until(at) + time.Millisecond)
+	for {
+		now, err := seeder(ss).DatabaseNow(ctx)
+		require.NoError(t, err)
+		if now.After(at) {
+			return
+		}
+		time.Sleep(at.Sub(now) + time.Millisecond)
+	}
 }

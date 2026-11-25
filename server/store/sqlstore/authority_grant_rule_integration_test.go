@@ -28,6 +28,7 @@ import (
 // no Store caller reaches delegation under a ceiling today, because the Role
 // Binding Actions that precede it are closed to tokens; this covers it.
 func TestActionGrantRuleUnderTokenCeiling(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

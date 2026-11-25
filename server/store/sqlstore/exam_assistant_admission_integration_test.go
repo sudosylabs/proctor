@@ -19,6 +19,7 @@ import (
 )
 
 func TestAssistantAdmissionStore(t *testing.T) {
+	t.Parallel()
 	sqlStore := openTestStore(t)
 	resetPristineTestStore(t, sqlStore)
 	storetest.TestAssistantAdmissionStore(t, sqlStore, func(t *testing.T, id model.ExamAttemptID, expected model.AssistantPolicy) {

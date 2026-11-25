@@ -106,6 +106,7 @@ func desktopReauthenticationCompletionForSQLTest(t *testing.T, ctx context.Conte
 }
 
 func TestDesktopReauthenticationRefreshesTheBoundSessionWithASingleUseCode(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -133,6 +134,7 @@ func TestDesktopReauthenticationRefreshesTheBoundSessionWithASingleUseCode(t *te
 }
 
 func TestDesktopReauthenticationCodeIsBoundToItsSessionAndKey(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -164,6 +166,7 @@ func TestDesktopReauthenticationCodeIsBoundToItsSessionAndKey(t *testing.T) {
 }
 
 func TestDesktopReauthenticationIsRefusedAfterTheSessionIsRevoked(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -182,6 +185,7 @@ func TestDesktopReauthenticationIsRefusedAfterTheSessionIsRevoked(t *testing.T) 
 }
 
 func TestDesktopReauthenticationDeniesProofOfAnotherAccount(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
@@ -203,6 +207,7 @@ func TestDesktopReauthenticationDeniesProofOfAnotherAccount(t *testing.T) {
 }
 
 func TestDesktopReauthenticationSecondFactorStore(t *testing.T) {
+	t.Parallel()
 	for _, changed := range []bool{false, true} {
 		name := "complete"
 		if changed {

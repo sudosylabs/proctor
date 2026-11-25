@@ -111,7 +111,7 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	lateSession := saveRegisteredDesktopSession(t, ctx, ss, late.ID, fixture.institutionID)
 
-	time.Sleep(time.Until(sitting.JoinWindow.OpensAt.Time) + 100*time.Millisecond)
+	WaitUntilPassed(t, ctx, ss, sitting.JoinWindow.OpensAt.Time)
 	require.NoError(t, overview(), "a candidate who joined early can run the readiness checks")
 	waiting := activityItem(fixture.candidate, fixture.session)
 	require.Equal(t, store.CandidateExamAccessWaiting, waiting.AccessState, "the candidate is told they are waiting for the start")
@@ -124,7 +124,7 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Equal(t, model.ExamSittingScheduled, stillScheduled.Sitting.State, "the sitting does not open early")
 
-	time.Sleep(time.Until(sitting.ScheduledStartAt) + 100*time.Millisecond)
+	WaitUntilPassed(t, ctx, ss, sitting.ScheduledStartAt)
 	opened, err := ss.ExamSitting().AdvanceDue(ctx, &store.ExamSittingDueAdvance{SittingID: sitting.ID,
 		AuditEventID: saveExamSittingSystemAudit(t, ctx, ss, sitting.ID, fixture.unitID).ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
@@ -137,7 +137,7 @@ func TestExamSittingJoinWindow(t *testing.T, ss store.Store) {
 	require.True(t, first.FirstAdmission)
 	require.False(t, first.Attempt.CreatedAt.Before(sitting.ScheduledStartAt), "the Attempt starts no earlier than the scheduled start")
 
-	time.Sleep(time.Until(sitting.JoinWindow.ClosesAt.Time) + 100*time.Millisecond)
+	WaitUntilPassed(t, ctx, ss, sitting.JoinWindow.ClosesAt.Time)
 	lateFixture := joined
 	lateFixture.candidate, lateFixture.session = late, lateSession
 	lateInput, _, err := connect(lateFixture, "join-window-late")

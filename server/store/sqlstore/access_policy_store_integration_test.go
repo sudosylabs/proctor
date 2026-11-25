@@ -21,6 +21,7 @@ import (
 )
 
 func TestAccessPolicyStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
 	storetest.TestAccessPolicyStore(t, persistence, storetest.AccessPolicySQLProbe{
@@ -40,12 +41,14 @@ func TestAccessPolicyStore(t *testing.T) {
 }
 
 func TestAccessPolicyRoleHolderMFAStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
 	storetest.TestAccessPolicyRoleHolderMFAStore(t, persistence)
 }
 
 func TestAccessPolicySessionLengthStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
 	storetest.TestAccessPolicySessionLengthStore(t, persistence, storetest.SessionLengthSQLProbe{

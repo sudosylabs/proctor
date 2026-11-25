@@ -22,6 +22,7 @@ import (
 )
 
 func TestPasswordReauthenticationCommitsOnlyCurrentProofAndAudit(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"success", "missing audit", "changed password", "revoked credential", "recovery generation changed"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -73,6 +74,7 @@ func TestPasswordReauthenticationCommitsOnlyCurrentProofAndAudit(t *testing.T) {
 }
 
 func TestExternalReauthenticationRechecksExactIdentityAndLiveBoundSession(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"success", "leading proof", "wrong subject", "unlinked identity", "revoked credential", "old proof", "future proof", "disabled provider", "terminal audit"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -147,6 +149,7 @@ func TestExternalReauthenticationRechecksExactIdentityAndLiveBoundSession(t *tes
 }
 
 func TestPasswordReauthenticationRechecksCredentialAfterWaitingForFence(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	f := mfaRecoveryFixture(t, ctx)

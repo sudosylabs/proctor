@@ -16,13 +16,17 @@ package sqlstore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/internal/testdb"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/storetest"
@@ -114,8 +118,14 @@ func seedTestAuthenticationPolicy(t *testing.T, sqlStore *SQLStore, providerAdmi
 
 func openTestStore(t *testing.T) *SQLStore {
 	t.Helper()
-	settings := testSettings(t)
-	sqlStore, err := New(context.Background(), settings)
+	require.NotEmpty(t, os.Getenv(testdb.Variable), "%s is not set", testdb.Variable)
+	return openStore(t, testDataSource(t))
+}
+
+// openStore opens a store on dataSource, closed when t ends.
+func openStore(t *testing.T, dataSource string) *SQLStore {
+	t.Helper()
+	sqlStore, err := New(context.Background(), databaseSettings(dataSource))
 	require.NoError(t, err)
 	if _, err := sqlStore.ApplyPendingMigrations(context.Background()); err != nil {
 		_ = sqlStore.Close()
@@ -155,8 +165,11 @@ func resetPristineTestStore(t *testing.T, sqlStore *SQLStore) {
 
 func testSettings(t *testing.T) Settings {
 	t.Helper()
-	dataSource := os.Getenv("PROCTOR_TEST_DATABASE_URL")
-	require.NotEmpty(t, dataSource, "PROCTOR_TEST_DATABASE_URL is not set")
+	require.NotEmpty(t, os.Getenv(testdb.Variable), "%s is not set", testdb.Variable)
+	return databaseSettings(testDataSource(t))
+}
+
+func databaseSettings(dataSource string) Settings {
 	return Settings{
 		DataSource:            dataSource,
 		MaxOpenConnections:    10,
@@ -167,4 +180,43 @@ func testSettings(t *testing.T) Settings {
 		QueryTimeout:          10 * time.Second,
 		MigrationTimeout:      time.Minute,
 	}
+}
+
+// databases maps each running top-level test to its own database, so its
+// subtests and the peer stores it opens share one, as two nodes would.
+var databases = struct {
+	sync.Mutex
+	byTest map[string]string
+}{byTest: map[string]string{}}
+
+// testDataSource returns the database of t's top-level test, copying a
+// fresh one from the migrated template on first use.
+func testDataSource(t *testing.T) string {
+	t.Helper()
+	root, _, _ := strings.Cut(t.Name(), "/")
+	databases.Lock()
+	defer databases.Unlock()
+	if dataSource, ok := databases.byTest[root]; ok {
+		return dataSource
+	}
+	dataSource := testdb.Isolated(t, migrateTemplate)
+	databases.byTest[root] = dataSource
+	t.Cleanup(func() {
+		databases.Lock()
+		defer databases.Unlock()
+		delete(databases.byTest, root)
+	})
+	return dataSource
+}
+
+func migrateTemplate(dataSource string) error {
+	ctx := context.Background()
+	template, err := New(ctx, databaseSettings(dataSource))
+	if err != nil {
+		return err
+	}
+	if _, err = template.ApplyPendingMigrations(ctx); err == nil {
+		err = template.ValidateSchema(ctx)
+	}
+	return errors.Join(err, template.Close())
 }

@@ -20,6 +20,7 @@ import (
 )
 
 func TestInstallationCanonicalIDConstraints(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
 	ctx := context.Background()

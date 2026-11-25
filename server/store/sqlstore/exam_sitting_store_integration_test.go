@@ -24,26 +24,32 @@ import (
 )
 
 func TestExamSittingStoreAdapter(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamSittingStore)
 }
 
 func TestExamSittingJoinWindow(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamSittingJoinWindow)
 }
 
 func TestExamSittingJoinWindowUpdate(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamSittingJoinWindowUpdate)
 }
 
 func TestExamSittingMailReconciliationAfterObsoleteSuppression(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamSittingMailReconciliationAfterObsoleteSuppression)
 }
 
 func TestExamSittingClassTransferMailReconciliation(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamSittingClassTransferMailReconciliation)
 }
 
 func TestExamSittingDisabledMailReconciliationConverges(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamSittingDisabledMailReconciliationConverges(t, persistence, storetest.ExamSittingDisabledMailSQLProbe{
@@ -58,6 +64,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T) {
 }
 
 func TestExamSittingDisabledMailEligibilityChronologySerializesBothCommitOrders(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name        string
 		markerFirst bool
@@ -152,6 +159,7 @@ func TestExamSittingDisabledMailEligibilityChronologySerializesBothCommitOrders(
 }
 
 func TestExamSittingReconciliationAndInvitationAcceptanceShareUserClassLockOrder(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	fixture := storetest.PrepareExamSittingInvitationLockOrderFixture(t, persistence)
@@ -195,6 +203,7 @@ func TestExamSittingReconciliationAndInvitationAcceptanceShareUserClassLockOrder
 // acceptance target the same User. Reconciliation must wait before acquiring
 // the shared Class/hierarchy fence, and acceptance must wait on its User lock.
 func TestDisabledSittingReconciliationAndInvitationAcceptanceUseUserSingletonClassOrder(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	fixture := storetest.PrepareExamSittingInvitationLockOrderFixture(t, persistence)
@@ -257,6 +266,7 @@ func TestDisabledSittingReconciliationAndInvitationAcceptanceUseUserSingletonCla
 }
 
 func TestInvitationAcceptanceAndAuthenticationMethodMutationUseGlobalUserOrder(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	primary := openTestStore(t)
@@ -341,10 +351,12 @@ func controllerPID(t *testing.T, ctx context.Context, connection interface {
 }
 
 func TestExamSittingMailExpansionMaintenance(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestExamSittingMailExpansionMaintenance)
 }
 
 func TestExamSittingMailRetentionCleanup(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamSittingMailRetentionCleanup(t, persistence, storetest.ExamSittingMailRetentionSQLProbe{
@@ -399,6 +411,7 @@ func TestExamSittingMailRetentionCleanup(t *testing.T) {
 }
 
 func TestExamSittingMailExpansionMaintenanceUsesPostgreSQLTimeAndRecoversOrphan(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	fixture := storetest.PrepareExamSittingMailRecoveryFixture(t, persistence)
@@ -454,6 +467,7 @@ func TestExamSittingMailExpansionMaintenanceUsesPostgreSQLTimeAndRecoversOrphan(
 }
 
 func TestExamSittingStoreSQLGuards(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamSittingStoreSQLGuards(t, persistence, storetest.ExamSittingSQLProbe{
@@ -471,6 +485,7 @@ func TestExamSittingStoreSQLGuards(t *testing.T) {
 }
 
 func TestExamSittingLifecycleStore(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamSittingLifecycleStore(t, persistence, storetest.ExamSittingLifecycleSQLProbe{

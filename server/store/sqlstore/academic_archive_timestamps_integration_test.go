@@ -22,6 +22,7 @@ import (
 )
 
 func TestAcademicArchiveTimestamps(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	adapters := []struct {
 		name string
@@ -71,6 +72,7 @@ func academicArchiveSQLProbe(persistence *SQLStore) storetest.AcademicArchivePro
 }
 
 func TestAcademicLifecycleRevisionConformance(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	for _, adapter := range []struct {
 		name string

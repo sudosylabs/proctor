@@ -54,25 +54,30 @@ func openTimeAuthorityIdentityStore(t *testing.T) *SQLStore {
 }
 
 func TestTimeAuthorityInvitationTransitionsFollowLeadingIssue(t *testing.T) {
+	t.Parallel()
 	persistence := openTimeAuthorityIdentityStore(t)
 	storetest.RunTimeAuthorityInvitationTransitions(t, persistence, timeAuthorityIdentityProbe(persistence))
 }
 
 func TestTimeAuthorityOnboardingImportRowOutcomeFollowsLeadingImport(t *testing.T) {
+	t.Parallel()
 	persistence := openTimeAuthorityIdentityStore(t)
 	storetest.RunTimeAuthorityOnboardingImportRowOutcome(t, persistence)
 }
 
 func TestTimeAuthorityUserDisableFollowsLeadingUser(t *testing.T) {
+	t.Parallel()
 	persistence := openTimeAuthorityIdentityStore(t)
 	storetest.RunTimeAuthorityUserDisable(t, persistence, timeAuthorityIdentityProbe(persistence))
 }
 
 func TestTimeAuthorityUserLoginFollowsLeadingUser(t *testing.T) {
+	t.Parallel()
 	persistence := openTimeAuthorityIdentityStore(t)
 	storetest.RunTimeAuthorityUserLogin(t, persistence, timeAuthorityIdentityProbe(persistence))
 }
 
 func TestTimeAuthorityBootstrapAdministratorActsAtOnce(t *testing.T) {
+	t.Parallel()
 	PristineStoreTest(t, storetest.RunTimeAuthorityBootstrapAdministrator)
 }

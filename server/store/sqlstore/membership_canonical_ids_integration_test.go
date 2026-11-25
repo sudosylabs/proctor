@@ -21,6 +21,7 @@ import (
 )
 
 func TestMembershipCanonicalIDConstraintsRejectNoncanonicalValues(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

@@ -16,5 +16,6 @@ import (
 )
 
 func TestAttemptEnvironmentStore(t *testing.T) {
+	t.Parallel()
 	StoreTest(t, storetest.TestAttemptEnvironmentStore)
 }

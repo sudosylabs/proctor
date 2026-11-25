@@ -150,6 +150,10 @@ mailpit-logs:
 # memory pressure. The dev seed reads Mailpit, which the mail certification
 # test clears, so it runs alone after the rest.
 INTEGRATION_PACKAGE_PARALLELISM ?= 2
+# Tests run in parallel within a package, each on its own database copy. Each
+# holds up to 12 connections, so 2 packages of 4 stay well inside PostgreSQL's
+# default of 100.
+INTEGRATION_TEST_PARALLELISM ?= 4
 
 integration-all:
 	@set -eu; \
@@ -161,7 +165,7 @@ integration-all:
 	PROCTOR_TEST_REDIS_ADDRESS='$(PROCTOR_TEST_REDIS_ADDRESS)' \
 	PROCTOR_TEST_MAIL_SMTP_ADDRESS='$(PROCTOR_TEST_MAIL_SMTP_ADDRESS)' \
 	PROCTOR_TEST_MAILPIT_HTTP_URL='$(PROCTOR_TEST_MAILPIT_HTTP_URL)' \
-		$(GO_TEST) -tags=integration -timeout=25m -p=$(INTEGRATION_PACKAGE_PARALLELISM) $$packages -count=1; \
+		$(GO_TEST) -tags=integration -timeout=25m -p=$(INTEGRATION_PACKAGE_PARALLELISM) -parallel=$(INTEGRATION_TEST_PARALLELISM) $$packages -count=1; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 	PROCTOR_TEST_MAIL_SMTP_ADDRESS='$(PROCTOR_TEST_MAIL_SMTP_ADDRESS)' \
 	PROCTOR_TEST_MAILPIT_HTTP_URL='$(PROCTOR_TEST_MAILPIT_HTTP_URL)' \
@@ -180,7 +184,7 @@ integration-postgres:
 	trap cleanup EXIT INT TERM; \
 	$(COMPOSE) up --detach --wait postgres; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
-		$(GO_TEST) -tags=integration -timeout=90m -p=$(INTEGRATION_PACKAGE_PARALLELISM) $(INTEGRATION_POSTGRES_PACKAGES) -skip '$(INTEGRATION_POSTGRES_SKIP)' -count=1
+		$(GO_TEST) -tags=integration -timeout=90m -p=$(INTEGRATION_PACKAGE_PARALLELISM) -parallel=$(INTEGRATION_TEST_PARALLELISM) $(INTEGRATION_POSTGRES_PACKAGES) -skip '$(INTEGRATION_POSTGRES_SKIP)' -count=1
 
 # integration-changed stresses the integration tests a change adds or edits,
 # against the base revision BASE, with every service they may need.

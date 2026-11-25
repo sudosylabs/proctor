@@ -23,6 +23,7 @@ import (
 // statement must reach audit_events through an index, so retirement cost does
 // not grow with the audit table.
 func TestRetentionRetirementOutcomeDeletesUseIndexes(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	// The synthetic audit table is large; release it for the tests that follow.

@@ -26,6 +26,7 @@ import (
 // days before the October transition must still expire exactly 168 hours
 // later, as invitations_lifetime_check requires.
 func TestSessionsComputeIntervalsInUTCWhateverTheServerZone(t *testing.T) {
+	t.Parallel()
 	settings := testSettings(t)
 	settings.DataSource = withStartupOptions(t, settings.DataSource, "-c TimeZone=Europe/Paris")
 	sqlStore, err := New(context.Background(), settings)

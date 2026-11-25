@@ -29,9 +29,14 @@ const storetestEntry = /^func ((?:Test|Run)\w*)\(\w+ \*testing\.T[,)]/;
 
 // changedLines maps each changed _test.go or storetest file to the line
 // numbers the change added or edited, from a zero-context diff.
+//
+// A line that only adds t.Parallel() doesn't count. Marking every test in a
+// package parallel would otherwise stress the whole package, which no
+// timeout fits; the full suite still runs those tests, in parallel.
 export function changedLines(diff) {
   const files = new Map();
   let current;
+  let next;
   for (const line of diff.split("\n")) {
     if (line.startsWith("+++ ")) {
       current = line === "+++ /dev/null" ? undefined : line.slice(6);
@@ -40,11 +45,15 @@ export function changedLines(diff) {
       continue;
     }
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-    if (hunk && current) {
-      const start = Number(hunk[1]);
-      const length = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    if (hunk) {
+      next = Number(hunk[1]);
       // A pure deletion still edits the function around it.
-      for (let number = start; number < start + Math.max(length, 1); number++) files.get(current).add(number);
+      if (current && hunk[2] === "0") files.get(current).add(next);
+      continue;
+    }
+    if (current && line.startsWith("+")) {
+      if (line.slice(1).trim() !== "t.Parallel()") files.get(current).add(next);
+      next++;
     }
   }
   return files;
@@ -151,7 +160,9 @@ function main(argv) {
     const pattern = `^(${tests.join("|")})$`;
     console.log(`Stressing ${tests.length} test(s) in ${directory} ${count} times: ${tests.join(", ")}`);
     const args = [...runner.slice(1), "-race", `-count=${count}`, "-run", pattern];
-    if (integration) args.push("-tags=integration");
+    // Integration tests share one database server, so they run at the
+    // parallelism the make targets use, inside the job's time limit.
+    if (integration) args.push("-tags=integration", "-timeout=20m", "-parallel=4");
     args.push(directory);
     const result = spawnSync(runner[0], args, { cwd: join(root, "server"), stdio: "inherit", env: process.env });
     if (result.status !== 0) failed++;

@@ -23,6 +23,7 @@ import (
 // Each predicate must be implied by the queries it serves, and each key must
 // lead with the filtered or referencing columns.
 func TestBaselineHotPathIndexes(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
@@ -65,6 +66,7 @@ func TestBaselineHotPathIndexes(t *testing.T) {
 // asks only whether the index is eligible. A change to the operation literal,
 // the expression or the operator breaks the match.
 func TestAttemptWorkspaceOutcomeProtectionUsesItsIndex(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
@@ -101,6 +103,7 @@ func TestAttemptWorkspaceOutcomeProtectionUsesItsIndex(t *testing.T) {
 // columns and predicate repeat the leading columns of another index on the
 // same table: every write maintains it and no query needs it.
 func TestBaselineHasNoRedundantIndexes(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	var redundant []string
 	require.NoError(t, persistence.GetMaster().Select(context.Background(), &redundant, `WITH idx AS (

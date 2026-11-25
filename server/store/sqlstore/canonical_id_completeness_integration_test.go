@@ -46,6 +46,7 @@ func canonicalIDConstraintName(table, column string) string {
 }
 
 func TestCanonicalIDConstraintCompleteness(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

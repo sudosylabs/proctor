@@ -23,6 +23,7 @@ import (
 )
 
 func TestPurgeBatchProgress(t *testing.T) {
+	t.Parallel()
 	persistence, peer := openTestStore(t), openTestStore(t)
 	for _, test := range []struct {
 		name     string

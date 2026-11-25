@@ -84,6 +84,7 @@ func requireStoredPlatformAttempt(t *testing.T, ctx context.Context, persistence
 }
 
 func TestTimeAuthorityPlatformJobClaimAfterLeadingEnqueue(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -98,6 +99,7 @@ func TestTimeAuthorityPlatformJobClaimAfterLeadingEnqueue(t *testing.T) {
 }
 
 func TestTimeAuthorityPlatformJobHeartbeatAfterLaterHeartbeat(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -113,6 +115,7 @@ func TestTimeAuthorityPlatformJobHeartbeatAfterLaterHeartbeat(t *testing.T) {
 }
 
 func TestTimeAuthorityPlatformJobCheckpointAfterLeadingTransition(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -129,6 +132,7 @@ func TestTimeAuthorityPlatformJobCheckpointAfterLeadingTransition(t *testing.T) 
 }
 
 func TestTimeAuthorityPlatformJobCompletionAfterLeadingTransitions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -162,6 +166,7 @@ func TestTimeAuthorityPlatformJobCompletionAfterLeadingTransitions(t *testing.T)
 }
 
 func TestTimeAuthorityPlatformJobOperatorCancelAfterLeadingEnqueue(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -203,6 +208,7 @@ func requireStoredPlatformMail(t *testing.T, ctx context.Context, persistence *S
 }
 
 func TestTimeAuthorityPlatformMailWorkerTransitionsAfterLeadingTransition(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -236,6 +242,7 @@ func TestTimeAuthorityPlatformMailWorkerTransitionsAfterLeadingTransition(t *tes
 }
 
 func TestTimeAuthorityPlatformUploadConsumptionAfterLeadingCreation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -273,6 +280,7 @@ func TestTimeAuthorityPlatformUploadConsumptionAfterLeadingCreation(t *testing.T
 }
 
 func TestTimeAuthorityPlatformAcademicArchiveKeepsModificationMonotonic(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -308,6 +316,7 @@ func TestTimeAuthorityPlatformAcademicArchiveKeepsModificationMonotonic(t *testi
 // rolled-back transaction because only the source row's lifecycle is under
 // test.
 func TestTimeAuthorityPlatformBrowserSourceCloseWithinStartMillisecond(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)

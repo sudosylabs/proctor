@@ -87,24 +87,28 @@ func candidateLockProbe(persistence *SQLStore) storetest.CandidateLockProbe {
 }
 
 func TestExamAttemptConnectCandidateLockOrder(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamAttemptConnectCandidateLockOrder(t, persistence, candidateLockProbe(persistence))
 }
 
 func TestExamManagerAddCandidateLockOrder(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamManagerAddCandidateLockOrder(t, persistence, candidateLockProbe(persistence))
 }
 
 func TestRoleBindingCandidateLockOrder(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestRoleBindingCandidateLockOrder(t, persistence, candidateLockProbe(persistence))
 }
 
 func TestClassEnrollmentCandidateLockOrder(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestClassEnrollmentCandidateLockOrder(t, persistence, candidateLockProbe(persistence))

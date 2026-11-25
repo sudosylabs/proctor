@@ -23,6 +23,7 @@ import (
 )
 
 func TestDesktopAuthorizationExchangeSerializesWithCompatibilityPolicyReplacement(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	persistence := openTestStore(t)
@@ -55,6 +56,7 @@ func TestDesktopAuthorizationExchangeSerializesWithCompatibilityPolicyReplacemen
 }
 
 func TestExamAttemptAdmissionSerializesWithCompatibilityPolicyReplacement(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	storetest.TestExamAttemptCompatibilityPolicySerialization(

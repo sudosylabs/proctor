@@ -21,6 +21,7 @@ import (
 )
 
 func TestManagedFileCanonicalIDConstraints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)

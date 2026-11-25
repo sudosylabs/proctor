@@ -25,6 +25,7 @@ import (
 // committed enqueue wakes its type, a deduplicated one sends nothing, and a
 // listener whose connection dies wakes every type once it is back.
 func TestJobNotificationsWakeEveryListener(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	persistence := openTestStore(t)

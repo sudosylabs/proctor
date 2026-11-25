@@ -116,6 +116,7 @@ func requireAuditExpiryCountsMatchFacts(t *testing.T, s *SQLStore) {
 }
 
 func TestRetentionExpiryAuditCountMatchesFacts(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestRetentionReceiptExpiryStore(t, s, retentionSQLProbe(s), retentionExpirySQLProbe(s))
@@ -132,6 +133,7 @@ func TestRetentionExpiryAuditCountMatchesFacts(t *testing.T) {
 // the Store query timeout. Its plan must scan the audit table a constant
 // number of times and never repeat work per audit event.
 func TestRetentionExpiryAuditCountPlanIsBounded(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	// The synthetic audit table is large; release it for the tests that follow.

@@ -26,6 +26,7 @@ import (
 // lease that expired under its own ID is never revived, another live lease is
 // never replaced, and an expired one is.
 func TestServingNodeLeaseUpsertDecidesOnTheDatabaseClock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sqlStore := openTestStore(t)
 	resetPristineTestStore(t, sqlStore)
@@ -59,6 +60,7 @@ func TestServingNodeLeaseUpsertDecidesOnTheDatabaseClock(t *testing.T) {
 // control pool exists: with every main-pool connection held, the lease still
 // renews.
 func TestServingNodeLeaseRenewsWhileTheMainPoolIsExhausted(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	settings := testSettings(t)
 	settings.MaxOpenConnections, settings.MaxIdleConnections = 2, 2

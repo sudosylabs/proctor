@@ -25,6 +25,7 @@ import (
 // holds capability evidence to its bounded detail object. It probes copies of
 // the tables that keep their CHECKs but not their foreign keys.
 func TestIntegrityPolicyKindConstraintsMatchTheModel(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

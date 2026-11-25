@@ -23,11 +23,13 @@ import (
 )
 
 func TestRetentionExpiryStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetPristineTestStore(t, s)
 	storetest.TestRetentionExpiryStore(t, s, retentionExpirySQLProbe(s))
 }
 func TestRetentionReceiptExpiryStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestRetentionReceiptExpiryStore(t, s, retentionSQLProbe(s), retentionExpirySQLProbe(s))
@@ -110,6 +112,7 @@ func retentionExpirySQLProbe(s *SQLStore) storetest.RetentionExpirySQLProbe {
 }
 
 func TestRetentionExpiryForeignKeyInventory(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	var actual []string
 	err := s.GetMaster().Select(context.Background(), &actual, `SELECT c.conrelid::regclass::text||'.'||a.attname FROM pg_constraint c JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=ANY(c.conkey) WHERE c.contype='f' AND c.confrelid='audit_events'::regclass`)
@@ -125,6 +128,7 @@ func TestRetentionExpiryForeignKeyInventory(t *testing.T) {
 }
 
 func TestRetentionExpiryCompletedHistoryDoesNotPinAuditForever(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestRetentionReceiptExpiryStore(t, s, retentionSQLProbe(s), retentionExpirySQLProbe(s))
@@ -187,11 +191,13 @@ func TestRetentionExpiryCompletedHistoryDoesNotPinAuditForever(t *testing.T) {
 }
 
 func TestRetentionCleanupAuditExpiryStore(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetPristineTestStore(t, s)
 	storetest.TestRetentionCleanupAuditExpiryStore(t, s, retentionExpirySQLProbe(s))
 }
 func TestRetentionAuditUnfinishedExamScope(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	resetTestStore(t, s)
 	storetest.TestRetentionAuditUnfinishedExamScope(t, s, retentionExpirySQLProbe(s))

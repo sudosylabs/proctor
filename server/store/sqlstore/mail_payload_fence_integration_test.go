@@ -25,6 +25,7 @@ import (
 // primary, so no aggregate (Personal Access Token notices, retention notices,
 // and so on) can insert an old-key payload behind a started rekey.
 func TestMailInsertHelpersTakeThePrimaryKeyFence(t *testing.T) {
+	t.Parallel()
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()

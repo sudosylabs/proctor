@@ -32,7 +32,7 @@ require (
 	github.com/sudosylabs/execenv v0.6.1
 	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261122151211-cf3b54d7e16b
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4
-	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b
+	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261126172405-cff1efa436d6
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0

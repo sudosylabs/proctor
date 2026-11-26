@@ -119,11 +119,14 @@ func (f *FS) Open(ctx context.Context, name string, options vfs.OpenOptions) (*v
 	if options.Offset > info.Size {
 		return nil, vfs.Error(op, name, vfs.ErrInvalidRange)
 	}
+	if options.Offset == info.Size {
+		return &vfs.File{Info: objectInfo(name, info), Body: io.NopCloser(strings.NewReader(""))}, nil
+	}
 	getOptions := minio.GetObjectOptions{}
 	if options.Offset > 0 || options.Length > 0 {
 		end := int64(0)
 		if options.Length > 0 {
-			end = options.Offset + options.Length - 1
+			end = options.Offset + min(options.Length, info.Size-options.Offset) - 1
 		}
 		if setRangeErr := getOptions.SetRange(options.Offset, end); setRangeErr != nil {
 			return nil, vfs.Error(op, name, vfs.ErrInvalidRange)

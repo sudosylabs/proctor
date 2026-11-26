@@ -127,8 +127,13 @@ export async function runGoTests(args, { env = process.env, cwd = process.cwd(),
     if (!event.Test && event.Action !== "fail") return;
     const packageName = event.Package ?? event.ImportPath ?? "unknown";
     const name = event.Test ?? "package";
-    results.set(`${packageName}/${name}`, {
-      name, package: packageName, action: event.Action, elapsed: event.Elapsed ?? 0,
+    const key = JSON.stringify([packageName, name]);
+    const previous = results.get(key);
+    results.set(key, {
+      name, package: packageName,
+      action: previous?.action === "fail" ? "fail" : event.Action,
+      passed: previous?.passed || event.Action === "pass",
+      elapsed: (previous?.elapsed ?? 0) + (event.Elapsed ?? 0),
     });
   });
   const terminate = () => child.kill("SIGTERM");
@@ -145,6 +150,12 @@ export async function runGoTests(args, { env = process.env, cwd = process.cwd(),
   await writeFile(join(directory, "junit.xml"), report.junit);
   const failed = exitCode !== 0 && !reportError ? failedTopLevelTests(results) : new Map();
   const flaky = failed.size > 0 ? await rerunFailures(args, failed, { env, cwd, command }) : [];
+  for (const item of results.values()) {
+    if (item.action === "fail" && item.passed && !item.name.includes("/") &&
+        !flaky.some(test => test.package === item.package && test.name === item.name)) {
+      flaky.push({ package: item.package, name: item.name });
+    }
+  }
   await writeFile(join(directory, "flaky.json"), `${JSON.stringify(flaky, null, 2)}\n`);
   const coverage = spawn("go", ["tool", "cover", `-func=${join(directory, "coverage.out")}`], { cwd, env });
   const coverageFile = createWriteStream(join(directory, "coverage.txt"));
@@ -155,7 +166,7 @@ export async function runGoTests(args, { env = process.env, cwd = process.cwd(),
   await finished(coverageFile);
   const coverageText = await readFile(join(directory, "coverage.txt"), "utf8");
   const total = /^total:.*?(\d+(?:\.\d+)?%)$/m.exec(coverageText)?.[1] ?? "unavailable";
-  const flakyLines = flaky.length === 0 ? "" : `\n**Flaky** (failed, then passed when rerun once; the run still fails):\n\n${flaky.map((item) => `- \`${item.package}\` ${item.name}`).join("\n")}\n`;
+  const flakyLines = flaky.length === 0 ? "" : `\n**Flaky** (both failed and passed; the run still fails):\n\n${flaky.map((item) => `- \`${item.package}\` ${item.name}`).join("\n")}\n`;
   const summary = `### Go tests: ${basename(directory)}\n\nTests: ${report.tests}; failures: ${report.failures}; skipped: ${report.skipped}; exit: ${exitCode}; statement coverage: ${total}.\n${flakyLines}\nSee this invocation's JUnit, raw events, stderr, and coverage artifacts.\n`;
   await writeFile(join(directory, "summary.md"), summary);
   if (env.GITHUB_STEP_SUMMARY) await appendFile(env.GITHUB_STEP_SUMMARY, `${summary}\n`);

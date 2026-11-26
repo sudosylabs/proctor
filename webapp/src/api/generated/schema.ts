@@ -28280,6 +28280,10 @@ export interface operations {
                 owner_id?: components["schemas"]["ID"];
                 /** @description Keeps the Academic Periods covering this instant, from `start_at` up to but not including `end_at`. */
                 active_at?: string;
+                /** @description Keeps the Academic Periods that share an instant with the range from this instant, an RFC 3339 date-time. A period overlaps when it ends after `overlaps_from` and, if `overlaps_until` is given, starts before it. Use it with `overlaps_until` to list a calendar or academic year. */
+                overlaps_from?: string;
+                /** @description Ends the overlap range, exclusive, an RFC 3339 date-time. A period overlaps when it starts before `overlaps_until` and, if `overlaps_from` is given, ends after it. With both given, it must be later than `overlaps_from`. */
+                overlaps_until?: string;
                 /** @description The page order, each key followed by identifier: `start` (start time, then name, the default) or `name`. A cursor only continues the sort and direction that produced it, so repeat both when following it. */
                 sort?: "start" | "name";
                 /** @description The direction of `sort`. */

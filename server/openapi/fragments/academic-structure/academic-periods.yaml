@@ -63,6 +63,26 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: overlaps_from
+          in: query
+          required: false
+          description: >-
+            Keeps the Academic Periods that share an instant with the range from this instant, an RFC 3339 date-time.
+            A period overlaps when it ends after `overlaps_from` and, if `overlaps_until` is given, starts before it.
+            Use it with `overlaps_until` to list a calendar or academic year.
+          schema:
+            type: string
+            format: date-time
+        - name: overlaps_until
+          in: query
+          required: false
+          description: >-
+            Ends the overlap range, exclusive, an RFC 3339 date-time. A period overlaps when it starts before
+            `overlaps_until` and, if `overlaps_from` is given, ends after it. With both given, it must be later than
+            `overlaps_from`.
+          schema:
+            type: string
+            format: date-time
         - name: sort
           in: query
           required: false

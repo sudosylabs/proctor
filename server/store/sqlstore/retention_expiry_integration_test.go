@@ -91,12 +91,26 @@ func retentionExpirySQLProbe(s *SQLStore) storetest.RetentionExpirySQLProbe {
 				require.NoError(t, err)
 			}
 		},
+		AddClipPurge: func(t *testing.T, ctx context.Context, id model.RetentionRetirementID) {
+			t.Helper()
+			_, err := s.GetMaster().Exec(ctx, `INSERT INTO retention_purge_screen_clips(retirement_id,screen_clip_id,chunk_count) VALUES(?,?,2)`, id.String(), model.NewScreenClipID().String())
+			require.NoError(t, err)
+		},
+		ClipCounts: func(t *testing.T, ctx context.Context, id model.RetentionRetirementID, pending, verified int64) {
+			t.Helper()
+			var row retentionRetirementRow
+			require.NoError(t, s.GetMaster().Get(ctx, &row, retentionRetirementQuery+` WHERE r.id=?`, id.String()))
+			require.Equal(t, pending, row.PurgePending)
+			require.Equal(t, verified, row.PurgeVerified)
+		},
 		AgeReceipt: func(t *testing.T, ctx context.Context, id model.RetentionRetirementID) {
 			t.Helper()
 			_, err := s.GetMaster().Exec(ctx, `UPDATE retention_retirements SET scheduled_at=clock_timestamp()-interval '103 days',retire_after=clock_timestamp()-interval '102 days',retired_at=CASE WHEN state='retired' THEN clock_timestamp()-interval '101 days' END,canceled_at=CASE WHEN state='canceled' THEN clock_timestamp()-interval '101 days' END WHERE id=?`, id.String())
 			require.NoError(t, err)
 		},
 		FinishReceiptPurge: func(t *testing.T, ctx context.Context, id model.RetentionRetirementID) {
+			_, clipErr := s.GetMaster().Exec(ctx, `UPDATE retention_purge_screen_clips SET absence_verified_at=clock_timestamp() WHERE retirement_id=?`, id.String())
+			require.NoError(t, clipErr)
 			t.Helper()
 			_, err := s.GetMaster().Exec(ctx, `UPDATE retention_purge_objects SET writer_finished=true,last_absence_observed_at=clock_timestamp()-interval '1 hour',absence_verified_at=clock_timestamp()-interval '1 hour',verify_after=clock_timestamp()-interval '1 minute' WHERE retirement_id=?`, id.String())
 			require.NoError(t, err)

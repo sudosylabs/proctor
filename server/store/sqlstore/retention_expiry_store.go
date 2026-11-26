@@ -346,7 +346,8 @@ const receiptExpiryFacts = `SELECT r.id, r.scheduled_at AS scan_at, false AS cle
 					OR po.last_absence_observed_at IS NULL
 					OR po.verify_after > bounds.at
 				)
-		) AS purge_pending,
+		) OR EXISTS(SELECT 1 FROM retention_purge_screen_clips pc
+			WHERE pc.retirement_id = r.id AND pc.absence_verified_at IS NULL) AS purge_pending,
 		EXISTS(
 			SELECT 1
 			FROM retention_source_protections sp
@@ -769,6 +770,10 @@ func expireRetentionRecord(
 			return err
 		}
 
+		if _, err := tx.Exec(ctx, `DELETE FROM retention_purge_screen_clips
+			WHERE retirement_id = ? AND absence_verified_at IS NOT NULL`, id); err != nil {
+			return err
+		}
 		// FK-owned notices have the same lifetime as their receipt. All immutable
 		// submission identities and category markers survive this history deletion.
 		if _, err := tx.Exec(ctx, `DELETE FROM retention_retirements WHERE id = ? AND state IN ('canceled', 'retired')`, id); err != nil {

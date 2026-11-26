@@ -8,9 +8,9 @@
 package filecontent
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -19,11 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// StageScreenClipChunk streams one chunk of exactly size bytes to its own
-// object while hashing it, and keeps it only if it matches expectedSHA256.
-// The bytes never touch a local spool. A chunk already stored with the same
-// bytes is left as it is, so Desktop can send a chunk again after a lost
-// response.
+// StageScreenClipChunk publishes only validated bytes. Concurrent writers of
+// the same manifest chunk therefore publish identical content, including on S3.
 func (c *Content) StageScreenClipChunk(
 	ctx context.Context,
 	clipID model.ScreenClipID,
@@ -39,33 +36,32 @@ func (c *Content) StageScreenClipChunk(
 		return model.ErrScreenClipChunkInvalid
 	}
 
-	key := screenClipChunkKey(clipID, index)
-	if matching, err := c.screenClipChunkMatches(ctx, key, size, expectedSHA256); err != nil {
-		return err
-	} else if matching {
-		_, err = io.Copy(io.Discard, io.LimitReader(body, size))
+	release, err := c.beginWork(ctx)
+	if err != nil {
 		return err
 	}
-
-	stream := newExactSizeReader(body, size)
-	written := size
-	info, writeErr := c.filesystem.Write(ctx, key, stream, vfs.WriteOptions{Size: &written})
-	finishErr := stream.finish()
-	mismatch := finishErr == nil && subtle.ConstantTimeCompare([]byte(stream.checksum()), []byte(expectedSHA256)) != 1
-	if writeErr != nil || finishErr != nil || mismatch || info.Size != size {
-		if removeErr := c.filesystem.Remove(ctx, key, vfs.RemoveOptions{}); removeErr != nil && !errors.Is(removeErr, vfs.ErrNotFound) {
-			return errors.Join(sanitize("stage screen clip chunk", writeErr), sanitize("remove rejected screen clip chunk", removeErr))
-		}
-		switch {
-		case finishErr != nil:
-			return errors.Join(model.ErrScreenClipChunkInvalid, finishErr)
-		case mismatch:
-			return model.ErrScreenClipChunkInvalid
-		case writeErr != nil:
-			return sanitize("stage screen clip chunk", writeErr)
-		default:
-			return sanitize("stage screen clip chunk", errors.New("backend size mismatch"))
-		}
+	defer release()
+	stream := newExactSizeReader(workReader{ctx: ctx, reader: body}, size)
+	staged := make([]byte, int(size))
+	if _, err = io.ReadFull(stream, staged); err != nil {
+		return errors.Join(model.ErrScreenClipChunkInvalid, err)
+	}
+	if err = stream.finish(); err != nil {
+		return errors.Join(model.ErrScreenClipChunkInvalid, err)
+	}
+	if stream.checksum() != expectedSHA256 {
+		return model.ErrScreenClipChunkInvalid
+	}
+	key := screenClipChunkKey(clipID, index)
+	if matching, matchErr := c.screenClipChunkMatches(ctx, key, size, expectedSHA256); matchErr != nil || matching {
+		return matchErr
+	}
+	info, err := c.filesystem.Write(ctx, key, bytes.NewReader(staged), vfs.WriteOptions{Size: &size})
+	if err != nil {
+		return sanitize("stage screen clip chunk", err)
+	}
+	if info.Size != size {
+		return errors.New("stored screen clip chunk size differs from manifest")
 	}
 	return nil
 }

@@ -28,6 +28,8 @@ import (
 // action's message alone. Self history never names the actor, and names the
 // user the caller acted on only while the caller can see them.
 const (
+	auditPermissionAllowed  = "audit.permission.allowed"
+	auditPermissionDenied   = "audit.permission.denied"
 	auditRoleCreated        = "audit.role.created"
 	auditRolePatched        = "audit.role.patched"
 	auditRolePatchFields    = "audit.role.patch_fields"
@@ -90,6 +92,9 @@ func auditSummaryLocalizationDefinitions() []localization.Definition {
 	definitions = append(definitions, localization.Definition{
 		ID: auditRolePatchFields, Origin: localizationOrigin, Variables: []string{"Actor", "Role", "Fields"},
 	})
+	for _, id := range []string{auditPermissionAllowed, auditPermissionDenied} {
+		definitions = append(definitions, localization.Definition{ID: id, Origin: localizationOrigin, Variables: []string{"Actor", "Action"}})
+	}
 	for _, field := range auditRoleFields {
 		definitions = append(definitions, localization.Definition{ID: "audit.role.field." + field, Origin: localizationOrigin})
 	}
@@ -154,19 +159,21 @@ func selfAuditRunSummaryID(event model.AuditSelfEvent, relation store.AuditSelfR
 
 // auditSummary writes the institution audit list's sentence for one event.
 func auditSummary(request *http.Request, event *model.AuditEvent, names store.AuditNames) string {
-	id := auditActionSummaryID(model.Action(event.Action))
-	if key := (auditOperation{action: model.Action(event.Action), operation: event.Operation()}); key.operation != "" {
-		if _, known := auditOperationSummaryVariables[key]; known {
-			id = auditOperationSummaryID(key)
-		}
-	}
-
 	actor := route.Translate(request, auditSummaryActorSystem, "")
 	if !event.ActorID.IsZero() {
 		actor = names.Users[event.ActorID]
 		if actor == "" {
 			actor = route.Translate(request, auditSummaryActorHidden, "")
 		}
+	}
+	if event.PermissionCheck {
+		id := auditPermissionAllowed
+		if event.Status == model.AuditStatusFail {
+			id = auditPermissionDenied
+		}
+		return route.TranslateRequest(request, localization.Request{ID: id, TemplateData: map[string]string{
+			"Actor": actor, "Action": event.Action,
+		}}, event.Action)
 	}
 	subject := names.Users[event.SubjectUserID]
 	if event.SubjectUserID.IsZero() || subject == "" {
@@ -176,6 +183,13 @@ func auditSummary(request *http.Request, event *model.AuditEvent, names store.Au
 	if event.Action == string(model.ActionRoleManage) && event.Status == model.AuditStatusSuccess {
 		if summary := auditRoleSummary(request, event, actor); summary != "" {
 			return summary
+		}
+	}
+
+	id := auditActionSummaryID(model.Action(event.Action))
+	if key := (auditOperation{action: model.Action(event.Action), operation: event.Operation()}); key.operation != "" {
+		if _, known := auditOperationSummaryVariables[key]; known {
+			id = auditOperationSummaryID(key)
 		}
 	}
 
@@ -446,6 +460,11 @@ var auditActionSummaryVariables = map[model.Action][]string{
 }
 
 var auditOperationSummaryVariables = map[auditOperation][]string{
+	{model.ActionAcademicProgressionManage, "student_progression.cancel"}:      {"Actor"},
+	{model.ActionAcademicProgressionManage, "student_progression.commit"}:      {"Actor"},
+	{model.ActionAcademicProgressionManage, "student_progression.dry_run"}:     {"Actor"},
+	{model.ActionAcademicProgressionManage, "student_progression.execute_row"}: {"Actor"},
+
 	{model.ActionAcademicUnitMembersManage, "create_member"}:         {"Actor", "Resource", "Subject"},
 	{model.ActionAcademicUnitMembersManage, "end_member"}:            {"Actor", "Resource", "Subject"},
 	{model.ActionAuthenticationDesktopSessionIssue, "exchange"}:      {"Actor"},

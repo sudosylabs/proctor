@@ -62,10 +62,38 @@ type auditRow struct {
 	Parameters   jsonValue           `db:"parameters"`
 	PriorState   jsonValue           `db:"prior_state"`
 	Result       jsonValue           `db:"result"`
+
+	PermissionCheck bool `db:"permission_check"`
+}
+
+const auditPermissionCheckParameters = `{"operation":"permission_check"}`
+
+// Permission decisions used to be inserted already terminal, with no operation,
+// prior state or result. Only permission actions can have produced these rows.
+// Event-only actions such as sign-in can legitimately have the same payload.
+var legacyChangePermissionsSQL = func() string {
+	var permissions []string
+	for _, action := range model.AuditActionsOfKind(model.AuditKindChange) {
+		if _, known := model.DefinitionForAction(model.Action(action)); known {
+			permissions = append(permissions, pq.QuoteLiteral(action))
+		}
+	}
+	return strings.Join(permissions, ", ")
+}()
+
+// Use the same classification on the original row for every audit projection.
+func auditPermissionCheckSQL(table string) string {
+	return fmt.Sprintf(`(COALESCE(%[1]s.parameters = '%[2]s'::jsonb, false) OR
+		(%[1]s.parameters IS NULL AND %[1]s.prior_state IS NULL AND %[1]s.result IS NULL
+		 AND %[1]s.actor_id IS NOT NULL AND %[1]s.created_at = %[1]s.updated_at
+		 AND ((%[1]s.status = 'success' AND %[1]s.error_code = '')
+		      OR (%[1]s.status = 'fail' AND %[1]s.error_code = 'authorization.denied'))
+		 AND %[1]s.action IN (%[3]s)))`, table, auditPermissionCheckParameters, legacyChangePermissionsSQL)
 }
 
 func auditSliceColumns() []string {
 	return []string{
+		auditPermissionCheckSQL("audit_events") + " AS permission_check",
 		"audit_events.id",
 		"audit_events.created_at",
 		"audit_events.updated_at",
@@ -430,7 +458,13 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 		query = query.Where("audit_events.action = ANY(?)", pq.Array(options.Actions))
 	}
 	if options.Kind != "" {
-		query = query.Where("audit_events.action = ANY(?)", pq.Array(model.AuditActionsOfKind(options.Kind)))
+		actions := pq.Array(model.AuditActionsOfKind(options.Kind))
+		check := auditPermissionCheckSQL("audit_events")
+		if options.Kind == model.AuditKindRead {
+			query = query.Where("(audit_events.action = ANY(?) OR "+check+")", actions)
+		} else {
+			query = query.Where("audit_events.action = ANY(?) AND NOT "+check, actions)
+		}
 	}
 	if options.Status != "" {
 		query = query.Where(sq.Eq{"audit_events.status": options.Status})
@@ -613,7 +647,7 @@ const auditSelfEventKeysCTE = `WITH self_event_keys(action, operation, status) A
 
 // auditSelfFilter is the event, outcome, and time filter both relations share.
 func auditSelfFilter(options store.AuditSelfListOptions) (string, []any) {
-	filter := `e.status <> 'attempt'
+	filter := `e.status <> 'attempt' AND NOT ` + auditPermissionCheckSQL("e") + `
 			AND (e.action, COALESCE(e.parameters->>'operation', ''), e.status::text) IN (
 				SELECT action, operation, status FROM self_event_keys
 			)`
@@ -762,6 +796,15 @@ func auditSelfRoleID(raw string) model.RoleID {
 func newAuditRow(event *model.AuditEvent) auditRow {
 	createdAt := model.TimeUTC(event.CreatedAt)
 	updatedAt := model.TimeUTC(event.UpdatedAt)
+	parameters := jsonValue(event.Parameters)
+	switch {
+	case event.PermissionCheck:
+		parameters = jsonValue(auditPermissionCheckParameters)
+	case len(parameters) == 0:
+		// Reserve SQL NULL for historical rows. JSON null keeps new events
+		// without parameters distinct from an old authorization decision.
+		parameters = jsonValue("null")
+	}
 	return auditRow{
 		ID:           event.ID.String(),
 		CreatedAt:    createdAt,
@@ -782,7 +825,7 @@ func newAuditRow(event *model.AuditEvent) auditRow {
 		IPAddress:    event.IPAddress,
 		UserAgent:    event.UserAgent,
 		ErrorCode:    event.ErrorCode,
-		Parameters:   jsonValue(event.Parameters),
+		Parameters:   parameters,
 		PriorState:   jsonValue(event.PriorState),
 		Result:       jsonValue(event.Result),
 	}
@@ -815,6 +858,10 @@ func (row auditRow) model() (*model.AuditEvent, error) {
 		return nil, err
 	}
 
+	// Both storage markers represent an event without application parameters.
+	if row.PermissionCheck || string(row.Parameters) == "null" {
+		row.Parameters = nil
+	}
 	value := &model.AuditEvent{
 		ID:            id,
 		CreatedAt:     row.CreatedAt.UTC(),
@@ -837,6 +884,8 @@ func (row auditRow) model() (*model.AuditEvent, error) {
 		Parameters:    append([]byte(nil), row.Parameters...),
 		PriorState:    append([]byte(nil), row.PriorState...),
 		Result:        append([]byte(nil), row.Result...),
+
+		PermissionCheck: row.PermissionCheck,
 	}
 	if err := validatePersistedModel("audit_event", value); err != nil {
 		return nil, err
@@ -928,6 +977,7 @@ func (s SQLAuditStore) CountRepeats(ctx context.Context, options store.AuditRepe
 		AND audit_events.resource_id = listed.resource_id
 		AND audit_events.created_at > listed.created_at - make_interval(secs => ?)
 		AND audit_events.created_at <= listed.created_at`, options.Window.Seconds()).
+		Where(auditPermissionCheckSQL("audit_events") + " = " + auditPermissionCheckSQL("listed")).
 		Limit(uint64(options.Maximum + 1))
 	inner, innerArgs, err := visible.PlaceholderFormat(sq.Question).ToSql()
 	if err != nil {

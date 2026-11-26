@@ -61,6 +61,9 @@ type auditEventResponse struct {
 	// resource more than once in the ten minutes up to and including this
 	// event, counting only events the caller can see.
 	Repeat *auditRepeatResponse `json:"repeat,omitempty"`
+
+	// PermissionCheck distinguishes authorization from performing the action.
+	PermissionCheck bool `json:"permission_check,omitempty"`
 	// prior_state, result and the other parameters are operator-only and
 	// deliberately left out.
 }
@@ -97,6 +100,8 @@ func auditEventResponseFromModel(request *http.Request, event *model.AuditEvent,
 		ErrorCode:  event.ErrorCode,
 		Summary:    auditSummary(request, event, names),
 		Reason:     event.AccountDisableReason(),
+
+		PermissionCheck: event.PermissionCheck,
 	}
 }
 

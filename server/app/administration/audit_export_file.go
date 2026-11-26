@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strconv"
 
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -41,12 +42,14 @@ type auditExportRecord struct {
 	UserAgent    string `json:"user_agent,omitempty"`
 	ErrorCode    string `json:"error_code,omitempty"`
 	Reason       string `json:"reason,omitempty"`
+
+	PermissionCheck bool `json:"permission_check,omitempty"`
 }
 
 var auditExportColumns = []string{
 	"id", "created_at", "updated_at", "actor_id", "session_id", "action", "resource_type", "resource_id",
 	"scope_type", "scope_id", "status", "request_id", "node_id", "client_type", "authentication_method",
-	"ip_address", "user_agent", "error_code", "reason",
+	"ip_address", "user_agent", "error_code", "reason", "permission_check",
 }
 
 func newAuditExportRecord(event *model.AuditEvent) auditExportRecord {
@@ -70,6 +73,8 @@ func newAuditExportRecord(event *model.AuditEvent) auditExportRecord {
 		UserAgent:    event.UserAgent,
 		ErrorCode:    event.ErrorCode,
 		Reason:       event.AccountDisableReason(),
+
+		PermissionCheck: event.PermissionCheck,
 	}
 }
 
@@ -77,7 +82,7 @@ func (r auditExportRecord) cells() []string {
 	cells := []string{
 		r.ID, r.CreatedAt, r.UpdatedAt, r.ActorID, r.SessionID, r.Action, r.ResourceType, r.ResourceID,
 		r.ScopeType, r.ScopeID, r.Status, r.RequestID, r.NodeID, r.ClientType, r.AuthMethod,
-		r.IPAddress, r.UserAgent, r.ErrorCode, r.Reason,
+		r.IPAddress, r.UserAgent, r.ErrorCode, r.Reason, strconv.FormatBool(r.PermissionCheck),
 	}
 	for i := range cells {
 		cells[i] = csvSafe(cells[i])

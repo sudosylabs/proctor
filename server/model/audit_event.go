@@ -64,6 +64,10 @@ type AuditEvent struct {
 	Parameters    json.RawMessage
 	PriorState    json.RawMessage
 	Result        json.RawMessage
+
+	// PermissionCheck records authorization for a change action. Status describes
+	// the decision itself. This distinction survives academic audit redaction.
+	PermissionCheck bool
 }
 
 // AccountDisableReason returns the reason recorded on an account disable
@@ -194,6 +198,12 @@ func (ae *AuditEvent) Validate() error {
 	}
 	if ae.Status != AuditStatusAttempt && ae.Status != AuditStatusSuccess && ae.Status != AuditStatusFail {
 		return invalidModelError(where, "audit_event", "status", "has an unknown value", details)
+	}
+	if ae.PermissionCheck {
+		kind, _ := AuditActionKind(ae.Action)
+		if kind != AuditKindChange || ae.Status == AuditStatusAttempt || len(ae.Parameters)+len(ae.PriorState)+len(ae.Result) != 0 {
+			return invalidModelError(where, "audit_event", "permission_check", "must be a terminal decision for a change action without mutation data", details)
+		}
 	}
 	if ae.NodeID == "" {
 		return invalidModelError(where, "audit_event", "node_id", "must not be empty", details)

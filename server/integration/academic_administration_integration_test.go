@@ -32,6 +32,44 @@ import (
 	"github.com/sudosylabs/proctor/server/testlib"
 )
 
+// requireRequestAudit checks the operator's feed for the request at each
+// expected resource. With no resources the request must be absent.
+func requireRequestAudit(
+	t *testing.T, handler http.Handler, token string, response *httptest.ResponseRecorder,
+	action model.Action, kind model.AuditKind, summary string, resourceIDs ...string,
+) {
+	t.Helper()
+	requestID := response.Header().Get("X-Request-ID")
+	require.NotEmpty(t, requestID)
+	page := performJSONRequest(t, handler, http.MethodGet, "/api/v1/audits?limit=200&action="+string(action)+"&kind="+string(kind), nil, token)
+	require.Equal(t, http.StatusOK, page.Code, page.Body.String())
+	var feed struct {
+		Items []struct {
+			RequestID       string               `json:"request_id"`
+			Resource        struct{ ID string }  `json:"resource"`
+			Summary         string               `json:"summary"`
+			Status          model.AuditStatus    `json:"status"`
+			PermissionCheck bool                 `json:"permission_check"`
+			Repeat          *struct{ Count int } `json:"repeat"`
+		} `json:"items"`
+	}
+	decodeIntegrationResponse(t, page, &feed)
+	var targets []string
+	for _, event := range feed.Items {
+		if event.RequestID != requestID {
+			continue
+		}
+		targets = append(targets, event.Resource.ID)
+		require.Contains(t, event.Summary, summary)
+		require.Equal(t, model.AuditStatusSuccess, event.Status)
+		require.Equal(t, kind == model.AuditKindRead, event.PermissionCheck)
+		if kind == model.AuditKindChange && action == model.ActionInstitutionManage {
+			require.Nil(t, event.Repeat, "permission checks must not inflate the single institution update")
+		}
+	}
+	require.ElementsMatch(t, resourceIDs, targets)
+}
+
 func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	dataSource := os.Getenv("PROCTOR_TEST_DATABASE_URL")
 	require.NotEmpty(t, dataSource, "PROCTOR_TEST_DATABASE_URL is not set")
@@ -69,6 +107,25 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		model.SessionClientCLI, "academic-owner-cli",
 	)
 	adminToken := adminLogin.Tokens.AccessToken
+
+	for _, page := range []struct {
+		path   string
+		action model.Action
+	}{
+		{"/api/v1/institution", model.ActionInstitutionManage},
+		{"/api/v1/student-progressions", model.ActionAcademicProgressionManage},
+	} {
+		read := performJSONRequest(t, handler, http.MethodGet, page.path, nil, adminToken)
+		require.Equal(t, http.StatusOK, read.Code, read.Body.String())
+		requireRequestAudit(t, handler, adminToken, read, page.action, model.AuditKindRead, "passed the permission check", installation.Institution.ID.String())
+		requireRequestAudit(t, handler, adminToken, read, page.action, model.AuditKindChange, "")
+	}
+	patch := performJSONRequest(t, handler, http.MethodPatch, "/api/v1/institution", map[string]any{
+		"display_name": "Northbridge Institute",
+	}, adminToken)
+	require.Equal(t, http.StatusOK, patch.Code, patch.Body.String())
+	requireRequestAudit(t, handler, adminToken, patch, model.ActionInstitutionManage, model.AuditKindChange, "changed the institution settings", installation.Institution.ID.String())
+	requireRequestAudit(t, handler, adminToken, patch, model.ActionInstitutionManage, model.AuditKindRead, "passed the permission check", installation.Institution.ID.String())
 
 	root := createIntegrationResource[model.AcademicUnit](
 		t, handler, http.MethodPost, "/api/v1/academic-units",
@@ -300,6 +357,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		"expected_revision": progression.Revision, "preview_digest": progression.PreviewDigest,
 	}, adminToken, "academic-progression-commit")
 	require.Equal(t, http.StatusAccepted, committedProgression.Code, "progression commit = %d: %s", committedProgression.Code, committedProgression.Body.String())
+	requireRequestAudit(t, handler, adminToken, committedProgression, model.ActionAcademicProgressionManage, model.AuditKindChange, "queued a student progression", secondClass.ID.String(), destinationClass.ID.String())
 	progression = waitForOnboardingImportState(t, handler, adminToken, studentProgressionsCollection, progression.ID, "completed")
 	require.Equal(t, 1, progression.SucceededRows)
 	require.Equal(t, 0, progression.FailedRows)
@@ -315,6 +373,21 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Len(t, progressionHistory, 3)
 	require.Equal(t, destinationClass.ID, progressionHistory[0].ClassID)
 	require.Equal(t, transfer.Membership.ID, progressionHistory[1].ID.String())
+	// The commit queues the batch. Only the worker processes a student, and
+	// it records the operation at both the source and destination class.
+	for _, classID := range []model.ClassID{secondClass.ID, destinationClass.ID} {
+		page := performJSONRequest(t, handler, http.MethodGet,
+			"/api/v1/audits?action=academic.progression.manage&kind=change&status=success&resource_type=class&resource_id="+classID.String(), nil, adminToken)
+		require.Equal(t, http.StatusOK, page.Code, page.Body.String())
+		var feed struct{ Items []struct{ Summary string } }
+		decodeIntegrationResponse(t, page, &feed)
+		var summaries []string
+		for _, event := range feed.Items {
+			summaries = append(summaries, event.Summary)
+		}
+		require.Contains(t, strings.Join(summaries, "\n"), "processed a student progression row")
+		require.Contains(t, strings.Join(summaries, "\n"), "requested a student progression preview")
+	}
 	require.False(t, progressionHistory[1].EndsAt.Valid)
 
 	teacherRole, err := storetest.SaveRole(context.Background(), persistence, &model.Role{

@@ -28,3 +28,24 @@ func TestAccountDisableReasonReadsOnlyTheDisableEvent(t *testing.T) {
 	projected.Parameters = nil
 	require.Empty(t, projected.AccountDisableReason(), "a projection without parameters shows no reason")
 }
+
+func TestPermissionCheckRequiresATerminalDecisionWithoutMutationData(t *testing.T) {
+	t.Parallel()
+	institution := NewInstitutionID().String()
+	check := &AuditEvent{PermissionCheck: true, Action: string(ActionInstitutionManage), Status: AuditStatusSuccess, NodeID: "node",
+		Resource: Resource{Type: ResourceInstitution, ID: institution}, ScopeType: RoleScopeInstitution, ScopeID: institution,
+	}
+	check.PrepareCreate(NewAuditEventID(), NowUTC())
+	require.NoError(t, check.Validate())
+	for name, change := range map[string]func(*AuditEvent){
+		"read action": func(event *AuditEvent) { event.Action = string(ActionUserView) },
+		"attempt":     func(event *AuditEvent) { event.Status = AuditStatusAttempt },
+		"parameters":  func(event *AuditEvent) { event.Parameters = []byte(`{}`) },
+		"prior state": func(event *AuditEvent) { event.PriorState = []byte(`{}`) },
+		"result":      func(event *AuditEvent) { event.Result = []byte(`{}`) },
+	} {
+		event := check.Clone()
+		change(event)
+		require.Error(t, event.Validate(), name)
+	}
+}

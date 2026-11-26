@@ -637,7 +637,7 @@
   },
   {
     "id": "audit.action.academic.progression.manage",
-    "translation": "{{.Actor}} moved students on from {{.Resource}}"
+    "translation": "{{.Actor}} managed a student progression for {{.Resource}}"
   },
   {
     "id": "audit.action.academic_audit.view",
@@ -1076,6 +1076,22 @@
     "translation": "The system"
   },
   {
+    "id": "audit.operation.academic.progression.manage.student_progression.cancel",
+    "translation": "{{.Actor}} canceled a student progression"
+  },
+  {
+    "id": "audit.operation.academic.progression.manage.student_progression.commit",
+    "translation": "{{.Actor}} queued a student progression"
+  },
+  {
+    "id": "audit.operation.academic.progression.manage.student_progression.dry_run",
+    "translation": "{{.Actor}} requested a student progression preview"
+  },
+  {
+    "id": "audit.operation.academic.progression.manage.student_progression.execute_row",
+    "translation": "{{.Actor}} processed a student progression row"
+  },
+  {
     "id": "audit.operation.academic_unit.members.manage.create_member",
     "translation": "{{.Actor}} added {{.Subject}} to {{.Resource}}"
   },
@@ -1210,6 +1226,14 @@
   {
     "id": "audit.operation.user.profile_picture.manage.set_profile_picture",
     "translation": "{{.Actor}} changed the profile picture of {{.Subject}}"
+  },
+  {
+    "id": "audit.permission.allowed",
+    "translation": "{{.Actor}} passed the permission check for {{.Action}}"
+  },
+  {
+    "id": "audit.permission.denied",
+    "translation": "{{.Actor}} was denied permission for {{.Action}}"
   },
   {
     "id": "audit.resource.academic_period",

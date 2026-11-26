@@ -244,6 +244,8 @@ func TestAuditExportBuildsTheListingTheCreatorSees(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(file), "\n")
 	require.Len(t, lines, 2)
 	require.True(t, strings.HasPrefix(lines[0], "id,created_at,updated_at,actor_id,session_id,action,"), lines[0])
+	require.True(t, strings.HasSuffix(lines[0], ",permission_check"), lines[0])
+	require.True(t, strings.HasSuffix(lines[1], ",false"), lines[1])
 	require.Contains(t, lines[1], event.ID.String())
 	require.Contains(t, lines[1], "198.51.100.7", "institution-wide readers see the request metadata the listing shows")
 	require.Contains(t, lines[1], `"'=HYPERLINK(""x"")"`, "a formula cell was left to run")
@@ -258,7 +260,11 @@ func TestAcademicAuditExportCarriesTheRedactedListing(t *testing.T) {
 	root := model.NewAcademicUnitID()
 	caller, inv := newCaller()
 	event := sensitiveAuditEvent(root)
-	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}}
+	check := event.Clone()
+	check.ID = model.NewAuditEventID()
+	check.PermissionCheck = true
+	check.Parameters, check.PriorState, check.Result = nil, nil, nil
+	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event, check}}
 	exports, content := newAuditExportStoreFake(), &auditExportContentFake{}
 	service, fixture := auditExportService(t, persistence, exports, content, academicAuditorAt(root)(caller.UserID))
 
@@ -272,10 +278,16 @@ func TestAcademicAuditExportCarriesTheRedactedListing(t *testing.T) {
 	require.False(t, persistence.input.Visibility.InstitutionWide)
 
 	file := readAuditExport(t, service, inv, export.ID)
-	var record map[string]any
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(file)), &record))
+	lines := strings.Split(strings.TrimSpace(file), "\n")
+	require.Len(t, lines, 2)
+	var record, decision map[string]any
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &record))
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &decision))
+	require.Equal(t, check.ID.String(), decision["id"])
+	require.Equal(t, true, decision["permission_check"])
 	require.Equal(t, event.ID.String(), record["id"])
 	require.Equal(t, event.ActorID.String(), record["actor_id"])
+	require.NotContains(t, record, "permission_check")
 	for _, field := range []string{"session_id", "request_id", "node_id", "client_type", "authentication_method", "ip_address", "user_agent", "reason"} {
 		require.NotContains(t, record, field, "an academic auditor's file carries %s", field)
 	}

@@ -39,7 +39,12 @@ func TestAuditSummaryCatalogueCoversEveryActionOperationAndSelfEvent(t *testing.
 	sort.Strings(actions)
 	require.Equal(t, model.AuditActions(), actions, "every audit action has exactly one summary")
 
-	wantOperations := []auditOperation{}
+	wantOperations := []auditOperation{
+		{model.ActionAcademicProgressionManage, "student_progression.cancel"},
+		{model.ActionAcademicProgressionManage, "student_progression.commit"},
+		{model.ActionAcademicProgressionManage, "student_progression.dry_run"},
+		{model.ActionAcademicProgressionManage, "student_progression.execute_row"},
+	}
 	wantEvents := []model.AuditSelfEvent{}
 	for _, key := range model.AuditSelfEventKeys(nil, "") {
 		if operation := (auditOperation{action: model.Action(key.Action), operation: key.Operation}); key.Operation != "" &&
@@ -118,6 +123,10 @@ func TestAuditSummaryNamesWhatTheCallerMaySeeAndOtherwiseUsesGenericNouns(t *tes
 		names store.AuditNames
 		want  string
 	}{
+		"denied check": {
+			&model.AuditEvent{PermissionCheck: true, ActorID: actor, Action: enrolment.Action, Resource: enrolment.Resource, Status: model.AuditStatusFail},
+			visible, "Ada Admin was denied permission for class.members.manage",
+		},
 		"visible names":   {enrolment, visible, "Ada Admin enrolled Bo Student in Year 1 Mathematics A"},
 		"nothing visible": {enrolment, store.AuditNames{}, "A user enrolled a user in a class"},
 		"failed": {

@@ -175,11 +175,13 @@ func (d *dispatcher) run(ctx context.Context) {
 				}
 			} else {
 				failures, stale, nextDue = 0, false, due
-				d.signalDue(nextDue, woken)
+				// Count before signaling, so the depth describes the queue this
+				// read saw rather than whatever the woken workers left of it.
 				if d.queue != nil && d.now().Sub(lastCount) >= queueCountInterval {
 					lastCount = d.now()
 					d.countQueue(ctx)
 				}
+				d.signalDue(nextDue, woken)
 			}
 		}
 		var wait time.Duration

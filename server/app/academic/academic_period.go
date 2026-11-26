@@ -259,7 +259,7 @@ func (s *Service) UpdateAcademicPeriod(
 	if err != nil {
 		return nil, err
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_period.conflict"); err != nil {
+	if err = checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_period.conflict"); err != nil {
 		return nil, err
 	}
 
@@ -281,7 +281,7 @@ func (s *Service) UpdateAcademicPeriod(
 	}
 
 	candidate.PrepareUpdate(s.now())
-	if err := candidate.Validate(); err != nil {
+	if err = candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("academic_period.invalid", err)
 	}
 

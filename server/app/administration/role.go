@@ -199,11 +199,11 @@ func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, com
 		BuiltIn:         false,
 		UpdatedByUserID: inv.Principal().UserID,
 	}
-	if err := validateKnownPermissions(candidate.Permissions); err != nil {
+	if err = validateKnownPermissions(candidate.Permissions); err != nil {
 		return nil, err
 	}
 
-	if err := s.authorizeActionDelegation(
+	if err = s.authorizeActionDelegation(
 		ctx,
 		inv,
 		candidate.Permissions,

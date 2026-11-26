@@ -118,19 +118,17 @@ func (s *Delivery) applySessionRevocation(
 	sink := s.sink
 	s.mu.RUnlock()
 
+	if revocation.CloseConnections && sink != nil {
+		if len(revocation.SessionIDs) == 0 {
+			sink.CloseUser(revocation.UserID, ConnectionCloseSessionRevoked)
+		}
+		for _, sessionID := range revocation.SessionIDs {
+			sink.CloseSession(sessionID, ConnectionCloseSessionRevoked)
+		}
+	}
 	if invalidator != nil {
 		invalidator.InvalidateAccessCredentials(ctx, revocation.AccessTokenHashes)
 		invalidator.InvalidateSessionActivity(ctx, sessionIDsFrom(revocation.SessionIDs))
-	}
-	if !revocation.CloseConnections || sink == nil {
-		return
-	}
-	if len(revocation.SessionIDs) == 0 {
-		sink.CloseUser(revocation.UserID, ConnectionCloseSessionRevoked)
-		return
-	}
-	for _, sessionID := range revocation.SessionIDs {
-		sink.CloseSession(sessionID, ConnectionCloseSessionRevoked)
 	}
 }
 

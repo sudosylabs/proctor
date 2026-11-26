@@ -89,6 +89,7 @@ type Transport struct {
 	stopMu   sync.Mutex
 	state    state
 	handlers map[cluster.Event]cluster.Handler
+	incoming chan receivedMessage
 	list     *hashimemberlist.Memberlist
 	// packetLimit is the largest envelope sent as one UDP packet; larger ones
 	// go through reliable over TCP.
@@ -113,6 +114,7 @@ func New(cfg Config) (*Transport, error) {
 		lookupIP:  net.DefaultResolver.LookupIPAddr,
 		state:     stateCreated,
 		handlers:  make(map[cluster.Event]cluster.Handler),
+		incoming:  make(chan receivedMessage, 16),
 	}, nil
 }
 
@@ -329,6 +331,11 @@ func (t *Transport) Start(ctx context.Context) error {
 	reconciler := newSeedReconciler(list)
 	go func() {
 		defer close(done)
+		var handlers sync.WaitGroup
+		for range 4 {
+			handlers.Go(func() { t.receive(runCtx) })
+		}
+		defer handlers.Wait()
 		t.discovery.run(runCtx, func(ctx context.Context, seeds []string) error {
 			return reconciler.rejoin(ctx, seeds)
 		})

@@ -30,7 +30,9 @@ authority; cluster delivery only makes other nodes notice sooner.
 4. **Idempotent handlers.** Application handlers for session revocation,
    authorization invalidation, and realtime fan-out must tolerate duplicates,
    finish bounded local work, and avoid durable or network work on the
-   Memberlist receive path.
+   Memberlist receive path. The callback enqueues up to 16 incoming messages.
+   Four workers dispatch them with a five-second context deadline. A full
+   queue drops the incoming message and increments the dropped-message count.
 5. **Authoritative state is PostgreSQL.** Each new Session authentication
    resolves the current credential, Session, and User from durable stores;
    each authorization decision resolves current role bindings and permissions.

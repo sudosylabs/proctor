@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"time"
 
 	hashimemberlist "github.com/hashicorp/memberlist"
 
@@ -63,14 +64,38 @@ func (d *delegate) NotifyMsg(message []byte) {
 		return
 	}
 
-	// Handler failures are logged, never retried.
-	err := d.transport.dispatchLocal(context.Background(), envelope.Message.Clone())
-	result := "success"
-	if err != nil {
-		result = "error"
+	// NotifyMsg runs on Memberlist's receive path. The decoded message owns
+	// its bytes and can safely outlive the callback.
+	select {
+	case d.transport.incoming <- receivedMessage{envelope.Message, len(message)}:
+	default:
+		d.observeMessage("unknown", "dropped", len(message))
 	}
+}
 
-	d.observeMessage(d.transport.metricEvent(envelope.Message.Event), result, len(message))
+type receivedMessage struct {
+	message *cluster.Message
+	size    int
+}
+
+func (t *Transport) receive(ctx context.Context) {
+	for ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case item := <-t.incoming:
+			bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+			err := t.dispatchLocal(bounded, item.message)
+			cancel()
+			result := "success"
+			if err != nil {
+				result = "error"
+			}
+			if t.cfg.Metrics != nil {
+				t.cfg.Metrics.ObserveClusterMessage("receive", t.metricEvent(item.message.Event), result, item.size)
+			}
+		}
+	}
 }
 
 func (d *delegate) observeMessage(event, outcome string, bytes int) {

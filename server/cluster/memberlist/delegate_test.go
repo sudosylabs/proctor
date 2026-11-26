@@ -13,11 +13,14 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	hashimemberlist "github.com/hashicorp/memberlist"
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/cluster"
 )
 
 func TestNodeMetadataAdvertisesOnlyCompiledProtocolAndNeverTruncates(t *testing.T) {
@@ -104,5 +107,41 @@ func validInternalConfig(key []byte) Config {
 		DiscoveryHeartbeat: time.Second,
 		ServerVersion:      "test",
 		Logger:             recordingAdmissionLogger{},
+	}
+}
+
+func TestMemberlistReceiveContinuesWhileAnotherHandlerWaits(t *testing.T) {
+	transport, err := New(validInternalConfig(make([]byte, 32)))
+	require.NoError(t, err)
+	started := make(chan struct{})
+	second := make(chan struct{})
+	require.NoError(t, transport.RegisterHandler("first", func(ctx context.Context, _ *cluster.Message) error {
+		close(started)
+		<-ctx.Done()
+		return nil
+	}))
+	require.NoError(t, transport.RegisterHandler("second", func(context.Context, *cluster.Message) error { close(second); return nil }))
+	ctx, cancel := context.WithCancel(t.Context())
+	var workers sync.WaitGroup
+	for range 2 {
+		workers.Go(func() { transport.receive(ctx) })
+	}
+	defer func() { cancel(); workers.Wait() }()
+	send := func(event cluster.Event) {
+		raw, err := json.Marshal(wireEnvelope{Version: wireProtocolVersion, Source: "node-b", Message: &cluster.Message{Event: event}})
+		require.NoError(t, err)
+		(&delegate{transport: transport}).NotifyMsg(raw)
+	}
+	send("first")
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first handler did not start")
+	}
+	send("second")
+	select {
+	case <-second:
+	case <-time.After(time.Second):
+		t.Fatal("second handler was blocked")
 	}
 }

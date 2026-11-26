@@ -53,11 +53,15 @@ func TestDesktopReleasesListTheCatalogueNewestFirst(t *testing.T) {
 
 func TestDesktopReleasesAndOpenSittingsNeedTheirGrants(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, inv := desktopCompatibilityServiceFixture(t)
+	service, persistence, fixture, inv := desktopCompatibilityServiceFixture(t)
 	persistence.openSittings = 4
 	count, err := service.CountOpenSittings(context.Background(), inv, 1000)
 	require.NoError(t, err)
 	require.Equal(t, 4, count)
+	decisions := fixture.Audits.Decisions()
+	require.Len(t, decisions, 1, "the count records one decision")
+	require.Equal(t, string(model.ActionAccessPolicyView), decisions[0].Action,
+		"the count is audited as a read; a recorded manage decision reads as a policy change")
 
 	outsider := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
@@ -73,6 +77,19 @@ func TestDesktopReleasesAndOpenSittingsNeedTheirGrants(t *testing.T) {
 	require.True(t, apperror.Is(err, "authorization.denied"), "a unit-scoped grant is not Institution-wide: %v", err)
 	_, err = service.ListDesktopReleases(context.Background(), outsiderInv)
 	require.True(t, apperror.Is(err, "authorization.denied"), "the list needs access_policy.view: %v", err)
+
+	viewer := accessWith(t, nil, accesstest.Options{Grants: []accesstest.Grant{
+		institutionGrant(outsider.UserID, model.ActionAccessPolicyView),
+		{UserID: outsider.UserID, Actions: []model.Action{model.ActionDesktopCompatibilityPolicyManage},
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: model.NewAcademicUnitID().String()},
+	}})
+	service = withAccess(service, viewer)
+	service.institutions = &accessPolicyInstitutionFake{institution: viewer.Institution}
+	_, err = service.CountOpenSittings(context.Background(), outsiderInv, 1000)
+	require.True(t, apperror.Is(err, "authorization.denied"), "viewing the policy is not enough to count: %v", err)
+	for _, decision := range viewer.Audits.Decisions() {
+		require.NotEqual(t, string(model.ActionDesktopCompatibilityPolicyManage), decision.Action, "the manage check records nothing")
+	}
 }
 
 func TestDesktopCompatibilityPolicyChangePublishesOnceAfterCommit(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -95,10 +96,19 @@ func compareReleases(left, right string) int {
 
 // CountOpenSittings needs Institution-wide desktop_compatibility_policy.manage:
 // it tells the person who could start maintenance how many Sittings it would
-// interrupt.
+// interrupt. The count is a read, so it is audited as the policy read is;
+// recording the manage decision would list every poll as a policy change.
 func (s *Service) CountOpenSittings(ctx context.Context, inv invocation.Invocation, maximum int) (int, error) {
-	if _, _, err := s.authorizeInstitutionAction(ctx, inv, model.ActionDesktopCompatibilityPolicyManage); err != nil {
+	_, resource, err := s.authorizeInstitutionAction(ctx, inv, model.ActionAccessPolicyView)
+	if err != nil {
 		return 0, err
+	}
+	manages, err := s.authorizer.Can(ctx, inv.Principal(), model.ActionDesktopCompatibilityPolicyManage, resource)
+	if err != nil {
+		return 0, err
+	}
+	if !manages {
+		return 0, access.DeniedError()
 	}
 	count, err := s.desktopCompatibilityPolicies.CountOpenSittings(ctx, maximum)
 	if err != nil {

@@ -90,7 +90,7 @@ func TestHubMetricsObserveBroadcastFanoutAndResumeOutcome(t *testing.T) {
 	defer func() { _ = hub.Close(context.Background()) }()
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
 	socket, _ := newSocketPair(t)
-	connection, _ := hub.register(socket, principal, model.RequestMetadata{}, "missing-resume", 0, "")
+	connection, _ := hub.register(t.Context(), socket, principal, model.RequestMetadata{}, "missing-resume", 0, "")
 	require.NotNil(t, connection, "register returned nil")
 	event := realtime.Event{ID: model.NewID(), Name: "academic_unit.updated", UserID: principal.UserID, Data: json.RawMessage(`{"updated":true}`)}
 	hub.PublishLocal(context.Background(), event)
@@ -114,8 +114,8 @@ func TestHubUnbindExamAttemptConnectionClearsOnlyExactBindingAndKeepsSocketOpen(
 		otherSocket, otherPeer := newSocketPair(t)
 		exactPeer.listen()
 		otherPeer.listen()
-		exact, _ := hub.register(exactSocket, principal, model.RequestMetadata{}, "", 0, "")
-		other, _ := hub.register(otherSocket, principal, model.RequestMetadata{}, "", 0, "")
+		exact, _ := hub.register(t.Context(), exactSocket, principal, model.RequestMetadata{}, "", 0, "")
+		other, _ := hub.register(t.Context(), otherSocket, principal, model.RequestMetadata{}, "", 0, "")
 		require.NotNil(t, exact, "Hub did not register test connections")
 		require.NotNil(t, other, "Hub did not register test connections")
 		exactID, otherID := model.NewAttemptConnectionID(), model.NewAttemptConnectionID()
@@ -203,9 +203,9 @@ func TestHubDeliversAScopedEventOnlyToItsScopeSubscribers(t *testing.T) {
 	defer func() { _ = hub.Close(context.Background()) }()
 	inScopeSocket, _ := newSocketPair(t)
 	outOfScopeSocket, _ := newSocketPair(t)
-	inScope, _ := hub.register(inScopeSocket,
+	inScope, _ := hub.register(t.Context(), inScopeSocket,
 		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
-	outOfScope, _ := hub.register(outOfScopeSocket,
+	outOfScope, _ := hub.register(t.Context(), outOfScopeSocket,
 		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
 	require.NotNil(t, inScope)
 	require.NotNil(t, outOfScope)
@@ -231,7 +231,7 @@ func TestHubDoesNotSendDesktopEventsToOtherActionSubscriptions(t *testing.T) {
 	sitting := model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}
 	register := func(action model.Action, resource model.Resource) *connectionRuntime {
 		socket, _ := newSocketPair(t)
-		runtime, _ := hub.register(socket,
+		runtime, _ := hub.register(t.Context(), socket,
 			model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
 		require.NotNil(t, runtime)
 		subscribeForScopeTest(t, runtime, action, resource)
@@ -279,7 +279,7 @@ func TestAuthorizationInvalidationClosesTheUserAndExactUserViewWatchers(t *testi
 	register := func(userID model.UserID) *connectionRuntime {
 		socket, peer := newSocketPair(t)
 		peer.listen()
-		connection, _ := hub.register(socket, model.Principal{UserID: userID, SessionID: model.NewSessionID()},
+		connection, _ := hub.register(t.Context(), socket, model.Principal{UserID: userID, SessionID: model.NewSessionID()},
 			model.RequestMetadata{}, "", 0, "")
 		require.NotNil(t, connection)
 		return connection
@@ -333,7 +333,7 @@ func TestHubAssistantEventsStayWithinTheOriginatingSession(t *testing.T) {
 	other := model.Principal{UserID: user, SessionID: model.NewSessionID()}
 	for _, principal := range []model.Principal{origin, other} {
 		socket, _ := newSocketPair(t)
-		connection, _ := hub.register(socket, principal, model.RequestMetadata{}, "", 0, "")
+		connection, _ := hub.register(t.Context(), socket, principal, model.RequestMetadata{}, "", 0, "")
 		require.NotNil(t, connection)
 	}
 	target := realtime.AssistantTarget{ExamID: model.NewExamID(), CandidateID: user, SessionID: origin.SessionID, SittingID: model.NewExamSittingID(), AttemptID: model.NewExamAttemptID(), TurnID: model.NewAssistantTurnID()}
@@ -357,9 +357,9 @@ func TestHubDeliversDesktopPolicyChangesOnlyToThePolicyManagers(t *testing.T) {
 	defer func() { _ = hub.Close(context.Background()) }()
 	managerSocket, _ := newSocketPair(t)
 	readerSocket, _ := newSocketPair(t)
-	manager, _ := hub.register(managerSocket,
+	manager, _ := hub.register(t.Context(), managerSocket,
 		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
-	reader, _ := hub.register(readerSocket,
+	reader, _ := hub.register(t.Context(), readerSocket,
 		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
 	institutionID := model.NewInstitutionID()
 	institution := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}

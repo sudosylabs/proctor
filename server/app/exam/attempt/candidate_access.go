@@ -38,15 +38,31 @@ func candidateSelector(inv invocation.Invocation, candidateAccess CandidateAcces
 		return store.CandidateAttemptAccess{}, apperror.Invalid("exam.attempt.invalid", "candidate_access")
 	}
 
+	return candidateConnectionSelector(principal, candidateAccess.AttemptID, candidateAccess.ConnectionID,
+		model.HashToken(candidateAccess.ContinuityCredential)), nil
+}
+
+// CandidateConnectionAccess retains the verified connection identity and a credential digest
+// so an admitted socket can recheck participation without retaining the Desktop credential.
+type CandidateConnectionAccess struct {
+	selector store.CandidateAttemptAccess
+}
+
+func candidateConnectionSelector(
+	principal model.Principal,
+	attemptID model.ExamAttemptID,
+	connectionID model.AttemptConnectionID,
+	digest string,
+) store.CandidateAttemptAccess {
 	return store.CandidateAttemptAccess{
-		AttemptID:                candidateAccess.AttemptID,
+		AttemptID:                attemptID,
 		CandidateUserID:          principal.UserID,
 		SessionID:                principal.SessionID,
 		DesktopRegistrationID:    principal.DesktopRegistrationID,
 		DPoPKeyThumbprint:        principal.DPoPKeyThumbprint,
-		ConnectionID:             candidateAccess.ConnectionID,
-		ContinuityCredentialHash: model.HashToken(candidateAccess.ContinuityCredential),
-	}, nil
+		ConnectionID:             connectionID,
+		ContinuityCredentialHash: digest,
+	}
 }
 
 // VerifiedCandidateAccess is what VerifyCandidateAttemptAccess proved. It
@@ -68,13 +84,19 @@ func (s *Service) VerifyCandidateAttemptAccess(
 	ctx context.Context,
 	inv invocation.Invocation,
 	candidateAccess CandidateAccess,
-) (_ VerifiedCandidateAccess, resultErr error) {
-	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+) (VerifiedCandidateAccess, error) {
 	selector, err := candidateSelector(inv, candidateAccess)
 	if err != nil {
-		return VerifiedCandidateAccess{}, err
+		return VerifiedCandidateAccess{}, publicFailures.Conceal(err)
 	}
 
+	return s.RecheckCandidateConnection(ctx, CandidateConnectionAccess{selector: selector})
+}
+
+// RecheckCandidateConnection resolves the live relationship behind a previously admitted connection.
+func (s *Service) RecheckCandidateConnection(ctx context.Context, connection CandidateConnectionAccess) (_ VerifiedCandidateAccess, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	selector := connection.selector
 	target, err := s.attempts.ResolveCandidateAccess(ctx, selector)
 	if err != nil {
 		return VerifiedCandidateAccess{}, storeError(storeErrors, err)

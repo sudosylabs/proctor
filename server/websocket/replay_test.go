@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -217,4 +218,53 @@ func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
 		}},
 	}))
 	return logger, &logs
+}
+
+func TestResumeRequiresCurrentResourceAuthority(t *testing.T) {
+	for _, tc := range []struct {
+		name                                              string
+		granted, retainedSubscription, invalidate, resume bool
+	}{
+		{name: "authorized subscription and history", granted: true, retainedSubscription: true, resume: true},
+		{name: "revoked subscription", retainedSubscription: true},
+		{name: "revoked history after unsubscribe"},
+		{name: "invalidated retained session", granted: true, retainedSubscription: true, invalidate: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hub := newInternalTestHub(t)
+			world := newAdmissionWorld(t, admissionOptions{withoutClassView: !tc.granted})
+			hub.admission = world.admission
+			require.NoError(t, hub.Start(t.Context()))
+			t.Cleanup(func() { _ = hub.Close(context.Background()) })
+			sub := validInboundSubscription()
+			id := model.NewID()
+			shard := hub.shardForUser(world.principal.UserID.String())
+			state := &replayState{
+				userID: world.principal.UserID.String(), sessionID: world.principal.SessionID.String(),
+				expiresAt: time.Now().Add(time.Minute), nextSequence: 1,
+				history: []*Event{{Action: sub.Action, Resource: sub.Resource, Sequence: 1}},
+			}
+			if tc.retainedSubscription {
+				state.subscriptions = map[string]Subscription{sub.Key(): sub}
+			}
+			shard.mu.Lock()
+			shard.replay[id] = state
+			shard.mu.Unlock()
+			if tc.invalidate {
+				hub.CloseSession(state.sessionID, realtime.ConnectionCloseSessionRevoked)
+			}
+			socket, _ := newSocketPair(t)
+			conn, resumed := hub.register(t.Context(), socket, world.principal, model.RequestMetadata{}, id, 0, "")
+			require.NotNil(t, conn)
+			defer hub.unregister(conn)
+			require.Equal(t, tc.resume, resumed)
+			if tc.resume {
+				require.Equal(t, state.subscriptions, conn.subscriptions)
+				require.Equal(t, state.history, conn.history)
+			} else {
+				require.Empty(t, conn.history)
+				require.Empty(t, conn.subscriptions)
+			}
+		})
+	}
 }

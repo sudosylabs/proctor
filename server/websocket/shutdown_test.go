@@ -61,7 +61,7 @@ func startShutdownAttempt(t *testing.T) (*Hub, *shutdownAttempt, <-chan struct{}
 	require.NoError(t, err)
 	socket, peer := newSocketPair(t)
 	peer.listen()
-	runtime, _ := hub.register(socket, f.candidate(), model.RequestMetadata{}, "", 0, "")
+	runtime, _ := hub.register(t.Context(), socket, f.candidate(), model.RequestMetadata{}, "", 0, "")
 	require.NotNil(t, runtime, "register failed")
 	f.admit(runtime, 1)
 	finished := make(chan struct{})
@@ -159,7 +159,7 @@ func TestHubShutdownUsesOneControlWriteBudgetForAllPeers(t *testing.T) {
 			socket, peer := newSocketPair(t)
 			peers = append(peers, peer)
 			principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
-			connection, _ := hub.register(socket, principal, model.RequestMetadata{}, "", 0, "")
+			connection, _ := hub.register(t.Context(), socket, principal, model.RequestMetadata{}, "", 0, "")
 			require.NotNil(t, connection, "register failed")
 		}
 		started := time.Now()
@@ -184,7 +184,7 @@ func TestHubShutdownPreventsRegisteredConnectionFromStarting(t *testing.T) {
 		socket, peer := newSocketPair(t)
 		peer.listen()
 		principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
-		connection, _ := hub.register(socket, principal, model.RequestMetadata{}, "", 0, "")
+		connection, _ := hub.register(t.Context(), socket, principal, model.RequestMetadata{}, "", 0, "")
 		require.NotNil(t, connection, "register failed")
 		require.NoError(t, hub.Close(context.Background()))
 		connection.run(context.Background())

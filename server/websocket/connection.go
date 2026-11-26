@@ -68,6 +68,7 @@ type connectionRuntime struct {
 }
 
 type examAttemptBinding struct {
+	access          attempt.CandidateConnectionAccess
 	attemptID       model.ExamAttemptID
 	sittingID       model.ExamSittingID
 	classID         model.ClassID

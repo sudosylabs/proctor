@@ -104,8 +104,8 @@ func TestFrameBudgetIsSharedBySessionAcrossConnectionsAndReconnects(t *testing.T
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
 	firstSocket, _ := newSocketPair(t)
 	secondSocket, _ := newSocketPair(t)
-	first, _ := hub.register(firstSocket, principal, model.RequestMetadata{}, "", 0, "")
-	second, _ := hub.register(secondSocket, principal, model.RequestMetadata{}, "", 0, "")
+	first, _ := hub.register(t.Context(), firstSocket, principal, model.RequestMetadata{}, "", 0, "")
+	second, _ := hub.register(t.Context(), secondSocket, principal, model.RequestMetadata{}, "", 0, "")
 	now := time.Now()
 	for range inboundFrameBurst {
 		require.True(t, first.inbound.allow(now))
@@ -121,11 +121,11 @@ func TestFrameBudgetIsSharedBySessionAcrossConnectionsAndReconnects(t *testing.T
 		shard.mu.Unlock()
 	}
 	reconnectedSocket, _ := newSocketPair(t)
-	reconnected, _ := hub.register(reconnectedSocket, principal, model.RequestMetadata{}, "", 0, "")
+	reconnected, _ := hub.register(t.Context(), reconnectedSocket, principal, model.RequestMetadata{}, "", 0, "")
 	require.False(t, reconnected.inbound.allow(now), "reconnecting does not reset a spent budget")
 
 	otherSocket, _ := newSocketPair(t)
-	other, _ := hub.register(otherSocket, model.Principal{UserID: principal.UserID, SessionID: model.NewSessionID()},
+	other, _ := hub.register(t.Context(), otherSocket, model.Principal{UserID: principal.UserID, SessionID: model.NewSessionID()},
 		model.RequestMetadata{}, "", 0, "")
 	require.True(t, other.inbound.allow(now), "another Session has its own budget")
 }

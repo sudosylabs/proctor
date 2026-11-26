@@ -238,6 +238,9 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, connected.FirstAdmission)
+	current, err := helper.App.Attempts.RecheckCandidateConnection(ctx, connected.Access)
+	require.NoError(t, err)
+	require.Equal(t, connected.Participation.ID, current.ParticipationID)
 	access := attempt.CandidateAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, ContinuityCredential: credential}
 	security := connected.Security
 
@@ -341,6 +344,8 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 		IdempotencyKey: "native-flow-submit",
 	})
 	require.NoError(t, err)
+	_, err = helper.App.Attempts.RecheckCandidateConnection(ctx, connected.Access)
+	require.Error(t, err, "submission ends authority for the bound subscription")
 	clips, err := helper.App.Attempts.ListScreenClips(ctx, managerInv, examID, sittingID, access.AttemptID)
 	require.NoError(t, err)
 	require.Len(t, clips, 4)

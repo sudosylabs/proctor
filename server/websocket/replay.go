@@ -26,6 +26,18 @@ type replayState struct {
 	expiresAt     time.Time
 }
 
+// A retained event can outlive the subscription that originally admitted it.
+func (s *replayState) requiredSubscriptions() map[string]Subscription {
+	checks := cloneSubscriptions(s.subscriptions)
+	for _, event := range s.history {
+		if event.Action != "" {
+			sub := Subscription{Action: event.Action, Resource: event.Resource}
+			checks[sub.Key()] = sub
+		}
+	}
+	return checks
+}
+
 // connectionSnapshot is immutable once a stopped connection hands it to the
 // hub's replay catalog.
 type connectionSnapshot struct {

@@ -1,0 +1,41 @@
+#!/bin/sh
+# Copyright 2026 SudoSylabs
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Installs a package's locked dependencies, development ones included, unless
+# the tree already matches the lockfile. Every local build passes through
+# here, and a full npm ci over an existing tree fails on macOS with ENOTEMPTY
+# when its rmdir of a large folder races a file watcher or Spotlight.
+
+set -eu
+
+if [ "$#" -ne 1 ]; then
+	printf 'usage: %s PACKAGE_DIR\n' "$0" >&2
+	exit 2
+fi
+
+cd "$1"
+npm_command=${NPM_COMMAND:-npm}
+stamp=node_modules/.proctor-npm-ci
+
+if command -v sha256sum >/dev/null 2>&1; then
+	lock_digest=$(sha256sum package.json package-lock.json)
+else
+	lock_digest=$(shasum -a 256 package.json package-lock.json)
+fi
+# The Node version is part of the key because native add-ons are built for it.
+wanted=$(printf '%s\nnode %s\n' "$lock_digest" "$(node --version)")
+
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$wanted" ]; then
+	printf '%s: node_modules matches package-lock.json\n' "$1"
+	exit 0
+fi
+
+# Clearing the tree first leaves npm ci nothing to remove, which is where it
+# races. A tree whose install was interrupted has no stamp and is cleared too.
+rm -rf node_modules
+# Development dependencies are installed even when the caller's shell defaults
+# npm to production mode.
+NODE_ENV=development npm_config_omit= npm_config_production= "$npm_command" ci --include=dev
+mkdir -p node_modules
+printf '%s\n' "$wanted" >"$stamp"

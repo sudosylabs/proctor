@@ -18,10 +18,6 @@ COMPOSE ?= $(DOCKER) compose
 CURL ?= curl
 JQ ?= jq
 
-# Development installs must include the locked build, test, and documentation
-# toolchain even when a contributor's shell defaults npm to production mode.
-NPM_CI_DEV = NODE_ENV=development npm_config_omit= npm_config_production= $(NPM) ci --include=dev
-
 ifneq ($(origin GO_VERSION),command line)
 override GO_VERSION := $(shell awk '$$1 == "go" { print $$2; exit }' "$(ROOT_DIR)/go.work")
 endif

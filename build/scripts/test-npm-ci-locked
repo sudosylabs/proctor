@@ -1,0 +1,61 @@
+#!/bin/sh
+# Copyright 2026 SudoSylabs
+# SPDX-License-Identifier: AGPL-3.0-only
+
+set -eu
+
+if [ "$#" -ne 1 ]; then
+	printf 'usage: %s NPM_CI_LOCKED_SCRIPT\n' "$0" >&2
+	exit 2
+fi
+
+script=$1
+fixture=$(mktemp -d "${TMPDIR:-/tmp}/proctor-npm-ci-locked.XXXXXX")
+trap 'rm -rf "$fixture"' EXIT HUP INT TERM
+
+# The fake npm counts its runs and fails if npm ci would find a tree to remove.
+cat >"$fixture/npm" <<'EOF'
+#!/bin/sh
+set -eu
+if [ -e node_modules ]; then
+	echo "npm ci ran over an existing node_modules" >&2
+	exit 1
+fi
+mkdir -p node_modules/package
+echo run >>"$NPM_RUNS"
+EOF
+chmod +x "$fixture/npm"
+mkdir "$fixture/package"
+printf '{}\n' >"$fixture/package/package.json"
+printf '{"lockfileVersion": 3}\n' >"$fixture/package/package-lock.json"
+
+runs() {
+	wc -l <"$fixture/runs" | tr -d ' '
+}
+
+install() {
+	NPM_COMMAND="$fixture/npm" NPM_RUNS="$fixture/runs" "$script" "$fixture/package" >/dev/null
+}
+
+install
+install
+if [ "$(runs)" != 1 ]; then
+	printf 'an unchanged lockfile reinstalled: %s runs\n' "$(runs)" >&2
+	exit 1
+fi
+
+printf '{"lockfileVersion": 3, "packages": {}}\n' >"$fixture/package/package-lock.json"
+install
+if [ "$(runs)" != 2 ]; then
+	printf 'a changed lockfile did not reinstall: %s runs\n' "$(runs)" >&2
+	exit 1
+fi
+
+rm "$fixture/package/node_modules/.proctor-npm-ci"
+install
+if [ "$(runs)" != 3 ]; then
+	printf 'a tree without a stamp did not reinstall: %s runs\n' "$(runs)" >&2
+	exit 1
+fi
+
+printf 'npm-ci-locked tests passed\n'

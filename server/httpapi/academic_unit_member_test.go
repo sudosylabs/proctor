@@ -97,6 +97,7 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	unitID, roleID := model.NewAcademicUnitID(), model.NewRoleID()
 	user := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	user.DisabledAt = model.OptionalTimeFromMillis(1_700_000_000_000)
 	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), AcademicUnitID: unitID, UserID: user.ID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
 	// list lists the unit's members as a caller holding academic_unit.members.view
 	// and, when described is set, Institution-wide user.view and
@@ -133,6 +134,9 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	require.JSONEq(t, `{"id":"`+user.ID.String()+`","display_name":"Amina Diallo"}`, string(item["user"]),
 		"no username without directory visibility")
 	require.NotContains(t, item, "email", "no email without Institution-wide user.view")
+	require.NotContains(t, item, "disabled_at", "no account state without Institution-wide user.view")
+	require.True(t, fixture.unitMembers.lastPage(t).ExcludeDisabledUsers,
+		"without Institution-wide user.view the store leaves disabled accounts out")
 	_, rolesShown := item["roles_here"]
 	require.False(t, rolesShown, "no roles_here without role_binding.view on the unit")
 	_, moreShown := item["roles_here_more"]
@@ -142,6 +146,8 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	item, fixture = list(true)
 	require.JSONEq(t, `{"id":"`+user.ID.String()+`","display_name":"Amina Diallo","username":"amina","profile_picture_url":"/api/v1/users/`+user.ID.String()+`/profile-picture"}`, string(item["user"]))
 	require.JSONEq(t, `"amina@example.edu"`, string(item["email"]))
+	require.JSONEq(t, `"2023-11-14T22:13:20Z"`, string(item["disabled_at"]))
+	require.False(t, fixture.unitMembers.lastPage(t).ExcludeDisabledUsers)
 	require.JSONEq(t, `[{"role_id":"`+roleID.String()+`","display_name":"Reviewer"}]`, string(item["roles_here"]))
 	require.JSONEq(t, `2`, string(item["roles_here_more"]))
 	require.Len(t, fixture.bindings.options, 1)

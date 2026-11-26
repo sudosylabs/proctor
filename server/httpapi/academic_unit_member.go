@@ -34,8 +34,9 @@ type academicUnitMemberResponse struct {
 // member's current role bindings scoped exactly to it.
 type academicUnitMemberListItemResponse struct {
 	academicUnitMemberResponse
-	User  personRefResponse `json:"user"`
-	Email string            `json:"email,omitempty"`
+	User       personRefResponse `json:"user"`
+	Email      string            `json:"email,omitempty"`
+	DisabledAt string            `json:"disabled_at,omitempty"`
 	*academicUnitMemberRolesHereResponse
 }
 
@@ -237,6 +238,7 @@ func academicUnitMemberListItemResponseFromPage(
 		academicUnitMemberResponse: academicUnitMemberResponseFromModel(member),
 		User:                       *personRef(refs, member.UserID),
 		Email:                      identity.Email,
+		DisabledAt:                 identity.DisabledAt.FormatRFC3339(),
 	}
 	if page.RolesHere == nil {
 		return item

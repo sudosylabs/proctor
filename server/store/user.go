@@ -220,6 +220,9 @@ type UserIdentity struct {
 	Username    string
 	DisplayName string
 	Email       string
+	// DisabledAt is set while the account is disabled. Only a caller with
+	// institution-wide user.view may be shown it.
+	DisabledAt model.OptionalTime
 }
 
 // UserVisibilityMatch is the scope through which a user is visible, so a

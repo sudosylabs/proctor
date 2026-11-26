@@ -360,9 +360,18 @@ func (s *Service) ListAcademicUnitMembersPage(
 		return nil, err
 	}
 
+	// Only institution-wide user.view may learn that an account is
+	// disabled, as in the user directory: such a caller sees the state, and
+	// anyone else doesn't see disabled members at all.
+	institutionWide, err := s.authorizer.CanViewInstitutionUsers(ctx, inv)
+	if err != nil {
+		return nil, err
+	}
+
 	options := store.AcademicUnitMemberPageOptions{
 		AcademicUnitID:       query.AcademicUnitID,
 		ActiveAt:             model.TimeFromMillis(activeAt),
+		ExcludeDisabledUsers: !institutionWide,
 		MembershipPageKeyset: keyset,
 		AfterID:              query.AfterID,
 		Limit:                limit,
@@ -401,21 +410,22 @@ func (s *Service) ListAcademicUnitMembersPage(
 	}
 
 	result.Total = total
-	if err := s.describeMembers(ctx, inv, resource, result, now); err != nil {
+	if err := s.describeMembers(ctx, inv, resource, result, now, institutionWide); err != nil {
 		return nil, err
 	}
 
 	return result, nil
 }
 
-// describeMembers keeps email behind institution-wide user.view, as the user
-// directory does.
+// describeMembers keeps email and account state behind institution-wide
+// user.view, as the user directory does.
 func (s *Service) describeMembers(
 	ctx context.Context,
 	inv invocation.Invocation,
 	unit model.Resource,
 	page *AcademicUnitMemberPage,
 	now time.Time,
+	institutionWide bool,
 ) error {
 	page.Users = map[model.UserID]store.UserIdentity{}
 	if len(page.Members) == 0 {
@@ -435,14 +445,10 @@ func (s *Service) describeMembers(
 		return AcademicUnitMemberStoreErrors.Translate(err)
 	}
 
-	showEmail, err := s.authorizer.CanViewInstitutionUsers(ctx, inv)
-	if err != nil {
-		return err
-	}
-
 	for _, identity := range identities {
-		if !showEmail {
+		if !institutionWide {
 			identity.Email = ""
+			identity.DisabledAt = model.OptionalTime{}
 		}
 
 		page.Users[identity.ID] = identity

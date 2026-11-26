@@ -51,6 +51,9 @@ type AcademicUnitMemberPageOptions struct {
 	// these kinds at AffiliationsAt, which a non-empty list requires.
 	Affiliations   []model.AffiliationKind
 	AffiliationsAt time.Time
+	// ExcludeDisabledUsers leaves out members whose account is disabled, for a
+	// caller who may not learn that an account is disabled.
+	ExcludeDisabledUsers bool
 	MembershipPageKeyset
 	AfterID model.AcademicUnitMemberID
 	Limit   int

@@ -7678,7 +7678,7 @@ export interface components {
             items: components["schemas"]["AcademicUnitResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
         };
-        /** @description One membership and who the member is. `roles_here` and `roles_here_more` are present only if you hold role_binding.view on this Academic Unit. */
+        /** @description One membership and who the member is. `roles_here` and `roles_here_more` are present only if you hold role_binding.view on this Academic Unit. A disabled account's membership is listed only to a caller with Institution-wide user.view, with `disabled_at`. */
         AcademicUnitMemberListItemResponse: {
             /** @description The Academic Unit the User is a member of. */
             academic_unit_id: components["schemas"]["ID"];
@@ -7692,6 +7692,11 @@ export interface components {
              * @description When the membership was created.
              */
             created_at: string;
+            /**
+             * Format: date-time
+             * @description When the member's account was disabled. Present only while it is disabled, and only with Institution-wide user.view; without it, members whose account is disabled aren't listed, and `total` doesn't count them.
+             */
+            disabled_at?: string;
             /**
              * Format: email
              * @description The member's email address. Present only with Institution-wide user.view.

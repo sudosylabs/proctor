@@ -684,7 +684,8 @@ func (s *academicUserRecords) ListIdentities(_ context.Context, ids []model.User
 	identities := make([]store.UserIdentity, 0, len(ids))
 	for _, id := range ids {
 		if user, ok := s.byID[id]; ok {
-			identities = append(identities, store.UserIdentity{ID: id, Username: user.Username, DisplayName: user.DisplayName, Email: user.Email})
+			identities = append(identities, store.UserIdentity{ID: id, Username: user.Username, DisplayName: user.DisplayName, Email: user.Email,
+				DisabledAt: user.DisabledAt})
 		}
 	}
 	return identities, nil

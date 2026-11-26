@@ -146,6 +146,10 @@ for editor_config in "$root/.vscode/launch.json" "$root/contrib/editors/neovim/p
 done
 
 mkdir -p "$fixture/webapp" "$fixture/docs"
+for package in "$fixture/webapp" "$fixture/docs"; do
+	printf '{}\n' >"$package/package.json"
+	printf '{}\n' >"$package/package-lock.json"
+done
 cat >"$fixture/npm" <<'EOF'
 #!/bin/sh
 printf '%s|%s|%s|%s\n' "${NODE_ENV-unset}" "${npm_config_omit-unset}" \

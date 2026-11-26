@@ -23,15 +23,16 @@ build-scripts-check:
 	@"$(ROOT_DIR)/build/scripts/test-dev-server-env" "$(ROOT_DIR)/build/scripts/dev-server-env"
 	@"$(ROOT_DIR)/build/scripts/test-with-dev-server-env" "$(ROOT_DIR)/build/scripts/with-dev-server-env"
 	@"$(ROOT_DIR)/build/scripts/test-test-diagnostics" "$(ROOT_DIR)/build/scripts/test-diagnostics"
+	@"$(ROOT_DIR)/build/scripts/test-npm-ci-locked" "$(ROOT_DIR)/build/scripts/npm-ci-locked"
 
 webapp-install:
-	cd "$(WEBAPP_DIR)" && $(NPM_CI_DEV)
+	@NPM_COMMAND="$(NPM)" "$(ROOT_DIR)/build/scripts/npm-ci-locked" "$(WEBAPP_DIR)"
 
 webapp-check: webapp-install
 	cd "$(WEBAPP_DIR)" && $(NPM) run check
 
 docs-install:
-	cd "$(DOCS_SITE_DIR)" && $(NPM_CI_DEV)
+	@NPM_COMMAND="$(NPM)" "$(ROOT_DIR)/build/scripts/npm-ci-locked" "$(DOCS_SITE_DIR)"
 
 docs-start: docs-install ## Preview the public documentation site.
 	cd "$(DOCS_SITE_DIR)" && $(NPM) start
@@ -41,7 +42,7 @@ docs-check: docs-install ## Validate and build the public documentation site.
 	cd "$(DOCS_SITE_DIR)" && $(NPM) run check
 
 mail-templates-install:
-	cd "$(SERVER_DIR)/templates" && $(NPM_CI_DEV)
+	@NPM_COMMAND="$(NPM)" "$(ROOT_DIR)/build/scripts/npm-ci-locked" "$(SERVER_DIR)/templates"
 
 mail-templates-check: mail-templates-install ## Verify generated transactional-mail HTML is fresh and renders.
 	cd "$(SERVER_DIR)/templates" && $(NPM) run check && $(NPM) test

@@ -17,6 +17,7 @@ trap 'rm -rf "$fixture"' EXIT HUP INT TERM
 cat >"$fixture/npm" <<'EOF'
 #!/bin/sh
 set -eu
+if [ "$1" = ls ]; then test -d node_modules/package; exit; fi
 if [ -e node_modules ]; then
 	echo "npm ci ran over an existing node_modules" >&2
 	exit 1
@@ -58,4 +59,20 @@ if [ "$(runs)" != 3 ]; then
 	exit 1
 fi
 
+mkdir -p "$fixture/real/tool"
+printf '%s\n' '{"name":"install-fixture","version":"1.0.0","devDependencies":{"local-tool":"file:tool"}}' >"$fixture/real/package.json"
+printf '%s\n' '{"name":"local-tool","version":"1.0.0","bin":{"local-tool":"cli.js"}}' >"$fixture/real/tool/package.json"
+printf '%s\n' '#!/usr/bin/env node' >"$fixture/real/tool/cli.js"
+chmod +x "$fixture/real/tool/cli.js"
+(
+	cd "$fixture/real"
+	export npm_config_cache="$fixture/cache" npm_config_offline=true npm_config_audit=false
+	npm install --package-lock-only
+	"$script" .
+	test -x node_modules/.bin/local-tool
+	npm prune --omit=dev
+	test ! -e node_modules/.bin/local-tool
+	"$script" .
+	test -x node_modules/.bin/local-tool
+)
 printf 'npm-ci-locked tests passed\n'

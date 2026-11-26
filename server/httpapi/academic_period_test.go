@@ -89,7 +89,7 @@ func TestAcademicPeriodOpenAPIDocument(t *testing.T) {
 	document := readOpenAPIDocument(t)
 	var listOperation openAPIOperation
 	require.NoError(t, json.Unmarshal(document.Paths[model.APIURLSuffix+"/academic-periods"]["get"], &listOperation))
-	require.Equal(t, []string{"active_at", "cursor", "dir", "limit", "owner_id", "owner_type", "q", "sort"}, academicStructureQueryParameterNames(listOperation.Parameters), "Academic Period list query parameters")
+	require.Equal(t, []string{"active_at", "cursor", "dir", "limit", "overlaps_from", "overlaps_until", "owner_id", "owner_type", "q", "sort"}, academicStructureQueryParameterNames(listOperation.Parameters), "Academic Period list query parameters")
 	list := document.Components.Schemas["AcademicPeriodListResponse"]
 	requireOpenAPIListEnvelope(t, list, "#/components/schemas/AcademicPeriodResponse")
 	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["AcademicPeriodArchived"].Headers["Cache-Control"].Ref)

@@ -9,7 +9,6 @@ package sqlstore
 
 import (
 	"context"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -113,10 +112,19 @@ func (ss *SQLStore) SeedLastLogin(ctx context.Context, update *store.UserLastLog
 	}).UpdateLastLogin(ctx, update)
 }
 
-// DatabaseNow reads PostgreSQL's clock, so a test can wait for the instant
-// the database will use to decide a deadline.
-func (ss *SQLStore) DatabaseNow(ctx context.Context) (time.Time, error) {
-	var now time.Time
-	err := ss.GetMaster().Get(ctx, &now, `SELECT clock_timestamp()`)
-	return now.UTC(), err
+// SeedExpiredSession moves a fixture's validity interval into the past.
+func (ss *SQLStore) SeedExpiredSession(ctx context.Context, id model.SessionID) error {
+	_, err := ss.GetMaster().Exec(ctx, `UPDATE sessions SET
+		created_at=created_at-interval '90 days', updated_at=updated_at-interval '90 days',
+		authenticated_at=authenticated_at-interval '90 days', last_activity_at=last_activity_at-interval '90 days',
+		idle_expires_at=idle_expires_at-interval '90 days',expires_at=expires_at-interval '90 days' WHERE id=?`, id.String())
+	return err
+}
+
+// SeedExpiredPersonalAccessToken ages a fixture without consulting the node clock.
+func (ss *SQLStore) SeedExpiredPersonalAccessToken(ctx context.Context, id model.PersonalAccessTokenID) error {
+	_, err := ss.GetMaster().Exec(ctx, `UPDATE personal_access_tokens SET created_at=created_at-interval '90 days',
+		updated_at=updated_at-interval '90 days',last_used_at=last_used_at-interval '90 days',
+		expires_at=expires_at-interval '90 days' WHERE id=?`, id.String())
+	return err
 }

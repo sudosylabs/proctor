@@ -47,8 +47,7 @@ func (s *Service) AuthenticateDPoP(
 	if _, err = s.verifyDesktopProof(ctx, resolved, rawToken, proof, method, path, true); err != nil {
 		return nil, err
 	}
-	now := model.TimeUTC(s.now())
-	if err = s.updateActivity(ctx, resolved, now); err != nil {
+	if err = s.updateActivity(ctx, resolved, resolved.checkedAt); err != nil {
 		return nil, err
 	}
 	principal := principalFromDesktopAuthentication(resolved)
@@ -92,7 +91,10 @@ func (s *Service) resolveDesktopCredential(
 		return nil, authenticationUnavailable(err)
 	}
 
-	now := model.TimeUTC(s.now())
+	now, err := s.sessions.DatabaseNow(ctx)
+	if err != nil {
+		return nil, authenticationUnavailable(err)
+	}
 	if session.ClientType != model.SessionClientDesktop ||
 		credential.IsExpiredAt(now) ||
 		!session.DesktopRegistrationID.IsValid() ||
@@ -113,7 +115,7 @@ func (s *Service) resolveDesktopCredential(
 		return nil, authenticationUnavailable(err)
 	}
 
-	return &resolvedAuthentication{Credential: credential, Session: session, User: user}, nil
+	return &resolvedAuthentication{Credential: credential, Session: session, User: user, checkedAt: now}, nil
 }
 
 func (s *Service) verifyDesktopProof(

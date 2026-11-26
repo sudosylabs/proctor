@@ -78,6 +78,7 @@ func (c *authenticationCacheFake) Add(_ context.Context, key string, delta int64
 }
 
 type authenticationStoreFake struct {
+	databaseNow         func() time.Time
 	users               map[string]*model.User
 	usersByUsername     map[string]*model.User
 	usersByEmail        map[string]*model.User
@@ -654,6 +655,7 @@ func newTestAuthenticationServiceWithEffects(
 			MaximumAccountFailureDelay: time.Second,
 		}, newCredential: newCredential, now: now, wait: waitContext,
 	}
+	persistence.databaseNow = func() time.Time { return service.now() }
 	require.NoError(t, service.requireSessionAuthentication())
 	return service
 }
@@ -678,4 +680,8 @@ func (discardPersonalAccessTokenStore) Resolve(
 	time.Duration,
 ) (*store.PersonalAccessTokenResolution, error) {
 	return nil, store.NewErrNotFound("personal_access_token", "")
+}
+
+func (s authenticationSessionStore) DatabaseNow(context.Context) (time.Time, error) {
+	return s.root.databaseNow(), nil
 }

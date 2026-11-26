@@ -31,6 +31,7 @@ import (
 const activityCachePrefix = "authentication/activity/"
 
 type resolvedAuthentication struct {
+	checkedAt  time.Time
 	Credential *model.SessionCredential
 	Session    *model.Session
 	User       *model.User
@@ -74,7 +75,6 @@ func (s *Service) authenticateAccess(
 		return nil, access.InvalidTokenAppError()
 	}
 
-	now := model.TimeUTC(s.now())
 	tokenHash := model.HashToken(rawToken)
 	// Always read the store: a positive cache entry would outlive a
 	// revocation, rotation or disablement whose invalidation was lost.
@@ -97,6 +97,10 @@ func (s *Service) authenticateAccess(
 	}
 
 	resolved := &resolvedAuthentication{Credential: credential, Session: session, User: account}
+	now, err := s.sessions.DatabaseNow(ctx)
+	if err != nil {
+		return nil, authenticationUnavailable(err)
+	}
 	if !resolved.User.IsActive() || resolved.Credential.IsExpiredAt(now) {
 		return nil, access.InvalidTokenAppError()
 	}
@@ -272,7 +276,11 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 		return access.InvalidTokenAppError()
 	}
 
-	session, err = s.enforceSessionExpiry(ctx, session, s.now().UTC())
+	now, err := s.sessions.DatabaseNow(ctx)
+	if err != nil {
+		return authenticationUnavailable(err)
+	}
+	session, err = s.enforceSessionExpiry(ctx, session, now)
 	if err != nil {
 		return err
 	}

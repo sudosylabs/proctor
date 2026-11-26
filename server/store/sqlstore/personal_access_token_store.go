@@ -209,11 +209,10 @@ func (s SQLPersonalAccessTokenStore) ListByUser(ctx context.Context, userID mode
 func (s SQLPersonalAccessTokenStore) Resolve(
 	ctx context.Context,
 	tokenHash string,
-	now time.Time,
+	_ time.Time,
 	updateInterval time.Duration,
 ) (*store.PersonalAccessTokenResolution, error) {
-	at := model.TimeUTC(now)
-	if !model.IsValidTokenHash(tokenHash) || !at.After(time.Unix(0, 0)) || updateInterval <= 0 {
+	if !model.IsValidTokenHash(tokenHash) || updateInterval <= 0 {
 		return nil, store.NewErrInvalidInput("personal_access_token", "resolve", nil)
 	}
 
@@ -236,18 +235,24 @@ func (s SQLPersonalAccessTokenStore) Resolve(
 		   AND pat.archived_at IS NULL
 		   AND pat.revoked_at IS NULL
 		   AND pat.disabled_at IS NULL
-		   AND pat.expires_at > ?
+		   AND pat.expires_at > clock_timestamp()
 		   AND u.archived_at IS NULL
 		   AND u.disabled_at IS NULL
 		   AND NOT EXISTS(SELECT 1 FROM user_mfa_recovery r WHERE r.user_id = pat.user_id AND r.reenrollment_required)
 		   AND (pat.academic_unit_id IS NULL OR au.archived_at IS NULL)
 		 FOR UPDATE OF pat`,
 			tokenHash,
-			at,
 		); err != nil {
 			return nil, translateError("personal_access_token", "", err)
 		}
 
+		at, timeErr := databaseWallTime(ctx, tx)
+		if timeErr != nil {
+			return nil, timeErr
+		}
+		if !at.Before(tokenRow.ExpiresAt) {
+			return nil, store.NewErrNotFound("personal_access_token", "")
+		}
 		if !tokenRow.LastUsedAt.Valid || at.Sub(tokenRow.LastUsedAt.Time) >= updateInterval {
 			if _, err := tx.Exec(
 				ctx,

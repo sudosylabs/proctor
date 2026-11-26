@@ -396,7 +396,7 @@ func testPersonalAccessTokenLifecycle(t *testing.T, ss store.Store) {
 	require.Equal(t, model.HashToken(raw), got.TokenHash)
 	require.Equal(t, unit.ID, got.AcademicUnitID)
 	require.Len(t, got.Scopes, 2)
-	now := model.MillisFromTime(token.CreatedAt) + 10
+	now := model.MillisFromTime(token.ExpiresAt.Add(time.Hour))
 	resolved, err := ss.PersonalAccessToken().Resolve(
 		ctx,
 		model.HashToken(raw),
@@ -406,7 +406,8 @@ func testPersonalAccessTokenLifecycle(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Equal(t, user.ID.String(), resolved.User.ID.String())
 	require.Equal(t, token.ID, resolved.Token.ID)
-	require.Equal(t, now, resolved.Token.LastUsedAt.Millis())
+	require.True(t, resolved.Token.LastUsedAt.Valid)
+	require.Less(t, resolved.Token.LastUsedAt.Millis(), now)
 	debounced, err := ss.PersonalAccessToken().Resolve(
 		ctx,
 		model.HashToken(raw),
@@ -414,7 +415,7 @@ func testPersonalAccessTokenLifecycle(t *testing.T, ss store.Store) {
 		time.Second,
 	)
 	require.NoError(t, err)
-	require.Equal(t, now, debounced.Token.LastUsedAt.Millis(), "debounced last_used_at")
+	require.Equal(t, resolved.Token.LastUsedAt.Millis(), debounced.Token.LastUsedAt.Millis(), "debounced last_used_at")
 	disabled, err := changePersonalAccessTokenStateWithNotice(t, ctx, ss, token, true, 10)
 	require.NoError(t, err)
 	require.True(t, disabled.DisabledAt.Valid)

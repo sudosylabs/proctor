@@ -88,6 +88,8 @@ type UserSessionsRevocationResult struct {
 // compare at UTC microsecond precision, and a session is inactive at either
 // deadline.
 type SessionStore interface {
+	// DatabaseNow supplies the authoritative clock for authentication decisions.
+	DatabaseNow(context.Context) (time.Time, error)
 	ReauthenticateExternal(context.Context, *SessionExternalReauthentication) (*SessionReauthenticationResult, error)
 	ReauthenticatePassword(context.Context, *SessionPasswordReauthentication) (*SessionReauthenticationResult, error)
 	Save(context.Context, *SessionCreation) (*model.Session, []*model.SessionCredential, error)

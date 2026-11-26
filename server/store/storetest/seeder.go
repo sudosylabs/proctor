@@ -36,6 +36,8 @@ type Seeder interface {
 	SeedPasswordCredential(context.Context, *model.PasswordCredential) (*model.PasswordCredential, error)
 	SeedExternalIdentity(context.Context, *model.ExternalIdentity) (*model.ExternalIdentity, error)
 	SeedLastLogin(context.Context, *store.UserLastLoginUpdate) error
+	SeedExpiredSession(context.Context, model.SessionID) error
+	SeedExpiredPersonalAccessToken(context.Context, model.PersonalAccessTokenID) error
 	// DatabaseNow reads PostgreSQL's clock, which decides every deadline.
 	DatabaseNow(context.Context) (time.Time, error)
 }

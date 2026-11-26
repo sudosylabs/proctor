@@ -29,31 +29,21 @@ func testPersonalAccessTokenNativeExpiry(t *testing.T, ss store.Store) {
 	saved, err := createPersonalAccessTokenWithNotice(t, ctx, ss, candidate, 10)
 	require.NoError(t, err)
 	require.True(t, saved.ExpiresAt.Equal(deadline), "token deadline = %s", saved.ExpiresAt)
-	for _, test := range []struct {
-		name       string
-		offset     time.Duration
-		lastOffset time.Duration
-		valid      bool
-	}{
-		{name: "first use", offset: -400 * time.Microsecond, lastOffset: -400 * time.Microsecond, valid: true},
-		{name: "debounced", offset: -201 * time.Microsecond, lastOffset: -400 * time.Microsecond, valid: true},
-		{name: "update threshold", offset: -200 * time.Microsecond, lastOffset: -200 * time.Microsecond, valid: true},
-		{name: "nanosecond normalization", offset: -time.Nanosecond, lastOffset: -200 * time.Microsecond, valid: true},
-		{name: "at deadline"},
-		{name: "after deadline", offset: time.Microsecond},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			at := deadline.Add(test.offset).In(time.FixedZone("test", 2*60*60))
-			resolved, err := ss.PersonalAccessToken().Resolve(ctx, model.HashToken(raw), at, 200*time.Microsecond)
-			if !test.valid {
-				require.True(t, store.IsNotFound(err), "expired Resolve()")
-				return
-			}
-			require.NoError(t, err)
-			require.True(t, resolved.Token.LastUsedAt.Valid, "last use = %v", resolved.Token.LastUsedAt)
-			require.True(t, resolved.Token.LastUsedAt.Time.Equal(deadline.Add(test.lastOffset)), "last use = %v", resolved.Token.LastUsedAt)
-		})
-	}
+	before, err := ss.Session().DatabaseNow(ctx)
+	require.NoError(t, err)
+	resolved, err := ss.PersonalAccessToken().Resolve(ctx, model.HashToken(raw), deadline.Add(time.Microsecond), time.Hour)
+	require.NoError(t, err)
+	after, err := ss.Session().DatabaseNow(ctx)
+	require.NoError(t, err)
+	first := resolved.Token.LastUsedAt
+	require.True(t, first.Valid)
+	require.False(t, first.Time.Before(before) || first.Time.After(after))
+	again, err := ss.PersonalAccessToken().Resolve(ctx, model.HashToken(raw), deadline.Add(time.Hour), time.Hour)
+	require.NoError(t, err)
+	require.Equal(t, first, again.Token.LastUsedAt)
+	require.NoError(t, seeder(ss).SeedExpiredPersonalAccessToken(ctx, saved.ID))
+	_, err = ss.PersonalAccessToken().Resolve(ctx, model.HashToken(raw), before.Add(-100*24*time.Hour), time.Hour)
+	require.True(t, store.IsNotFound(err))
 }
 
 func testMFANativeExpiry(t *testing.T, ss store.Store) {

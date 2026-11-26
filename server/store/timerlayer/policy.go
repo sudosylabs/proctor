@@ -556,6 +556,8 @@ const (
 	methodInventory          methodName = "inventory"
 )
 
+const methodDatabaseNow methodName = "database_now"
+
 const methodUsage methodName = "usage"
 
 const methodListCandidateStarterWorkspace methodName = "list_candidate_starter_workspace"

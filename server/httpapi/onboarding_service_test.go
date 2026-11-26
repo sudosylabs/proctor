@@ -373,6 +373,10 @@ type onboardingSessions struct {
 	session *model.Session
 }
 
+func (s *onboardingSessions) DatabaseNow(context.Context) (time.Time, error) {
+	return model.NowUTC(), nil
+}
+
 func (s *onboardingSessions) Get(_ context.Context, id model.SessionID) (*model.Session, error) {
 	if s.session == nil || s.session.ID != id {
 		return nil, store.NewErrNotFound("session", id.String())

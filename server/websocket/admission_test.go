@@ -436,3 +436,5 @@ func (s admissionMemberships) ListActiveByUser(_ context.Context, userID model.U
 	}
 	return []*model.AcademicUnitMember{{AcademicUnitID: s.unitID, UserID: userID}}, nil
 }
+
+func (*admissionSessions) DatabaseNow(context.Context) (time.Time, error) { return model.NowUTC(), nil }

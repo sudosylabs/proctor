@@ -45,6 +45,8 @@ func TestAuthenticationValidatesLongLivedSessionPrincipal(t *testing.T) {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		AuthenticatedAt: at.Add(-time.Minute), ClientType: model.SessionClientWeb,
 	}
+	persistence.databaseNow = func() time.Time { return at }
+	service.now = func() time.Time { return at.Add(24 * time.Hour) }
 	require.NoError(t, service.validatePrincipal(context.Background(), principal))
 	persistence.userGetErr = errors.New("database unavailable")
 	err := service.validatePrincipal(context.Background(), principal)
@@ -166,6 +168,8 @@ func TestAuthenticationAuthoritativeIdleExtensionOverridesStaleExpiredCache(t *t
 		t, persistence, cache, &mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
 		model.NewCredentialToken, func() time.Time { return at },
 	)
+	persistence.databaseNow = func() time.Time { return at }
+	service.now = func() time.Time { return at.Add(48 * time.Hour) }
 	stale := *authoritative
 	stale.IdleExpiresAt = at
 	cacheLegacyAuthentication(t, cache, credential, &stale, user)

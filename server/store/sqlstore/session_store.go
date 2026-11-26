@@ -468,8 +468,8 @@ func (s SQLSessionStore) UpdateActivity(ctx context.Context, input *store.Sessio
 			 WHERE id = ?
 			   AND archived_at IS NULL
 			   AND revoked_at IS NULL
-			   AND idle_expires_at > ?
-			   AND expires_at > ?
+			   AND idle_expires_at > GREATEST(clock_timestamp(), ?::timestamptz)
+			   AND expires_at > GREATEST(clock_timestamp(), ?::timestamptz)
 			RETURNING user_id
 		), advanced AS (
 			UPDATE users
@@ -513,9 +513,8 @@ func (s SQLSessionStore) Withdraw(ctx context.Context, input *store.SessionWithd
 	})
 }
 
-// EnforceExpiry revokes the user's unrevoked session as expired when it has
-// expired at at, returning its revoked credential hashes with Expired set. An
-// unexpired session is returned unchanged.
+// EnforceExpiry checks the locked Session against the database clock and returns
+// the revoked credential hashes when either deadline has passed.
 func (s SQLSessionStore) EnforceExpiry(
 	ctx context.Context,
 	input *store.SessionExpiryEnforcement,
@@ -555,6 +554,10 @@ func (s SQLSessionStore) EnforceExpiry(
 		}
 
 		session, err := row.model()
+		if err != nil {
+			return nil, err
+		}
+		at, err := databaseWallTime(ctx, tx)
 		if err != nil {
 			return nil, err
 		}

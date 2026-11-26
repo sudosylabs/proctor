@@ -116,22 +116,24 @@ func newReviewFixtureWith(t *testing.T, actions ...model.Action) *reviewFixture 
 }
 
 type reviewStoreFake struct {
-	f           *reviewFixture
-	lists       []store.SubmissionListOptions
-	listed      []store.SubmissionListItem
-	releases    []*store.ExamIntegrityReviewRelease
-	liveReads   int
-	decision    *store.ExamIntegrityReviewDecisionMutation
-	replayed    bool
-	mode        string
-	student     *model.StudentResult
-	release     *store.ExamIntegrityReviewRelease
-	reopen      *store.ExamIntegrityReviewReopen
-	reopenErr   error
-	draft       *store.ExamIntegrityReviewDraftMutation
-	idempotency *store.CommandIdempotency
-	prepareErr  error
-	batches     map[[32]byte]reviewBatchFake
+	f             *reviewFixture
+	lists         []store.SubmissionListOptions
+	listed        []store.SubmissionListItem
+	releases      []*store.ExamIntegrityReviewRelease
+	liveReads     int
+	decision      *store.ExamIntegrityReviewDecisionMutation
+	replayed      bool
+	mode          string
+	student       *model.StudentResult
+	release       *store.ExamIntegrityReviewRelease
+	reopen        *store.ExamIntegrityReviewReopen
+	reopenErr     error
+	draft         *store.ExamIntegrityReviewDraftMutation
+	idempotency   *store.CommandIdempotency
+	prepareErr    error
+	beforeRelease func()
+	listErr       error
+	batches       map[[32]byte]reviewBatchFake
 }
 
 type reviewBatchFake struct {
@@ -170,6 +172,9 @@ func (f *reviewStoreFake) CompleteResultReleaseBatch(_ context.Context, completi
 }
 
 func (f *reviewStoreFake) PrepareRelease(ctx context.Context, input *store.ExamIntegrityReviewReleasePrepare) (*store.ExamIntegrityReviewReleasePreparation, error) {
+	if f.beforeRelease != nil {
+		f.beforeRelease()
+	}
 	if f.prepareErr != nil {
 		return nil, f.prepareErr
 	}
@@ -217,6 +222,9 @@ func (f *reviewStoreFake) Finalize(_ context.Context, _ *store.ExamIntegrityRevi
 	return &store.ExamIntegrityReviewMutationResult{Authorization: *mustReviewAuthorization(f), Review: review}, nil
 }
 func (f *reviewStoreFake) ListSubmissions(_ context.Context, options store.SubmissionListOptions) (*store.SubmissionListPage, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	f.lists = append(f.lists, options)
 	page := &store.SubmissionListPage{Items: []store.SubmissionListItem{}}
 	for _, item := range f.listed {

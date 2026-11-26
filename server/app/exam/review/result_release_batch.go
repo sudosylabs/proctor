@@ -208,11 +208,7 @@ func (s *Service) releaseBatchItem(
 	}
 	override, authorization, err := s.authorizeReleaseMutation(ctx, inv, submissionID)
 	if err != nil {
-		item.Outcome = ResultReleaseDenied
-		if !concealedDenial(err) {
-			item.Outcome, item.ErrorCode = ResultReleaseFailed, apperror.CodeOf(publicFailures.Conceal(err), "exam.integrity_review.unavailable")
-		}
-		return item
+		return releaseBatchAuthorizationFailure(item, err)
 	}
 	review := row.Review
 	if review == nil || review.State != model.SubmissionReviewFinalized {
@@ -240,23 +236,42 @@ func (s *Service) releaseBatchItem(
 		item.Outcome = ResultReleaseReleased
 		return item
 	}
-	if review.ReleaseState == model.SubmissionReviewReleased {
-		item.Outcome = ResultReleaseAlready
-		return item
-	}
 	code := apperror.CodeOf(publicFailures.Conceal(err), "exam.integrity_review.unavailable")
 	if code != "exam.integrity_review.revision_conflict" && code != "exam.integrity_review.state_conflict" {
 		item.Outcome, item.ErrorCode = ResultReleaseFailed, code
 		return item
 	}
-	// The review moved since the batch read it: report where it is now.
+	// Recheck the caller's release authority before reading the current state.
+	if _, _, err = s.authorizeReleaseMutation(ctx, inv, submissionID); err != nil {
+		return releaseBatchAuthorizationFailure(item, err)
+	}
 	item.Outcome = ResultReleaseNotFinalized
-	if now, readErr := s.reviews.ListSubmissions(ctx, store.SubmissionListOptions{
+	now, readErr := s.reviews.ListSubmissions(ctx, store.SubmissionListOptions{
 		ExamID: row.ExamID, SittingID: row.SittingID, ReviewVisible: true, ExcludeCandidateUserID: inv.Principal().UserID,
 		SubmissionIDs: []model.SubmissionID{submissionID}, Sort: store.SubmissionListBySubmitted, Limit: 1,
-	}); readErr == nil && now != nil && len(now.Items) == 1 && now.Items[0].Review != nil &&
+	})
+	if readErr != nil {
+		item.Outcome = ResultReleaseFailed
+		item.ErrorCode = apperror.CodeOf(publicFailures.Conceal(storeErrors.Translate(readErr)), "exam.integrity_review.unavailable")
+		return item
+	}
+	if now == nil || len(now.Items) != 1 {
+		item.Outcome = ResultReleaseDenied
+		return item
+	}
+	if now.Items[0].Review != nil &&
 		now.Items[0].Review.ReleaseState == model.SubmissionReviewReleased {
 		item.Outcome = ResultReleaseAlready
+	}
+	return item
+}
+
+func releaseBatchAuthorizationFailure(item ResultReleaseBatchItem, err error) ResultReleaseBatchItem {
+	if concealedDenial(err) {
+		item.Outcome = ResultReleaseDenied
+	} else {
+		item.Outcome = ResultReleaseFailed
+		item.ErrorCode = apperror.CodeOf(publicFailures.Conceal(err), "exam.integrity_review.unavailable")
 	}
 	return item
 }

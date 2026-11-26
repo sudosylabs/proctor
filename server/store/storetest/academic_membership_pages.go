@@ -271,3 +271,101 @@ func membershipPageOrder[M any](
 	}
 	return ids
 }
+
+// testAcademicUnitMemberPageExcludesDisabledUsers lists a unit with one
+// active and one disabled member: the disabled one is listed and counted
+// unless the page asks to leave disabled accounts out, and the identities
+// carry the account state.
+func testAcademicUnitMemberPageExcludesDisabledUsers(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	parents := saveClassFixture(t, ctx, ss)
+	unit := saveAcademicUnit(t, ctx, ss, parents.institution.ID.String(), "", "disabled-members")
+	member := func(disabled bool) *model.User {
+		t.Helper()
+		user := newUser()
+		if disabled {
+			user.PrepareCreate(model.NewUserID(), model.NowUTC().Add(-time.Hour))
+			user.DisabledAt = model.OptionalTimeFrom(model.NowUTC().Add(-time.Minute))
+		}
+		saved, err := createUser(t, ctx, ss, user)
+		require.NoError(t, err)
+		_, err = seeder(ss).SeedAcademicUnitMember(ctx, &model.AcademicUnitMember{
+			AcademicUnitID: unit.ID, UserID: saved.ID, StartsAt: model.NowUTC().Add(-time.Minute),
+		})
+		require.NoError(t, err)
+		return saved
+	}
+	active, disabled := member(false), member(true)
+
+	for _, exclude := range []bool{false, true} {
+		options := store.AcademicUnitMemberPageOptions{AcademicUnitID: unit.ID, ExcludeDisabledUsers: exclude, Limit: 10}
+		page, err := ss.AcademicUnitMember().ListPageByAcademicUnit(ctx, options)
+		require.NoError(t, err)
+		listed := make([]model.UserID, 0, len(page.Members))
+		for _, m := range page.Members {
+			listed = append(listed, m.UserID)
+		}
+		total, err := ss.AcademicUnitMember().CountPageByAcademicUnit(ctx, options, store.MaximumListCount)
+		require.NoError(t, err)
+		if exclude {
+			require.Equal(t, []model.UserID{active.ID}, listed, "a disabled account is left out")
+			require.Equal(t, 1, total, "and not counted")
+		} else {
+			require.ElementsMatch(t, []model.UserID{active.ID, disabled.ID}, listed)
+			require.Equal(t, 2, total)
+		}
+	}
+
+	identities, err := ss.User().ListIdentities(ctx, []model.UserID{active.ID, disabled.ID})
+	require.NoError(t, err)
+	states := map[model.UserID]bool{}
+	for _, identity := range identities {
+		states[identity.ID] = identity.DisabledAt.Valid
+	}
+	require.Equal(t, map[model.UserID]bool{active.ID: false, disabled.ID: true}, states, "identities carry the account state")
+}
+
+// testClassMemberPageExcludesDisabledUsers lists a Class with one active and
+// one disabled student: the disabled one is listed and counted unless the
+// page asks to leave disabled accounts out.
+func testClassMemberPageExcludesDisabledUsers(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	parents := saveClassFixture(t, ctx, ss)
+	class := saveClass(t, ctx, ss, parents.level.ID.String(), parents.period.ID.String(), "disabled-students")
+	at := model.NowUTC()
+	student := func(disabled bool) *model.User {
+		t.Helper()
+		user := newUser()
+		if disabled {
+			user.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
+			user.DisabledAt = model.OptionalTimeFrom(at.Add(-time.Minute))
+		}
+		saved, err := createUser(t, ctx, ss, user)
+		require.NoError(t, err)
+		_, err = seeder(ss).SeedAffiliation(ctx, &model.Affiliation{UserID: saved.ID, Kind: model.AffiliationStudent, StartsAt: at.Add(-time.Minute)})
+		require.NoError(t, err)
+		_, err = seeder(ss).SeedClassEnrollment(ctx, &model.ClassMember{ClassID: class.ID, UserID: saved.ID, StartsAt: at})
+		require.NoError(t, err)
+		return saved
+	}
+	active, disabled := student(false), student(true)
+
+	for _, exclude := range []bool{false, true} {
+		options := store.ClassMemberPageOptions{ClassID: class.ID, ExcludeDisabledUsers: exclude, Limit: 10}
+		page, err := ss.ClassMember().ListPageByClass(ctx, options)
+		require.NoError(t, err)
+		listed := make([]model.UserID, 0, len(page.Members))
+		for _, m := range page.Members {
+			listed = append(listed, m.UserID)
+		}
+		total, err := ss.ClassMember().CountPageByClass(ctx, options, store.MaximumListCount)
+		require.NoError(t, err)
+		if exclude {
+			require.Equal(t, []model.UserID{active.ID}, listed, "a disabled account is left out")
+			require.Equal(t, 1, total, "and not counted")
+		} else {
+			require.ElementsMatch(t, []model.UserID{active.ID, disabled.ID}, listed)
+			require.Equal(t, 2, total)
+		}
+	}
+}

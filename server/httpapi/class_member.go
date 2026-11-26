@@ -32,9 +32,10 @@ type classMemberResponse struct {
 // is, as a unit member listing names them, and the transfer its end is.
 type classMemberListItemResponse struct {
 	classMemberResponse
-	User     personRefResponse            `json:"user"`
-	Email    string                       `json:"email,omitempty"`
-	Transfer *classMemberTransferResponse `json:"transfer,omitempty"`
+	User       personRefResponse            `json:"user"`
+	Email      string                       `json:"email,omitempty"`
+	DisabledAt string                       `json:"disabled_at,omitempty"`
+	Transfer   *classMemberTransferResponse `json:"transfer,omitempty"`
 }
 
 type classMemberTransferResponse struct {
@@ -142,6 +143,7 @@ func (h classMemberHandlers) list(request route.Request) (route.Result, error) {
 				classMemberResponse: classMemberResponseFromModel(member),
 				User:                *personRef(refs, member.UserID),
 				Email:               identity.Email,
+				DisabledAt:          identity.DisabledAt.FormatRFC3339(),
 			}
 			if transfer, transferred := page.Transfers[member.ID]; transferred {
 				item.Transfer = &classMemberTransferResponse{

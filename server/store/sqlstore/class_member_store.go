@@ -1414,6 +1414,12 @@ func filterClassMemberPage(query sq.SelectBuilder, options store.ClassMemberPage
 				)
 		)`, args...)
 	}
+	if options.ExcludeDisabledUsers {
+		query = query.Where(`EXISTS (
+			SELECT 1 FROM users
+			WHERE users.id = class_members.user_id AND users.disabled_at IS NULL
+		)`)
+	}
 	return query
 }
 

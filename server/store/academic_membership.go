@@ -51,6 +51,9 @@ type AcademicUnitMemberPageOptions struct {
 	// these kinds at AffiliationsAt, which a non-empty list requires.
 	Affiliations   []model.AffiliationKind
 	AffiliationsAt time.Time
+	// ExcludeDisabledUsers leaves out members whose account is disabled, for a
+	// caller who may not learn that an account is disabled.
+	ExcludeDisabledUsers bool
 	MembershipPageKeyset
 	AfterID model.AcademicUnitMemberID
 	Limit   int
@@ -72,6 +75,9 @@ type ClassMemberPageOptions struct {
 	// matches the email, only for a caller who may see emails.
 	Query             string
 	QueryMatchesEmail bool
+	// ExcludeDisabledUsers leaves out members whose account is disabled, for a
+	// caller who may not learn that an account is disabled.
+	ExcludeDisabledUsers bool
 	MembershipPageKeyset
 	AfterID model.ClassMemberID
 	Limit   int

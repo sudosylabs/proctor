@@ -802,6 +802,9 @@ func (s *Service) ListClassMembersPage(
 		return nil, err
 	}
 
+	// Only institution-wide user.view may see emails or learn that an account
+	// is disabled, as in the user directory: anyone else neither matches on
+	// email nor sees disabled members at all.
 	showEmail, err := s.authorizer.CanViewInstitutionUsers(ctx, inv)
 	if err != nil {
 		return nil, err
@@ -812,6 +815,7 @@ func (s *Service) ListClassMembersPage(
 		ActiveAt:             model.TimeFromMillis(activeAt),
 		Query:                strings.TrimSpace(query.Query),
 		QueryMatchesEmail:    showEmail,
+		ExcludeDisabledUsers: !showEmail,
 		MembershipPageKeyset: keyset,
 		AfterID:              query.AfterID,
 		Limit:                limit,
@@ -872,6 +876,7 @@ func (s *Service) describeClassMembers(ctx context.Context, inv invocation.Invoc
 	for _, identity := range identities {
 		if !showEmail {
 			identity.Email = ""
+			identity.DisabledAt = model.OptionalTime{}
 		}
 		page.Users[identity.ID] = identity
 	}

@@ -276,7 +276,8 @@ components:
       additionalProperties: false
       description: >-
         One membership and who the member is. `roles_here` and `roles_here_more` are present only if you hold
-        role_binding.view on this Academic Unit.
+        role_binding.view on this Academic Unit. A disabled account's membership is listed only to a caller with
+        Institution-wide user.view, with `disabled_at`.
       required:
         - id
         - created_at
@@ -325,6 +326,13 @@ components:
           format: email
           maxLength: 254
           description: The member's email address. Present only with Institution-wide user.view.
+        disabled_at:
+          type: string
+          format: date-time
+          description: >-
+            When the member's account was disabled. Present only while it is disabled, and only with
+            Institution-wide user.view; without it, members whose account is disabled aren't listed, and `total`
+            doesn't count them.
         roles_here:
           type: array
           maxItems: 5

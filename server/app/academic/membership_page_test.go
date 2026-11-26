@@ -57,12 +57,13 @@ func TestAcademicUnitMemberPagingAuthorizesEveryPage(t *testing.T) {
 	require.NoError(t, err, "first page = %#v", first)
 	require.True(t, first.HasMore, "first page = %#v", first)
 	// Contract: authorization precedes the read, and the member descriptions
-	// follow it. Describing reads the caller's grants twice, once for email
-	// and once for Role Bindings, without recording a decision.
-	require.Equal(t, []string{"grants", "decision:academic_unit.members.view:success", "list-page", "count-page", "grants", "grants"}, events)
+	// follow it. The caller's grants are read twice without recording a
+	// decision: before the read for account visibility, which filters it, and
+	// after it for Role Bindings.
+	require.Equal(t, []string{"grants", "decision:academic_unit.members.view:success", "grants", "list-page", "count-page", "grants"}, events)
 	require.Equal(t, paging.Total{Counted: true, Total: 1}, first.Total, "the first page counts its memberships")
-	require.Equal(t, store.AcademicUnitMemberPageOptions{AcademicUnitID: scopeID, ActiveAt: now, Limit: 1}, persistence.countOptions,
-		"the count reads the page's scope and instant")
+	require.Equal(t, store.AcademicUnitMemberPageOptions{AcademicUnitID: scopeID, ActiveAt: now, ExcludeDisabledUsers: true, Limit: 1},
+		persistence.countOptions, "the count reads the page's scope, instant and account visibility")
 	now = now.Add(time.Hour)
 	persistence.pageResult = &store.AcademicUnitMemberPage{}
 	next, err := service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
@@ -107,11 +108,12 @@ func TestClassMemberPagingAuthorizesEveryPage(t *testing.T) {
 	require.NoError(t, err, "first page = %#v", first)
 	require.True(t, first.HasMore, "first page = %#v", first)
 	// The get-class resolves the Class's scope for the decision; the second
-	// grants read decides whether the member's email is shown and searched.
+	// grants read decides whether the member's email is shown and searched,
+	// and whether disabled accounts are listed.
 	require.Equal(t, []string{"get-class", "grants", "decision:class.members.view:success", "grants", "list-page", "count-page"}, events)
 	require.Equal(t, paging.Total{Counted: true, Total: 1}, first.Total, "the first page counts its memberships")
-	require.Equal(t, store.ClassMemberPageOptions{ClassID: scopeID, ActiveAt: now, Limit: 1}, persistence.countOptions,
-		"the count reads the page's Class and instant")
+	require.Equal(t, store.ClassMemberPageOptions{ClassID: scopeID, ActiveAt: now, ExcludeDisabledUsers: true, Limit: 1},
+		persistence.countOptions, "the count reads the page's Class, instant and account visibility")
 	now = now.Add(time.Hour)
 	persistence.pageResult = &store.ClassMemberPage{}
 	next, err := service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
@@ -182,21 +184,30 @@ func TestAcademicUnitMemberPageDescribesMembersWithinTheCallersAuthority(t *test
 			}
 			access := academicUnitAccess(t, &events, nil, grants...)
 			bindings := &academicUnitMemberRoleBindingStoreFake{events: &events, summaries: []store.UserRoleBindingSummary{reviewer}}
-			service := mustNew(Dependencies{Store: &catalogFake{academicUnitMember: &academicUnitMemberStoreFake{events: &events, pageResult: &store.AcademicUnitMemberPage{Members: members}}, user: relationshipUserStoreTestFake{}, roleBinding: bindings}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return now }})
+			memberStore := &academicUnitMemberStoreFake{events: &events, pageResult: &store.AcademicUnitMemberPage{Members: members}}
+			service := mustNew(Dependencies{Store: &catalogFake{academicUnitMember: memberStore, user: relationshipUserStoreTestFake{}, roleBinding: bindings}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return now }})
 			page, err := service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: unitID})
 			require.NoError(t, err)
+			// Only Institution-wide user.view may learn an account is disabled,
+			// so anyone else never reaches a disabled member, in the page or
+			// its count.
+			require.Equal(t, !test.institutionUsers, memberStore.pageOptions.ExcludeDisabledUsers)
+			require.Equal(t, !test.institutionUsers, memberStore.countOptions.ExcludeDisabledUsers)
 			for _, userID := range []model.UserID{first, second} {
 				identity := page.Users[userID]
 				require.Equal(t, "user-"+userID.String(), identity.Username)
 				require.Equal(t, "User "+userID.String(), identity.DisplayName)
 				if test.institutionUsers {
 					require.Equal(t, userID.String()+"@example.edu", identity.Email)
+					require.Equal(t, model.OptionalTimeFromMillis(1000), identity.DisabledAt)
 				} else {
 					require.Empty(t, identity.Email, "email needs Institution-wide user.view")
+					require.False(t, identity.DisabledAt.Valid, "account state needs Institution-wide user.view")
 				}
 			}
-			// Both predicates read the caller's grants without recording a decision.
-			described := []string{"grants", "decision:academic_unit.members.view:success", "list-page", "count-page", "grants", "grants"}
+			// Both predicates read the caller's grants without recording a decision;
+			// account visibility is decided before the read, because it filters it.
+			described := []string{"grants", "decision:academic_unit.members.view:success", "grants", "list-page", "count-page", "grants"}
 			if !test.roleBindings {
 				require.Nil(t, page.RolesHere, "Role Bindings need role_binding.view on the unit")
 				// Contract: without role_binding.view the Role Bindings are never read.

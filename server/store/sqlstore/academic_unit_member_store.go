@@ -775,7 +775,8 @@ func (s SQLAcademicUnitMemberStore) CountPageByAcademicUnit(
 }
 
 // filterAcademicUnitMemberPage applies every ListPageByAcademicUnit filter
-// but the keyset: the unit, unarchived memberships, and the effective instant.
+// but the keyset: the unit, unarchived memberships, the effective instant,
+// and, when asked, members whose account isn't disabled.
 func filterAcademicUnitMemberPage(query sq.SelectBuilder, options store.AcademicUnitMemberPageOptions) sq.SelectBuilder {
 	query = query.Where(sq.Eq{
 		"academic_unit_members.academic_unit_id": options.AcademicUnitID.String(),
@@ -796,6 +797,12 @@ func filterAcademicUnitMemberPage(query sq.SelectBuilder, options store.Academic
 				AND affiliations.start_at <= ?
 				AND (affiliations.end_at IS NULL OR affiliations.end_at > ?)
 		)`, pq.Array(idStrings(options.Affiliations)), at, at)
+	}
+	if options.ExcludeDisabledUsers {
+		query = query.Where(`EXISTS (
+			SELECT 1 FROM users
+			WHERE users.id = academic_unit_members.user_id AND users.disabled_at IS NULL
+		)`)
 	}
 	return query
 }

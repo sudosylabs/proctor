@@ -9,6 +9,7 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -158,16 +159,17 @@ func (s SQLUserStore) ListIdentities(ctx context.Context, ids []model.UserID) ([
 	}
 
 	type identityRow struct {
-		ID          string `db:"id"`
-		Username    string `db:"username"`
-		DisplayName string `db:"display_name"`
-		Email       string `db:"email"`
+		ID          string       `db:"id"`
+		Username    string       `db:"username"`
+		DisplayName string       `db:"display_name"`
+		Email       string       `db:"email"`
+		DisabledAt  sql.NullTime `db:"disabled_at"`
 	}
 	rows := []identityRow{}
 	if err := s.GetMaster().Select(
 		ctx,
 		&rows,
-		`SELECT id, username, display_name, email FROM users WHERE id = ANY(?)`,
+		`SELECT id, username, display_name, email, disabled_at FROM users WHERE id = ANY(?)`,
 		pq.Array(idStrings(ids)),
 	); err != nil {
 		return nil, fmt.Errorf("list User identities: %w", err)
@@ -180,7 +182,8 @@ func (s SQLUserStore) ListIdentities(ctx context.Context, ids []model.UserID) ([
 			return nil, invalidPersistedState("user", "id", err)
 		}
 
-		identities = append(identities, store.UserIdentity{ID: id, Username: row.Username, DisplayName: row.DisplayName, Email: row.Email})
+		identities = append(identities, store.UserIdentity{ID: id, Username: row.Username, DisplayName: row.DisplayName, Email: row.Email,
+			DisabledAt: OptionalTimeFromNullTime(row.DisabledAt)})
 	}
 
 	return identities, nil

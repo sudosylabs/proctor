@@ -275,7 +275,8 @@ components:
           description: True when counting stopped at 10,000 and there may be more. Present with `total`.
     ClassMemberListItemResponse:
       description: >-
-        One enrollment, who the student is, and, when its end moves the student to another Class, that transfer.
+        One enrollment, who the student is, and, when its end moves the student to another Class, that transfer. A
+        disabled account's enrollment is listed only to a caller with Institution-wide user.view, with `disabled_at`.
       type: object
       additionalProperties: false
       required:
@@ -327,6 +328,13 @@ components:
           type: string
           format: email
           description: The student email, present with Institution-wide user.view.
+        disabled_at:
+          type: string
+          format: date-time
+          description: >-
+            When the student's account was disabled. Present only while it is disabled, and only with
+            Institution-wide user.view; without it, students whose account is disabled aren't listed, and `total`
+            doesn't count them.
         transfer:
           $ref: '#/components/schemas/ClassMemberTransfer'
     ClassMemberTransfer:

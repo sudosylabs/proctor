@@ -20,6 +20,7 @@ import (
 
 func TestAcademicUnitMemberStore(t *testing.T, ss store.Store) {
 	t.Run("StablePages", func(t *testing.T) { testAcademicUnitMemberPaging(t, ss) })
+	t.Run("PagesCanLeaveOutDisabledAccounts", func(t *testing.T) { testAcademicUnitMemberPageExcludesDisabledUsers(t, ss) })
 	t.Run("ActiveIntervalPrecision", func(t *testing.T) { testAcademicUnitMemberActiveIntervalPrecision(t, ss) })
 	t.Run("EndBeforeModification", func(t *testing.T) { testAcademicUnitMemberEndBeforeModification(t, ss) })
 	ctx := context.Background()

@@ -153,6 +153,17 @@ for (const colorScheme of ["light", "dark"] as const) {
   }
 }
 
+test("an unavailable profile still permits signing out", async ({ page }) => {
+  const state = await mockSecurity(page);
+  await page.route("**/api/v1/users/me", route => route.fulfill({ status: 503, body: "{}" }));
+  const profile = page.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/users/me");
+  await page.goto("/account/security");
+  await profile;
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(state.signedOut).toBe(true);
+});
+
 test("status names the signed-in User and signs out from the footer", async ({ page }) => {
   const state = await mockSecurity(page);
   await page.goto("/account/security");

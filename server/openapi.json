@@ -18915,7 +18915,7 @@
       },
       "ClassMemberListItemResponse": {
         "additionalProperties": false,
-        "description": "One enrollment, who the student is, and, when its end moves the student to another Class, that transfer.",
+        "description": "One enrollment, who the student is, and, when its end moves the student to another Class, that transfer. A disabled account's enrollment is listed only to a caller with Institution-wide user.view, with `disabled_at`.",
         "properties": {
           "academic_period_id": {
             "$ref": "#/components/schemas/ID",
@@ -18932,6 +18932,11 @@
           },
           "created_at": {
             "description": "When the enrollment was created.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "disabled_at": {
+            "description": "When the student's account was disabled. Present only while it is disabled, and only with Institution-wide user.view; without it, students whose account is disabled aren't listed, and `total` doesn't count them.",
             "format": "date-time",
             "type": "string"
           },

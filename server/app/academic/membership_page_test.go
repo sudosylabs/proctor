@@ -108,11 +108,12 @@ func TestClassMemberPagingAuthorizesEveryPage(t *testing.T) {
 	require.NoError(t, err, "first page = %#v", first)
 	require.True(t, first.HasMore, "first page = %#v", first)
 	// The get-class resolves the Class's scope for the decision; the second
-	// grants read decides whether the member's email is shown and searched.
+	// grants read decides whether the member's email is shown and searched,
+	// and whether disabled accounts are listed.
 	require.Equal(t, []string{"get-class", "grants", "decision:class.members.view:success", "grants", "list-page", "count-page"}, events)
 	require.Equal(t, paging.Total{Counted: true, Total: 1}, first.Total, "the first page counts its memberships")
-	require.Equal(t, store.ClassMemberPageOptions{ClassID: scopeID, ActiveAt: now, Limit: 1}, persistence.countOptions,
-		"the count reads the page's Class and instant")
+	require.Equal(t, store.ClassMemberPageOptions{ClassID: scopeID, ActiveAt: now, ExcludeDisabledUsers: true, Limit: 1},
+		persistence.countOptions, "the count reads the page's Class, instant and account visibility")
 	now = now.Add(time.Hour)
 	persistence.pageResult = &store.ClassMemberPage{}
 	next, err := service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})

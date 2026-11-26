@@ -10092,7 +10092,7 @@ export interface components {
             /** @description True when `total` reached 10,000 and there may be more. Present with `total`. */
             total_is_lower_bound?: boolean;
         };
-        /** @description One enrollment, who the student is, and, when its end moves the student to another Class, that transfer. */
+        /** @description One enrollment, who the student is, and, when its end moves the student to another Class, that transfer. A disabled account's enrollment is listed only to a caller with Institution-wide user.view, with `disabled_at`. */
         ClassMemberListItemResponse: {
             /** @description The Academic Period of the Class, which the enrollment belongs to. */
             academic_period_id: components["schemas"]["ID"];
@@ -10108,6 +10108,11 @@ export interface components {
              * @description When the enrollment was created.
              */
             created_at: string;
+            /**
+             * Format: date-time
+             * @description When the student's account was disabled. Present only while it is disabled, and only with Institution-wide user.view; without it, students whose account is disabled aren't listed, and `total` doesn't count them.
+             */
+            disabled_at?: string;
             /**
              * Format: email
              * @description The student email, present with Institution-wide user.view.

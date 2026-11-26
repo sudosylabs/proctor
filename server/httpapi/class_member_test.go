@@ -170,4 +170,52 @@ func TestClassMemberHTTPListNamesMembersAndTheirTransfers(t *testing.T) {
 		body.Items[0]["transfer"])
 	require.Equal(t, "amara", fixture.classMembers.pageOptions[0].Query)
 	require.False(t, fixture.classMembers.pageOptions[0].QueryMatchesEmail, "a scoped viewer can't search by a hidden email")
+	require.True(t, fixture.classMembers.pageOptions[0].ExcludeDisabledUsers, "a scoped viewer never reaches a disabled account")
+}
+
+// TestClassMemberHTTPListMarksDisabledAccountsForInstitutionViewers lists a
+// disabled student twice: an Institution-wide user.view caller gets the
+// account state beside the email, and a scoped caller gets neither, and asks
+// the store to leave disabled accounts out.
+func TestClassMemberHTTPListMarksDisabledAccountsForInstitutionViewers(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	world := newAcademicWorld()
+	member := &model.ClassMember{ID: model.NewClassMemberID(), UserID: model.NewUserID(), ClassID: world.class.ID,
+		StartsAt: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)}
+	list := func(institution bool) (map[string]any, store.ClassMemberPageOptions) {
+		t.Helper()
+		principal := academicCaller()
+		grants := []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassMembersView, model.ActionClassView)}
+		if institution {
+			grants = append(grants, institutionWide(principal.UserID, model.ActionUserView))
+		}
+		fixture := newAcademicFixture(t, academicOptions{Grants: grants, Units: world.units()})
+		fixture.hold(world)
+		fixture.users.add(&model.User{ID: member.UserID, Username: "aokafor", DisplayName: "Amara Okafor", Email: "amara@example.edu",
+			DisabledAt: model.OptionalTimeFrom(time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC))})
+		fixture.classMembers.page, fixture.classMembers.total = store.ClassMemberPage{Members: []*model.ClassMember{member}}, 1
+		api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(fixture.service, fixture.people()))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/"+world.class.ID.String()+"/members", nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var body struct {
+			Items []map[string]any `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		require.Len(t, body.Items, 1)
+		return body.Items[0], fixture.classMembers.pageOptions[0]
+	}
+
+	item, options := list(true)
+	require.Equal(t, "2026-10-01T09:00:00Z", item["disabled_at"])
+	require.Equal(t, "amara@example.edu", item["email"])
+	require.False(t, options.ExcludeDisabledUsers)
+
+	item, options = list(false)
+	require.NotContains(t, item, "disabled_at", "no account state without Institution-wide user.view")
+	require.NotContains(t, item, "email")
+	require.True(t, options.ExcludeDisabledUsers)
 }

@@ -44,13 +44,15 @@ const retentionRetirementQuery = `SELECT r.id, r.exam_id, r.exam_sitting_id, r.s
 			FROM retention_purge_objects
 			WHERE retirement_id = r.id
 				AND absence_verified_at IS NULL
-		) AS purge_pending,
+		) + (SELECT COALESCE(sum(chunk_count), 0) FROM retention_purge_screen_clips
+ WHERE retirement_id = r.id AND absence_verified_at IS NULL) AS purge_pending,
 		(
 			SELECT count(*)
 			FROM retention_purge_objects
 			WHERE retirement_id = r.id
 				AND absence_verified_at IS NOT NULL
-		) AS purge_verified
+		) + (SELECT COALESCE(sum(chunk_count), 0) FROM retention_purge_screen_clips
+ WHERE retirement_id = r.id AND absence_verified_at IS NOT NULL) AS purge_verified
 	FROM retention_retirements r`
 
 func getActiveRetirement(

@@ -38,6 +38,9 @@ func testSessionNativeTimeBoundaries(t *testing.T, ss store.Store) {
 			for _, test := range sessionDecisionCases(deadline) {
 				t.Run("EnforceExpiry/"+test.name, func(t *testing.T) {
 					user, session, raw := saveSessionTimeFixture(t, ss, expiry, deadline)
+					if test.expired {
+						require.NoError(t, seeder(ss).SeedExpiredSession(t.Context(), session.ID))
+					}
 					result, err := ss.Session().EnforceExpiry(context.Background(), &store.SessionExpiryEnforcement{ID: session.ID, UserID: user.ID, At: test.at})
 					require.NoError(t, err)
 					require.NotNil(t, result, "EnforceExpiry(%v)", test.at)
@@ -48,8 +51,8 @@ func testSessionNativeTimeBoundaries(t *testing.T, ss store.Store) {
 						require.Empty(t, result.TokenHashes, "expiry enforcement changed an active Session")
 						return
 					}
-					at := model.TimeUTC(test.at)
-					require.True(t, result.Session.RevokedAt.Time.Equal(at))
+					at := result.Session.RevokedAt.Time
+					require.True(t, at.After(result.Session.IdleExpiresAt) || at.After(result.Session.ExpiresAt))
 					require.Len(t, result.TokenHashes, 2)
 					credential, saved, err := ss.SessionCredential().GetSessionByTokenHash(
 						context.Background(), model.HashToken(raw.access), model.SessionCredentialAccess,

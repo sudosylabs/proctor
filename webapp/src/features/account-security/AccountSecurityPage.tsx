@@ -21,7 +21,7 @@ export function AccountSecurityPage() {
   const name = useSignedInName(ordinarySession);
   return (
     <AccessPageShell skipLabel={message("webapp.security.skip_to_main")}
-      signedIn={name === undefined ? undefined : { name, signOut: <SecuritySignOut signOut={actions.signOut} /> }}>
+      signedIn={ordinarySession ? { name, signOut: <SecuritySignOut signOut={actions.signOut} /> } : undefined}>
       <AccountSecurityContent actions={actions} loading={resource.loading} state={resource.value} onRefresh={resource.retry} />
     </AccessPageShell>
   );

@@ -361,7 +361,7 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 		Description:      command.Description,
 	}
 	candidate.PrepareCreate(classID, s.now())
-	if err := candidate.Validate(); err != nil {
+	if err = candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
 
@@ -416,27 +416,23 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 	if err != nil {
 		return nil, classStoreErrors.Translate(err)
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "class.conflict"); err != nil {
+	if err = checkAcademicRevision(command.ExpectedRevision, current.Revision, "class.conflict"); err != nil {
 		return nil, err
 	}
 
 	candidate := *current
 	if command.ProgrammeLevelID != nil {
-		levelID, err := model.ParseProgrammeLevelID(strings.TrimSpace(command.ProgrammeLevelID.String()))
+		candidate.ProgrammeLevelID, err = model.ParseProgrammeLevelID(strings.TrimSpace(command.ProgrammeLevelID.String()))
 		if err != nil {
 			return nil, apperror.New("request.invalid").WithField("field", "programme_level_id").Wrap(err)
 		}
-
-		candidate.ProgrammeLevelID = levelID
 	}
 
 	if command.AcademicPeriodID != nil {
-		periodID, err := model.ParseAcademicPeriodID(strings.TrimSpace(command.AcademicPeriodID.String()))
+		candidate.AcademicPeriodID, err = model.ParseAcademicPeriodID(strings.TrimSpace(command.AcademicPeriodID.String()))
 		if err != nil {
 			return nil, apperror.New("request.invalid").WithField("field", "academic_period_id").Wrap(err)
 		}
-
-		candidate.AcademicPeriodID = periodID
 	}
 
 	if command.Name != nil {
@@ -451,7 +447,7 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 
 	if candidate.ProgrammeLevelID != current.ProgrammeLevelID {
 		destination := model.Resource{Type: model.ResourceProgrammeLevel, ID: candidate.ProgrammeLevelID.String()}
-		if err := s.authorizer.Authorize(ctx, inv, model.ActionClassManage, destination); err != nil {
+		if err = s.authorizer.Authorize(ctx, inv, model.ActionClassManage, destination); err != nil {
 			return nil, err
 		}
 	}
@@ -462,7 +458,7 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 	}
 
 	candidate.PrepareUpdate(at)
-	if err := candidate.Validate(); err != nil {
+	if err = candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
 

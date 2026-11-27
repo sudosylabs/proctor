@@ -15,7 +15,7 @@ import styles from "./AccessPageShell.module.css";
 
 export interface AccessPageSignedIn {
   /** Safe display name of the signed-in User, rendered as escaped text. */
-  name: string;
+  name?: string | undefined;
   /** Page-owned sign-out control (a button or link) placed after the name. */
   signOut?: ReactNode;
 }
@@ -71,14 +71,16 @@ export function AccessPageShell({
           </div>
           {signedIn === undefined ? null : (
             <div className={styles.signedIn}>
-              <p className={styles.signedInText}>
-                <span className={styles.signedInFull}>
-                  {message("webapp.shell.signed_in", { Name: signedIn.name })}
-                </span>
-                <span className={styles.signedInShort} aria-hidden="true">
-                  {signedIn.name}
-                </span>
-              </p>
+              {signedIn.name === undefined ? null : (
+                <p className={styles.signedInText}>
+                  <span className={styles.signedInFull}>
+                    {message("webapp.shell.signed_in", { Name: signedIn.name })}
+                  </span>
+                  <span className={styles.signedInShort} aria-hidden="true">
+                    {signedIn.name}
+                  </span>
+                </p>
+              )}
               {signedIn.signOut}
             </div>
           )}

@@ -9,6 +9,7 @@ package review
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -192,4 +193,30 @@ func TestBulkReleaseNeedsReleaseAuthorityOnTheSitting(t *testing.T) {
 		IdempotencyKey: "release-both",
 	})
 	require.True(t, apperror.Is(err, "exam.integrity_review.invalid"), "naming Submissions and all_finalized together: %v", err)
+}
+
+func TestBulkReleaseReportsFreshlyWithheldResult(t *testing.T) {
+	f := newReviewFixture(t)
+	f.persistence.listed = []store.SubmissionListItem{{
+		SubmissionID: f.submissionID, ExamID: f.examID, SittingID: f.sittingID, AttemptID: f.attemptID,
+		ReviewVisible: true, Review: &store.SubmissionListReview{ID: f.reviewID, State: model.SubmissionReviewFinalized,
+			ReleaseState: model.SubmissionReviewReleased, Revision: 3, FinalizedByUserID: f.userID},
+	}}
+	f.persistence.prepareErr = store.NewErrConflict("submission_review", "integrity_review_state", nil)
+	f.persistence.beforeRelease = func() {
+		fresh := *f.persistence.listed[0].Review
+		fresh.State, fresh.ReleaseState = model.SubmissionReviewDraft, model.SubmissionReviewWithheld
+		f.persistence.listed[0].Review = &fresh
+	}
+	result, err := f.service.ReleaseSittingResults(t.Context(), f.inv, ResultReleaseBatchCommand{
+		ExamID: f.examID, SittingID: f.sittingID, SubmissionIDs: []model.SubmissionID{f.submissionID}, IdempotencyKey: "reopen-conflict",
+	})
+	require.NoError(t, err)
+	require.Equal(t, ResultReleaseNotFinalized, result.Items[0].Outcome)
+	f.persistence.listed[0].Review.State = model.SubmissionReviewFinalized
+	f.persistence.beforeRelease = func() { f.persistence.listErr = errors.New("unavailable") }
+	result, err = f.service.ReleaseSittingResults(t.Context(), f.inv, ResultReleaseBatchCommand{
+		ExamID: f.examID, SittingID: f.sittingID, SubmissionIDs: []model.SubmissionID{f.submissionID}, IdempotencyKey: "reread-failed"})
+	require.NoError(t, err)
+	require.Equal(t, ResultReleaseFailed, result.Items[0].Outcome)
 }

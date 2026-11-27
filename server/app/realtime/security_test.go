@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -39,12 +40,7 @@ func TestSessionRevocationAppliesAllLocalEffectsBeforeStablePeerFanout(t *testin
 	const hash = "345bf502d577508c91103476c743217fa304f9a15e92c6bdc5810f891677891f"
 	service.SessionsRevoked(context.Background(), userID, []model.SessionID{sessionID}, []string{hash})
 
-	// Contract: every local effect applies before the peer fan-out; the local
-	// effects may apply in any order.
-	effects := order.snapshot()
-	require.NotEmpty(t, effects)
-	require.Equal(t, "broadcast", effects[len(effects)-1], "peer fan-out preceded a local effect")
-	require.ElementsMatch(t, []string{"invalidate-access", "invalidate-activity", "close-session"}, effects[:len(effects)-1])
+	require.Equal(t, []string{"close-session", "invalidate-access", "invalidate-activity", "broadcast"}, order.snapshot())
 	require.Len(t, fanout.broadcasts, 1)
 	require.Equal(t, clusterEventSessionRevoked, fanout.broadcasts[0].event)
 	wantPayload := `{"user_id":"bbbbbbbbbbbbbbbbbbbbbbbbbb","session_ids":["cccccccccccccccccccccccccc"],"access_token_hashes":["345bf502d577508c91103476c743217fa304f9a15e92c6bdc5810f891677891f"],"close_connections":true}`
@@ -53,7 +49,24 @@ func TestSessionRevocationAppliesAllLocalEffectsBeforeStablePeerFanout(t *testin
 
 	handler := fanout.handler(clusterEventSessionRevoked)
 	require.NotNil(t, handler, "session revocation handler was not registered")
-	require.NoError(t, handler(context.Background(), fanout.broadcasts[0].data))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	entered := make(chan struct{})
+	invalidator.onAccess = func(ctx context.Context) {
+		close(entered)
+		<-ctx.Done()
+	}
+	done := make(chan error, 1)
+	go func() { done <- handler(ctx, fanout.broadcasts[0].data) }()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("peer revocation did not reach cache cleanup")
+	}
+	require.Equal(t, 2, sink.sessionCloseCount(), "peer sockets close before cache cleanup finishes")
+	require.NoError(t, fanout.handler(clusterEventAuthorizationInvalidated)(ctx, []byte(`{"user_id":"bbbbbbbbbbbbbbbbbbbbbbbbbb"}`)))
+	cancel()
+	require.NoError(t, <-done)
 	require.Len(t, fanout.broadcasts, 1, "peer session revocation rebroadcast")
 	require.Equal(t, 2, invalidator.accessCalls(), "peer effects: access")
 	require.Equal(t, 2, invalidator.activityCalls(), "peer effects: access")
@@ -244,13 +257,17 @@ func mustNewDelivery(
 }
 
 type recordingInvalidator struct {
+	onAccess func(context.Context)
 	mu       sync.Mutex
 	access   [][]string
 	activity [][]model.SessionID
 	order    *orderedCalls
 }
 
-func (i *recordingInvalidator) InvalidateAccessCredentials(_ context.Context, values []string) {
+func (i *recordingInvalidator) InvalidateAccessCredentials(ctx context.Context, values []string) {
+	if i.onAccess != nil {
+		i.onAccess(ctx)
+	}
 	i.mu.Lock()
 	i.access = append(i.access, append([]string(nil), values...))
 	i.mu.Unlock()

@@ -15172,7 +15172,7 @@
                 "type": "string"
               }
             ],
-            "description": "The action that was attempted, named like a permission, such as `class.members.manage`.",
+            "description": "The action performed or checked, such as `class.members.manage`.",
             "type": "string"
           },
           "actor": {
@@ -15210,6 +15210,10 @@
           "node_id": {
             "description": "The server node that handled the action. Omitted for Academic Unit auditors.",
             "type": "string"
+          },
+          "permission_check": {
+            "description": "True when this Event records a permission check for a change action. Its status describes the authorization decision.",
+            "type": "boolean"
           },
           "reason": {
             "description": "Reason given when an account was disabled. Present only on that Event, only when a reason was given, and only for Institution-wide audit readers.",
@@ -15405,7 +15409,7 @@
       },
       "AuditRepeat": {
         "additionalProperties": false,
-        "description": "Present when the same actor did the same action to the same resource more than once in the ten minutes up to and including this event. It counts only events you can see in this listing, this one included, and stops at 100.",
+        "description": "Present when the same actor did the same action to the same resource more than once in the ten minutes up to and including this event. It counts only events you can see in this listing, this one included, and stops at 100. Permission checks and operations have separate repeat counts.",
         "properties": {
           "count": {
             "maximum": 100,
@@ -43321,7 +43325,7 @@
             }
           },
           {
-            "description": "Return only Events whose action changes something (`change`: a mutation, a sign-in or other authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a list, or an export). Every audit action is one of the two. It only narrows `action` and what you can see, so an Academic Unit auditor still sees only their own academic actions.",
+            "description": "Return only Events whose action changes something (`change`: a mutation, a sign-in or other authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a list, or an export). A permission check for a change action counts as a read. This filter narrows `action` and what you can see, so an Academic Unit auditor still sees only their own academic actions.",
             "in": "query",
             "name": "kind",
             "schema": {

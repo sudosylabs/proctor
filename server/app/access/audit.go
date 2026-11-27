@@ -828,7 +828,10 @@ func (s *Auditor) recordDecision(
 		errorCode = ""
 	}
 
+	kind, _ := model.AuditActionKind(action)
 	event := &model.AuditEvent{
+		PermissionCheck: kind == model.AuditKindChange,
+
 		ActorID:       principal.UserID,
 		SubjectUserID: subject,
 		Parameters:    parameters,

@@ -94,8 +94,8 @@ paths:
           description: >-
             Return only Events whose action changes something (`change`: a mutation, a sign-in or other
             authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a
-            list, or an export). Every audit action is one of the two. It only narrows `action` and what you can
-            see, so an Academic Unit auditor still sees only their own academic actions.
+            list, or an export). A permission check for a change action counts as a read. This filter narrows `action` and
+            what you can see, so an Academic Unit auditor still sees only their own academic actions.
         - name: resource_type
           in: query
           schema:
@@ -179,7 +179,7 @@ components:
       description: >-
         Present when the same actor did the same action to the same resource more than once in the ten minutes up to
         and including this event. It counts only events you can see in this listing, this one included, and stops at
-        100.
+        100. Permission checks and operations have separate repeat counts.
       type: object
       additionalProperties: false
       required:
@@ -236,7 +236,10 @@ components:
           anyOf:
             - $ref: '#/components/schemas/AuditAction'
             - type: string
-          description: The action that was attempted, named like a permission, such as `class.members.manage`.
+          description: The action performed or checked, such as `class.members.manage`.
+        permission_check:
+          type: boolean
+          description: True when this Event records a permission check for a change action. Its status describes the authorization decision.
         resource:
           type: object
           additionalProperties: false

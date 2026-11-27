@@ -616,7 +616,7 @@ func (s *Service) UpdateUserProfile(
 	candidate.ApplyProfileChanges(&changes)
 	at := s.now()
 	candidate.PrepareUpdate(at)
-	if err := candidate.Validate(); err != nil {
+	if err = candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("user.invalid", err)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,6 +75,17 @@ func Run(t *testing.T, factory Factory) {
 		require.NoError(t, closeErr, "read/close range")
 		require.Equal(t, "3456", string(got), "unexpected range")
 
+		for _, tc := range []struct {
+			offset int64
+			want   string
+		}{{3, "3456789"}, {10, ""}} {
+			file, err = filesystem.Open(ctx, "range.txt", vfs.OpenOptions{Offset: tc.offset, Length: math.MaxInt64})
+			require.NoError(t, err)
+			got, err = io.ReadAll(file.Body)
+			require.NoError(t, file.Body.Close())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, string(got))
+		}
 		_, err = filesystem.Open(ctx, "range.txt", vfs.OpenOptions{Offset: 11})
 		require.ErrorIs(t, err, vfs.ErrInvalidRange)
 	})

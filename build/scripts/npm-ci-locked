@@ -26,7 +26,8 @@ fi
 # The Node version is part of the key because native add-ons are built for it.
 wanted=$(printf '%s\nnode %s\n' "$lock_digest" "$(node --version)")
 
-if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$wanted" ]; then
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$wanted" ] &&
+	NODE_ENV=development "$npm_command" ls --all --include=dev --offline >/dev/null 2>&1; then
 	printf '%s: node_modules matches package-lock.json\n' "$1"
 	exit 0
 fi

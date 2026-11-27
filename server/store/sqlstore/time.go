@@ -8,7 +8,9 @@
 package sqlstore
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -16,6 +18,20 @@ import (
 
 // Time SQL adapters map domain time.Time / OptionalTime onto PostgreSQL
 // timestamptz columns (nullable via sql.NullTime).
+
+// DatabaseNow reads the installation's authoritative clock for credential and Session decisions.
+func (ss *SQLStore) DatabaseNow(ctx context.Context) (time.Time, error) {
+	return databaseWallTime(ctx, ss.GetMaster())
+}
+
+// databaseWallTime samples the clock at execution, including time spent waiting for locks.
+func databaseWallTime(ctx context.Context, executor sqlxExecutor) (time.Time, error) {
+	var now time.Time
+	if err := executor.Get(ctx, &now, `SELECT clock_timestamp()`); err != nil {
+		return time.Time{}, fmt.Errorf("read database wall time: %w", err)
+	}
+	return now.UTC(), nil
+}
 
 // NullTimeFromOptional maps OptionalTime onto database/sql.NullTime.
 func NullTimeFromOptional(value model.OptionalTime) sql.NullTime {

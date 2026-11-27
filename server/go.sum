@@ -301,6 +301,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/sudosylabs/execenv v0.6.1 h1:+a7s3TCQT2/FkAJQfzp54sP8JNU2bdR6D/dDRHsp2z0=
 github.com/sudosylabs/execenv v0.6.1/go.mod h1:GjUNpTShtPpcNPVaYOEpQg1meAkpYBitr+5t/weXGcE=
+github.com/sudosylabs/execenv v0.7.0 h1:lQYxOLy9CsPk9+l0mOnru2TGaeMEfUgKfTneXpbEPXo=
+github.com/sudosylabs/execenv v0.7.0/go.mod h1:GjUNpTShtPpcNPVaYOEpQg1meAkpYBitr+5t/weXGcE=
 github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027 h1:SAwhcNF+UVDE/bFiWIBgq9HUnBPLgKsvZp3vgEWt4RI=
 github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027/go.mod h1:I+iXJYDvz/TZy1NZtoXMoMd5ZN70WEdVlsmNZqm/unw=
 github.com/sudosylabs/proctor/packages/cache v0.0.0-20261122151211-cf3b54d7e16b h1:d30TsWijSRc0bbpOXd2uEdO6qKfMDAn1kdRTnFVIZd8=
@@ -311,6 +313,8 @@ github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4 h1
 github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4/go.mod h1:KKLdR8h+O3aiQmWABHvZQe4yudRw35UWQfx0yxVsIlQ=
 github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b h1:A8DlDTCV+lxEGccxLRpgLvsXNjinr4CneSnZ/Ej13to=
 github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b/go.mod h1:S+T4PAlidWbA/1NyoNNTFleG0jjr9ugf1DrYMlRYom0=
+github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261126172405-cff1efa436d6 h1:KEHvd525rDrHFbCQWX+fumslj1a5VOTpRdkp3aXorys=
+github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261126172405-cff1efa436d6/go.mod h1:S+T4PAlidWbA/1NyoNNTFleG0jjr9ugf1DrYMlRYom0=
 github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07/go.mod h1:kDXzergiv9cbyO7IOYJZWg1U88JhDg3PB6klq9Hg2pA=
 github.com/tinylib/msgp v1.6.4 h1:mOwYbyYDLPj35mkA2BjjYejgJk9BuHxDdvRnb6v2ZcQ=
 github.com/tinylib/msgp v1.6.4/go.mod h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77roAqEA=

@@ -61,19 +61,13 @@ func lockExportBuild(
 	token model.JobClaimToken,
 	lockRow func() (exportBuildRow, error),
 ) (time.Time, error) {
-	var at time.Time
-	if err := tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
-		return at, err
-	}
-
-	attempt, err := getFencedAttempt(ctx, tx, attemptID, token, at)
+	attempt, job, at, err := getFencedAttempt(ctx, tx, attemptID, token)
 	if err != nil {
 		return at, err
 	}
 
-	job, err := getJob(ctx, tx, jobID, true)
-	if err != nil {
-		return at, err
+	if attempt.JobID != jobID {
+		return at, store.NewErrConflict(kind.entity, "claim_lost", nil)
 	}
 
 	row, err := lockRow()
@@ -84,8 +78,7 @@ func lockExportBuild(
 		return at, err
 	}
 
-	if attempt.JobID != jobID ||
-		job.Type != kind.buildJobType ||
+	if job.Type != kind.buildJobType ||
 		job.Status != model.JobStatusRunning ||
 		row.JobID != jobID.String() ||
 		!at.Before(attempt.LeaseExpiresAt) {

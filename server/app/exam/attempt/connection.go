@@ -32,6 +32,7 @@ type ConnectCommand struct {
 // ConnectionResult is the admitted attempt and what the desktop applies; it
 // also reports which sessions the admission revoked.
 type ConnectionResult struct {
+	Access                    CandidateConnectionAccess `json:"-"`
 	Security                  model.AdmittedSecurity
 	Attempt                   model.ExamAttempt
 	Workspace                 model.ExamAttemptWorkspace
@@ -155,6 +156,7 @@ func (s *Service) ConnectExamAttempt(
 		return ConnectionResult{}, err
 	}
 
+	result.Access = CandidateConnectionAccess{selector: candidateConnectionSelector(principal, result.Attempt.ID, result.Connection.ID, credentialHash)}
 	if result.ConnectionOpened && !result.Replayed {
 		if effectErr := s.publishConnectionOpened(ctx, result); effectErr != nil {
 			s.publisher.Report(ctx, "exam_attempt_connection_opened", effectErr)

@@ -959,3 +959,19 @@ func TestControlRateRefusalHasRetryAdviceWithoutClosingBinding(t *testing.T) {
 	require.Nil(t, response.Error.Delivery, "control retry refusal changed authority or lost retry advice")
 	require.Same(t, binding, runtime.attempt, "control retry refusal changed authority or lost retry advice")
 }
+
+func TestPeriodicValidationClosesUnauthorizedSubscription(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		world := newAdmissionWorld(t, admissionOptions{withoutClassView: true})
+		runtime, peer := newInboundRuntime(t, world, nil)
+		peer.listen()
+		sub := validInboundSubscription()
+		runtime.subscriptions[sub.Key()] = sub
+		go runtime.sessionPump(t.Context())
+		time.Sleep(sessionCheck)
+		synctest.Wait()
+		frames := peer.closeFrames()
+		require.Len(t, frames, 1)
+		require.Equal(t, CloseAuthorizationChanged, frames[0].code)
+	})
+}

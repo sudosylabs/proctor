@@ -77,10 +77,14 @@ case "$*" in
   *-run*)
     printf '%s\\n' '{"Action":"pass","Package":"example.test/pkg","Test":"TestFlaky"}'
     printf '%s\\n' '{"Action":"fail","Package":"example.test/pkg","Test":"TestBroken"}'
+    printf '%s\\n' '{"Action":"fail","Package":"example.test/pkg","Test":"TestMixed"}'
     exit 1 ;;
   *)
     printf '%s\\n' '{"Action":"fail","Package":"example.test/pkg","Test":"TestFlaky"}'
     printf '%s\\n' '{"Action":"fail","Package":"example.test/pkg","Test":"TestBroken"}'
+    printf '%s\\n' '{"Action":"pass","Package":"example.test/pkg","Test":"TestFlaky"}'
+    printf '%s\\n' '{"Action":"fail","Package":"example.test/pkg","Test":"TestMixed"}'
+    printf '%s\\n' '{"Action":"pass","Package":"example.test/pkg","Test":"TestMixed"}'
     exit 1 ;;
 esac
 `, { mode: 0o755 });
@@ -88,7 +92,9 @@ esac
   assert.equal(await runGoTests(["./..."], { command, cwd: directory, env }), 1, "a flake never turns the run green");
   const [report] = await readdir(env.PROCTOR_TEST_REPORT_DIR);
   const flaky = JSON.parse(await readFile(join(env.PROCTOR_TEST_REPORT_DIR, report, "flaky.json"), "utf8"));
-  assert.deepEqual(flaky, [{ package: "example.test/pkg", name: "TestFlaky" }]);
+  assert.deepEqual(flaky, ["TestFlaky", "TestMixed"].map(name => ({ package: "example.test/pkg", name })));
+  const junit = await readFile(join(env.PROCTOR_TEST_REPORT_DIR, report, "junit.xml"), "utf8");
+  assert.match(junit, /<testcase name="TestMixed"[^>]*><failure /);
   const invocation = JSON.parse(await readFile(join(env.PROCTOR_TEST_REPORT_DIR, report, "command.json"), "utf8"));
   assert.equal(invocation.ci.sha, "abc123");
   assert.match(await readFile(env.GITHUB_STEP_SUMMARY, "utf8"), /Flaky[\s\S]*TestFlaky/);

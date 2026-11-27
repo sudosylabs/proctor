@@ -74,7 +74,7 @@ func (f *FS) Open(ctx context.Context, name string, options vfs.OpenOptions) (*v
 		return nil, vfs.Error(op, name, vfs.ErrInvalidRange)
 	}
 	end := int64(len(obj.data))
-	if options.Length > 0 && start+options.Length < end {
+	if options.Length > 0 && options.Length < end-start {
 		end = start + options.Length
 	}
 

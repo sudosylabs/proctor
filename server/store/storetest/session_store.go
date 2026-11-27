@@ -309,7 +309,7 @@ func testSessionEnforceExpiry(t *testing.T, ss store.Store) {
 	}
 	beforeExpiry, err := ss.Session().EnforceExpiry(
 		ctx,
-		&store.SessionExpiryEnforcement{ID: active.ID, UserID: user.ID, At: active.IdleExpiresAt.Add(-time.Millisecond)},
+		&store.SessionExpiryEnforcement{ID: active.ID, UserID: user.ID, At: active.IdleExpiresAt.Add(24 * time.Hour)},
 	)
 	require.NoError(t, err)
 	require.False(t, beforeExpiry.Expired)
@@ -319,7 +319,8 @@ func testSessionEnforceExpiry(t *testing.T, ss store.Store) {
 	require.Empty(t, beforeExpiry.TokenHashes)
 
 	expired, _, raw := saveSession(t, ctx, ss, user.ID.String(), 10)
-	at := expired.IdleExpiresAt.Add(time.Second)
+	require.NoError(t, seeder(ss).SeedExpiredSession(ctx, expired.ID))
+	at := expired.CreatedAt.AddDate(-1, 0, 0)
 	result, err := ss.Session().EnforceExpiry(
 		ctx,
 		&store.SessionExpiryEnforcement{ID: expired.ID, UserID: user.ID, At: at},
@@ -327,7 +328,8 @@ func testSessionEnforceExpiry(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.True(t, result.Expired)
 	require.NotNil(t, result.Session)
-	require.True(t, result.Session.RevokedAt.Time.Equal(at))
+	require.True(t, result.Session.RevokedAt.Time.After(result.Session.IdleExpiresAt))
+	at = result.Session.RevokedAt.Time
 	require.Equal(t, model.SessionRevocationExpired, result.Session.RevocationReason)
 	require.Len(t, result.TokenHashes, 2)
 	for _, token := range []struct {

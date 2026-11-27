@@ -30,7 +30,9 @@ authority; cluster delivery only makes other nodes notice sooner.
 4. **Idempotent handlers.** Application handlers for session revocation,
    authorization invalidation, and realtime fan-out must tolerate duplicates,
    finish bounded local work, and avoid durable or network work on the
-   Memberlist receive path.
+   Memberlist receive path. The callback enqueues up to 16 incoming messages.
+   Four workers dispatch them with a five-second context deadline. A full
+   queue drops the incoming message and increments the dropped-message count.
 5. **Authoritative state is PostgreSQL.** Each new Session authentication
    resolves the current credential, Session, and User from durable stores;
    each authorization decision resolves current role bindings and permissions.
@@ -127,7 +129,7 @@ resolves active role bindings from PostgreSQL.
 | Condition | Recovery |
 | --- | --- |
 | Missed session revocation message | The next new authentication reads current Store state and rejects; an established WebSocket closes on its next failed Session revalidation. |
-| Missed authorization invalidation | Authorization is not session-cached; each decision resolves current roles from PostgreSQL. |
+| Missed authorization invalidation | WebSocket resume checks the current permissions for retained subscriptions and events. Open connections recheck subscribed resources during periodic Session validation. |
 | Missed realtime event | Clients fetch current state; local replay/resync covers connection-local loss only. |
 | Node stop and later start | Graceful stop withdraws the lease best-effort; a newly constructed transport advertises and joins current seeds; periodic rediscovery repairs startup isolation and later churn. |
 | Duplicate invalidation | Cache deletes and connection closes are idempotent. |

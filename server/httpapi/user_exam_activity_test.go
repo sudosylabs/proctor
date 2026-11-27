@@ -22,9 +22,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func (l *attemptLedger) ListCandidateActivity(_ context.Context, options store.CandidateExamActivityListOptions) (*store.CandidateExamActivityPage, error) {
-	l.activityLists = append(l.activityLists, options)
-	return &store.CandidateExamActivityPage{ServerTime: attemptFixtureTime, Items: append([]store.CandidateExamActivityItem(nil), l.activity...)}, nil
+func (s *attemptLedger) ListCandidateActivity(_ context.Context, options store.CandidateExamActivityListOptions) (*store.CandidateExamActivityPage, error) {
+	s.activityLists = append(s.activityLists, options)
+	return &store.CandidateExamActivityPage{ServerTime: attemptFixtureTime, Items: append([]store.CandidateExamActivityItem(nil), s.activity...)}, nil
 }
 
 func TestCandidateExamActivityShowsJoinWindowReceiptAndAttemptTimes(t *testing.T) {

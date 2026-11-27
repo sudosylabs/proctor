@@ -21,6 +21,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -130,15 +131,55 @@ func (c *connectionRuntime) sessionPump(ctx context.Context) {
 			c.closeTransport()
 			return
 		case <-ticker.C:
-			if appErr := c.admission.ValidateWebSocketPrincipal(
-				ctx,
-				c.principal,
-			); appErr != nil {
+			checkCtx, cancel := context.WithTimeout(ctx, sessionCheck)
+			if appErr := c.admission.ValidateWebSocketPrincipal(checkCtx, c.principal); appErr != nil {
+				cancel()
 				c.close(CloseSessionRevoked, localizedCloseReason(c.localizer, c.locale, websocketCloseMessages["session_revoked"]), false)
+				return
+			}
+			authorized := c.subscriptionsStillAuthorized(checkCtx)
+			cancel()
+			if !authorized {
+				c.close(CloseAuthorizationChanged, localizedCloseReason(c.localizer, c.locale, websocketCloseMessages["authorization_changed"]), false)
 				return
 			}
 		}
 	}
+}
+
+func (c *connectionRuntime) subscriptionsStillAuthorized(ctx context.Context) bool {
+	c.mu.Lock()
+	subs := cloneSubscriptions(c.subscriptions)
+	binding := c.attempt
+	if binding != nil {
+		delete(subs, c.examAttemptSubscriptionLocked().Key())
+	}
+	c.mu.Unlock()
+
+	if binding != nil {
+		current, err := c.attempts.RecheckCandidateConnection(ctx, binding.access)
+		if err != nil || current.ParticipationID != binding.participationID ||
+			current.Generation != binding.generation || current.SittingID != binding.sittingID {
+			return false
+		}
+	}
+	return subscriptionsAuthorized(ctx, c.admission, invocation.New(c.principal, c.metadata), subs)
+}
+
+func subscriptionsAuthorized(ctx context.Context, admission *app.RealtimeAdmission, inv invocation.Invocation, subs map[string]Subscription) bool {
+	ctx, cancel := context.WithTimeout(ctx, sessionCheck)
+	defer cancel()
+	for _, sub := range subs {
+		// Participation belongs to a live Attempt Connection. A new socket
+		// must bind through exam_attempt.connect before receiving its events.
+		if sub.Action == model.ActionExamSittingParticipate {
+			return false
+		}
+		if err := admission.AuthorizeWebSocketSubscription(ctx, inv, sub.Action, sub.Resource.model()); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *connectionRuntime) handleRequest(
@@ -297,6 +338,7 @@ func (c *connectionRuntime) handleExamAttemptConnect(ctx context.Context, reques
 	}
 
 	binding := &examAttemptBinding{
+		access:          result.Access,
 		attemptID:       result.Attempt.ID,
 		sittingID:       sittingID,
 		classID:         result.ClassID,

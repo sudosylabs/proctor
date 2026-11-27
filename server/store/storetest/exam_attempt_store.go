@@ -669,9 +669,10 @@ func TestSessionExpiryAttemptFence(t *testing.T, ss store.Store) {
 	connected, err := ss.ExamAttempt().Connect(ctx, input,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "session-expiry-fence-connect", "session-expiry-fence-connect"))
 	require.NoError(t, err)
+	require.NoError(t, seeder(ss).SeedExpiredSession(ctx, fixture.session.ID))
 	expired, err := ss.Session().EnforceExpiry(
 		ctx,
-		&store.SessionExpiryEnforcement{ID: fixture.session.ID, UserID: fixture.candidate.ID, At: fixture.session.IdleExpiresAt.Add(time.Second)},
+		&store.SessionExpiryEnforcement{ID: fixture.session.ID, UserID: fixture.candidate.ID, At: model.NowUTC()},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, expired)

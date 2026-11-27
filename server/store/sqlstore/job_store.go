@@ -568,17 +568,11 @@ func (s SQLJobStore) Heartbeat(ctx context.Context, input *store.JobHeartbeat) (
 	) error {
 		return err
 	}), func(ctx context.Context, tx *sqlxTxWrapper) (*model.JobAttempt, error) {
-		databaseNow, err := jobDatabaseNow(ctx, tx)
+		attempt, _, databaseNow, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken)
 		if err != nil {
 			return nil, err
 		}
 
-		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
-		if err != nil {
-			return nil, err
-		}
-
-		// A concurrent heartbeat may have committed a later transaction start.
 		heartbeatAt := latestTime(attempt.HeartbeatAt, databaseNow)
 		heartbeat, err := attempt.Heartbeat(heartbeatAt, heartbeatAt.Add(input.LeaseDuration))
 		if err != nil {
@@ -614,17 +608,7 @@ func (s SQLJobStore) Checkpoint(ctx context.Context, input *store.JobCheckpoint)
 	) error {
 		return err
 	}), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
-		databaseNow, err := jobDatabaseNow(ctx, tx)
-		if err != nil {
-			return nil, err
-		}
-
-		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
-		if err != nil {
-			return nil, err
-		}
-
-		job, err := getJob(ctx, tx, attempt.JobID, true)
+		_, job, databaseNow, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken)
 		if err != nil {
 			return nil, err
 		}
@@ -658,12 +642,7 @@ func (s SQLJobStore) ReserveWork(ctx context.Context, input *store.JobWorkReserv
 	) error {
 		return fmt.Errorf("commit job work reservation: %w", err)
 	}), func(ctx context.Context, tx *sqlxTxWrapper) (*store.JobWorkReservationResult, error) {
-		databaseNow, err := jobDatabaseNow(ctx, tx)
-		if err != nil {
-			return nil, err
-		}
-
-		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
+		attempt, _, databaseNow, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken)
 		if err != nil {
 			return nil, err
 		}
@@ -706,22 +685,12 @@ func (s SQLJobStore) Complete(ctx context.Context, input *store.JobCompletion) (
 	) error {
 		return err
 	}), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
-		databaseNow, err := jobDatabaseNow(ctx, tx)
+		attempt, job, databaseNow, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken)
 		if err != nil {
 			return nil, err
 		}
 
-		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
-		if err != nil {
-			return nil, err
-		}
-
-		job, err := getJob(ctx, tx, attempt.JobID, true)
-		if err != nil {
-			return nil, err
-		}
-
-		// The lease fence above used CURRENT_TIMESTAMP. The recorded transition
+		// The lease fence used database wall time after both locks. The recorded transition
 		// never precedes the job's enqueueing node clock or a transition that a
 		// later-starting transaction committed before this one locked the rows.
 		jobAt := latestTime(job.UpdatedAt, databaseNow)
@@ -907,18 +876,11 @@ func (s SQLJobStore) CancellationRequested(ctx context.Context, attemptID model.
 		false,
 		nil,
 	), func(ctx context.Context, tx *sqlxTxWrapper) (bool, error) {
-		now, err := jobDatabaseNow(ctx, tx)
+		_, job, _, err := getFencedAttempt(ctx, tx, attemptID, token)
 		if err != nil {
 			return false, err
 		}
-		attempt, err := getFencedAttempt(ctx, tx, attemptID, token, now)
-		if err != nil {
-			return false, err
-		}
-		job, err := getJob(ctx, tx, attempt.JobID, false)
-		if err != nil {
-			return false, err
-		}
+
 		return job.Status == model.JobStatusCancelRequested, nil
 	})
 }
@@ -1117,20 +1079,27 @@ func getFencedAttempt(
 	tx *sqlxTxWrapper,
 	id model.JobAttemptID,
 	token model.JobClaimToken,
-	at time.Time,
-) (*model.JobAttempt, error) {
+) (*model.JobAttempt, *model.Job, time.Time, error) {
 	var row jobAttemptRow
 	if err := tx.Get(ctx, &row, `SELECT `+jobAttemptColumns+` FROM job_attempts WHERE id = ? FOR UPDATE`, id.String()); err != nil {
-		return nil, translateError("job_attempt", id.String(), err)
+		return nil, nil, time.Time{}, translateError("job_attempt", id.String(), err)
 	}
 	attempt, err := row.model()
 	if err != nil {
-		return nil, err
+		return nil, nil, time.Time{}, err
+	}
+	job, err := getJob(ctx, tx, attempt.JobID, true)
+	if err != nil {
+		return nil, nil, time.Time{}, err
+	}
+	at, err := databaseWallTime(ctx, tx)
+	if err != nil {
+		return nil, nil, time.Time{}, err
 	}
 	if attempt.ClaimToken != token || attempt.Status != model.JobAttemptStatusRunning || !model.TimeUTC(at).Before(attempt.LeaseExpiresAt) {
-		return nil, store.NewErrConflict("job_attempt", "claim_lost", nil)
+		return nil, nil, time.Time{}, store.NewErrConflict("job_attempt", "claim_lost", nil)
 	}
-	return attempt, nil
+	return attempt, job, at, nil
 }
 
 func jobDatabaseNow(ctx context.Context, tx *sqlxTxWrapper) (time.Time, error) {

@@ -455,7 +455,11 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 	operation := func(name string) []byte { return []byte(`{"operation":"` + name + `","value":{}}`) }
 	passwordChanged := save(&model.AuditEvent{ActorID: me.ID, Action: string(model.ActionExternalIdentityManage), Resource: userResource(me),
 		Parameters: operation("change_password"), Status: model.AuditStatusSuccess, IPAddress: "192.0.2.10", UserAgent: "Browser"})
-	administratorReset := save(&model.AuditEvent{ActorID: administrator.ID, Action: string(model.ActionUserMFAReset), Resource: userResource(me),
+	// The authorization check and the actual reset share an action and status.
+	// Only the reset belongs in personal history.
+	save(&model.AuditEvent{ActorID: administrator.ID, Action: string(model.ActionUserMFAReset), Resource: userResource(me),
+		Status: model.AuditStatusSuccess, PermissionCheck: true})
+	administratorReset := save(&model.AuditEvent{PriorState: []byte(`{"identity_verified":true}`), ActorID: administrator.ID, Action: string(model.ActionUserMFAReset), Resource: userResource(me),
 		Status: model.AuditStatusSuccess})
 	failedSignIn := save(&model.AuditEvent{Action: string(model.ActionAuthenticationLogin), Resource: userResource(me),
 		Status: model.AuditStatusFail, ErrorCode: "authentication.invalid_credentials"})

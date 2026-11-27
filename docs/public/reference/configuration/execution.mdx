@@ -50,6 +50,15 @@ Exam's execution policy names one profile.
 }
 ```
 
+## Execution host compatibility
+
+Use execenv v0.7.0 on execution hosts. Proctor uses execenv remote protocol 3,
+and the guest helper uses protocol 5. Drain each execution host before the
+upgrade and replace the daemon and affected catalog artifacts together.
+Rebuild guest images with the matching helper before returning the host to
+service. Production hosts need a usable KVM device and the cgroup v2 CPU and
+memory controllers. See the [execenv v0.7.0 release notes](https://github.com/sudosylabs/execenv/releases/tag/v0.7.0).
+
 ## Preview ports
 
 A preview connects to a listener inside the guest through the execution
@@ -61,8 +70,3 @@ Attempt. Each execution grant allows up to 64 connections across all nodes.
 All preview connections on a grant share an 8 MiB per second limit and a
 32 MiB burst in each direction. A connection expires after 10 minutes
 without bytes in either direction.
-
-Use execenv v0.6.0 or later on the execution hosts. Rebuild the guest images
-with the matching helper before upgrading a host. With execenv v0.6.0 the
-guest helper must speak protocol 3. The host refuses images with an
-incompatible helper.

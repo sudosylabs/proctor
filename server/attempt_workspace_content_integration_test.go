@@ -12,11 +12,13 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +35,7 @@ func TestAttemptWorkspaceContentIntegrationOnLocalVFS(t *testing.T) {
 	filesystem, err := local.New(filepath.Join(t.TempDir(), "vfs"))
 	require.NoError(t, err)
 	proveAttemptWorkspaceContentConformance(t, filesystem)
+	t.Run("overlapping screen clip uploads", func(t *testing.T) { proveScreenClipRetryPreservesBytes(t, filesystem) })
 }
 
 func TestAttemptWorkspaceContentIntegrationOnS3(t *testing.T) {
@@ -49,6 +52,33 @@ func TestAttemptWorkspaceContentIntegrationOnS3(t *testing.T) {
 	})
 	require.NoError(t, err)
 	proveAttemptWorkspaceContentConformance(t, filesystem)
+	t.Run("overlapping screen clip uploads", func(t *testing.T) { proveScreenClipRetryPreservesBytes(t, filesystem) })
+}
+
+func proveScreenClipRetryPreservesBytes(t *testing.T, filesystem vfs.FileSystem) {
+	t.Helper()
+	content, err := filecontent.New(filesystem, filecontent.Policy{MaximumConcurrentOperations: 2}, nil)
+	require.NoError(t, err)
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte("good")))
+	id := model.NewScreenClipID()
+	t.Cleanup(func() { require.NoError(t, content.PurgeRetiredScreenClip(context.Background(), id, 1)) })
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	defer reader.Close()
+	done := make(chan error, 1)
+	go func() { done <- content.StageScreenClipChunk(t.Context(), id, 0, reader, 4, digest) }()
+	_, err = writer.Write([]byte("b"))
+	require.NoError(t, err)
+	require.NoError(t, content.StageScreenClipChunk(t.Context(), id, 0, strings.NewReader("good"), 4, digest))
+	require.NoError(t, writer.Close())
+	require.ErrorIs(t, <-done, model.ErrScreenClipChunkInvalid)
+	playback, err := content.OpenScreenClipChunk(t.Context(), id, 0, 0, 4)
+	require.NoError(t, err)
+	defer playback.Close()
+	data, err := io.ReadAll(playback)
+	require.NoError(t, err)
+	require.Equal(t, "good", string(data))
+	require.Equal(t, digest, fmt.Sprintf("%x", sha256.Sum256(data)))
 }
 
 func proveAttemptWorkspaceContentConformance(t *testing.T, filesystem vfs.FileSystem) {

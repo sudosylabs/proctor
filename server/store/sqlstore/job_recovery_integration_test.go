@@ -194,3 +194,36 @@ func TestJobQueueDepthSplitsDueFromScheduled(t *testing.T) {
 		model.JobTypeProfilePictureGenerateDefault: {Due: 2, Scheduled: 1},
 	}, depth, "a running Job and an unlisted type do not count")
 }
+
+func TestHeartbeatRejectsLeaseThatExpiredWhileWaitingForLock(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	s := openTestStore(t)
+	resetPristineTestStore(t, s)
+	job := enqueueRecoveryJob(t, ctx, s, model.JobTypeProfilePictureGenerateDefault, model.NowUTC().Add(-time.Minute))
+	token := newRecoveryClaimToken(t)
+	claim, err := s.Job().ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{job.Type}, NodeID: "lease-test", ClaimToken: token, LeaseDuration: time.Hour})
+	require.NoError(t, err)
+	tx, err := s.GetMaster().Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	var pid int
+	require.NoError(t, tx.Get(ctx, &pid, `SELECT pg_backend_pid() FROM job_attempts WHERE id=? FOR UPDATE`, claim.Attempt.ID.String()))
+	done := make(chan error, 1)
+	go func() {
+		_, heartbeatErr := s.Job().Heartbeat(ctx, &store.JobHeartbeat{AttemptID: claim.Attempt.ID, ClaimToken: token, LeaseDuration: time.Hour})
+		done <- heartbeatErr
+	}()
+	waitForBlockedMailQuery(t, ctx, s, pid, "FROM job_attempts")
+	var deadline time.Time
+	err = tx.Get(ctx, &deadline, `UPDATE job_attempts SET lease_expires_at=clock_timestamp() WHERE id=? RETURNING lease_expires_at`, claim.Attempt.ID.String())
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	var conflict *store.ErrConflict
+	require.ErrorAs(t, <-done, &conflict)
+	require.Equal(t, "claim_lost", conflict.Constraint)
+	var unchanged bool
+	require.NoError(t, s.GetMaster().Get(ctx, &unchanged, `SELECT heartbeat_at = ? AND lease_expires_at = ?
+		FROM job_attempts WHERE id = ?`, claim.Attempt.HeartbeatAt, deadline, claim.Attempt.ID.String()))
+	require.True(t, unchanged)
+}

@@ -8550,7 +8550,7 @@ export interface components {
         AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "assistant_profile.manage" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.rename" | "desktop_registration.revoke" | "environment_profile.manage" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "plugin.manage" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
         /** @description One audit record you can see, without sensitive detail. */
         AuditEventResponse: {
-            /** @description The action that was attempted, named like a permission, such as `class.members.manage`. */
+            /** @description The action performed or checked, such as `class.members.manage`. */
             action: string | components["schemas"]["AuditAction"];
             /** @description The User who performed the action, named for every reader of the Event. Omitted with `actor_id`. */
             actor?: components["schemas"]["PersonRef"];
@@ -8572,6 +8572,8 @@ export interface components {
             ip_address?: string;
             /** @description The server node that handled the action. Omitted for Academic Unit auditors. */
             node_id?: string;
+            /** @description True when this Event records a permission check for a change action. Its status describes the authorization decision. */
+            permission_check?: boolean;
             /** @description Reason given when an account was disabled. Present only on that Event, only when a reason was given, and only for Institution-wide audit readers. */
             reason?: string;
             repeat?: components["schemas"]["AuditRepeat"];
@@ -8656,7 +8658,7 @@ export interface components {
             /** @description True when `total` reached 10,000 and there may be more. Sent with `total`. */
             total_is_lower_bound?: boolean;
         };
-        /** @description Present when the same actor did the same action to the same resource more than once in the ten minutes up to and including this event. It counts only events you can see in this listing, this one included, and stops at 100. */
+        /** @description Present when the same actor did the same action to the same resource more than once in the ten minutes up to and including this event. It counts only events you can see in this listing, this one included, and stops at 100. Permission checks and operations have separate repeat counts. */
         AuditRepeat: {
             count: number;
             /** @enum {integer} */
@@ -29094,7 +29096,7 @@ export interface operations {
                 action?: components["schemas"]["AuditAction"][];
                 /** @description Return only Events with this outcome: `attempt` (no outcome recorded yet), `success` or `fail`. */
                 status?: "attempt" | "success" | "fail";
-                /** @description Return only Events whose action changes something (`change`: a mutation, a sign-in or other authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a list, or an export). Every audit action is one of the two. It only narrows `action` and what you can see, so an Academic Unit auditor still sees only their own academic actions. */
+                /** @description Return only Events whose action changes something (`change`: a mutation, a sign-in or other authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a list, or an export). A permission check for a change action counts as a read. This filter narrows `action` and what you can see, so an Academic Unit auditor still sees only their own academic actions. */
                 kind?: "change" | "read";
                 /** @description Return only Events about resources of this type. Send it together with `resource_id`. */
                 resource_type?: components["schemas"]["ResourceType"];

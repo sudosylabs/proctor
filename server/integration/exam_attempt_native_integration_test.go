@@ -238,6 +238,9 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, connected.FirstAdmission)
+	current, err := helper.App.Attempts.RecheckCandidateConnection(ctx, connected.Access)
+	require.NoError(t, err)
+	require.Equal(t, connected.Participation.ID, current.ParticipationID)
 	access := attempt.CandidateAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, ContinuityCredential: credential}
 	security := connected.Security
 
@@ -333,6 +336,61 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, media, body)
 
+	// Competing declarations fit individually beside the ready clip. Both
+	// reach the budget lock before either is allowed to reserve space.
+	var contenders []model.ScreenClipID
+	for _, key := range []string{"clip-budget-a", "clip-budget-b"} {
+		requested, requestErr := helper.App.Attempts.RequestScreenClip(ctx, managerInv, attempt.RequestScreenClipCommand{
+			ExamID: examID, SittingID: sittingID, AttemptID: access.AttemptID, Range: model.ScreenClipRange{FromSessionStart: true, End: model.NowUTC()}, PrivateReason: "Inspect the recording", IdempotencyKey: key})
+		require.NoError(t, requestErr)
+		_, takeErr := helper.App.Attempts.TakeScreenClip(ctx, desktop.inv, access, requested.Clip.ID)
+		require.NoError(t, takeErr)
+		contenders = append(contenders, requested.Clip.ID)
+	}
+	large := model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: model.ScreenClipMaxBytes}
+	partial := make([]byte, model.ScreenClipChunkBytes)
+	hash := sha256.Sum256(partial)
+	for range large.ChunkCount() {
+		large.ChunkSHA256 = append(large.ChunkSHA256, hex.EncodeToString(hash[:]))
+	}
+	begin := func(id model.ScreenClipID) error {
+		_, beginErr := helper.App.Attempts.BeginScreenClipUpload(ctx, desktop.inv, attempt.BeginScreenClipUploadCommand{Access: access, ClipID: id, Upload: large})
+		return beginErr
+	}
+	gate, err := persistence.GetMaster().Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = gate.Rollback() }()
+	var pid int
+	require.NoError(t, gate.Get(ctx, &pid, `SELECT pg_backend_pid() FROM pg_advisory_xact_lock(hashtextextended(?,0))`, "proctor:screen-clip-budget:"+access.AttemptID.String()))
+	type reservation struct {
+		id  model.ScreenClipID
+		err error
+	}
+	results := make(chan reservation, len(contenders))
+	for _, id := range contenders {
+		go func() { results <- reservation{id, begin(id)} }()
+	}
+	require.Eventually(t, func() bool {
+		var count int
+		lockErr := persistence.GetMaster().Get(ctx, &count, `SELECT count(*) FROM pg_locks waiting
+			JOIN pg_locks held USING (locktype, database, classid, objid, objsubid)
+			WHERE held.pid=? AND held.granted AND held.locktype='advisory' AND NOT waiting.granted`, pid)
+		return lockErr == nil && count == len(contenders)
+	}, 10*time.Second, 10*time.Millisecond)
+	require.NoError(t, gate.Commit())
+	first, second := <-results, <-results
+	if first.err != nil {
+		first, second = second, first
+	}
+	require.NoError(t, first.err)
+	require.True(t, apperror.Is(second.err, "exam.attempt.screen_clip_too_large"), "%v", second.err)
+	require.NoError(t, helper.App.Attempts.UploadScreenClipChunk(ctx, desktop.inv, attempt.UploadScreenClipChunkCommand{
+		Access: access, ClipID: first.id, Index: 0, Body: bytes.NewReader(partial), Size: int64(len(partial)),
+	}))
+	_, err = persistence.GetMaster().Exec(ctx, `UPDATE exam_attempt_screen_clips SET state='failed',failure='rejected',revision=revision+1 WHERE id=?`, first.id.String())
+	require.NoError(t, err)
+	require.True(t, apperror.Is(begin(second.id), "exam.attempt.screen_clip_too_large"), "failed upload still occupies storage until retirement")
+
 	// Submission ends the Attempt; the manager's clip, never taken, fails.
 	_, err = helper.App.Attempts.SubmitExamAttempt(ctx, desktop.inv, attempt.SubmitCommand{
 		Access: attempt.WorkspaceMutationAccess{CandidateAccess: access, ParticipationID: security.ParticipationID,
@@ -341,10 +399,15 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 		IdempotencyKey: "native-flow-submit",
 	})
 	require.NoError(t, err)
+	_, err = helper.App.Attempts.RecheckCandidateConnection(ctx, connected.Access)
+	require.Error(t, err, "submission ends authority for the bound subscription")
 	clips, err := helper.App.Attempts.ListScreenClips(ctx, managerInv, examID, sittingID, access.AttemptID)
 	require.NoError(t, err)
-	require.Len(t, clips, 4)
+	require.Len(t, clips, 6)
 	for _, clip := range clips {
+		if clip.ID == first.id || clip.ID == second.id {
+			continue
+		}
 		if clip.ID == incident {
 			require.Equal(t, model.ScreenClipReady, clip.State)
 		} else {

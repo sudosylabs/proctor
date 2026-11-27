@@ -28,6 +28,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/internal/weborigin"
 	"github.com/sudosylabs/proctor/server/localization"
@@ -260,6 +261,7 @@ func (h *Hub) Accept(
 	}
 
 	connection, resumed := h.register(
+		request.Context(),
 		socket,
 		principal,
 		metadata,
@@ -296,6 +298,7 @@ func (h *Hub) Accept(
 }
 
 func (h *Hub) register(
+	ctx context.Context,
 	socket *websocket.Conn,
 	principal model.Principal,
 	metadata model.RequestMetadata,
@@ -311,6 +314,19 @@ func (h *Hub) register(
 	}
 
 	shard := h.shardForUser(principal.UserID.String())
+	// Replay states are immutable. Recheck their authority outside the lock,
+	// then consume only the exact state that passed that check.
+	var approved *replayState
+	if requestedID != "" {
+		shard.mu.RLock()
+		state := shard.replay[requestedID]
+		shard.mu.RUnlock()
+		if state != nil && state.userID == principal.UserID.String() && state.sessionID == principal.SessionID.String() &&
+			time.Now().Before(state.expiresAt) && requestedSequence <= state.nextSequence &&
+			subscriptionsAuthorized(ctx, h.admission, invocation.New(principal, metadata), state.requiredSubscriptions()) {
+			approved = state
+		}
+	}
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 	h.mu.RLock()
@@ -323,7 +339,11 @@ func (h *Hub) register(
 	if connectionLimitReachedLocked(shard, principal) {
 		return nil, false
 	}
-	resume := takeReplayResumeLocked(shard, principal, requestedID, requestedSequence)
+	resumeID := ""
+	if approved != nil && shard.replay[requestedID] == approved {
+		resumeID = requestedID
+	}
+	resume := takeReplayResumeLocked(shard, principal, resumeID, requestedSequence)
 	connection := newConnectionRuntime(
 		h.admission,
 		h.attempts,
@@ -554,7 +574,7 @@ func (h *Hub) CloseSession(sessionID string, reason realtime.ConnectionCloseReas
 	code, text := closeCodeForReason(reason)
 	h.closeMatching(code, text, func(connection *connectionRuntime) bool {
 		return connection.belongsToSession(sessionID)
-	})
+	}, func(state *replayState) bool { return state.sessionID == sessionID })
 }
 
 // CloseUser implements realtime.Sink.
@@ -566,13 +586,16 @@ func (h *Hub) CloseUser(userID string, reason realtime.ConnectionCloseReason) {
 		// relationship to that User. Reconnect checks the subscription again.
 		return connection.belongsToUser(userID) ||
 			(reason == realtime.ConnectionCloseAuthorizationChanged && connection.hasSubscription(userView))
+	}, func(state *replayState) bool {
+		_, subscribed := state.subscriptions[userView.Key()]
+		return state.userID == userID || (reason == realtime.ConnectionCloseAuthorizationChanged && subscribed)
 	})
 }
 
 // CloseAll implements realtime.Sink.
 func (h *Hub) CloseAll(reason realtime.ConnectionCloseReason) {
 	code, text := closeCodeForReason(reason)
-	h.closeMatching(code, text, func(*connectionRuntime) bool { return true })
+	h.closeMatching(code, text, func(*connectionRuntime) bool { return true }, func(*replayState) bool { return true })
 }
 
 func eventFromRealtime(event realtime.Event) *Event {
@@ -604,16 +627,22 @@ func (h *Hub) closeMatching(
 	code int,
 	reason localizedMessage,
 	matches func(*connectionRuntime) bool,
+	matchesReplay func(*replayState) bool,
 ) {
 	var connections []*connectionRuntime
 	for _, shard := range h.shards {
-		shard.mu.RLock()
+		shard.mu.Lock()
+		for id, state := range shard.replay {
+			if matchesReplay(state) {
+				delete(shard.replay, id)
+			}
+		}
 		for _, connection := range shard.conns {
 			if matches(connection) && connection.acquire() {
 				connections = append(connections, connection)
 			}
 		}
-		shard.mu.RUnlock()
+		shard.mu.Unlock()
 	}
 	// A slow peer must not spend another full write budget before the next
 	// subscription is invalidated.

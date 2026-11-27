@@ -17,5 +17,5 @@ replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20260928
 replace (
 	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261122151211-cf3b54d7e16b => ./packages/cache
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4 => ./packages/mail
-	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261122151211-cf3b54d7e16b => ./packages/vfs
+	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261126172405-cff1efa436d6 => ./packages/vfs
 )

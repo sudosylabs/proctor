@@ -630,9 +630,14 @@ func (s *SQLExamAttemptStore) BeginScreenClipUpload(
 			return nil, store.NewErrConflict("screen_clip", "screen_clip_state", nil)
 		}
 
+		// Different clips take different row locks. Serialize declarations for one
+		// attempt without upgrading its shared candidate guard.
+		if err = lockAdvisory(ctx, tx, advisoryLockKey("screen-clip-budget", clip.AttemptID.String())); err != nil {
+			return nil, fmt.Errorf("lock screen clip budget: %w", err)
+		}
 		var stored int64
 		if err = tx.Get(ctx, &stored, `SELECT COALESCE(sum(size_bytes), 0) FROM exam_attempt_screen_clips
-			WHERE exam_attempt_id = ? AND state IN ('uploading', 'ready')`, clip.AttemptID.String()); err != nil {
+			WHERE exam_attempt_id = ? AND size_bytes IS NOT NULL`, clip.AttemptID.String()); err != nil {
 			return nil, fmt.Errorf("sum screen clip bytes: %w", err)
 		}
 		if stored+input.Upload.SizeBytes > model.ScreenClipAttemptMaxBytes {

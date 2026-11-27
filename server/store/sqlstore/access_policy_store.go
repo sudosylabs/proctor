@@ -217,9 +217,8 @@ func (s SQLAccessPolicyStore) HasRoleHolderMFARequirement(ctx context.Context, u
 // accessPolicyReplacementOutcome is the committed result of an access policy
 // replacement. It persists as accessPolicyReplacementDocument.
 type accessPolicyReplacementOutcome struct {
-	Result              *store.AccessPolicyReplacementResult
-	ChangedFields       []string
-	RevokedSessionCount int
+	Result        *store.AccessPolicyReplacementResult
+	ChangedFields []string
 }
 
 // accessPolicyReplacementDocument is the persisted outcome of an access
@@ -275,7 +274,7 @@ func encodeAccessPolicyReplacementOutcome(outcome accessPolicyReplacementOutcome
 		Policy:              accessPolicyDocument(*snapshot.Policy),
 		Changed:             outcome.Result.Changed,
 		ChangedFields:       outcome.ChangedFields,
-		RevokedSessionCount: outcome.RevokedSessionCount,
+		RevokedSessionCount: outcome.Result.RevokedSessionCount,
 	}
 	if snapshot.History != nil {
 		document.History = make([]accessPolicyTransitionDocument, 0, len(snapshot.History))
@@ -395,7 +394,8 @@ func replaceAccessPolicy(
 		Changed:                changed,
 		SessionRevocations:     revocations,
 		SessionDeadlineChanges: deadlineChanges,
-	}, ChangedFields: changedFields, RevokedSessionCount: accessPolicyRevokedSessionCount(revocations)}
+		RevokedSessionCount:    accessPolicyRevokedSessionCount(revocations),
+	}, ChangedFields: changedFields}
 	if err := completeAccessPolicyReplacementAudit(ctx, tx, outcome, input, false, ""); err != nil {
 		return accessPolicyReplacementOutcome{}, err
 	}
@@ -523,12 +523,12 @@ func decodeAccessPolicyReplacementOutcome(encoded []byte) (accessPolicyReplaceme
 			Changed:                document.Changed,
 			SessionRevocations:     []store.AccessPolicySessionRevocation{},
 			SessionDeadlineChanges: []store.AccessPolicySessionDeadlineChange{},
+			RevokedSessionCount:    document.RevokedSessionCount,
 		},
-		ChangedFields:       document.ChangedFields,
-		RevokedSessionCount: document.RevokedSessionCount,
+		ChangedFields: document.ChangedFields,
 	}
 	if outcome.Result.Snapshot.Policy.Validate() != nil ||
-		outcome.RevokedSessionCount < 0 ||
+		outcome.Result.RevokedSessionCount < 0 ||
 		len(outcome.ChangedFields) > model.AccessPolicyTransitionFieldMaxCount {
 		return accessPolicyReplacementOutcome{}, invalidPersistedState("command_outcome", "outcome", errors.New("invalid access policy outcome"))
 	}
@@ -560,7 +560,7 @@ func completeAccessPolicyReplacementAudit(
 		"resulting_revision":       outcome.Result.Snapshot.Policy.Revision,
 		"changed_fields":           append([]string(nil), outcome.ChangedFields...),
 		"revoke_existing_sessions": input.Preflight.RevokeExistingSessions,
-		"revoked_session_count":    outcome.RevokedSessionCount,
+		"revoked_session_count":    outcome.Result.RevokedSessionCount,
 	}
 	if replayed {
 		data["idempotency_replayed"] = true

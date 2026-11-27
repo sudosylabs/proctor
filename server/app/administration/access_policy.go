@@ -61,6 +61,13 @@ type AccessPolicyView struct {
 	SessionLimits         model.SessionLengthLimits
 }
 
+// AccessPolicyReplacementView is the replaced policy and how many sessions
+// the replacement ended. They end in its transaction, so the count is final.
+type AccessPolicyReplacementView struct {
+	AccessPolicyView
+	RevokedSessionCount int
+}
+
 type PreflightAccessPolicyCommand struct {
 	ExpectedRevision       int64
 	Settings               model.AccessPolicySettings
@@ -133,22 +140,22 @@ func (s *Service) ReplaceAccessPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
 	command ReplaceAccessPolicyCommand,
-) (AccessPolicyView, error) {
+) (AccessPolicyReplacementView, error) {
 	if err := s.requireStrongRecent(inv); err != nil {
-		return AccessPolicyView{}, err
+		return AccessPolicyReplacementView{}, err
 	}
 
 	institution, _, err := s.authorizeAccessPolicy(ctx, inv, model.ActionAccessPolicyManage)
 	if err != nil {
-		return AccessPolicyView{}, err
+		return AccessPolicyReplacementView{}, err
 	}
 	if command.IdempotencyKey == "" {
-		return AccessPolicyView{}, apperror.New("idempotency.key_required")
+		return AccessPolicyReplacementView{}, apperror.New("idempotency.key_required")
 	}
 
 	input, err := s.preflightInput(command.ExpectedRevision, command.Settings, command.RevokeExistingSessions)
 	if err != nil {
-		return AccessPolicyView{}, err
+		return AccessPolicyReplacementView{}, err
 	}
 
 	idempotency, err := idempotency.Prepare(
@@ -162,7 +169,7 @@ func (s *Service) ReplaceAccessPolicy(
 		}{command.ExpectedRevision, command.Settings, command.RevokeExistingSessions},
 	)
 	if err != nil {
-		return AccessPolicyView{}, err
+		return AccessPolicyReplacementView{}, err
 	}
 
 	stored, err := access.RunAudited(
@@ -189,10 +196,10 @@ func (s *Service) ReplaceAccessPolicy(
 		accessPolicyError,
 	)
 	if err != nil {
-		return AccessPolicyView{}, err
+		return AccessPolicyReplacementView{}, err
 	}
 	if stored == nil || stored.Snapshot == nil || stored.Snapshot.Policy == nil {
-		return AccessPolicyView{}, apperror.New("access_policy.unavailable")
+		return AccessPolicyReplacementView{}, apperror.New("access_policy.unavailable")
 	}
 
 	// The event is best effort and only follows the commit; the store repeats
@@ -203,7 +210,10 @@ func (s *Service) ReplaceAccessPolicy(
 		}
 	}
 
-	return s.view(stored.Snapshot), nil
+	return AccessPolicyReplacementView{
+		AccessPolicyView:    s.view(stored.Snapshot),
+		RevokedSessionCount: stored.RevokedSessionCount,
+	}, nil
 }
 
 func accessPolicyReplacementAuditValue(command ReplaceAccessPolicyCommand) map[string]any {

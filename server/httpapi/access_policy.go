@@ -58,6 +58,9 @@ type accessPolicyResponse struct {
 	History                       []accessPolicyTransitionResponse         `json:"history"`
 	AvailableProviders            []externalAuthenticationProviderResponse `json:"available_providers"`
 	DurableMail                   bool                                     `json:"durable_mail"`
+	// RevokedSessionCount is set only in the response to a replacement, so a
+	// replacement that ended no Session still says 0.
+	RevokedSessionCount *int `json:"revoked_session_count,omitempty"`
 }
 
 type accessPolicyTransitionResponse struct {
@@ -255,11 +258,13 @@ func (h accessPolicyHandlers) replace(request route.Request) (route.Result, erro
 		return route.Result{}, err
 	}
 
-	actors, err := h.app.NameAccessPolicyActors(request.Context, request.Invocation(), accessPolicyActors(view))
+	actors, err := h.app.NameAccessPolicyActors(request.Context, request.Invocation(), accessPolicyActors(view.AccessPolicyView))
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, accessPolicyResponseFromView(request.HTTP, view, actors)), nil
+	response := accessPolicyResponseFromView(request.HTTP, view.AccessPolicyView, actors)
+	response.RevokedSessionCount = &view.RevokedSessionCount
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.AccessPolicySettings, bool, error) {

@@ -84,6 +84,9 @@ type AccessPolicyReplacementResult struct {
 	Changed            bool
 	Replayed           bool
 	SessionRevocations []AccessPolicySessionRevocation
+	// RevokedSessionCount is how many sessions the replacement ended. Unlike
+	// SessionRevocations it is retained, so a replay reports it too.
+	RevokedSessionCount int
 	// SessionDeadlineChanges name the live sessions a shorter session length
 	// pulled in, so cached authentication can be invalidated.
 	SessionDeadlineChanges []AccessPolicySessionDeadlineChange

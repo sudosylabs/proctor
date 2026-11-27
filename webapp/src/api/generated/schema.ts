@@ -440,7 +440,7 @@ export interface paths {
         get: operations["getAccessPolicy"];
         /**
          * Revision-fenced replacement of the installation Access Policy
-         * @description Replaces the whole Access Policy. Send the `revision` you read as `expected_revision`. If the policy has changed since, the request fails and nothing changes. Proctor checks again, as it saves the change, that the deployment supports the new settings and that a system administrator can still sign in. When you ask it to, Proctor signs out Sessions that used a sign-in method you are turning off. If the change starts requiring two-step verification for role holders, it also signs out their Sessions that have not proved a second factor. When a Session length gets shorter, running Sessions get the earlier deadline. The request needs a recent, strongly authenticated interactive Session and an Idempotency-Key.
+         * @description Replaces the whole Access Policy. Send the `revision` you read as `expected_revision`. If the policy has changed since, the request fails and nothing changes. Proctor checks again, as it saves the change, that the deployment supports the new settings and that a system administrator can still sign in. When you ask it to, Proctor signs out Sessions that used a sign-in method you are turning off. If the change starts requiring two-step verification for role holders, it also signs out their Sessions that have not proved a second factor. When a Session length gets shorter, running Sessions get the earlier deadline. The response says how many Sessions were signed out, in `revoked_session_count`. The request needs a recent, strongly authenticated interactive Session and an Idempotency-Key.
          */
         put: operations["replaceAccessPolicy"];
         post?: never;
@@ -7899,6 +7899,8 @@ export interface components {
              * @description Goes up by one with every applied change. Send it as `expected_revision` when you preflight or replace the policy.
              */
             revision: number;
+            /** @description How many Sessions the replacement signed out. Present only in the response to a replacement, and the same when the request is retried with its Idempotency-Key. The Sessions are signed out in the same transaction as the change, so the count is final when the response arrives. */
+            revoked_session_count?: number;
             /** @description Whether the role holder two-step verification requirement is in force: true only while `role_holder_mfa_required` is on and the server configuration enables two-step verification. While it is false with the setting on, the requirement is paused and nobody is restricted or refused. */
             readonly role_holder_mfa_enforced: boolean;
             /** @description Whether every role holder, a User with a current Role Binding at any scope, must use two-step verification. Clients may label it "Two-step required for staff". */

@@ -57,6 +57,7 @@ func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *tes
 	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.Now())
 	policy.Revision = 2
 	fixture.accessPolicies.snapshot = &store.AccessPolicySnapshot{Policy: policy, History: []*model.AccessPolicyTransition{}}
+	fixture.accessPolicies.revoked = 41
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(fixture.service))
 	body := `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false,"session_idle_minutes":null,"session_absolute_minutes":null}`
 	do := func(candidate string) *httptest.ResponseRecorder {
@@ -72,6 +73,7 @@ func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *tes
 	require.Equal(t, http.StatusOK, first.Code, "first")
 	require.Equal(t, http.StatusOK, replay.Code, "first")
 	require.Equal(t, replay.Body.String(), first.Body.String(), "first")
+	require.Contains(t, first.Body.String(), `"revoked_session_count":41`, "the replacement says how many sessions it ended")
 	require.Len(t, fixture.accessPolicies.replacements, 1, "the replay committed nothing new")
 	replacement := fixture.accessPolicies.replacements[0]
 	require.Equal(t, int64(1), replacement.Preflight.ExpectedRevision)
@@ -108,6 +110,7 @@ func TestAccessPolicyHTTPCarriesRoleHolderMFARequirementAndPreflightCounts(t *te
 	require.Equal(t, http.StatusOK, read.Code, read.Body.String())
 	require.Contains(t, read.Body.String(), `"role_holder_mfa_required":true`)
 	require.Contains(t, read.Body.String(), `"role_holder_mfa_enforced":false`, "a setting the deployment cannot enforce reads as paused")
+	require.NotContains(t, read.Body.String(), "revoked_session_count", "only a replacement ends sessions")
 	preflight := do(http.MethodPost, "/api/v1/access-policy/preflight", `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":true,"provider_admissions":{},"role_holder_mfa_required":true,"session_idle_minutes":60,"session_absolute_minutes":null}`)
 	require.Equal(t, http.StatusOK, preflight.Code, preflight.Body.String())
 	require.JSONEq(t, `{"blockers":[{"code":"mfa_unavailable"}],"role_holders_without_mfa_count":3,"role_holder_single_factor_session_count":5}`, preflight.Body.String())

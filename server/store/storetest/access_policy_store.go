@@ -186,6 +186,7 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 	require.Len(t, result.SessionRevocations[0].SessionIDs, 1)
 	require.True(t, containsSessionID(result.SessionRevocations[0].SessionIDs, campusSession.ID))
 	require.Len(t, result.SessionRevocations[0].AccessTokenHashes, 1)
+	require.Equal(t, 1, result.RevokedSessionCount)
 	require.NotEmpty(t, result.Snapshot.History)
 	require.True(t, containsString(result.Snapshot.History[0].ChangedFields, "revoke_existing_sessions"))
 	revokeReplayReplacement := &store.AccessPolicyReplacement{Preflight: store.AccessPolicyPreflight{
@@ -197,6 +198,7 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 	require.NoError(t, err)
 	require.True(t, revocationReplay.Replayed)
 	require.Empty(t, revocationReplay.SessionRevocations)
+	require.Equal(t, 1, revocationReplay.RevokedSessionCount, "a replay reports the sessions the original ended")
 	revokedPassword, err := ss.Session().Get(ctx, passwordSession.ID)
 	require.NoError(t, err)
 	revokedCampus, err := ss.Session().Get(ctx, campusSession.ID)

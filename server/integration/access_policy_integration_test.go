@@ -107,7 +107,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 			view, replaceErr := candidate.app.Administration.ReplaceAccessPolicy(context.Background(), inv, administration.ReplaceAccessPolicyCommand{
 				ExpectedRevision: 1, Settings: candidate.settings, IdempotencyKey: candidate.key,
 			})
-			outcomes <- outcome{view: view, err: replaceErr}
+			outcomes <- outcome{view: view.AccessPolicyView, err: replaceErr}
 		}(candidate)
 	}
 	successes, conflicts := 0, 0

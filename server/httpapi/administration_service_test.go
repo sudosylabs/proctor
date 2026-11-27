@@ -409,6 +409,8 @@ type administrationAccessPolicyStore struct {
 	mu        sync.Mutex
 	snapshot  *store.AccessPolicySnapshot
 	preflight store.AccessPolicyPreflightResult
+	// revoked is how many sessions each replacement reports it ended.
+	revoked int
 
 	preflights   []*store.AccessPolicyPreflight
 	replacements []*store.AccessPolicyReplacement
@@ -452,7 +454,7 @@ func (s *administrationAccessPolicyStore) Replace(_ context.Context, input *stor
 		return &replayed, nil
 	}
 	s.replacements = append(s.replacements, input)
-	result := store.AccessPolicyReplacementResult{Snapshot: s.snapshot}
+	result := store.AccessPolicyReplacementResult{Snapshot: s.snapshot, RevokedSessionCount: s.revoked}
 	s.outcomes[command.KeyDigest] = administrationReplacementOutcome{fingerprint: command.Fingerprint, result: result}
 	return &result, nil
 }
